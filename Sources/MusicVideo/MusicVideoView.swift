@@ -123,8 +123,10 @@ struct MusicVideoBackground: View {
 
 /// A YouTube video shown whole: fitted to the picture's own shape (read
 /// from its still, so YouTube's letterbox or pillarbox bars are cropped),
-/// with the still under the player until it plays, and while YouTube's
-/// overlays show (`MusicVideoFraming.revealHold`).
+/// with the still under the player until it plays. The player shows as soon
+/// as it plays; while YouTube's controls are drawn over its first seconds,
+/// their regions are covered with the still, blurred and feathered into the
+/// picture (`MusicVideoOverlayMask`).
 struct WholeYouTubeVideo: View {
     let videoID: String
     let paused: Bool
@@ -139,6 +141,10 @@ struct WholeYouTubeVideo: View {
     var onFirstFrame: (() -> Void)?
     @State private var still: NSImage?
     @State private var aspect: CGFloat = MusicVideoFraming.youTubeAspect
+    /// YouTube's controls are being covered; `coverTurn` tells one cover
+    /// from the next.
+    @State private var covering = false
+    @State private var coverTurn = 0
 
     var body: some View {
         GeometryReader { proxy in
@@ -159,8 +165,12 @@ struct WholeYouTubeVideo: View {
                     // at `box` inside it, so YouTube's own bars fall outside.
                     YouTubeMusicVideoView(videoID: videoID, paused: paused, blur: blur, framing: framing,
                                           box: layout.box, ambience: ambience,
-                                          revealsAtOnce: revealsAtOnce, onFirstFrame: onFirstFrame)
+                                          revealsAtOnce: revealsAtOnce, onFirstFrame: onFirstFrame,
+                                          onCoverOverlays: cover)
                         .frame(width: layout.visible.width, height: layout.visible.height)
+                    OverlayCover(still: still, layout: layout, blur: blur)
+                        .opacity(covering ? 1 : 0)
+                        .allowsHitTesting(false)
                 }
             }
             .frame(width: layout.visible.width, height: layout.visible.height)
@@ -168,6 +178,7 @@ struct WholeYouTubeVideo: View {
             .animation(.easeOut(duration: YouTubeThumbnail.fadeIn), value: still != nil)
         }
         .task(id: videoID) {
+            covering = false
             still = nil
             aspect = YouTubeVideoShape.cached(videoID) ?? MusicVideoFraming.youTubeAspect
             async let shape = YouTubeVideoShape.aspect(of: videoID)
@@ -188,6 +199,57 @@ struct WholeYouTubeVideo: View {
             }
             let found = await shape
             if !Task.isCancelled, let found { aspect = found }
+        }
+    }
+
+    /// The player started showing: cover YouTube's controls at once, then
+    /// fade the cover once they have gone.
+    private func cover() {
+        coverTurn += 1
+        let turn = coverTurn
+        var instant = Transaction()
+        instant.disablesAnimations = true
+        withTransaction(instant) { covering = true }
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(MusicVideoOverlayMask.hold))
+            guard turn == coverTurn else { return }
+            withAnimation(.easeOut(duration: MusicVideoOverlayMask.fadeOut)) { covering = false }
+        }
+    }
+}
+
+/// The cover over YouTube's controls: the video's still, placed like the
+/// picture and blurred, shown only in `MusicVideoOverlayMask.regions`, their
+/// edges feathered so it reads as part of the image. A dark wash where no
+/// still has loaded.
+private struct OverlayCover: View {
+    let still: NSImage?
+    let layout: MusicVideoFraming.WholeLayout
+    let blur: Double
+
+    var body: some View {
+        let regions = MusicVideoOverlayMask.regions(player: layout.player, visible: layout.visible)
+        ZStack {
+            if let still {
+                Image(nsImage: still).resizable().aspectRatio(contentMode: .fill)
+                    .frame(width: layout.player.width, height: layout.player.height)
+                    .blur(radius: max(18, blur))
+            } else {
+                Color.black.opacity(0.6)
+            }
+        }
+        .frame(width: layout.visible.width, height: layout.visible.height)
+        .clipped()
+        .mask {
+            ZStack(alignment: .topLeading) {
+                ForEach(Array(regions.enumerated()), id: \.offset) { _, region in
+                    Rectangle()
+                        .frame(width: region.width, height: region.height)
+                        .offset(x: region.minX, y: region.minY)
+                }
+            }
+            .frame(width: layout.visible.width, height: layout.visible.height, alignment: .topLeading)
+            .blur(radius: MusicVideoOverlayMask.feather)
         }
     }
 }
@@ -773,6 +835,8 @@ struct YouTubeMusicVideoView: NSViewRepresentable {
     /// See `MusicVideoBackground`.
     var revealsAtOnce = false
     var onFirstFrame: (() -> Void)?
+    /// Shown whole: each time the player starts showing (`MusicVideoOverlayMask`).
+    var onCoverOverlays: (() -> Void)?
 
     func makeCoordinator() -> YouTubeMusicVideoCoordinator { YouTubeMusicVideoCoordinator() }
 
@@ -782,6 +846,7 @@ struct YouTubeMusicVideoView: NSViewRepresentable {
         coordinator.host = host
         coordinator.revealsAtOnce = revealsAtOnce
         coordinator.onFirstFrame = onFirstFrame
+        coordinator.onCoverOverlays = onCoverOverlays
         coordinator.setFraming(framing)
         coordinator.setBox(box)
         coordinator.setAmbience(ambience)
@@ -796,6 +861,7 @@ struct YouTubeMusicVideoView: NSViewRepresentable {
         let coordinator = context.coordinator
         coordinator.revealsAtOnce = revealsAtOnce
         coordinator.onFirstFrame = onFirstFrame
+        coordinator.onCoverOverlays = onCoverOverlays
         coordinator.setFraming(framing)
         coordinator.setBox(box)
         coordinator.setAmbience(ambience)
@@ -911,13 +977,6 @@ enum YouTubeEmbed {
         buffering && hold == .live && !hasFrame && framing == .fill ? bufferingGrace : 0
     }
 
-    /// How long a player that starts playing stays hidden before it is
-    /// shown: none when filled (YouTube's title is off-screen) or when it
-    /// shows already; YouTube's title overlay's while when shown whole.
-    static func revealDelay(framing: MusicVideoFraming, showing: Bool) -> TimeInterval {
-        showing ? 0 : framing.revealHold
-    }
-
     /// The interface language for the player's own text: the system's.
     static func playerLanguage(_ locale: Locale = .current) -> String {
         let code = locale.language.languageCode?.identifier.lowercased() ?? "en"
@@ -973,10 +1032,11 @@ enum YouTubeEmbed {
         </style></head><body><div id="frame"><div id="player"></div></div>
         <script>
         var player = null, ready = false, blurPx = 0, overscan = \(overscan), box = \(box?.script ?? "null");
-        var captionsWanted = \(captions != nil);
+        var captionsWanted = \(captions != nil), captionTimer = null, awaitingCue = false, reloadCaptions = null;
+        var currentVideo = '\(videoID)', currentPage = \(page);
         function post(type, value) {
           try { window.webkit.messageHandlers.\(messageName).postMessage({type: type, value: value,
-                video: '\(videoID)', page: \(page)}); } catch (e) {}
+                video: currentVideo, page: currentPage}); } catch (e) {}
         }
         function visibleFor(state) { return state === 1; }
         function show(state) {
@@ -1000,7 +1060,7 @@ enum YouTubeEmbed {
             events: {
               onReady: function (event) {
                 ready = true; event.target.mute(); hideCaptions(); show(-1); post('ready', 0);
-                if (captionsWanted) setTimeout(window.lunalyrCaptionsDone, \(Int(captionWait * 1000)));
+                if (captionsWanted) captionTimer = setTimeout(window.lunalyrCaptionsDone, \(Int(captionWait * 1000)));
               },
               onError: function (event) { show(-1); post('error', event.data); },
               onApiChange: function () { hideCaptions(); },
@@ -1008,6 +1068,12 @@ enum YouTubeEmbed {
                 var state = event.data;
                 if (state === 1 || state === 3) { player.mute(); }
                 if (state === -1 || state === 1 || state === 5) { hideCaptions(); }
+                if (state === 5 && awaitingCue) { awaitingCue = false; post('ready', 0); }
+                if (state === 1 && reloadCaptions) {
+                  var lang = reloadCaptions; reloadCaptions = null;
+                  try { player.loadModule('captions'); } catch (e) {}
+                  try { player.setOption('captions', 'track', {languageCode: lang}); } catch (e) {}
+                }
                 show(state);
                 post('state', state);
               }
@@ -1021,6 +1087,28 @@ enum YouTubeEmbed {
           return {time: player.getCurrentTime(), state: player.getPlayerState(), duration: player.getDuration()};
         };
         window.lunalyrCaptionsDone = function () { captionsWanted = false; hideCaptions(); };
+        // Another video in this same player (`YouTubePlayerReuse`): cued at
+        // `start`, not played (the sync loop plays it), numbered `pageNo`
+        // so its messages are told apart from the last video's; its
+        // captions are loaded again, unseen, when `captions` names a language.
+        window.lunalyrLoad = function (id, start, pageNo, captions) {
+          if (!ready || !player || !player.cueVideoById) return false;
+          currentVideo = id; currentPage = pageNo;
+          show(-1);
+          player.mute();
+          if (captionTimer) { clearTimeout(captionTimer); captionTimer = null; }
+          captionsWanted = !!captions;
+          // Ready once cued (state 5); playing sooner is lost. Captions are
+          // asked for again once it plays: the player keeps the last
+          // video's track otherwise.
+          awaitingCue = true;
+          reloadCaptions = captionsWanted ? captions : null;
+          if (!captionsWanted) hideCaptions();
+          player.cueVideoById({videoId: id, startSeconds: Math.max(0, Math.floor(start))});
+          if (captionsWanted) captionTimer = setTimeout(window.lunalyrCaptionsDone, \(Int(captionWait * 1000)));
+          setTimeout(function () { if (awaitingCue) { awaitingCue = false; post('ready', 0); } }, \(Int(cueWait * 1000)));
+          return true;
+        };
         window.lunalyrPlay = function () { if (ready) { player.mute(); player.playVideo(); } };
         window.lunalyrPause = function () { if (ready) player.pauseVideo(); };
         window.lunalyrSeek = function (t) { if (ready) { player.mute(); player.seekTo(t, true); } };
@@ -1040,6 +1128,19 @@ enum YouTubeEmbed {
         </body></html>
         """
     }
+
+    /// Switches the ready player to `videoID` (`lunalyrLoad`); returns
+    /// whether it could. Arguments are checked like the page's own.
+    static func switchScript(videoID: String, start: Double, page: Int, captions: String?) -> String {
+        precondition(YouTubeVideoID.isValid(videoID))
+        let start = max(0, start.isFinite ? start : 0)
+        let captions = captionLanguage(captions).map { "'\($0)'" } ?? "null"
+        return "return !!(window.lunalyrLoad && window.lunalyrLoad('\(videoID)', \(Int(start)), \(page), \(captions)));"
+    }
+
+    /// A video switched to in the same player is taken as ready this long
+    /// after it was asked for, if the player never said it was cued.
+    static let cueWait: TimeInterval = 2
 
     /// The captions are unloaded this long after the player is ready even
     /// if none were captured.
@@ -1147,6 +1248,7 @@ final class YouTubeEmbedSession {
     /// Set once a failure was reported for the current page; later news
     /// about it is ignored.
     private var failed = false
+    var hasFailed: Bool { failed }
     /// Since when the ready player should have been playing and was not.
     private var notPlayingSince: TimeInterval?
     private var timeout: Task<Void, Never>?
@@ -1284,10 +1386,16 @@ final class YouTubeMusicVideoCoordinator: NSObject, WKNavigationDelegate, WKScri
     private var playerVisible = false
     /// A buffering player's hide, waiting out `YouTubeEmbed.bufferingGrace`.
     private var pendingHide: DispatchWorkItem?
-    /// Fill or whole; whole holds each reveal (`MusicVideoFraming.revealHold`).
+    /// Fill or whole; whole covers YouTube's controls at each reveal.
     private(set) var framing: MusicVideoFraming = .fill
-    /// A playing player's reveal, waiting for YouTube's title overlay to fade.
-    private var pendingReveal: DispatchWorkItem?
+    /// Shown whole: told each time the player starts showing, so its view
+    /// covers YouTube's controls for a moment (`MusicVideoOverlayMask`).
+    var onCoverOverlays: (() -> Void)?
+    /// When YouTube's controls were last covered (uptime).
+    private var coveredAt: TimeInterval?
+    /// The page's player is up and well, so another video can be switched
+    /// to inside it (`YouTubePlayerReuse`).
+    private var pageReady = false
     /// The wallpaper holds this player's layer until its first picture: that
     /// picture shows at once (`WallpaperTransition.revealsAtOnce`).
     var revealsAtOnce = false
@@ -1325,9 +1433,25 @@ final class YouTubeMusicVideoCoordinator: NSObject, WKNavigationDelegate, WKScri
         perform(session.attach(videoID))
     }
 
-    /// A fresh web view in the host, hidden until the player says it plays.
+    /// A web view in the host, hidden until the player says it plays: the
+    /// page parked by the last video's player when there is one (its
+    /// player switches to this video), else a fresh one.
     private func openWebView() {
         guard let host else { return }
+        if let parked = YouTubePlayerPark.shared.take() {
+            let controller = parked.configuration.userContentController
+            controller.add(WeakScriptHandler(self), name: YouTubeEmbed.messageName)
+            controller.add(WeakScriptHandler(self), name: MusicVideoCaptionSync.messageName)
+            parked.alphaValue = 0
+            playerVisible = false
+            cancelPendingHide()
+            parked.navigationDelegate = self
+            parked.frame = host.bounds
+            host.install(parked)
+            view = parked
+            pageReady = true
+            return
+        }
         let configuration = YouTubeEmbed.configuration()
         configuration.userContentController.add(WeakScriptHandler(self), name: YouTubeEmbed.messageName)
         configuration.userContentController.add(WeakScriptHandler(self), name: MusicVideoCaptionSync.messageName)
@@ -1338,18 +1462,17 @@ final class YouTubeMusicVideoCoordinator: NSObject, WKNavigationDelegate, WKScri
         view.alphaValue = 0
         playerVisible = false
         cancelPendingHide()
-        cancelPendingReveal()
         view.underPageBackgroundColor = .black
         view.allowsMagnification = false
         view.navigationDelegate = self
         host.install(view)
         self.view = view
+        pageReady = false
     }
 
     /// Closes the web view, and with it the page and its player.
     private func closeWebView() {
         cancelPendingHide()
-        cancelPendingReveal()
         playerVisible = false
         guard let view else { return }
         view.configuration.userContentController.removeScriptMessageHandler(forName: YouTubeEmbed.messageName)
@@ -1359,6 +1482,26 @@ final class YouTubeMusicVideoCoordinator: NSObject, WKNavigationDelegate, WKScri
         view.removeFromSuperview()
         self.view = nil
         navigation = nil
+        pageReady = false
+    }
+
+    /// Hands the page, its player ready, to the next video's player
+    /// (`YouTubePlayerPark`): paused, hidden, out of the host, no longer
+    /// talking to this coordinator.
+    private func parkWebView() {
+        cancelPendingHide()
+        playerVisible = false
+        guard let view else { return }
+        view.evaluateJavaScript("window.lunalyrPause && window.lunalyrPause()", completionHandler: nil)
+        view.configuration.userContentController.removeScriptMessageHandler(forName: YouTubeEmbed.messageName)
+        view.configuration.userContentController.removeScriptMessageHandler(forName: MusicVideoCaptionSync.messageName)
+        view.navigationDelegate = nil
+        view.alphaValue = 0
+        view.removeFromSuperview()
+        self.view = nil
+        navigation = nil
+        pageReady = false
+        YouTubePlayerPark.shared.park(view)
     }
 
     /// `buffering`: the effect answers a buffering state (3) message.
@@ -1366,6 +1509,7 @@ final class YouTubeMusicVideoCoordinator: NSObject, WKNavigationDelegate, WKScri
         switch effect {
         case .none: break
         case .ready:
+            pageReady = true
             let wanted = blur
             blur = -1
             setBlur(wanted)
@@ -1381,12 +1525,26 @@ final class YouTubeMusicVideoCoordinator: NSObject, WKNavigationDelegate, WKScri
             let controller = MusicVideoController.shared
             let captions = controller.wantsCaptions(for: .youTube(videoID))
                 ? (controller.captionLanguage() ?? YouTubeEmbed.playerLanguage()) : nil
-            let html = YouTubeEmbed.html(videoID: videoID, start: start, page: page,
-                                         overscan: framing.youTubeOverscan, box: box, captions: captions)
-            navigation = view.loadHTMLString(html, baseURL: YouTubeEmbed.baseURL)
+            if YouTubePlayerReuse.load(hasView: true, pageReady: pageReady) == .switchVideo {
+                // The same player, another video: hidden until it plays.
+                fade(visible: false, atOnce: true)
+                let script = YouTubeEmbed.switchScript(videoID: videoID, start: start, page: page, captions: captions)
+                view.callAsyncJavaScript(script, arguments: [:], in: nil, in: .page) { [weak self] result in
+                    MainActor.assumeIsolated {
+                        guard let self, self.session.videoID == videoID, self.session.page == page else { return }
+                        if case .success(let value) = result, (value as? Bool) == true { return }
+                        // The player was not up after all: a new page.
+                        self.pageReady = false
+                        self.loadPage(videoID: videoID, start: start, page: page, captions: captions)
+                    }
+                }
+            } else {
+                loadPage(videoID: videoID, start: start, page: page, captions: captions)
+            }
         case .visible(let visible):
             setVisible(visible, buffering: buffering)
         case .fail(let videoID, let failure):
+            pageReady = false
             setVisible(false)
             freeze.reset()
             run("window.lunalyrPause && window.lunalyrPause()")
@@ -1394,35 +1552,27 @@ final class YouTubeMusicVideoCoordinator: NSObject, WKNavigationDelegate, WKScri
         }
     }
 
+    private func loadPage(videoID: String, start: Double, page: Int, captions: String?) {
+        guard let view else { return }
+        pageReady = false
+        let html = YouTubeEmbed.html(videoID: videoID, start: start, page: page,
+                                     overscan: framing.youTubeOverscan, box: box, captions: captions)
+        navigation = view.loadHTMLString(html, baseURL: YouTubeEmbed.baseURL)
+    }
+
     /// The whole web view fades with the player's state, so nothing of
     /// YouTube's (title bar, play or pause button) shows over the stand-in
     /// or the frozen frame. A playing video that starts to buffer is hidden
     /// only after a short grace (`YouTubeEmbed.hideDelay`), so a drift seek
     /// does not blink to the stand-in.
-    /// Shown whole, a player that starts playing stays hidden (behind the
-    /// frozen frame or the video's still) for `MusicVideoFraming.revealHold`,
-    /// so YouTube's start-of-play title overlay is never seen.
+    /// A player that starts playing shows at once; shown whole, YouTube's
+    /// controls over its first seconds are covered (`MusicVideoOverlayMask`).
     private func setVisible(_ visible: Bool, buffering: Bool = false) {
         if visible {
             cancelPendingHide()
-            let hold = YouTubeEmbed.revealDelay(framing: framing, showing: playerVisible)
-            guard hold > 0 else {
-                reveal()
-                return
-            }
-            guard pendingReveal == nil else { return }
-            let work = DispatchWorkItem { [weak self] in
-                MainActor.assumeIsolated {
-                    guard let self, self.pendingReveal != nil else { return }
-                    self.pendingReveal = nil
-                    self.reveal()
-                }
-            }
-            pendingReveal = work
-            DispatchQueue.main.asyncAfter(deadline: .now() + hold, execute: work)
+            reveal()
             return
         }
-        cancelPendingReveal()
         let delay = YouTubeEmbed.hideDelay(buffering: buffering, hold: hold, hasFrame: freeze.image != nil,
                                            framing: framing)
         if delay > 0, playerVisible {
@@ -1449,13 +1599,11 @@ final class YouTubeMusicVideoCoordinator: NSObject, WKNavigationDelegate, WKScri
         pendingHide = nil
     }
 
-    private func cancelPendingReveal() {
-        pendingReveal?.cancel()
-        pendingReveal = nil
-    }
-
     private func reveal() {
-        cancelPendingReveal()
+        if MusicVideoOverlayMask.covers(framing: framing, wasShowing: playerVisible) {
+            coveredAt = ProcessInfo.processInfo.systemUptime
+            onCoverOverlays?()
+        }
         freeze.notePlayer(showing: true)
         let first = !reportedFirstFrame
         fade(visible: true, atOnce: first && revealsAtOnce)
@@ -1514,13 +1662,19 @@ final class YouTubeMusicVideoCoordinator: NSObject, WKNavigationDelegate, WKScri
         run("window.lunalyrBlur(\(max(0, value)))")
     }
 
+    /// The layer is gone: its page is parked for the next video when its
+    /// player is up and well (`YouTubePlayerReuse.mayPark`), else closed.
     func tearDown() {
+        let park = YouTubePlayerReuse.mayPark(pageReady: pageReady && session.ready, failed: session.hasFailed)
         loop.stop()
         session.stop()
         freeze.reset()
         ambience?.capture = nil
-        run("window.lunalyrPause && window.lunalyrPause()")
-        closeWebView()
+        onCoverOverlays = nil
+        if park { parkWebView() } else {
+            run("window.lunalyrPause && window.lunalyrPause()")
+            closeWebView()
+        }
     }
 
     private func run(_ script: String) {
@@ -1531,8 +1685,11 @@ final class YouTubeMusicVideoCoordinator: NSObject, WKNavigationDelegate, WKScri
 
     /// Our own web view's picture, as drawn: the page's crop, overscan and
     /// blur are in it, and the wallpaper's dimming lies over the host.
+    /// Not while YouTube's controls are drawn over the picture (covered
+    /// on screen, but not in a snapshot): a frozen frame would keep them.
     func captureFrame(_ done: @escaping @MainActor (CGImage?) -> Void) {
-        guard let view, view.bounds.width > 0, view.bounds.height > 0 else { done(nil); return }
+        guard MusicVideoOverlayMask.capturable(now: ProcessInfo.processInfo.systemUptime, coveredAt: coveredAt),
+              let view, view.bounds.width > 0, view.bounds.height > 0 else { done(nil); return }
         view.takeSnapshot(with: WKSnapshotConfiguration()) { image, _ in
             MainActor.assumeIsolated {
                 let picture = image?.cgImage(forProposedRect: nil, context: nil, hints: nil)
@@ -1542,9 +1699,12 @@ final class YouTubeMusicVideoCoordinator: NSObject, WKNavigationDelegate, WKScri
     }
 
     /// A small copy of the picture for the ambient glow: only while the
-    /// player shows, so YouTube's overlays and a blank page never tint it.
+    /// player shows and YouTube's controls are not drawn over it, so they
+    /// and a blank page never tint it.
     func captureAmbient(_ done: @escaping @MainActor (CGImage?) -> Void) {
-        guard playerVisible, let view, view.alphaValue > 0.5, view.bounds.width > 0, view.bounds.height > 0 else {
+        guard playerVisible,
+              MusicVideoOverlayMask.capturable(now: ProcessInfo.processInfo.systemUptime, coveredAt: coveredAt),
+              let view, view.alphaValue > 0.5, view.bounds.width > 0, view.bounds.height > 0 else {
             done(nil)
             return
         }
@@ -1680,6 +1840,7 @@ final class YouTubeMusicVideoCoordinator: NSObject, WKNavigationDelegate, WKScri
     }
 
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        pageReady = false
         perform(session.contentProcessTerminated())
     }
 }
