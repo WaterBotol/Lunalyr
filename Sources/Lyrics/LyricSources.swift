@@ -4,6 +4,7 @@ import Foundation
 
 enum LyricSourceID: String, CaseIterable, Identifiable, Codable {
     case appleMusicCache, lyricsPlus, netEase, qqMusic, kugou, lrclib, lyrimuse, kuwo, lyricsOVH, amll
+    case sodaMusic, petitLyrics, deezer, migu, vibe, genie, lyricFind
     var id: String { rawValue }
     var title: String {
         switch self {
@@ -17,6 +18,13 @@ enum LyricSourceID: String, CaseIterable, Identifiable, Codable {
         case .lyricsOVH: return "lyrics.ovh"
         case .amll: return "AMLL TTML DB"
         case .lyrimuse: return "Lyrimuse · local files"
+        case .sodaMusic: return "Soda Music"
+        case .petitLyrics: return "PetitLyrics"
+        case .deezer: return "Deezer"
+        case .migu: return "Migu Music"
+        case .vibe: return "VIBE"
+        case .genie: return "Genie Music"
+        case .lyricFind: return "LyricFind (YouTube Music)"
         }
     }
     var timing: String {
@@ -30,6 +38,9 @@ enum LyricSourceID: String, CaseIterable, Identifiable, Codable {
         case .lyricsOVH: return "Plain text fallback"
         case .amll: return "Word / syllable timing"
         case .lyrimuse: return "LRC / TTML / YRC + readings, translations"
+        case .sodaMusic, .deezer, .migu: return "Word or line timing"
+        case .petitLyrics: return "Word timing"
+        case .vibe, .genie, .lyricFind: return "Line timing"
         }
     }
     /// Read from this Mac rather than a lyric service. Local sources are
@@ -41,6 +52,7 @@ enum LyricSourceID: String, CaseIterable, Identifiable, Codable {
         switch self {
         case .lyricsOVH: return 0
         case .kuwo: return 1 // Kuwo's line list is converted to line-level LRC.
+        case .vibe, .genie, .lyricFind: return 1 // These services time lines only.
         default: return 3
         }
     }
@@ -117,7 +129,49 @@ final class LyricSourceOptions: ObservableObject {
     @Published var mode: Mode {
         didSet { UserDefaults.standard.set(mode.rawValue, forKey: "custom.lyricMatchMode") }
     }
-    static let recommendedOrder: [LyricSourceID] = [.appleMusicCache, .lyrimuse, .lyricsPlus, .amll, .netEase, .lrclib, .qqMusic, .kugou, .kuwo, .lyricsOVH]
+    static let recommendedOrder: [LyricSourceID] = [.appleMusicCache, .lyrimuse, .lyricsPlus, .amll, .netEase, .lrclib, .qqMusic, .kugou, .kuwo,
+                                                    .sodaMusic, .petitLyrics, .deezer, .migu, .vibe, .genie, .lyricFind, .lyricsOVH]
+    /// Sources added after people had saved their choices: each starts
+    /// switched on once (`custom.lyricSourcesSeen` remembers which were
+    /// offered), so turning one off later sticks.
+    static let addedLater: [LyricSourceID] = [.sodaMusic, .petitLyrics, .deezer, .migu, .vibe, .genie, .lyricFind]
+    /// A saved order with the sources it lacks added: one of `addedLater`
+    /// where the recommended order has it (after the nearest source before
+    /// it there), any other at the end, as before.
+    nonisolated static func merged(_ saved: [LyricSourceID]) -> [LyricSourceID] {
+        guard !saved.isEmpty else { return recommendedOrder }
+        var order: [LyricSourceID] = []
+        for item in saved + recommendedOrder.filter({ !addedLater.contains($0) }) where !order.contains(item) { order.append(item) }
+        for (index, item) in recommendedOrder.enumerated() where !order.contains(item) {
+            let anchor = recommendedOrder[..<index].reversed().first(where: order.contains)
+            order.insert(item, at: anchor.flatMap { order.firstIndex(of: $0) }.map { $0 + 1 } ?? 0)
+        }
+        return order
+    }
+    /// The switched-on sources stored in `defaults`, with sources added since
+    /// they were saved switched on once. Writes back what it changed:
+    /// assigning `enabled` in `init` does not run its `didSet`.
+    nonisolated static func loadEnabled(_ defaults: UserDefaults) -> Set<LyricSourceID> {
+        let stored = defaults.stringArray(forKey: "custom.lyricSources")
+        var chosen = Set((stored ?? LyricSourceID.allCases.filter { $0 != .lyrimuse && $0 != .appleMusicCache }.map(\.rawValue))
+            .compactMap(LyricSourceID.init(rawValue:)))
+        var changed = false
+        if !defaults.bool(forKey: "custom.lyricSourcesSeenAMLL") {
+            changed = changed || !chosen.contains(.amll)
+            chosen.insert(.amll)
+            defaults.set(true, forKey: "custom.lyricSourcesSeenAMLL")
+        }
+        var seen = Set(defaults.stringArray(forKey: "custom.lyricSourcesSeen") ?? [])
+        let fresh = addedLater.filter { !seen.contains($0.rawValue) }
+        if !fresh.isEmpty {
+            changed = changed || !chosen.isSuperset(of: fresh)
+            chosen.formUnion(fresh)
+            seen.formUnion(fresh.map(\.rawValue))
+            defaults.set(seen.sorted(), forKey: "custom.lyricSourcesSeen")
+        }
+        if changed, stored != nil { defaults.set(chosen.map(\.rawValue).sorted(), forKey: "custom.lyricSources") }
+        return chosen
+    }
     // "custom.preferWordTiming" and "custom.preferWordTimedLRCLIB" are no
     // longer read: word and mixed timing always rank first, with LRCLIB
     // after Music's own lyrics. Stored values are left as they are.
@@ -134,17 +188,9 @@ final class LyricSourceOptions: ObservableObject {
     private init() {
         let d = UserDefaults.standard
         let saved = (d.stringArray(forKey: "custom.lyricSourceOrder") ?? []).compactMap(LyricSourceID.init(rawValue:))
-        var unique: [LyricSourceID] = []
-        for item in saved + Self.recommendedOrder where !unique.contains(item) { unique.append(item) }
-        order = unique
-        var chosen = Set((d.stringArray(forKey: "custom.lyricSources") ?? LyricSourceID.allCases.filter { $0 != .lyrimuse && $0 != .appleMusicCache }.map(\.rawValue))
-            .compactMap(LyricSourceID.init(rawValue:)))
+        order = Self.merged(saved)
         // A source added after someone saved their choices starts switched on, once.
-        if !d.bool(forKey: "custom.lyricSourcesSeenAMLL") {
-            chosen.insert(.amll)
-            d.set(true, forKey: "custom.lyricSourcesSeenAMLL")
-        }
-        enabled = chosen
+        enabled = Self.loadEnabled(d)
         mode = Mode(rawValue: d.string(forKey: "custom.lyricMatchMode") ?? "") ?? .smart
         repairQQGaps = d.object(forKey: "custom.repairQQGaps") as? Bool ?? true
     }

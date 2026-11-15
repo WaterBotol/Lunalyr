@@ -1,7 +1,8 @@
 import Foundation
 
 /// An artist's names in other scripts ("米津玄師" for "Kenshi Yonezu"), from
-/// MusicBrainz, so the Chinese catalogues (NetEase, QQ, Kugou, Kuwo), which
+/// MusicBrainz, so the East Asian catalogues (NetEase, QQ, Kugou, Kuwo, Soda,
+/// Migu, PetitLyrics, VIBE, Genie), which
 /// often index only the native name, can be searched again under it.
 ///
 /// Asked only when such a source found nothing, or only another artist, under
@@ -17,7 +18,7 @@ actor ArtistAliases {
     /// Whether the lookup may run ("Search under other names").
     static var enabled: Bool { UserDefaults.standard.object(forKey: "custom.artistAliases") as? Bool ?? true }
     /// The sources searched again under another name.
-    static let catalogues: Set<LyricSourceID> = [.netEase, .qqMusic, .kugou, .kuwo]
+    static let catalogues: Set<LyricSourceID> = [.netEase, .qqMusic, .kugou, .kuwo, .sodaMusic, .migu, .petitLyrics, .vibe, .genie]
 
     private struct Entry: Codable {
         var names: [String]

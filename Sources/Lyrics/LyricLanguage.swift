@@ -328,7 +328,8 @@ actor OriginalTitles {
 
 extension LyricsFetcher {
     /// The sources searched again under a song's original title.
-    static let originalTitleSources: Set<LyricSourceID> = [.lrclib, .netEase, .qqMusic, .kugou, .kuwo, .lyricsPlus, .amll]
+    static let originalTitleSources: Set<LyricSourceID> = [.lrclib, .netEase, .qqMusic, .kugou, .kuwo, .lyricsPlus, .amll,
+                                                             .sodaMusic, .petitLyrics, .deezer, .migu, .vibe, .genie, .lyricFind]
 
     /// A source's answer, searched again under the song's original title
     /// (`OriginalTitles`) when the listed title found nothing usable: a

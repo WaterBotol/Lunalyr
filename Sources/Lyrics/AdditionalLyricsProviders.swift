@@ -3,7 +3,7 @@ import Foundation
 /// Independent adapters for public lyric lookup endpoints. No account cookies,
 /// credentials, audio downloads or private listening history are requested.
 enum AdditionalLyricsProviders {
-    private static func score(_ query: LyricQuery, title: String, artist: String, duration: Double?) -> Double {
+    static func score(_ query: LyricQuery, title: String, artist: String, duration: Double?) -> Double {
         vc_match_score(LyricQuery.similarity(query.title, title), query.artistScore(artist),
             duration.map { abs($0 - query.duration) } ?? 0, duration != nil && query.duration > 0 ? 1 : 0,
             0, 1, 0)
@@ -11,7 +11,7 @@ enum AdditionalLyricsProviders {
     /// Hits that name the playing recording first (`LyricsFetcher.namesRecording`),
     /// then by score, so a close name with the wrong length is not fetched
     /// and offered ahead of the right recording.
-    private static func ordered<Hit>(_ hits: [Hit], _ source: LyricSourceID, query: LyricQuery,
+    static func ordered<Hit>(_ hits: [Hit], _ source: LyricSourceID, query: LyricQuery,
                                      _ fields: (Hit) -> (title: String, artist: String, duration: Double?, score: Double)) -> [Hit] {
         hits.map { hit -> (hit: Hit, passes: Int, score: Double) in
             let f = fields(hit)
@@ -19,7 +19,7 @@ enum AdditionalLyricsProviders {
         }.sorted { ($0.passes, $0.score) > ($1.passes, $1.score) }.map(\.hit)
     }
     /// Records a catalogue search for the lookup trace: what came back, what scored, and what will be read.
-    private static func trace<Hit>(_ label: String, returned: Int, scored ordered: [Hit], read: Int, query: LyricQuery, _ source: LyricSourceID,
+    static func trace<Hit>(_ label: String, returned: Int, scored ordered: [Hit], read: Int, query: LyricQuery, _ source: LyricSourceID,
                                    _ fields: (Hit) -> (title: String, artist: String, duration: Double?, score: Double)) {
         guard LyricTrace.isOn else { return }
         LyricTrace.results(label, returned: returned, read: min(read, ordered.count))
@@ -32,7 +32,7 @@ enum AdditionalLyricsProviders {
         }
         if returned > ordered.count { LyricTrace.note("\(returned - ordered.count) result(s) scored 0 and were dropped") }
     }
-    private static func candidate(_ source: LyricSourceID, lrc: String, query: LyricQuery,
+    static func candidate(_ source: LyricSourceID, lrc: String, query: LyricQuery,
                                   title: String, artist: String, duration: Double?) -> LyricCandidate? {
         let lines = LyricsFetcher.parseLRC(LyricHTTP.text(lrc), trackDuration: query.duration)
         guard !lines.isEmpty else {
