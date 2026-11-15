@@ -575,14 +575,16 @@ final class LyricsFetcher {
     /// Where a source stands ahead of the configured order at a ranked
     /// timing, at best: Music's own cache leads timed lyrics, then Apple
     /// Music's lyrics relayed by Lyrics+ (`isAppleRelay`; Music's own is the
-    /// exact track, so it wins a tie), and LRCLIB follows them only with
-    /// word-by-word or mixed timing. Every other source is 3.
+    /// exact track, so it wins a tie), then Musixmatch, and LRCLIB follows
+    /// them only with word-by-word or mixed timing. Every other source is 4.
+    /// (The user's order, 16 Nov 2026: Apple Music > Musixmatch > LRCLIB.)
     private static func lead(_ source: LyricSourceID, timing: Int) -> Int {
         switch source {
         case .appleMusicCache where timing >= 1: return 0
         case .lyricsPlus where timing >= 1: return 1
-        case .lrclib where timing == 2: return 2
-        default: return 3
+        case .musixmatch where timing >= 1: return 2
+        case .lrclib where timing == 2: return 3
+        default: return 4
         }
     }
     /// `lead` for a match. Lyrics+ leads only when it relays Apple Music's
@@ -591,8 +593,8 @@ final class LyricsFetcher {
     /// timing and LRCLIB's disagrees with both
     /// (`LyricAgreement.timingOutlier`): its timing is made by listeners.
     private static func lead(_ candidate: LyricCandidate, timing: Int) -> Int {
-        if candidate.source == .lrclib, candidate.agreement.timingOutlier { return 4 }
-        if candidate.source == .lyricsPlus, !isAppleRelay(candidate) { return 3 }
+        if candidate.source == .lrclib, candidate.agreement.timingOutlier { return 5 }
+        if candidate.source == .lyricsPlus, !isAppleRelay(candidate) { return 4 }
         return lead(candidate.source, timing: timing)
     }
     /// The name Lyrics+ results carry after their upstream's ("Apple via Lyrics+").

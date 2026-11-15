@@ -58,6 +58,21 @@ final class LyricPriorityTests: XCTestCase {
         LyricsFetcher.ranked(candidates, query: query, options: options).map(\.source)
     }
 
+    /// The user's order (16 Nov 2026): Apple Music, then Musixmatch, then
+    /// LRCLIB, whatever the configured list says.
+    func testMusixmatchRanksBetweenAppleMusicAndLRCLIB() {
+        let order: [LyricSourceID] = [.lrclib, .netEase, .qqMusic, .appleMusicCache, .musixmatch]
+        for options in modes(order) {
+            XCTAssertEqual(winner([candidate(.lrclib, .word), candidate(.musixmatch, .word)], options), .musixmatch)
+            XCTAssertEqual(winner([candidate(.appleMusicCache, .word), candidate(.musixmatch, .word)], options), .appleMusicCache)
+            XCTAssertEqual(winner([candidate(.netEase, .line), candidate(.musixmatch, .line)], options), .musixmatch)
+            XCTAssertEqual(winner([candidate(.lrclib, .line), candidate(.musixmatch, .line)], options), .musixmatch)
+            XCTAssertEqual(winner([candidate(.appleMusicCache, .line), candidate(.musixmatch, .line)], options), .appleMusicCache)
+            // Word timing still beats any line timing, Musixmatch's included.
+            XCTAssertEqual(winner([candidate(.qqMusic, .word), candidate(.musixmatch, .line)], options), .qqMusic)
+        }
+    }
+
     func testTheFixturesCarryTheTimingLabelsTheCardsShow() {
         XCTAssertEqual(candidate(.lrclib, .word).provenance.precision, "Word-by-word")
         XCTAssertEqual(candidate(.lrclib, .mixed).provenance.precision, "Mixed timing")
