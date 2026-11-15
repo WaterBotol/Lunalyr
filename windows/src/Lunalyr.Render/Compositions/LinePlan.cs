@@ -28,12 +28,26 @@ internal sealed class RunInk : IDisposable
     public Vector4 Glow { get; init; } = Vector4.One;
     /// <summary>The slot's centre in the line's block (top-left origin), layout pixels.</summary>
     public PointD Centre { get; set; }
+    /// <summary>The word's symbol (the Mac's word symbols), in the rest colour, and in the sung colour where the word sweeps.</summary>
+    public Ink? Symbol { get; init; }
+    public Ink? SymbolSung { get; init; }
+    /// <summary>The symbol's centre relative to the unit's centre, layout pixels.</summary>
+    public Vector2 SymbolOffset { get; init; }
+    /// <summary>The run's action word motion, if it takes one.</summary>
+    public WordAction? Action { get; init; }
+    /// <summary>The colours the label was baked in (the action's colour cue multiplies them).</summary>
+    public Vector4 RestColour { get; init; } = Vector4.One;
+    public Vector4 SungColour { get; init; } = Vector4.One;
+
+    public bool HasAccent => Symbol is not null || Action is not null;
 
     public void Dispose()
     {
         Label.Dispose();
         Sung?.Dispose();
         Reading?.Dispose();
+        Symbol?.Dispose();
+        SymbolSung?.Dispose();
     }
 }
 
@@ -116,7 +130,8 @@ internal readonly record struct PlanSpec(
     LineFit Fit, double RasterBoost, ShadowSpec Shadow, Vector4 Colour,
     Vector4 ReadingColour, double LineReadingSize, double LineReadingWidth, ShadowSpec LineReadingShadow,
     LyricInk? Ink = null, CompositionKind Kind = CompositionKind.Editorial, double Spread = 1,
-    double TranslationSize = 0, double EditorialAmount = 1, bool RandomFonts = false, SizeD? FillStage = null);
+    double TranslationSize = 0, double EditorialAmount = 1, bool RandomFonts = false, SizeD? FillStage = null,
+    bool Symbols = false, bool Actions = false, WordAccentLists? WordLists = null);
 
 internal static class LinePlans
 {
@@ -133,6 +148,10 @@ internal static class LinePlans
                                                  spec.Editorial, runReadings, 1, spec.Kind, spec.Spread, spec.EditorialAmount);
         var locale = TextKit.LocaleFor(string.Concat(words.Select(word => word.Text)));
         var count = typography.Runs.Count;
+        // Word symbols and action words: English words of a word-timed line, planned once for the whole line.
+        var accents = Accents(typography, spec);
+        var symbols = accents is null ? null : new IDWriteTextLayout?[count];
+        var symbolGaps = accents is null ? null : new double[count];
         var labels = new IDWriteTextLayout[count];
         var readings = new IDWriteTextLayout?[count];
         var slices = new ReadingSlices?[count];
@@ -162,6 +181,19 @@ internal static class LinePlans
                     var reading = readings[r]!.Metrics;
                     width = Math.Max(width, reading.Width);
                     height += metrics.Size * 0.04 + reading.Height;
+                }
+                // The symbol sits beside the word from the line's first frame (transparent until its word is sung), so
+                // it is measured with the word and the line never reflows.
+                if (accents is not null && WordSymbolGlyphs.Glyph(accents[r].Symbol) is { } glyph)
+                {
+                    var symbolSize = (float)Math.Max(spec.MinimumSize * 6 / 11, metrics.Size * 0.5);
+                    var symbol = glyph == WordSymbolGlyphs.Dollar
+                        ? kit.Layout(glyph, Face.Heavy, symbolSize, "en-us", false)
+                        : kit.SymbolLayout(glyph, symbolSize);
+                    symbols![r] = symbol;
+                    symbolGaps![r] = metrics.Size * 0.16;
+                    width = Math.Max(width, label.Width) + symbolGaps[r] + symbol.Metrics.Width;
+                    height = Math.Max(height, symbol.Metrics.Height);
                 }
                 units[r] = new SizeD(width, height);
                 slots[r] = EditorialFlow.Slot(units[r], metrics.Rotation, run.Inset, metrics.WaveOffset);
@@ -231,18 +263,41 @@ internal static class LinePlans
                 Ink? reading = readings[r] is { } layout ? kit.Bake(layout, readingColour, raster, spec.Shadow) : null;
                 var unit = units[r];
                 var labelHeight = labels[r].Metrics.Height;
+                var labelY = (float)(-unit.Height / 2 + labelHeight / 2);
+                // With a symbol, the word moves aside by half the symbol and its gap (the symbol follows the word in
+                // its reading direction), and its reading stays under it.
+                var labelX = 0f;
+                Ink? symbolInk = null, symbolSung = null;
+                var symbolOffset = Vector2.Zero;
+                var sungColour = sample is { Sweeps: true } swept ? LyricInks.Vector(swept.Sung) : colour;
+                if (symbols?[r] is { } symbolLayout)
+                {
+                    var symbolWidth = symbolLayout.Metrics.Width;
+                    var side = typography.Runs[r].RightToLeft ? -1f : 1f;
+                    var labelWidth = labels[r].Metrics.Width;
+                    labelX = -side * (float)((symbolGaps![r] + symbolWidth) / 2);
+                    symbolOffset = new Vector2(labelX + side * (float)(labelWidth / 2 + symbolGaps[r] + symbolWidth / 2), labelY);
+                    symbolInk = kit.Bake(symbolLayout, colour, raster, spec.Shadow);
+                    symbolSung = sample is { Sweeps: true } ? kit.Bake(symbolLayout, sungColour, raster, ShadowSpec.None) : null;
+                }
                 runs[r] = new RunInk
                 {
                     Label = label,
                     Sung = sung,
                     Reading = reading,
                     ReadingSlices = reading is null ? null : slices[r],
-                    LabelOffset = new Vector2(0, (float)(-unit.Height / 2 + labelHeight / 2)),
-                    ReadingOffset = reading is null ? default : new Vector2(0, (float)(unit.Height / 2 - reading.Box.Y / 2)),
+                    LabelOffset = new Vector2(labelX, labelY),
+                    ReadingOffset = reading is null ? default : new Vector2(labelX, (float)(unit.Height / 2 - reading.Box.Y / 2)),
                     Unit = unit,
                     Slot = slots[r],
                     Centre = centres[r],
                     Glow = sample is { } glow ? LyricInks.Vector(glow.Glow) : colour,
+                    Symbol = symbolInk,
+                    SymbolSung = symbolSung,
+                    SymbolOffset = symbolOffset,
+                    Action = accents?[r].Action,
+                    RestColour = colour,
+                    SungColour = sungColour,
                 };
             }
             var lineInk = lineLayout is null ? null : kit.Bake(lineLayout, spec.ReadingColour, raster, spec.LineReadingShadow);
@@ -273,7 +328,23 @@ internal static class LinePlans
         {
             foreach (var layout in labels) layout?.Dispose();
             foreach (var layout in readings) layout?.Dispose();
+            if (symbols is not null) foreach (var layout in symbols) layout?.Dispose();
         }
+    }
+
+    /// <summary>
+    /// The line's word symbols and action word (the Mac's ad5a6a6 and cba108f): only for a word-timed line with either
+    /// switched on; each run matched by its text (a glued run's tokens joined). Null when there are none.
+    /// </summary>
+    private static RunAccent[]? Accents(EditorialLine typography, in PlanSpec spec)
+    {
+        if (!spec.WordTimed || !(spec.Symbols || spec.Actions) || spec.WordLists is not { } lists) return null;
+        var texts = new string[typography.Runs.Count];
+        for (var r = 0; r < texts.Length; r++) texts[r] = typography.Runs[r].Label;
+        var plan = WordAccents.Plan(texts, spec.Symbols, spec.Actions, lists);
+        foreach (var accent in plan)
+            if (!accent.IsEmpty) return plan;
+        return null;
     }
 }
 

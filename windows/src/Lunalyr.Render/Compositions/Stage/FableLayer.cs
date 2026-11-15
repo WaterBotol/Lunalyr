@@ -73,7 +73,7 @@ internal sealed class FableLayer(IWordBreaker breaker, Logger? logger) : StageLa
             var role = i < plan.Roles.Length ? plan.Roles[i] : FableRole.Content;
             var size = FableGeometry.Size(role, runs.Count, u);
             line.Size[i] = size;
-            var spec = new WordSpec(size, [Colour(sample.Rest, 0.86), Colour(sample.Sung)]) { Shadow = shadow, Raster = 1.15f };
+            var spec = new WordSpec(size, [Colour(sample.Rest, 0.86), Colour(sample.Sung)]) { Shadow = shadow, Raster = 1.15f, Accent = Accent(source, i) };
             if (source.Readings[i] is { } reading)
             {
                 spec = spec with

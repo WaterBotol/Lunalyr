@@ -60,12 +60,15 @@ internal static class SetupBench
                 Title = demo.Title, Artist = demo.Artist, Album = demo.Album, TrackKey = demo.Title, Duration = demo.Duration,
                 Lyrics = presented, Readings = readings, WordReadings = words, Palette = cover.Palette, Cover = cover.Art,
                 TitleReading = titleReading,
-                Style = LyricStyle.Default with { OpeningTitle = true, Credits = true },
+                Style = StyleExtras.Apply(LyricStyle.Default with { OpeningTitle = true, Credits = true }, Extras),
             };
             songs.Add(new Song(demo.Title, scene, demo.Duration));
         }
         return [songs[0], songs[1], songs[0]];
     }
+
+    /// <summary>The -style extras, applied to every demo song (so -hashes can compare with a setting off).</summary>
+    public static IReadOnlyList<(string Name, string Value)> Extras { get; set; } = [];
 
     public static void Run(Offscreen stage, IReadOnlyList<IRenderLayerFactory> factories, string? only, float scale, int runs, int surfaces)
     {

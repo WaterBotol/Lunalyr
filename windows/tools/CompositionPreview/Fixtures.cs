@@ -64,6 +64,19 @@ public static class Fixtures
         return Scene("Neon Harbour", Parse(LyricFormat.Ttml, payload, 60), style: style);
     }
 
+    /// <summary>
+    /// Word symbols and action words (the Mac's ad5a6a6 and cba108f): "love" takes a heart and "spin" turns; "falling"
+    /// dips beside a moon and a flame; "frozen" frosts beside a heart and a sun.
+    /// </summary>
+    public static SceneSnapshot Accents(LyricStyle? style = null)
+    {
+        Sung[] first = Even(10.0, 0.45, 0.4, "I", "love", "the", "way", "you", "spin");
+        Sung[] second = Even(14.0, 0.5, 0.45, "Falling", "through", "the", "night", "like", "fire");
+        Sung[] third = Even(18.0, 0.5, 0.45, "Frozen", "hearts", "under", "the", "sun");
+        var payload = Ttml("en", first, second, third);
+        return Scene("Word Accents", Parse(LyricFormat.Ttml, payload, 30), style: style);
+    }
+
     /// <summary>Two unspaced Japanese lines timed by word, with readings.</summary>
     public static SceneSnapshot Japanese(LyricStyle? style = null)
     {

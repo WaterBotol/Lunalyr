@@ -485,7 +485,8 @@ public sealed class ScatteredFamilyRenderTests : IDisposable
                 new() { Start = 10, End = 12, Text = "neon rain", WordTimed = true, Words = [new("neon", 10, 10.35), new("rain", 10.4, rainEnd)] },
                 new() { Start = 12.5, End = 13, Text = "la", WordTimed = true, Words = [new("la", 12.5, 13)] },
             ], new LyricProvenance("Word-by-word", "Test")),
-            Palette = Fixtures.Night, Style = Style("fade"),
+            // Without word symbols: "rain"'s cloud would take the line onto two rows, leaving no gap to measure.
+            Palette = Fixtures.Night, Style = Style("fade") with { WordSymbols = false },
         };
         int WordGap(IRenderLayer layer, SceneSnapshot scene, double time)
         {

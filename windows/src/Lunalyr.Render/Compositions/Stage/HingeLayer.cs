@@ -79,7 +79,7 @@ internal sealed class HingeLayer(IWordBreaker breaker, Logger? logger) : StageLa
                 // A word at its own width, never wider than its page: too wide, it shrinks to it.
                 var spec = WithReading(new WordSpec(size, [Colour(sample.Sung)])
                 {
-                    Uppercase = true, MaxWidth = room, MinimumScale = focal ? 0.3 : 0.5,
+                    Uppercase = true, MaxWidth = room, MinimumScale = focal ? 0.3 : 0.5, Accent = Accent(source, id),
                     Shadow = Shadow(0.3, Math.Max(2, size * 0.06 / Pt), 2), Raster = focal ? 1.6f : 1.4f,
                 }, source.Readings[id], size, [Colour(sample.Reading)], maxWidth: room, alignment: own == HingeSide.Right ? -1 : 1);
                 words[id] = Bake(run, run.Text, spec);

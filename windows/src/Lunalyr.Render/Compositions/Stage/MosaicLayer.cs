@@ -61,7 +61,7 @@ internal sealed class MosaicLayer(IWordBreaker breaker, Logger? logger) : StageL
                 // Huge, running off the edge, with a star beside it.
                 var spec = WithReading(new WordSpec(size, [Colour(sample.Sung)])
                 {
-                    MaxWidth = Stage.Width * 1.1, MinimumScale = 0.5, Shadow = Shadow(0.28, 8, 3), Raster = 1.1f,
+                    MaxWidth = Stage.Width * 1.1, MinimumScale = 0.5, Shadow = Shadow(0.28, 8, 3), Raster = 1.1f, Accent = Accent(source, i),
                 }, reading, size, [Colour(sample.Reading)], maxWidth: Stage.Width * 1.1);
                 words[i] = Bake(run, run.Text, spec);
             }
@@ -70,7 +70,7 @@ internal sealed class MosaicLayer(IWordBreaker breaker, Logger? logger) : StageL
                 // White on a colour bar; a reading is printed on the bar under its word.
                 var spec = WithReading(new WordSpec(size, [tileText])
                 {
-                    MaxWidth = Stage.Width * 0.7, MinimumScale = 0.45, Shadow = Shadow(0.25, 8, 3), Raster = 1.1f,
+                    MaxWidth = Stage.Width * 0.7, MinimumScale = 0.45, Shadow = Shadow(0.25, 8, 3), Raster = 1.1f, Accent = Accent(source, i),
                 }, reading, size, [Faded(tileText, LyricHighlight.ReadingOpacity)], shadow: false, maxWidth: Stage.Width * 0.7);
                 words[i] = Bake(run, run.Text, spec);
                 line.Bar[i] = new SizeD(words[i].Size.Width + size * 0.56, words[i].Size.Height + size * 0.12);

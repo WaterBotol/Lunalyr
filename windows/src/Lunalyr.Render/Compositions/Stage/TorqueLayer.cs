@@ -60,6 +60,7 @@ internal sealed class TorqueLayer(IWordBreaker breaker, Logger? logger) : StageL
             var sung = Colour(sample.Sung);
             var spec = WithReading(new WordSpec(size, [Colour(sample.Rest, 0.86), sung])
             {
+                Accent = Accent(source, i),
                 MaxWidth = Stage.Width * 0.8, MinimumScale = 0.35, Shadow = Shadow(0.28, Math.Max(3, u * 0.1 / Pt), u * 0.05 / Pt), Raster = 1.15f,
             }, source.Readings[i], size, [Colour(sample.Reading), Colour(sample.Sung, LyricHighlight.ReadingOpacity)],
                gap: size * 0.04, maxWidth: Stage.Width * 0.8);
@@ -193,12 +194,15 @@ internal sealed class TorqueLayer(IWordBreaker breaker, Logger? logger) : StageL
         if (depth > 0.2 * Pt)
         {
             var parts = word.Boundaries is null ? default : line.PartOpacities(run, time);
+            // The edge moves with an action word's motion, as the word does.
+            var edgeUnit = Acting(word, run, time, unit, line.LabelAt[id] - word.LabelOffset, out var acting);
+            var edgeAlpha = alpha * acting.Opacity;
             for (var step = steps; step >= 1; step--)
             {
                 var share = (double)step / steps;
                 var shade = line.Edges[id][share > 0.6 ? 1 : 0];
                 var nudge = word.LabelOffset + new Vector2((float)(side * depth * share * 0.55), (float)(depth * share));
-                DrawInk(dc, shade, unit, line.LabelAt[id] - word.LabelOffset + nudge, alpha, blur, 0, word.Boundaries, parts, word.RightToLeft);
+                DrawInk(dc, shade, edgeUnit, line.LabelAt[id] - word.LabelOffset + nudge, edgeAlpha, blur, 0, word.Boundaries, parts, word.RightToLeft);
             }
         }
         var labelNudge = line.LabelAt[id] - word.LabelOffset;

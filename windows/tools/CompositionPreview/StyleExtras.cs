@@ -27,6 +27,8 @@ internal static class StyleExtras
                 "reveal" => style with { NoWordReveal = value == "off" ? AllLayouts() : ValueList.Empty },
                 "preview" => style with { NoNextWordPreview = value == "off" ? AllLayouts() : ValueList.Empty },
                 "lead" => style with { PreviewLead = Number(value) },
+                "symbols" => style with { WordSymbols = value != "off" },
+                "actions" => style with { ActionWords = value != "off" },
                 _ => throw new ArgumentException($"Unknown style extra {name}"),
             };
         }

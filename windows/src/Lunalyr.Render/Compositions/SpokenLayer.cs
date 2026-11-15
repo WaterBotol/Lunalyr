@@ -37,6 +37,14 @@ internal sealed class SpokenUnit : IDisposable
     public Ink? Tile { get; init; }
     public Ink? LabelOnTile { get; init; }
     public Ink? ReadingOnTile { get; init; }
+    /// <summary>The word's symbol (the Mac's word symbols) in its rest colour, and in its sung colour where it sweeps.</summary>
+    public Ink? Symbol { get; init; }
+    public Ink? SymbolSung { get; init; }
+    public Vector2 SymbolOffset { get; init; }
+    /// <summary>The word's action motion (the Mac's action words), if it takes one.</summary>
+    public WordAction? Action { get; init; }
+    public Vector4 RestColour { get; init; } = Vector4.One;
+    public Vector4 SungColour { get; init; } = Vector4.One;
 
     public void Dispose()
     {
@@ -46,6 +54,8 @@ internal sealed class SpokenUnit : IDisposable
         Tile?.Dispose();
         LabelOnTile?.Dispose();
         ReadingOnTile?.Dispose();
+        Symbol?.Dispose();
+        SymbolSung?.Dispose();
     }
 }
 
@@ -59,6 +69,8 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger, Composit
     private RollingWord[] _prepared = [];
     private SpokenUnit?[] _preparedUnits = [];
     private readonly Dictionary<LyricWord, SpokenUnit> _units = [];
+    /// <summary>Each rolling run's word symbol and action word, planned per whole line and keyed by the run.</summary>
+    private readonly Dictionary<LyricWord, RunAccent> _accents = [];
     private readonly Dictionary<int, BackingPlan[]> _backing = [];
     private int _trackSeed;
 
@@ -92,10 +104,34 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger, Composit
     {
         // Word-by-word readings where the scene has them, each line's reading string otherwise.
         _song = new RollingSong(lines, Breaker, scene.WordReadings, ReadingDisplay, scene.Readings, scene.Style.BackingVocals);
+        PlanAccents(lines, scene.Style);
         _trackSeed = (int)(RollingWords.Fnv1a((scene.Title ?? "") + "\u001f" + (scene.Artist ?? "")) & 0x7FFF_FFFF);
     }
 
     private double LineBase => BaseSize * 0.75 * Metrics.UserScale;
+
+    /// <summary>
+    /// Word symbols and action words (the Mac's ad5a6a6 and cba108f): each word-timed line planned whole, with its own
+    /// caps, from the runs it rolls as (lifted backing vocals already out), never from the window on screen; the
+    /// window's runs look theirs up. None where readings replace the words.
+    /// </summary>
+    private void PlanAccents(IReadOnlyList<LyricLine> lines, LyricStyle style)
+    {
+        _accents.Clear();
+        var symbols = style.WordSymbols && style.Readings != ReadingPlacement.Instead;
+        var actions = style.ActionWords && style.Readings != ReadingPlacement.Instead;
+        if (!(symbols || actions) || _song is null) return;
+        for (var row = 0; row < lines.Count; row++)
+        {
+            if (!lines[row].WordTimed) continue;
+            var words = _song.WordsOf(row);
+            var texts = new string[words.Count];
+            for (var i = 0; i < texts.Length; i++) texts[i] = words[i].Text;
+            var plan = WordAccents.Plan(texts, symbols, actions, style.WordLists);
+            for (var i = 0; i < plan.Length; i++)
+                if (!plan[i].IsEmpty) _accents[words[i]] = plan[i];
+        }
+    }
 
     protected override void DrawRolling(ID2D1DeviceContext dc, int row, double time, double presence)
     {
@@ -200,6 +236,19 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger, Composit
                 * Matrix3x2.CreateRotation(Radians(state.Angle))
                 * Matrix3x2.CreateTranslation(origin.X + (float)centre.X, origin.Y + (float)centre.Y);
             var scale = (float)(slot.EntranceScale * fit * state.Scale);
+            // An action word's motion, outside the stage fit: about the unit's centre on screen, its offset in ems of
+            // the word as drawn.
+            var action = unit.Action is { } act ? WordActionMotion.Pose(act, time - token.Source.Start, reduce) : WordActionPose.Identity;
+            if (!action.IsIdentity)
+            {
+                var at = world.Translation;
+                var em = (float)(token.PointSize * fit * state.Scale);
+                world *= Matrix3x2.CreateTranslation(-at)
+                    * Matrix3x2.CreateScale((float)(action.TurnScale * action.Scale), (float)action.Scale)
+                    * Matrix3x2.CreateTranslation(at.X + (float)action.Dx * em, at.Y + (float)action.Dy * em);
+                scale *= (float)action.Scale;
+                opacity *= action.Opacity;
+            }
             var progress = state.Presentation.Progress;
             var blur = Combine(Points(motion.Blur(progress, reduce)), Points(state.Pose.Blur)) * scale;
             // A cutout is unmasked from its leading edge while it arrives (cutouts follow the reveal itself).
@@ -236,6 +285,8 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger, Composit
                     sung.DrawBetween(dc, labelWorld, scale, (float)opacity, blur, (float)from, (float)to,
                                      reveal.IsEmpty ? default : AsSpan(token.Boundaries), reveal, token.RightToLeft);
                 }
+                if (unit.Symbol is not null || action.Tints)
+                    DrawAccent(dc, token, unit, labelWorld, world, scale, opacity, blur, action, time, state.Presentation.Preview, clip);
                 var readingWorld = Matrix3x2.CreateTranslation(unit.ReadingOffset) * world;
                 var reading = state.Presentation.Preview ? null : unit.Reading;
                 reading?.Draw(dc, readingWorld, scale, (float)opacity, blur, GlowSpec.None, 1, readingBoundaries, readingShares, clip: clip);
@@ -339,6 +390,32 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger, Composit
             if (on < 0.999f) reading.DrawBetween(dc, readingWorld, scale, opacity, blur, onFrom, onTo, readingBoundaries, readingShares);
             unit.ReadingOnTile?.DrawBetween(dc, readingWorld, scale, opacity * on, blur, onFrom, onTo, readingBoundaries, readingShares);
         }
+    }
+
+    /// <summary>
+    /// A rolling word's symbol, fading in over 0.3 s from its onset (none while the word is a faint preview) and
+    /// crossing to the sung colour as a sweep fills the word, and its action's colour cue laid over word and symbol.
+    /// </summary>
+    private static void DrawAccent(ID2D1DeviceContext dc, RollingWord token, SpokenUnit unit, in Matrix3x2 labelWorld,
+                                   in Matrix3x2 world, float scale, double opacity, float blur, in WordActionPose action,
+                                   double time, bool preview, InkClip clip)
+    {
+        var sweep = unit.SymbolSung is not null || action.Tints ? Math.Clamp(SungSweep.Progress(token, time), 0, 1) : 0;
+        var basis = Vector4.Lerp(unit.RestColour, unit.SungColour, (float)sweep);
+        var (r, g, b) = action.Multiply;
+        var cue = new Vector4(basis.X * (float)r, basis.Y * (float)g, basis.Z * (float)b, 1);
+        if (action.Tints) unit.Label.DrawTinted(dc, labelWorld, cue with { W = (float)opacity }, clip);
+        if (unit.Symbol is not { } symbol || preview) return;
+        var shown = opacity * WordActionMotion.SymbolOpacity(time - token.Source.Start);
+        if (!(shown > 0.002)) return;
+        var symbolWorld = Matrix3x2.CreateTranslation(unit.SymbolOffset) * world;
+        var glow = action.Glow > 0.002
+            ? new GlowSpec(new Vector4(unit.SungColour.X, unit.SungColour.Y, unit.SungColour.Z, (float)action.GlowOpacity),
+                           (float)action.GlowRadius(token.PointSize) * scale)
+            : GlowSpec.None;
+        symbol.Draw(dc, symbolWorld, scale, (float)shown, blur, glow, 1, clip: clip);
+        if (unit.SymbolSung is { } sung && sweep > 0.002) sung.Draw(dc, symbolWorld, scale, (float)(shown * sweep), blur, GlowSpec.None, 0, clip: clip);
+        if (action.Tints) symbol.DrawTinted(dc, symbolWorld, cue with { W = (float)shown }, clip);
     }
 
     /// <summary>A fold about the bottom edge of a unit <paramref name="height"/> tall, drawn as a foreshortening.</summary>
@@ -448,19 +525,48 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger, Composit
         }
         // The word and its reading sit in the middle of the unit's padding.
         var content = height - 2 * Padding(token, Scale).Y;
+        var labelY = (float)(-content / 2 + labelBox.Height / 2);
+        // A word symbol: 0.16 em from the word, centred on its box, measured with the unit (not on Cutout's labels).
+        _accents.TryGetValue(token.Source, out var wordAccent);
+        Ink? symbolInk = null, symbolSung = null;
+        var labelX = 0f;
+        var symbolOffset = Vector2.Zero;
+        var sungColour = LyricInks.Vector(colours.Sweeps ? colours.Sung : rest);
+        if (!token.Tile && WordSymbolGlyphs.Glyph(wordAccent.Symbol) is { } glyph)
+        {
+            var symbolSize = (float)Math.Max(Points(6), token.PointSize * 0.5);
+            using var symbol = glyph == WordSymbolGlyphs.Dollar
+                ? kit.Layout(glyph, Face.Heavy, symbolSize, "en-us", false)
+                : kit.SymbolLayout(glyph, symbolSize);
+            var gap = token.PointSize * 0.16;
+            var symbolWidth = symbol.Metrics.Width;
+            var side = token.RightToLeft ? -1f : 1f;
+            width += gap + symbolWidth;
+            height = Math.Max(height, symbol.Metrics.Height + 2 * Padding(token, Scale).Y);
+            labelX = -side * (float)((gap + symbolWidth) / 2);
+            symbolOffset = new Vector2(labelX + side * (float)(labelBox.Width / 2 + gap + symbolWidth / 2), labelY);
+            symbolInk = kit.Bake(symbol, LyricInks.Vector(rest), raster, shadow);
+            symbolSung = sungInk is not null ? kit.Bake(symbol, sungColour, raster, ShadowSpec.None) : null;
+        }
         return new SpokenUnit
         {
             Label = labelInk,
             Sung = sungInk,
             Reading = readingInk,
             ReadingSlices = slices,
-            LabelOffset = new Vector2(0, (float)(-content / 2 + labelBox.Height / 2)),
-            ReadingOffset = readingInk is null ? default : new Vector2(0, (float)(content / 2 - readingInk.Box.Y / 2)),
+            LabelOffset = new Vector2(labelX, labelY),
+            ReadingOffset = readingInk is null ? default : new Vector2(labelX, (float)(content / 2 - readingInk.Box.Y / 2)),
             Size = new SizeD(width, height),
             LastUsed = Frame,
             Tile = tile,
             LabelOnTile = labelOnTile,
             ReadingOnTile = readingOnTile,
+            Symbol = symbolInk,
+            SymbolSung = symbolSung,
+            SymbolOffset = symbolOffset,
+            Action = wordAccent.Action,
+            RestColour = LyricInks.Vector(rest),
+            SungColour = sungColour,
         };
     }
 

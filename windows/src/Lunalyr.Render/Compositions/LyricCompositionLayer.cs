@@ -821,7 +821,11 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
             Kind: FlowKind(planKind), Spread: StyleShown.ConstellationSpread, EditorialAmount: editorialAmount,
             RandomFonts: StyleShown.RandomFonts,
             TranslationSize: BaseSize * LineTranslations.LineSize * Metrics.UserScale,
-            FillStage: Stage);
+            FillStage: Stage,
+            // Word symbols and action words: lead lines only, never a romanisation shown instead of the words.
+            Symbols: StyleShown.WordSymbols && StyleShown.Readings != ReadingPlacement.Instead,
+            Actions: StyleShown.ActionWords && StyleShown.Readings != ReadingPlacement.Instead,
+            WordLists: StyleShown.WordLists);
         var plan = LinePlans.Build(Kit!, words, glue, spec, runReadings, lineReading, runShares, translation);
         Decorate(plan, planKind, words, glue, lineEnd, lineIndex, baseSize, Stage, ink);
         if (groups is { Count: > 0 })
@@ -838,6 +842,7 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
                     Editorial = EditorialAmountFor(backingKind.HasEditorialTypography()) > 0,
                     EditorialAmount = EditorialAmountFor(backingKind.HasEditorialTypography()), Heavy = false,
                     MaxWidth = box.Width, Fit = new LineFit(box, 1, 1), Kind = FlowKind(backingKind), FillStage = null,
+                    Symbols = false, Actions = false,
                 }, null, null);
                 Decorate(sub, backingKind, group.Words, group.Glue, double.NaN, backingSeed + group.Id, baseSize * 0.5, box, ink);
                 backing[g] = new BackingPlan(group, sub);
@@ -1002,14 +1007,23 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
             // Settled words hold still while they are read: the flow layouts no longer float idle words about.
             var drift = WordPose.Rest;
             var lateral = LyricMotion.Jitter(run.Seed, 12) * 0.10;
+            // A word with a symbol swells about itself and by its own width, so the room kept for the symbol never
+            // pushes it into the gap before it.
             var swellCap = EditorialRunFrame.CappedSwell(
-                EditorialRunFrame.Swell(frame.Heat, frame.Glow, frame.DriftScale, reduce), run.Inset.Width, ink.Unit.Width);
+                EditorialRunFrame.Swell(frame.Heat, frame.Glow, frame.DriftScale, reduce), run.Inset.Width,
+                ink.Symbol is null ? ink.Unit.Width : ink.Label.Box.X);
             // A held word's letters swell only with motion (the Mac's HeldGlyphRenderer takes no sustain under Reduce Motion).
             var holding = !reduce && run.Sustain > 0.02 ? run.Sustain * Easing.Smoothstep(frame.Fill) : 0;
             var floatScale = drift.Scale * (1 - 0.04 * travel);
+            // An action word's motion (the Mac's cba108f), inside the word's slot so its anchor doesn't drift.
+            var action = ink.Action is { } act
+                ? WordActionMotion.Pose(act, time - tokens[run.TokenStart].Source.Start, reduce)
+                : WordActionPose.Identity;
             var local =
-                Matrix3x2.CreateRotation(Radians(run.Metrics.Rotation))
-                * Matrix3x2.CreateScale((float)swellCap)
+                (action.IsIdentity ? Matrix3x2.Identity : ActionMatrix(action, size))
+                * Matrix3x2.CreateRotation(Radians(run.Metrics.Rotation))
+                * (ink.Symbol is null ? Matrix3x2.CreateScale((float)swellCap)
+                    : Matrix3x2.CreateScale((float)swellCap, new Vector2(ink.LabelOffset.X, 0)))
                 * Matrix3x2.CreateRotation(Radians(reduce ? 0 : frame.DriftAngle))
                 * Matrix3x2.CreateTranslation((float)(reduce ? 0 : frame.DriftX * size), (float)(reduce ? 0 : frame.DriftY * size))
                 * Entrance(transform)
@@ -1019,7 +1033,8 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
                 * Matrix3x2.CreateTranslation((float)(origin.X + ink.Centre.X), (float)(origin.Y + ink.Centre.Y + run.Metrics.WaveOffset))
                 * block;
             var heldUp = 1 + plan.HeldY[r] * holding;
-            var scale = contentScale * swell * swellCap * heldUp * transform.Scale * floatScale;
+            var scale = contentScale * swell * swellCap * heldUp * transform.Scale * floatScale * action.Scale;
+            visibility *= action.Opacity;
             var blur = Combine(Points(motion.Blur(presentation.Progress, reduce)), Points(2.4 * travel)) * (float)scale;
             // "Cutout · Highlight": the tiles behind this run's sung words, and how strong the strongest is.
             var tiled = 0.0;
@@ -1032,6 +1047,10 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
                 ? new GlowSpec(new Vector4(ink.Glow.X, ink.Glow.Y, ink.Glow.Z, (float)(0.6 * glowStrength * frame.Fill)),
                                Points(10 + 22 * frame.Glow) * (float)scale)
                 : GlowSpec.None;
+            // An action's glow: a shadow in the word's own glow colour (the stronger of the two shows).
+            if (action.Glow > 0.002 && action.GlowOpacity > glow.Colour.W)
+                glow = new GlowSpec(new Vector4(ink.Glow.X, ink.Glow.Y, ink.Glow.Z, (float)action.GlowOpacity),
+                                    (float)(action.GlowRadius(size) * scale / Math.Max(1e-3, action.Scale)));
             var shadow = (float)((0.28 + 0.24 * heat) / 0.52);
             var tokenOpacities = frame.RevealsByToken ? plan.TokenOpacities.AsSpan(run.TokenStart, run.TokenCount) : default;
             // A held word grows about its foot: glyph by glyph it barely widens (the Mac swells each glyph in place).
@@ -1058,6 +1077,8 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
                 }
             }
             if (tiles) DrawRunTiles(dc, segments!, ink.Label, labelWorld, size, run.RightToLeft, time, visibility, overlay: true);
+            if (ink.HasAccent)
+                DrawAccent(dc, run, tokens, ink, labelWorld, local, scale, visibility, blur, glow, shadow, action, time, clip);
             if (ink.Reading is { } reading)
             {
                 var runTokens = plan.TokenOpacities.AsSpan(run.TokenStart, run.TokenCount);
@@ -1081,6 +1102,46 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
             }
             if (LyricSwipe.Shows(motion, presentation.Progress, reduce))
                 DrawSwipe(dc, local, ink.Unit, presentation.Progress, direction, motion, opacity);
+        }
+    }
+
+    /// <summary>
+    /// An action word's pose as a matrix about the unit's centre: the scale (its width turned by the spin), then the
+    /// offset in ems of the word's size.
+    /// </summary>
+    private static Matrix3x2 ActionMatrix(in WordActionPose pose, double size) =>
+        Matrix3x2.CreateScale((float)(pose.TurnScale * pose.Scale), (float)pose.Scale)
+        * Matrix3x2.CreateTranslation((float)(pose.Dx * size), (float)(pose.Dy * size));
+
+    /// <summary>
+    /// A run's word symbol and its action's colour cue (the Mac's ad5a6a6 and cba108f): the symbol fades in over 0.3 s
+    /// from its word's onset in the word's own colour, crossing to the sung colour as a sweep fills the word; an action
+    /// that warms or cools the word lays the multiplied colour over it (never lighter).
+    /// </summary>
+    private static void DrawAccent(ID2D1DeviceContext dc, EditorialRun run, IReadOnlyList<EditorialToken> tokens, RunInk ink,
+                                   in Matrix3x2 labelWorld, in Matrix3x2 local, double scale, double visibility, float blur,
+                                   GlowSpec glow, float shadow, in WordActionPose action, double time, InkClip clip)
+    {
+        var onset = tokens[run.TokenStart].Source.Start;
+        var sweep = ink.SymbolSung is not null || action.Tints ? SungSweep.Progress(run, tokens, time) : 0;
+        if (action.Tints)
+        {
+            var (r, g, b) = action.Multiply;
+            var basis = Vector4.Lerp(ink.RestColour, ink.SungColour, (float)Math.Clamp(sweep, 0, 1));
+            ink.Label.DrawTinted(dc, labelWorld, new Vector4(basis.X * (float)r, basis.Y * (float)g, basis.Z * (float)b, (float)visibility), clip);
+        }
+        if (ink.Symbol is not { } symbol) return;
+        var shown = visibility * WordActionMotion.SymbolOpacity(time - onset);
+        if (!(shown > 0.002)) return;
+        var world = Matrix3x2.CreateTranslation(ink.SymbolOffset) * local;
+        symbol.Draw(dc, world, (float)scale, (float)shown, blur, glow, shadow);
+        if (ink.SymbolSung is { } sung && sweep > 0.002)
+            sung.Draw(dc, world, (float)scale, (float)(shown * Math.Clamp(sweep, 0, 1)), blur, GlowSpec.None, 0);
+        if (action.Tints)
+        {
+            var (r, g, b) = action.Multiply;
+            var basis = Vector4.Lerp(ink.RestColour, ink.SungColour, (float)Math.Clamp(sweep, 0, 1));
+            symbol.DrawTinted(dc, world, new Vector4(basis.X * (float)r, basis.Y * (float)g, basis.Z * (float)b, (float)shown), InkClip.None);
         }
     }
 

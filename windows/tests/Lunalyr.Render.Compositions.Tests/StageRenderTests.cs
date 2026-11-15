@@ -326,7 +326,9 @@ public sealed class StageRenderTests : IDisposable
             (Line(["今", "日", "も", "雨", "が", "降", "る", "け", "ど"], 0.35, 1, [false, false, true, false, true, false, true, false, false]), "kyoumo amega furu kedo"),
         })
         {
+            // "fly" is an action word: its float would still be moving at the first frame compared.
             var scene = Scene(line, reading);
+            scene = scene with { Style = scene.Style with { ActionWords = false } };
             var lastStart = line.Words.Max(word => word.Start);
             // The stage keeps a sung line 1.2 s past its last word; the Mac's test held it forever.
             Assert.Equal(Frame(layer, scene, lastStart + 0.8), Frame(layer, scene, lastStart + 1.3));

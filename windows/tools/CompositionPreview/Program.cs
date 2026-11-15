@@ -121,6 +121,7 @@ var fixtures = new Dictionary<string, Func<SceneSnapshot>>
     ["japanesesyllables"] = () => ExtrasFixtures.JapaneseSyllables(),
     ["credits"] = () => ExtrasFixtures.Credits(),
     ["highlight"] = () => ExtrasFixtures.Highlight(),
+    ["accents"] = () => Fixtures.Accents(),
     // The stage layouts' review lines (StageFixtures.cs): fast word runs, and long lines with a pause and pictures.
     ["fast"] = () => StageFixtures.Fast(style),
     ["long"] = () => StageFixtures.Long(style),
@@ -167,6 +168,7 @@ if (setup)
 }
 if (hashes is not null)
 {
+    SetupBench.Extras = extras;
     SetupBench.Hashes(stage, factories, only, scale, hashes);
     return;
 }

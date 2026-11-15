@@ -41,11 +41,20 @@ internal sealed class StageWord : IDisposable
     public ReadingSlices? ReadingSlices { get; init; }
     public bool RightToLeft { get; init; }
     public bool HasReading => Readings.Length > 0;
+    /// <summary>The word's symbol (the Mac's word symbols) in each of the label's colours, on its baseline beside it.</summary>
+    public Ink[] Symbols { get; init; } = [];
+    public Vector2 SymbolOffset { get; init; }
+    /// <summary>The word's action motion (the Mac's action words), if it takes one.</summary>
+    public WordAction? Action { get; init; }
+    public Vector4[] Colours { get; init; } = [];
+    /// <summary>The size the label was set at (after any shrinking), layout pixels.</summary>
+    public double FontSize { get; init; }
 
     public void Dispose()
     {
         foreach (var ink in Labels) ink.Dispose();
         foreach (var ink in Readings) ink.Dispose();
+        foreach (var ink in Symbols) ink.Dispose();
     }
 }
 
@@ -72,6 +81,8 @@ internal sealed record WordSpec(double Size, Vector4[] Colours)
     /// <summary>The text baked is the run's reading itself (Mosaic's letter-by-letter kind sets it on its own): its
     /// shares are measured along the label.</summary>
     public bool LabelIsReading { get; init; }
+    /// <summary>The run's word symbol and action word (planned for its whole line, <see cref="StageLayer.Accent"/>).</summary>
+    public RunAccent Accent { get; init; }
 }
 
 /// <summary>What a stage line is built from.</summary>
@@ -588,9 +599,29 @@ internal abstract class StageLayer(CompositionKind kind, IWordBreaker breaker, L
                 }
             }
             var hasReading = readings.Length > 0;
-            var unitWidth = Math.Max(w, readingWidth);
+            // A word symbol: a space of 0.352 of the word's size, then the symbol at half its size on the word's
+            // baseline, measured with the word so the stage never reflows when it shows.
+            var symbols = Array.Empty<Ink>();
+            double symbolWidth = 0, symbolGap = 0, symbolDy = 0;
+            if (spec.Colours.Length > 0 && WordSymbolGlyphs.Glyph(spec.Accent.Symbol) is { } glyph)
+            {
+                var symbolSize = (float)Math.Max(6 * Pt, size * 0.5);
+                using var symbol = glyph == WordSymbolGlyphs.Dollar
+                    ? kit.Layout(glyph, face, symbolSize, "en-us", false)
+                    : kit.SymbolLayout(glyph, symbolSize);
+                symbols = new Ink[spec.Colours.Length];
+                for (var i = 0; i < symbols.Length; i++) symbols[i] = kit.Bake(symbol, spec.Colours[i], spec.Raster, spec.Shadow);
+                symbolWidth = symbol.Metrics.Width;
+                symbolGap = size * 0.352;
+                symbolDy = Baseline(label) - Baseline(symbol) + symbol.Metrics.Height / 2 - h / 2;
+            }
+            var wordWidth = w + (symbols.Length > 0 ? symbolGap + symbolWidth : 0);
+            var unitWidth = Math.Max(wordWidth, readingWidth);
             var unitHeight = h + (hasReading ? spec.ReadingGap + readingRow : 0);
             float Aligned(double inner) => (float)(spec.Alignment * (unitWidth - inner) / 2);
+            // With a symbol the word moves aside by half of it (the symbol follows it in its reading direction).
+            var side = rightToLeft ? -1f : 1f;
+            var wordShift = symbols.Length > 0 ? -side * (float)((symbolGap + symbolWidth) / 2) : 0f;
             double[]? boundaries = null;
             if (run is { Parts.Count: > 1 })
             {
@@ -608,13 +639,20 @@ internal abstract class StageLayer(CompositionKind kind, IWordBreaker breaker, L
             {
                 Labels = labels,
                 Readings = readings,
-                LabelOffset = new Vector2(Aligned(w), (float)(-unitHeight / 2 + h / 2)),
+                LabelOffset = new Vector2(Aligned(wordWidth) + wordShift, (float)(-unitHeight / 2 + h / 2)),
                 ReadingOffset = new Vector2(Aligned(readingWidth), (float)(unitHeight / 2 - readingRow / 2)),
                 Size = new SizeD(unitWidth, unitHeight),
                 Label = new SizeD(w, h),
                 Boundaries = boundaries,
                 ReadingSlices = readingSlices,
                 RightToLeft = rightToLeft,
+                Symbols = symbols,
+                SymbolOffset = symbols.Length == 0 ? default
+                    : new Vector2(Aligned(wordWidth) + wordShift + side * (float)(w / 2 + symbolGap + symbolWidth / 2),
+                                  (float)(-unitHeight / 2 + h / 2 + symbolDy)),
+                Action = spec.Colours.Length > 0 ? spec.Accent.Action : null,
+                FontSize = size,
+                Colours = spec.Colours,
             };
         }
         finally
@@ -637,6 +675,38 @@ internal abstract class StageLayer(CompositionKind kind, IWordBreaker breaker, L
         var inks = new Ink[colours.Length];
         for (var i = 0; i < inks.Length; i++) inks[i] = kit.Bake(layout, colours[i], 1.2f, ShadowSpec.None);
         return inks;
+    }
+
+    /// <summary>A laid-out text's first baseline from its top, layout pixels.</summary>
+    private static double Baseline(Vortice.DirectWrite.IDWriteTextLayout layout)
+    {
+        var metrics = new Vortice.DirectWrite.LineMetrics[1];
+        layout.GetLineMetrics(metrics, out var count);
+        return count > 0 ? metrics[0].Baseline : layout.Metrics.Height * 0.8;
+    }
+
+    private StageSource? _accentSource;
+    private RunAccent[] _accents = [];
+
+    /// <summary>
+    /// The word symbol and action word of <paramref name="source"/>'s run <paramref name="index"/> (the Mac's ad5a6a6
+    /// and cba108f), planned once for the whole line: English words of word-timed lines only, never a reading shown
+    /// instead of the words.
+    /// </summary>
+    protected RunAccent Accent(StageSource source, int index)
+    {
+        if (!ReferenceEquals(source, _accentSource))
+        {
+            _accentSource = source;
+            var style = StyleShown;
+            var shown = source.Line.WordTimed && style.Readings != ReadingPlacement.Instead;
+            var symbolsOn = shown && style.WordSymbols;
+            var actionsOn = shown && style.ActionWords;
+            var texts = new string[source.Runs.Count];
+            for (var i = 0; i < texts.Length; i++) texts[i] = source.Runs[i].Text;
+            _accents = symbolsOn || actionsOn ? WordAccents.Plan(texts, symbolsOn, actionsOn, style.WordLists) : [];
+        }
+        return index >= 0 && index < _accents.Length ? _accents[index] : default;
     }
 
     /// <summary>The heavy face's baseline as a share of a line's height (rows of words share their baselines).</summary>
@@ -737,12 +807,57 @@ internal abstract class StageLayer(CompositionKind kind, IWordBreaker breaker, L
     }
 
     /// <summary>Draws a stage word's label (colour <paramref name="colour"/>) with its syllables arriving as sung.</summary>
-    protected static void DrawLabel(ID2D1DeviceContext dc, StageLine line, StageWord word, StageRun run, int colour, double time,
-                                    in Matrix4x4 unit, double opacity, float blur = 0, float shadow = 1, Vector2 nudge = default)
+    protected void DrawLabel(ID2D1DeviceContext dc, StageLine line, StageWord word, StageRun run, int colour, double time,
+                             in Matrix4x4 unit, double opacity, float blur = 0, float shadow = 1, Vector2 nudge = default)
     {
         var parts = word.Boundaries is null ? default : line.PartOpacities(run, time);
-        DrawInk(dc, word.Labels[colour], unit, word.LabelOffset + nudge, opacity, blur, shadow, word.Boundaries, parts,
+        if (word.Action is null && word.Symbols.Length == 0)
+        {
+            DrawInk(dc, word.Labels[colour], unit, word.LabelOffset + nudge, opacity, blur, shadow, word.Boundaries, parts,
+                    word.RightToLeft);
+            return;
+        }
+        // An action word's motion about the word's centre (scale with the spin's turn, then the offset in ems), and
+        // its colour cue laid over it; the symbol beside it moves with it and fades in from the word's onset.
+        var moved = Acting(word, run, time, unit, nudge, out var pose);
+        var shown = opacity * pose.Opacity;
+        DrawInk(dc, word.Labels[colour], moved, word.LabelOffset + nudge, shown, blur, shadow, word.Boundaries, parts,
                 word.RightToLeft);
+        if (pose.Tints) DrawCue(dc, word.Labels[colour], word.Colours[Math.Min(colour, word.Colours.Length - 1)], pose, moved, word.LabelOffset + nudge, shown);
+        if (word.Symbols.Length > colour)
+        {
+            var symbol = shown * WordActionMotion.SymbolOpacity(time - run.Start);
+            DrawInk(dc, word.Symbols[colour], moved, word.SymbolOffset + nudge, symbol, blur, shadow);
+            if (pose.Tints) DrawCue(dc, word.Symbols[colour], word.Colours[Math.Min(colour, word.Colours.Length - 1)], pose, moved, word.SymbolOffset + nudge, symbol);
+        }
+    }
+
+    /// <summary>
+    /// <paramref name="unit"/> with <paramref name="word"/>'s action motion layered on it, about the word's centre (its
+    /// label at <paramref name="nudge"/>): the scale, its width turned by a spin, then the offset in ems of its size.
+    /// Unchanged when the word takes no action or its motion is over.
+    /// </summary>
+    protected Matrix4x4 Acting(StageWord word, StageRun run, double time, in Matrix4x4 unit, Vector2 nudge, out WordActionPose pose)
+    {
+        pose = word.Action is { } action ? WordActionMotion.Pose(action, time - run.Start, ReduceMotion) : WordActionPose.Identity;
+        if (pose.IsIdentity) return unit;
+        var size = word.FontSize;
+        var centre = word.LabelOffset + nudge;
+        return Matrix4x4.CreateTranslation(-centre.X, -centre.Y, 0)
+            * Matrix4x4.CreateScale((float)(pose.TurnScale * pose.Scale), (float)pose.Scale, 1)
+            * Matrix4x4.CreateTranslation(centre.X + (float)(pose.Dx * size), centre.Y + (float)(pose.Dy * size), 0) * unit;
+    }
+
+    /// <summary>An action's warm or cool colour cue: the ink's colour multiplied, laid over it (never lighter).</summary>
+    private static void DrawCue(ID2D1DeviceContext dc, Ink ink, Vector4 colour, in WordActionPose pose, in Matrix4x4 unit,
+                                Vector2 offset, double opacity)
+    {
+        if (!(opacity > 0.002)) return;
+        var world = Matrix4x4.CreateTranslation(offset.X, offset.Y, 0) * unit;
+        if (!Homography.IsAffine(world)) return;
+        var (r, g, b) = pose.Multiply;
+        ink.DrawTinted(dc, Homography.Flat(world), new Vector4(colour.X * (float)r, colour.Y * (float)g, colour.Z * (float)b,
+                                                               colour.W * (float)opacity), InkClip.None);
     }
 
     /// <summary>

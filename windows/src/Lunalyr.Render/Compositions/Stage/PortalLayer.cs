@@ -110,10 +110,15 @@ internal sealed class PortalLayer(IWordBreaker breaker, Logger? logger) : StageL
             line.Outlined[i] = outlined;
             line.Flip[i] = StageShared.Chance(seed, run.Id, 17) < 0.5;
             line.IconFirst[i] = StageShared.Chance(seed, run.Id, 13) < 0.6;
-            line.HasIcon[i] = icons[i] is not null;
+            // Portal keeps its own pictures (no word symbol beside its words); a word it has no picture for (one the
+            // user added to the word symbol list) shows its word symbol in the pill instead (the Mac's ad5a6a6).
+            var glyph = SegoeIcons.For(icons[i]);
+            if (icons[i] is null && LyricWordIcons.Symbol(run.Text) is null && Accent(source, i).Symbol is { } own)
+                glyph = WordSymbolGlyphs.Glyph(own);
+            line.HasIcon[i] = glyph is not null;
             // The Mac sets its symbol at 0.34 of the word's size; a Segoe Fluent Icons glyph inks about 0.55 of its em,
             // so it is set larger to fill the same share of its disc.
-            line.Icons[i] = BakeSymbol(SegoeIcons.For(icons[i]), size * 0.55, outlined ? tile : tileText);
+            line.Icons[i] = BakeSymbol(glyph, size * 0.55, outlined ? tile : tileText);
         }
         line.Words = words;
         return line;
