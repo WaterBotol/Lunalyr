@@ -48,12 +48,12 @@ A browser window opens and asks you to allow Wrangler to access your Cloudflare 
 npx wrangler deploy
 ```
 
-The first time, Wrangler may ask you to pick a **workers.dev subdomain**. This is a name for your account, such as `tommy`, and it appears in the relay's URL. Choose anything that's free. When the deploy finishes, the output ends with lines like these:
+The first time, Wrangler may ask you to pick a **workers.dev subdomain**. This is a name for your account, such as `yourname`, and it appears in the relay's URL. Choose anything that's free. When the deploy finishes, the output ends with lines like these:
 
 ```
 Uploaded lunalyr-relay
 Deployed lunalyr-relay triggers
-  https://lunalyr-relay.tommy.workers.dev
+  https://lunalyr-relay.yourname.workers.dev
 ```
 
 That last line is your **relay URL**. You can also find it later in the Cloudflare dashboard: open **Workers & Pages**, click **lunalyr-relay**, and look under **Domains & Routes** (or the URL shown at the top of its overview page).
@@ -72,7 +72,7 @@ It creates a room, sends a song through it, checks that a listener receives it, 
 
 ### 6. Put the URL in Lunalyr
 
-In Lunalyr, open **Settings > Share**, paste the URL (for example `https://lunalyr-relay.tommy.workers.dev`, without a trailing path) into **Relay URL**, and turn listen-along sharing on.
+In Lunalyr, open **Settings > Share**, paste the URL (for example `https://lunalyr-relay.yourname.workers.dev`, without a trailing path) into **Relay URL**, and turn listen-along sharing on.
 
 ### Updating later
 
