@@ -26,6 +26,7 @@ public sealed partial class SettingsWindow : Window
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(TitleBar);
         SizeWindow();
+        SetUpSearch();
 
         _ctx = new SettingsContext(host.Settings, DispatcherQueue, message => host.Log.App.Info(message));
         _ctx.OnRefresh(_ => ApplyTheme());
