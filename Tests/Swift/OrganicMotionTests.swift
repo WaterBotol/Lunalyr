@@ -280,26 +280,26 @@ final class OrganicMotionTests: XCTestCase {
         XCTAssertEqual(last, 1, accuracy: 0.0001)
     }
 
-    func testInterludeOrbMorphsSmoothlyAndItsLobesMoveApart() throws {
+    func testInterludeOrbMovesSmoothlyAndKeepsMoving() throws {
         let gap = VCVocalGap(start: 30, end: 46, nextVocal: 4)
         func pose(_ time: Double) throws -> ThinkingOrb.Pose {
             ThinkingOrb.pose(try XCTUnwrap(gap.instrumentalCue(at: time, previewLead: 0.5)), reduceMotion: false,
                              increaseContrast: false)
         }
         var previous = try pose(32)
-        var differs = false
         for step in 1...4000 {
             let current = try pose(32 + Double(step) / 1000)
-            for lobe in 0..<3 {
-                XCTAssertLessThan(abs(current.lobes[lobe].dx - previous.lobes[lobe].dx), 0.01)
-                XCTAssertLessThan(abs(current.lobes[lobe].dy - previous.lobes[lobe].dy), 0.01)
-                XCTAssertLessThan(abs(current.lobes[lobe].radius - previous.lobes[lobe].radius), 0.01)
-            }
+            // The engine's clock and the scale never jump.
+            XCTAssertLessThan(abs(current.layers[0].t - previous.layers[0].t), 0.01)
             XCTAssertLessThan(abs(current.scale - previous.scale), 0.01)
-            if abs(current.lobes[0].dx - current.lobes[1].dx) > 0.2 { differs = true }
             previous = current
         }
-        XCTAssertTrue(differs, "the lobes should not move in lockstep")
+        // A millisecond apart the dots barely move; seconds apart they have.
+        let near = try [32.0, 32.001].map { ThinkingOrb.frames(try pose($0), diameter: 48)[0].frame.dots }
+        XCTAssertEqual(near[0].count, near[1].count)
+        let far = try [32.0, 34.0].map { ThinkingOrb.frames(try pose($0), diameter: 48)[0].frame.dots }
+        let moved = zip(far[0], far[1]).map { abs($0.x - $1.x) + abs($0.y - $1.y) }.max() ?? 0
+        XCTAssertGreaterThan(moved, 1)
     }
 
     @MainActor

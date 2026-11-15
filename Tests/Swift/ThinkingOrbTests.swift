@@ -3,38 +3,123 @@ import SwiftUI
 import XCTest
 @testable import VersoCustom
 
-/// The thinking orb that stands for an instrumental break (`ThinkingOrb`).
-/// Writes PNG stills when LUNALYR_ORB_STILLS_DIR is set (pass it as
-/// TEST_RUNNER_LUNALYR_ORB_STILLS_DIR).
+/// The thinking orb that stands for an instrumental break (`ThinkingOrb`):
+/// thinking-orbs' dotted `listening` state with a countdown ring, focusing
+/// into `breathing` before the next line. Writes PNG stills when
+/// LUNALYR_ORB_STILLS_DIR is set (pass it as TEST_RUNNER_LUNALYR_ORB_STILLS_DIR).
 final class ThinkingOrbTests: XCTestCase {
     private let album: [SIMD3<Float>] = [SIMD3(0.12, 0.55, 0.85), SIMD3(0.75, 0.25, 0.6), SIMD3(0.95, 0.6, 0.2),
                                          SIMD3(0.1, 0.1, 0.2), SIMD3(0.3, 0.75, 0.55)]
 
-    private func cue(_ gap: VCVocalGap, _ time: Double, lead: Double = 1) throws -> InstrumentalCue {
-        try XCTUnwrap(gap.instrumentalCue(at: time, previewLead: lead))
+    private func cue(_ gap: VCVocalGap, _ time: Double, lead: Double = 1,
+                     audio: ThinkingOrb.Audio? = nil) throws -> InstrumentalCue {
+        try XCTUnwrap(gap.instrumentalCue(at: time, previewLead: lead, audio: audio))
+    }
+
+    private func pose(_ cue: InstrumentalCue, reduceMotion: Bool = false) -> ThinkingOrb.Pose {
+        ThinkingOrb.pose(cue, reduceMotion: reduceMotion, increaseContrast: false)
+    }
+
+    // MARK: Countdown
+
+    func testCountdownRingFillsFromTheBreakStartToTheHandOff() {
+        let span = 10.0, full = span - WallpaperMotion.interludeOut
+        XCTAssertEqual(ThinkingOrb.ringFill(elapsed: 0, span: span), 0)
+        XCTAssertEqual(try XCTUnwrap(ThinkingOrb.ringFill(elapsed: full / 2, span: span)), 0.5, accuracy: 1e-12)
+        XCTAssertEqual(ThinkingOrb.ringFill(elapsed: full, span: span), 1)
+        XCTAssertEqual(ThinkingOrb.ringFill(elapsed: span, span: span), 1, "stays full through the hand-off")
+        XCTAssertEqual(ThinkingOrb.ringFill(elapsed: -1, span: span), 0)
+        // One dot after another, clockwise from twelve o'clock.
+        let lights = ThinkingOrb.ringLights(fill: 0.5, count: 24)
+        XCTAssertEqual(lights.count, 24)
+        XCTAssertEqual(Array(lights[0..<12]), Array(repeating: 1, count: 12))
+        XCTAssertEqual(Array(lights[12...]), Array(repeating: 0, count: 12))
+        let between = ThinkingOrb.ringLights(fill: 12.25 / 24, count: 24)
+        XCTAssertEqual(between[12], 0.25, accuracy: 1e-9, "the next dot is part lit")
+        XCTAssertEqual(between[13], 0)
+        // Through a real break: lit dots only ever increase.
+        let gap = VCVocalGap(start: 10, end: 30, nextVocal: 1)
+        var previous = -1.0
+        for step in 0...190 {
+            guard let cue = gap.instrumentalCue(at: 10.6 + Double(step) / 10, previewLead: 1) else { continue }
+            let lit = try? XCTUnwrap(pose(cue).ring).reduce(0, +)
+            XCTAssertGreaterThanOrEqual(lit ?? -1, previous)
+            previous = lit ?? previous
+        }
+        XCTAssertEqual(previous, 24, accuracy: 1e-9)
+        // The small design has fewer dots.
+        XCTAssertEqual(ThinkingOrb.ringDots(diameter: 32), ThinkingOrb.ringDotsSmall)
+        XCTAssertEqual(ThinkingOrb.ringDots(diameter: 60), ThinkingOrb.ringDotsLarge)
+    }
+
+    func testShortBreaksHaveNoRing() throws {
+        XCTAssertNil(ThinkingOrb.ringFill(elapsed: 1, span: 2.99))
+        XCTAssertNotNil(ThinkingOrb.ringFill(elapsed: 1, span: 3))
+        XCTAssertNil(ThinkingOrb.ringFill(elapsed: 1, span: nil), "an unknown end has no countdown")
+        // A 3 s gap with a 0.5 s preview lead is up for 2.5 s: no ring.
+        let short = VCVocalGap(start: 10, end: 13, nextVocal: 1)
+        XCTAssertNil(pose(try cue(short, 11.5, lead: 0.5)).ring)
+        let long = VCVocalGap(start: 10, end: 14, nextVocal: 1)
+        XCTAssertNotNil(pose(try cue(long, 11.5, lead: 0.5)).ring)
+        // An open break neither counts down nor focuses.
+        let open = pose(try cue(VCVocalGap(start: 10, end: -1, nextVocal: -1), 40))
+        XCTAssertNil(open.ring)
+        XCTAssertEqual(open.focus, 0)
+        XCTAssertEqual(open.layers.map(\.state), [ThinkingOrb.breakState])
+    }
+
+    func testTheLastTwoSecondsFocusIntoBreathing() throws {
+        let span = 20.0, end = span - WallpaperMotion.interludeOut
+        XCTAssertEqual(ThinkingOrb.focus(elapsed: end - 2.01, span: span), 0)
+        XCTAssertEqual(ThinkingOrb.focus(elapsed: end - 1, span: span), 0.5, accuracy: 1e-9)
+        XCTAssertEqual(ThinkingOrb.focus(elapsed: end, span: span), 1)
+        XCTAssertEqual(ThinkingOrb.focus(elapsed: span, span: span), 1)
+        // A 3 s break focuses over its last 1.5 s.
+        XCTAssertEqual(ThinkingOrb.focus(elapsed: 3 - 0.4 - 1.5 - 0.01, span: 3), 0)
+        XCTAssertGreaterThan(ThinkingOrb.focus(elapsed: 3 - 0.4 - 1.4, span: 3), 0)
+
+        let gap = VCVocalGap(start: 10, end: 30, nextVocal: 1)   // up until 29
+        let middle = pose(try cue(gap, 18))
+        XCTAssertEqual(middle.layers.map(\.state), [.listening])
+        let crossing = pose(try cue(gap, 27.6))
+        XCTAssertEqual(crossing.layers.map(\.state), [.listening, .breathing])
+        XCTAssertEqual(crossing.layers.map(\.weight).reduce(0, +), 1, accuracy: 1e-9)
+        let focused = pose(try cue(gap, 28.6))
+        XCTAssertEqual(focused.layers.map(\.state), [.breathing])
+        // Tighter, brighter, the ring drawn in.
+        XCTAssertLessThan(focused.scale, middle.scale)
+        XCTAssertGreaterThan(focused.brighten, middle.brighten)
+        XCTAssertLessThan(focused.ringRadius, middle.ringRadius)
+        XCTAssertGreaterThan(focused.haloAlpha, middle.haloAlpha)
     }
 
     // MARK: Motion
 
-    func testReduceMotionHoldsTheOrbStillAndOnlyFades() throws {
+    func testReduceMotionKeepsStillDotsAndTheRingStillFills() throws {
         let gap = VCVocalGap(start: 10, end: 30, nextVocal: 1)
-        let times = [10.6, 11.0, 14.0, 17.3, 22.9, 28.85]
-        let poses = try times.map { ThinkingOrb.pose(try cue(gap, $0), reduceMotion: true, increaseContrast: false) }
-        for pose in poses {
-            XCTAssertEqual(pose.lobes, poses[0].lobes, "no morph")
-            XCTAssertEqual(pose.scale, 1, "no breath, no growing in or shrinking away")
+        let loud = ThinkingOrb.Audio(level: 1, onset: 1, phase: 3)
+        let times = [10.6, 11.0, 14.0, 17.3, 22.9]
+        let poses = try times.map { pose(try cue(gap, $0, audio: loud), reduceMotion: true) }
+        let frames = poses.map { ThinkingOrb.frames($0, diameter: 48)[0].frame }
+        for (pose, frame) in zip(poses, frames) {
+            XCTAssertEqual(pose.layers[0].t, OrbEngine.reducedMotionTime, "upstream's still frame")
+            XCTAssertEqual(frame, frames[0], "the dots do not move")
+            XCTAssertEqual(pose.scale, 1, "no growing in, tightening or shrinking away")
+            XCTAssertEqual(pose.swell, 1, "the music does not move it")
+            XCTAssertEqual(pose.dotScale, 1)
+            XCTAssertEqual(pose.ringRadius, ThinkingOrb.ringRadius)
         }
+        let lit = poses.map { $0.ring?.reduce(0, +) ?? -1 }
+        XCTAssertEqual(lit, lit.sorted())
+        XCTAssertGreaterThan(lit.last!, lit.first! + 5, "the countdown still fills")
         // Arrival and leaving are opacity alone.
         XCTAssertLessThan(poses.first!.opacity, 1)
         XCTAssertEqual(poses[2].opacity, 1)
-        XCTAssertLessThan(poses.last!.opacity, 1)
-        // The music's level does not move it either.
-        var loud = try cue(gap, 14); loud.energy = 1
-        XCTAssertEqual(ThinkingOrb.pose(loud, reduceMotion: true, increaseContrast: false).scale, 1)
-        // With motion it morphs and breathes.
-        let moving = try [14.0, 15.3].map { ThinkingOrb.pose(try cue(gap, $0), reduceMotion: false, increaseContrast: false) }
-        XCTAssertNotEqual(moving[0].lobes, moving[1].lobes)
-        XCTAssertNotEqual(moving[0].scale, moving[1].scale)
+        XCTAssertLessThan(pose(try cue(gap, 28.85), reduceMotion: true).opacity, 1)
+        XCTAssertEqual(pose(try cue(gap, 28.85), reduceMotion: true).scale, 1)
+        // With motion it turns.
+        let moving = try [14.0, 15.3].map { ThinkingOrb.frames(pose(try cue(gap, $0)), diameter: 48)[0].frame }
+        XCTAssertNotEqual(moving[0], moving[1])
     }
 
     func testEaseInAndShrinkAwayTiming() throws {
@@ -47,50 +132,96 @@ final class ThinkingOrbTests: XCTestCase {
         XCTAssertEqual(try cue(gap, 10 + delay + ease / 2).entering, 0.5, accuracy: 1e-9)
         XCTAssertEqual(try cue(gap, 10 + delay + ease).entering, 1, accuracy: 1e-9)
         XCTAssertEqual(try cue(gap, 10 + delay + ease).leaving, 0)
+        XCTAssertEqual(try cue(gap, 12).span, 19)
+        XCTAssertEqual(try XCTUnwrap(try cue(gap, 12).remaining), 17, accuracy: 1e-9)
         // Grows from 55% as it fades in.
-        let start = ThinkingOrb.pose(try cue(gap, 10 + delay + 0.001), reduceMotion: false, increaseContrast: false)
+        let start = pose(try cue(gap, 10 + delay + 0.001))
         XCTAssertEqual(start.scale, ThinkingOrb.enterScale, accuracy: 0.03)
-        // Shrinks to 30% and fades over the 0.4 s before the next line's preview.
+        // Shrinks to 30% (of its focused size) and fades over the 0.4 s
+        // before the next line's preview.
         let half = try cue(gap, cueEnd - WallpaperMotion.interludeOut / 2)
         XCTAssertEqual(half.leaving, 0.5, accuracy: 1e-9)
         XCTAssertEqual(half.opacity, 0.5, accuracy: 1e-9)
-        let leaving = ThinkingOrb.pose(try cue(gap, cueEnd - 0.01), reduceMotion: false, increaseContrast: false)
-        XCTAssertEqual(leaving.scale, ThinkingOrb.exitScale, accuracy: 0.03)
+        let leaving = pose(try cue(gap, cueEnd - 0.01))
+        XCTAssertEqual(leaving.scale, ThinkingOrb.exitScale * ThinkingOrb.focusScale, accuracy: 0.03)
         XCTAssertLessThan(leaving.opacity, 0.01)
         XCTAssertNil(gap.instrumentalCue(at: cueEnd, previewLead: lead))
-        // A break with no known end never leaves on its own, nor glows.
         let open = try cue(VCVocalGap(start: 10, end: -1, nextVocal: -1), 40)
         XCTAssertEqual(open.leaving, 0)
-        XCTAssertEqual(ThinkingOrb.pose(open, reduceMotion: false, increaseContrast: false).glow, 0)
+        XCTAssertNil(open.remaining)
     }
 
-    func testPeriodsBreathAndAudio() throws {
-        XCTAssertTrue(ThinkingOrb.morphPeriods.allSatisfy { (6...10).contains($0) })
-        XCTAssertTrue((2...3).contains(ThinkingOrb.breathPeriod))
-        func widest(energy: Double) -> Double {
-            (0..<260).map { step -> Double in
-                let cue = InstrumentalCue(elapsed: 5 + Double(step) / 100, opacity: 1, progress: 0.3, energy: energy)
-                return ThinkingOrb.pose(cue, reduceMotion: false, increaseContrast: false).scale
-            }.max()!
-        }
-        XCTAssertEqual(widest(energy: 0), 1 + ThinkingOrb.breathDepth, accuracy: 0.002)
-        XCTAssertGreaterThan(widest(energy: 1), widest(energy: 0) + 0.04, "a light response to the music")
+    // MARK: Audio
+
+    func testAudioSmoothingAttacksIn60msAndReleasesIn250ms() {
+        XCTAssertEqual(ThinkingOrb.attack, 0.06)
+        XCTAssertEqual(ThinkingOrb.release, 0.25)
+        var follower = ThinkingOrb.AudioFollower()
+        _ = follower.step(level: 0, onset: 0, wall: 100)
+        var audio = ThinkingOrb.Audio(level: 0, onset: 0)
+        for frame in 1...6 { audio = follower.step(level: 1, onset: 1, wall: 100 + Double(frame) / 100) }
+        XCTAssertEqual(audio.level, 1 - exp(-1), accuracy: 0.01, "63% of a step in one attack time")
+        XCTAssertEqual(audio.onset, 1 - exp(-1), accuracy: 0.01)
+        for frame in 7...200 { audio = follower.step(level: 1, onset: 1, wall: 100 + Double(frame) / 100) }
+        XCTAssertEqual(audio.level, 1, accuracy: 1e-6)
+        let top = 102.0
+        for frame in 1...25 { audio = follower.step(level: 0, onset: 0, wall: top + Double(frame) / 100) }
+        XCTAssertEqual(audio.level, exp(-1), accuracy: 0.01, "falls to 37% in one release time")
+        // The same frame twice changes nothing.
+        let again = follower.step(level: 1, onset: 1, wall: top + 0.25)
+        XCTAssertEqual(again, audio)
+        // A stall is one short step, not a jump.
+        let stalled = follower.step(level: 1, onset: 1, wall: top + 5)
+        XCTAssertLessThan(stalled.level, 1)
+        // At 24 fps (a break's frame rate) it lands in the same place.
+        var slow = ThinkingOrb.AudioFollower(), fast = ThinkingOrb.AudioFollower()
+        _ = slow.step(level: 0, onset: 0, wall: 0); _ = fast.step(level: 0, onset: 0, wall: 0)
+        var a = slow.audio, b = fast.audio
+        for frame in 1...24 { a = slow.step(level: 0.8, onset: 0, wall: Double(frame) / 24) }
+        for frame in 1...120 { b = fast.step(level: 0.8, onset: 0, wall: Double(frame) / 120) }
+        XCTAssertEqual(a.level, b.level, accuracy: 1e-6)
     }
+
+    func testTheMusicNudgesTheSpinAndPulsesTheDots() throws {
+        // The spin's extra phase grows only with the level.
+        var follower = ThinkingOrb.AudioFollower()
+        _ = follower.step(level: 0, onset: 0, wall: 0)
+        for frame in 1...48 { _ = follower.step(level: 0, onset: 0, wall: Double(frame) / 24) }
+        XCTAssertEqual(follower.audio.phase, 0)
+        for frame in 49...96 { _ = follower.step(level: 1, onset: 0, wall: Double(frame) / 24) }
+        XCTAssertEqual(follower.audio.phase, 2 * ThinkingOrb.speed * ThinkingOrb.levelSpeed, accuracy: 0.03)
+        XCTAssertEqual(ThinkingOrb.targets(rms: 0.1, bass: 0.2, pulse: 0.5).level, 0.42, accuracy: 1e-9)
+        XCTAssertEqual(ThinkingOrb.targets(rms: 1, bass: 1, pulse: 3).level, 1)
+        XCTAssertEqual(ThinkingOrb.targets(rms: 1, bass: 1, pulse: 3).onset, 1)
+
+        let gap = VCVocalGap(start: 10, end: 30, nextVocal: 1)
+        let quiet = pose(try cue(gap, 16))
+        let loud = pose(try cue(gap, 16, audio: .init(level: 1, onset: 1, phase: 0.5)))
+        XCTAssertEqual(quiet.swell, 1)
+        XCTAssertEqual(quiet.dotScale, 1)
+        XCTAssertEqual(loud.swell, 1 + ThinkingOrb.levelSwell)
+        XCTAssertEqual(loud.dotScale, 1 + ThinkingOrb.levelDotGrowth + ThinkingOrb.onsetDotGrowth)
+        XCTAssertGreaterThan(loud.brighten, quiet.brighten)
+        let presetSpeed = OrbEngine.resolve(.listening, .px64).speed
+        XCTAssertEqual(loud.layers[0].t - quiet.layers[0].t, 0.5 * presetSpeed, accuracy: 1e-9)
+        // A deeper wave: the rings swing further from the sphere.
+        func spread(_ pose: ThinkingOrb.Pose) -> Double {
+            let dots = ThinkingOrb.frames(pose, diameter: 48)[0].frame.dots
+            return (dots.map(\.y).max() ?? 0) - (dots.map(\.y).min() ?? 0)
+        }
+        XCTAssertNotEqual(spread(loud), spread(quiet))
+    }
+
+    // MARK: Size
 
     func testTheOrbScalesWithTheTypeSize() {
         XCTAssertEqual(ThinkingOrb.diameter(baseSize: 60), 48)
         XCTAssertLessThan(ThinkingOrb.diameter(baseSize: 50), ThinkingOrb.diameter(baseSize: 90))
         XCTAssertEqual(ThinkingOrb.diameter(baseSize: 10), ThinkingOrb.minDiameter)
         XCTAssertEqual(ThinkingOrb.diameter(baseSize: 400), ThinkingOrb.maxDiameter)
-    }
-
-    func testIncreaseContrastFirmsTheOrb() {
-        let cue = InstrumentalCue(elapsed: 4, opacity: 1, progress: 0.7)
-        let normal = ThinkingOrb.pose(cue, reduceMotion: false, increaseContrast: false)
-        let strong = ThinkingOrb.pose(cue, reduceMotion: false, increaseContrast: true)
-        XCTAssertGreaterThan(strong.lobeAlpha, normal.lobeAlpha)
-        XCTAssertGreaterThan(strong.lobeEdge, normal.lobeEdge)
-        XCTAssertGreaterThan(strong.haloAlpha, normal.haloAlpha)
+        // Upstream's two tuned designs: 20 px for the smallest orbs.
+        XCTAssertEqual(ThinkingOrb.design(diameter: 30), .px20)
+        XCTAssertEqual(ThinkingOrb.design(diameter: 48), .px64)
     }
 
     // MARK: Colour
@@ -181,7 +312,8 @@ final class ThinkingOrbTests: XCTestCase {
         settings.backgroundMode = .desktop
         settings.showInterludes = true
         let leaving = 20 - settings.nextWordPreviewLead - WallpaperMotion.interludeOut * 0.45
-        let moments: [(String, Double)] = [("early", 6.5), ("late, glowing", 17.5), ("leaving", leaving)]
+        let moments: [(String, Double)] = [("start", 4.4), ("middle", 11.5),
+                                           ("last second", 20 - settings.nextWordPreviewLead - 1), ("leaving", leaving)]
         let walls: [(String, [Color], Double)] = [
             ("dark", [Color(red: 0.10, green: 0.08, blue: 0.22), Color(red: 0.03, green: 0.04, blue: 0.09)], 0.03),
             ("light", [Color(red: 0.97, green: 0.94, blue: 0.88), Color(red: 0.86, green: 0.90, blue: 0.95)], 0.80),
@@ -213,27 +345,35 @@ final class ThinkingOrbTests: XCTestCase {
     }
 
     /// The orb alone, with ink from a director that has settled, in each
-    /// colour mode over each wallpaper: early, late and glowing, leaving.
+    /// colour mode over each wallpaper: the start, the middle (quiet and
+    /// with loud music on an onset), the last second and the hand-off; a
+    /// last row at the smallest size (upstream's 20 px design).
     @MainActor
     private func writeCloseUps(to directory: String, walls: [(String, [Color], Double)]) throws {
         let gap = VCVocalGap(start: 10, end: 30, nextVocal: 1)
-        let cues = [12.0, 26.0, 28.85].compactMap { gap.instrumentalCue(at: $0, previewLead: 1) }
-        let modes: [LyricColourMode] = [.standard, .albumDrift, .customGradient, .sungSweep]
+        let loud = ThinkingOrb.Audio(level: 0.9, onset: 0.8, phase: 0)
+        let columns: [(String, InstrumentalCue)] = try [("start", 11.4, nil), ("middle", 19.5, nil),
+                                                        ("middle, loud", 19.5, loud), ("last second", 28.1, nil),
+                                                        ("hand-off", 28.8, nil)].map {
+            ($0.0, try XCTUnwrap(gap.instrumentalCue(at: $0.1, previewLead: 1, audio: $0.2)))
+        }
+        let rows: [(LyricColourMode, CGFloat)] = [(.standard, 90), (.albumDrift, 90), (.customGradient, 90),
+                                                  (.sungSweep, 90), (.albumDrift, 38)]
         for (tone, colours, luminance) in walls {
-            let inks = modes.map { ink(backdrop: luminance, mode: $0) }
+            let inks = rows.map { ink(backdrop: luminance, mode: $0.0) }
             let sheet = VStack(spacing: 0) {
-                ForEach(modes.indices, id: \.self) { row in
+                ForEach(rows.indices, id: \.self) { row in
                     HStack(spacing: 0) {
-                        ForEach(cues.indices, id: \.self) { column in
+                        ForEach(columns.indices, id: \.self) { column in
                             ZStack {
                                 LinearGradient(colors: colours, startPoint: .topLeading, endPoint: .bottomTrailing)
-                                ThinkingOrbView(cue: cues[column], accent: .orange, baseSize: 90)
+                                ThinkingOrbView(cue: columns[column].1, accent: .orange, baseSize: rows[row].1)
                                     .environment(\.lyricInk, inks[row])
-                                Text("\(modes[row].rawValue) · \(tone)").font(.system(size: 10))
+                                Text("\(rows[row].0.rawValue) · \(tone) · \(columns[column].0)").font(.system(size: 10))
                                     .foregroundStyle(tone == "dark" ? Color.white.opacity(0.6) : Color.black.opacity(0.5))
                                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading).padding(6)
                             }
-                            .frame(width: 240, height: 200)
+                            .frame(width: 220, height: 200)
                         }
                     }
                 }

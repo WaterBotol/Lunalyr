@@ -7,14 +7,21 @@ struct InstrumentalCue {
     let opacity: Double
     /// 0...1 through the break, or nil when its end is not known.
     let progress: Double?
-    /// Seeds the orb's starting shape, so each break moves in its own way.
+    /// Seeds the orb's starting phase, so each break begins in its own pose.
     var seed: UInt64 = 0x1D07_5EED
-    /// Live or timing-derived intensity, 0...1: livelier music, a deeper breath.
-    var energy: Double = 0
+    /// The music, smoothed (`ThinkingOrb.AudioFollower`), or nil when
+    /// audio capture is off: then the orb keeps its own idle motion.
+    var audio: ThinkingOrb.Audio? = nil
     /// 0...1: the arrival's ease (smoothstep over `WallpaperMotion.interludeIn`).
     var entering: Double = 1
     /// 0...1: the leave as the next line comes (over `interludeOut`).
     var leaving: Double = 0
+    /// How long the orb is up, from the break's start to the moment the
+    /// next line's preview takes over (`cueEnd`); nil when the end is not known.
+    var span: Double? = nil
+
+    /// Seconds until the next line's preview takes over; nil when unknown.
+    var remaining: Double? { span.map { max(0, $0 - elapsed) } }
 }
 
 extension VCVocalGap {
@@ -24,7 +31,7 @@ extension VCVocalGap {
         return min(enter, leave)
     }
 
-    func instrumentalCue(at time: Double, previewLead: Double, energy: Double = 0) -> InstrumentalCue? {
+    func instrumentalCue(at time: Double, previewLead: Double, audio: ThinkingOrb.Audio? = nil) -> InstrumentalCue? {
         let elapsed = time - start
         let fadeIn = Easing.smoothstep((elapsed - WallpaperMotion.interludeInDelay) / WallpaperMotion.interludeIn)
         let knownEnd = end > start
@@ -35,7 +42,7 @@ extension VCVocalGap {
         let progress = knownEnd ? min(1, max(0, elapsed / max(0.01, cueEnd - start))) : nil
         let seed = LyricPhraseTiming.timeSeed(start) ^ 0x1D07_5EED
         return opacity > 0 ? InstrumentalCue(elapsed: elapsed, opacity: opacity, progress: progress,
-                                             seed: seed, energy: energy, entering: fadeIn,
-                                             leaving: 1 - fadeOut) : nil
+                                             seed: seed, audio: audio, entering: fadeIn,
+                                             leaving: 1 - fadeOut, span: knownEnd ? cueEnd - start : nil) : nil
     }
 }

@@ -402,7 +402,8 @@ struct LyricLayer: View {
                     creditsOverlay(lines, cues: cues, content: content, time: time)
                 }
                 .overlay {
-                    if let cue = gap?.instrumentalCue(at: time, previewLead: settings.nextWordPreviewLead, energy: energy) {
+                    if let cue = gap?.instrumentalCue(at: time, previewLead: settings.nextWordPreviewLead,
+                                                      audio: cache.orbAudio(wall: wall)) {
                         // In the floating window the opening title takes the
                         // middle, where the dots are: they wait for it.
                         ThinkingOrbView(cue: cue, accent: accent, baseSize: baseSize)
@@ -1391,6 +1392,18 @@ final class LyricLayerCache: ObservableObject {
 
     private var energy = VCFollower()
     private var energyWall: Double?
+    private var orbFollower = ThinkingOrb.AudioFollower()
+
+    /// The music for the thinking orb, while a break is on screen: level
+    /// and onsets with a 60 ms attack and 250 ms release, and the extra spin
+    /// the music has added. Nil when audio capture is off. Only stepped
+    /// while an orb is drawn, so nothing runs outside a break.
+    func orbAudio(wall: Double) -> ThinkingOrb.Audio? {
+        let audio = AudioReactiveController.shared
+        guard audio.running else { return nil }
+        let target = ThinkingOrb.targets(rms: audio.levels.rms, bass: audio.levels.bass, pulse: audio.levels.pulse)
+        return orbFollower.step(level: target.level, onset: target.onset, wall: wall)
+    }
 
     /// Live loudness when the visualiser is capturing audio, smoothed so it
     /// can only ever ease the motion rather than jolt it. Zero otherwise.

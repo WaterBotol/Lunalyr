@@ -63,15 +63,18 @@ final class RenderingPerformanceTests: XCTestCase {
         XCTAssertNil(gap.instrumentalCue(at: 10, previewLead: 0.5))
         let cue = try XCTUnwrap(gap.instrumentalCue(at: 16, previewLead: 0.5))
         XCTAssertEqual(cue.opacity, 1)
-        // The time-remaining cue the dots' filling gave: the glow rises
-        // through the second half of the break.
-        func glow(_ time: Double) throws -> Double {
+        // The time-remaining cue: the countdown ring fills through the
+        // break, and the orb focuses in its last two seconds.
+        func pose(_ time: Double) throws -> ThinkingOrb.Pose {
             ThinkingOrb.pose(try XCTUnwrap(gap.instrumentalCue(at: time, previewLead: 0.5)), reduceMotion: false,
-                             increaseContrast: false).glow
+                             increaseContrast: false)
         }
-        XCTAssertEqual(try glow(12), 0)
-        XCTAssertGreaterThan(try glow(22), try glow(19))
-        XCTAssertGreaterThan(try glow(25), 0.9)
+        func lit(_ time: Double) throws -> Double { try pose(time).ring?.reduce(0, +) ?? -1 }
+        XCTAssertLessThan(try lit(11), 3)
+        XCTAssertGreaterThan(try lit(22), try lit(19))
+        XCTAssertEqual(try lit(25.2), Double(ThinkingOrb.ringDotsLarge), accuracy: 0.01)
+        XCTAssertEqual(try pose(20).focus, 0)
+        XCTAssertGreaterThan(try pose(24.5).focus, 0.5)
         let unknown = VCVocalGap(start: 10, end: -1, nextVocal: -1).instrumentalCue(at: 17, previewLead: 0.5)
         XCTAssertNil(unknown?.progress)
         XCTAssertNil(gap.instrumentalCue(at: 25.55, previewLead: 0.5))
@@ -109,9 +112,9 @@ final class RenderingPerformanceTests: XCTestCase {
         extras.lyricsHidden = false
         settings.backgroundMode = .desktop
 
-        /// Lit pixels in the middle, and whether they make one round,
-        /// unbroken shape (the orb) rather than a row of separate dots.
-        func orb(show: Bool, floating: Bool = false) throws -> (lit: Int, solid: Bool) {
+        /// Lit pixels round the middle, and whether they make one round
+        /// cluster of dots centred where the lyrics were.
+        func orb(show: Bool, floating: Bool = false) throws -> (lit: Int, round: Bool) {
             settings.showInterludes = show
             let renderer = ImageRenderer(content: LyricLayer(time: 10, baseSize: 60, maxWidth: 350, maxHeight: 180,
                 mood: .neutral, accent: .orange, trackSeed: 0, animating: false)
@@ -119,24 +122,25 @@ final class RenderingPerformanceTests: XCTestCase {
                 .environment(\.lyricBackdropOverride, floating ? 0.1 : nil)
                 .frame(width: 400, height: 220))
             let bitmap = NSBitmapImageRep(cgImage: try XCTUnwrap(renderer.cgImage))
-            func lit(_ x: Int, _ y: Int) -> Bool { (bitmap.colorAt(x: x, y: y)?.alphaComponent ?? 0) > 0.1 }
             var count = 0
-            for y in 85..<135 {
-                for x in 145..<255 where lit(x, y) { count += 1 }
+            var xs: [Int] = [], ys: [Int] = []
+            for y in 30..<190 {
+                for x in 120..<280 where (bitmap.colorAt(x: x, y: y)?.alphaComponent ?? 0) > 0.35 {
+                    count += 1; xs.append(x); ys.append(y)
+                }
             }
-            let row = (100..<300).filter { lit($0, 110) }, column = (40..<180).filter { lit(200, $0) }
-            guard let left = row.first, let right = row.last, let top = column.first, let bottom = column.last else {
+            guard let left = xs.min(), let right = xs.max(), let top = ys.min(), let bottom = ys.max() else {
                 return (count, false)
             }
-            let unbroken = row.count == right - left + 1 && column.count == bottom - top + 1
             let width = Double(right - left), height = Double(bottom - top)
-            return (count, unbroken && abs(width - height) < 0.25 * max(width, height))
+            let centred = abs(Double(left + right) / 2 - 200) < 10 && abs(Double(top + bottom) / 2 - 110) < 10
+            return (count, centred && width > 30 && abs(width - height) < 0.2 * max(width, height))
         }
         for layout in [nil] + LyricComposition.allCases.map(Optional.some) {
             settings.lyricComposition = layout
             let shown = try orb(show: true)
-            XCTAssertGreaterThan(shown.lit, 200, layout?.title ?? "Automatic")
-            XCTAssertTrue(shown.solid, "one orb, not three dots: \(layout?.title ?? "Automatic")")
+            XCTAssertGreaterThan(shown.lit, 60, layout?.title ?? "Automatic")
+            XCTAssertTrue(shown.round, "one round orb of dots: \(layout?.title ?? "Automatic")")
             XCTAssertEqual(try orb(show: false).lit, 0)
         }
         // Floating lyrics draw the same layer (once the opening title,
@@ -144,7 +148,7 @@ final class RenderingPerformanceTests: XCTestCase {
         let title = UserDefaults.standard.object(forKey: OpeningTitle.settingKey)
         UserDefaults.standard.set(false, forKey: OpeningTitle.settingKey)
         defer { UserDefaults.standard.set(title, forKey: OpeningTitle.settingKey) }
-        XCTAssertTrue(try orb(show: true, floating: true).solid, "floating lyrics")
+        XCTAssertTrue(try orb(show: true, floating: true).round, "floating lyrics")
     }
 
     func testMotionCoverUsesTheAlbumHeaderAndMatchesTheRelease() throws {
