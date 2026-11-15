@@ -191,6 +191,25 @@ final class LyricsFetcher {
         }
         return report
     }
+    /// A song looked up ahead from Music's queue (`QueueLookAhead`) has
+    /// started, and the player gives it details whose `recordingKey`
+    /// differs (MediaRemote's duration can be a second or two off
+    /// AppleScript's). What that lookup learnt is carried over to the
+    /// playing song's key, so its lookup uses it: the saved online choice,
+    /// the sources that had nothing, and Musixmatch's request (joined even
+    /// while in flight, so the song is not asked about twice). Nothing the playing song has is replaced.
+    func adopt(from prefetched: LyricQuery, to playing: LyricQuery, fingerprint: String,
+               musixmatch: MusixmatchState = .shared) {
+        let from = prefetched.recordingKey, to = playing.recordingKey
+        guard from != to else { return }
+        let fromKey = from + "|" + fingerprint, toKey = to + "|" + fingerprint
+        if SavedLyrics.readCandidate(toKey, in: cacheFolder) == nil,
+           let saved = SavedLyrics.readCandidate(fromKey, in: cacheFolder) {
+            SavedLyrics.save(saved, key: toKey, in: cacheFolder)
+        }
+        misses.copy(from: fromKey, to: toKey)
+        musixmatch.link(to, to: from)
+    }
     /// Re-reads only the local lyric files after they change, keeping the
     /// online candidates already found. Nil when nothing relevant changed.
     func refreshLocal(_ query: LyricQuery, previous: LyricLookupReport,

@@ -150,6 +150,10 @@ final class LyricsViewModel: ObservableObject {
         if let track {
             var query=LyricQuery(title:track.title,artist:track.artist,album:track.album,duration:track.duration)
             query.genre=track.genre
+            // Looked up ahead from Music's queue under slightly different details: use what it found.
+            if let ahead=QueueLookAhead.shared.lookedUp(track) {
+                LyricsFetcher.shared.adopt(from:ahead.query,to:query,fingerprint:LyricSourceOptions.shared.fingerprint)
+            }
             startLookup(query,recording:query.recordingKey,force:false)
         }
     }
@@ -190,6 +194,9 @@ final class LyricsViewModel: ObservableObject {
         if sourceStates != update.states {sourceStates=update.states}
         if pinnedMatch != update.pinned {pinnedMatch=update.pinned}
         let step=Self.reception(of:update,applied:appliedRevision,rerun:rerun)
+        if step != .ignore, appliedRevision == 0, !rerun {
+            SongStartLog.note("lyrics \(update.result == nil ? "none" : "shown")\(update.cached ? " (saved match)" : "")\(update.isComplete ? "" : ", lookup continuing")")
+        }
         if step != .ignore {
             appliedRevision=max(update.revision,1)
             if step == .swapAtBoundary {

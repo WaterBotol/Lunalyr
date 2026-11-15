@@ -148,7 +148,22 @@ final class MusicVideoController: ObservableObject {
             return
         }
         status = .searching(title: next.title)
+        if let track, let ahead = QueueLookAhead.shared.lookedUp(track) {
+            resolver.adopt(from: ahead.videoSong, to: next)
+        }
         start(next)
+    }
+
+    /// Finds an upcoming song's video ahead of time, while "Music video" is
+    /// the wallpaper with online search on (`QueueLookAhead`): the YouTube
+    /// ID, remembered as the song's own lookup would, then its shape and,
+    /// with `pictures`, its still, which load quickly once it plays. No
+    /// player is made.
+    func lookAhead(_ song: MusicVideoSong, pictures: Bool) async {
+        guard enabled, online, let found = await resolver.lookAhead(song), !Task.isCancelled,
+              case .found(.youTube(let id)) = found else { return }
+        _ = await YouTubeVideoShape.aspect(of: id)
+        if pictures, !Task.isCancelled { _ = await YouTubeThumbnail.load(id, large: true) }
     }
 
     private func start(_ song: MusicVideoSong) {
@@ -162,6 +177,7 @@ final class MusicVideoController: ObservableObject {
     }
 
     private func apply(_ result: MusicVideoResolution, for song: MusicVideoSong) {
+        SongStartLog.note("music video \(Self.traceName(result))")
         switch result {
         case .found(let source):
             status = .showing(source, title: song.title)
@@ -169,6 +185,15 @@ final class MusicVideoController: ObservableObject {
         case .missing(let miss):
             status = .missing(miss, title: song.title)
             if (miss == .rateLimited || miss == .lookupFailed) && retried != song.key { scheduleRetry(song) }
+        }
+    }
+
+    /// What a lookup found, for `SongStartLog` (no IDs or paths).
+    nonisolated static func traceName(_ result: MusicVideoResolution) -> String {
+        switch result {
+        case .found(.youTube): return "found (YouTube)"
+        case .found(.local): return "found (library)"
+        case .missing(let miss): return "missing (\(miss))"
         }
     }
 

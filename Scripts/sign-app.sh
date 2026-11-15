@@ -33,5 +33,10 @@ for framework in "$APP"/Contents/Frameworks/*.framework; do
     ! -path '*/Resources/*' ! -path '*.app/*' ! -path '*.xpc/*' -print0)
   codesign "${FLAGS[@]}" "$framework"
 done
+# Plain libraries in Frameworks (the queue reader perl loads).
+for library in "$APP"/Contents/Frameworks/*.dylib; do
+  [[ -f "$library" ]] || continue
+  codesign "${FLAGS[@]}" "$library"
+done
 codesign "${FLAGS[@]}" "$APP"
 codesign --verify --deep --strict "$APP"

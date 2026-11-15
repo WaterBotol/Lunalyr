@@ -257,4 +257,53 @@ final class MusixmatchProviderTests: XCTestCase {
         XCTAssertEqual(LyricSourceID.musixmatch.timingCeiling, 3)
         XCTAssertEqual(LyricSourceID.musixmatch.title, "Musixmatch")
     }
+
+    // MARK: Looking ahead: still one request per song
+
+    private var macroRequests: Int { MusixmatchFixtureProtocol.actions.filter { $0 == "macro.subtitles.get" }.count }
+
+    func testLookupsAskingAtOnceShareOneRequest() async throws {
+        MusixmatchFixtureProtocol.reset(["token.get": [(200, Self.token)], "macro.subtitles.get": [(200, Self.macro())]])
+        let state = state(), session = session!, query = query
+        // A look-ahead still in flight when its song starts, and one cancelled while waiting.
+        let ahead = Task { try await MusixmatchLyricsProvider.lookup(query, session: session, state: state) }
+        let playing = Task { try await MusixmatchLyricsProvider.lookup(query, session: session, state: state) }
+        let cancelled = Task { try await MusixmatchLyricsProvider.lookup(query, session: session, state: state) }
+        cancelled.cancel()
+        let first = try await ahead.value, second = try await playing.value
+        _ = try? await cancelled.value
+        XCTAssertNotNil(first)
+        XCTAssertNotNil(second)
+        XCTAssertEqual(MusixmatchFixtureProtocol.actions, ["token.get", "macro.subtitles.get"])
+        XCTAssertNotNil(state.answered(query.recordingKey), "the answer is kept whoever was cancelled")
+    }
+
+    func testCancelledLookAheadStillCountsAsTheSongsRequest() async throws {
+        MusixmatchFixtureProtocol.reset(["token.get": [(200, Self.token)], "macro.subtitles.get": [(200, Self.macro())]])
+        let state = state(), session = session!, query = query
+        let ahead = Task { try await MusixmatchLyricsProvider.lookup(query, session: session, state: state) }
+        while MusixmatchFixtureProtocol.actions.isEmpty { await Task.yield() }
+        ahead.cancel()
+        _ = try? await ahead.value
+        XCTAssertEqual(macroRequests, 1)
+        _ = try await MusixmatchLyricsProvider.lookup(query, session: session, state: state)
+        XCTAssertEqual(macroRequests, 1, "the song start reuses the look-ahead's answer")
+    }
+
+    func testSongLookedUpAheadUnderOtherDetailsIsNotAskedAgain() async throws {
+        MusixmatchFixtureProtocol.reset(["token.get": [(200, Self.token)], "macro.subtitles.get": [(200, Self.macro())]])
+        let state = state()
+        let ahead = LyricQuery(title: "Our Song", artist: "Our Artist", album: nil, duration: 201.6)
+        let playing = LyricQuery(title: "Our Song", artist: "Our Artist", album: nil, duration: 199.9)
+        XCTAssertNotEqual(ahead.recordingKey, playing.recordingKey)
+        _ = try await MusixmatchLyricsProvider.lookup(ahead, session: session, state: state)
+        state.link(playing.recordingKey, to: ahead.recordingKey)
+        let found = try await MusixmatchLyricsProvider.lookup(playing, session: session, state: state)
+        XCTAssertNotNil(found)
+        XCTAssertEqual(macroRequests, 1)
+        // Without the link, another song is asked about as before.
+        let other = LyricQuery(title: "Other Song", artist: "Our Artist", album: nil, duration: 199.9)
+        _ = try await MusixmatchLyricsProvider.lookup(other, session: session, state: state)
+        XCTAssertEqual(macroRequests, 2)
+    }
 }

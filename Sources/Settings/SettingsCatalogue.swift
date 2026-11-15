@@ -497,6 +497,8 @@ enum SettingsCatalogue {
                   keywords: ["automation", "permission", "access"]),
             .init(.general, "Music players", "Open Privacy Settings", .action,
                   keywords: ["automation", "permission", "privacy & security"]),
+            .init(.general, "Music players", "Look ahead in the queue", .toggle, keys: ["custom.player.lookAhead"],
+                  keywords: ["up next", "prefetch", "preload", "next song", "queue"]),
         ]
         let onScreen: [SettingsCatalogueEntry] = [
             .init(.general, "On screen", "Hide lyrics", .toggle, keys: ["custom.lyricsHidden"],

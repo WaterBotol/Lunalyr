@@ -121,3 +121,24 @@ enum SongStartLog {
         logger.notice("\(String(format: "%+.2f", age), privacy: .public) \(text, privacy: .public)")
     }
 }
+
+/// The queue look-ahead (`MusicQueueReader`, `QueueLookAhead`), in the same
+/// system log (subsystem `local.verso.custom`, category `lookahead`): the
+/// helper starting, failing and backing off, how many upcoming songs were
+/// read, and what was looked up ahead and whether a starting song had been.
+/// Counts and outcomes only, never song titles. Nothing is logged in tests.
+enum LookAheadLog {
+    private static let logger = Logger(subsystem: "local.verso.custom", category: "lookahead")
+
+    static func note(_ message: @autoclosure () -> String) {
+        guard !AppRuntime.isUnitTesting else { return }
+        let text = message()
+        logger.notice("\(text, privacy: .public)")
+    }
+
+    static func failure(_ message: @autoclosure () -> String) {
+        guard !AppRuntime.isUnitTesting else { return }
+        let text = message()
+        logger.error("\(text, privacy: .public)")
+    }
+}

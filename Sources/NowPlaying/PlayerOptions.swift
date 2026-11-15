@@ -10,6 +10,7 @@ final class PlayerOptions: ObservableObject {
     static let key = "custom.player"
     static let webKey = "custom.player.webPlayers"
     static let localKey = "custom.player.localPlayers"
+    static let lookAheadKey = "custom.player.lookAhead"
 
     enum Choice: String, CaseIterable, Identifiable {
         case automatic, appleMusic, spotify, vlc, swinsian, vox, safari, chrome, arc, brave, edge
@@ -94,6 +95,14 @@ final class PlayerOptions: ObservableObject {
         didSet { defaults.set(followsLocalPlayers, forKey: Self.localKey) }
     }
 
+    /// Whether the next songs in Music's Up Next are looked up before they
+    /// play (`QueueLookAhead`): their lyrics, video and cover are then ready
+    /// when they start. On by default; off, only the playing song is ever
+    /// looked up.
+    @Published var looksAhead: Bool {
+        didSet { defaults.set(looksAhead, forKey: Self.lookAheadKey) }
+    }
+
     private let defaults: UserDefaults
 
     init(defaults: UserDefaults = .standard) {
@@ -101,6 +110,7 @@ final class PlayerOptions: ObservableObject {
         choice = Choice(rawValue: defaults.string(forKey: Self.key) ?? "") ?? .automatic
         followsWebPlayers = defaults.bool(forKey: Self.webKey)
         followsLocalPlayers = defaults.bool(forKey: Self.localKey)
+        looksAhead = defaults.object(forKey: Self.lookAheadKey) as? Bool ?? true
     }
 
     /// The players a choice follows. Automatic: Music and Spotify, plus the
