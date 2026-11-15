@@ -314,7 +314,12 @@ struct NowPlayingView: View {
         if case .shader(let style, _) = layer { compiled = effects.isSettled(style, display: effectDisplay) }
         return WallpaperTransition.canDraw(layer.transitionGate, firstFrameDrawn: drawnLayers.contains(layer),
                                            overdue: firstFrameOverdue == layer, firstLayer: firstLayer,
-                                           compiled: compiled)
+                                           compiled: compiled, overOpaque: shownLayerIsOpaque)
+    }
+
+    /// The layer on screen beneath any held one covers the desktop.
+    private var shownLayerIsOpaque: Bool {
+        crossfade.entries.last(where: \.isReady)?.layer.isOpaque ?? true
     }
 
     /// `layer` is the one being faded to, still held for its first frame:
@@ -403,8 +408,16 @@ struct NowPlayingView: View {
         // An outgoing layer only needs the clock until its fade ends, which
         // is already one of the transition deadlines.
         return FrameClockPolicy.quietAfter(.init(
-            backgroundAnimates: currentLayer.animatesWithClock && !(reduceMotion && currentLayer == .albumGradient),
+            backgroundAnimates: WallpaperTransition.backgroundAnimates(
+                layers: crossfade.entries.map { (animates: animatesWithClock($0.layer), isReady: $0.isReady) },
+                held: crossfade.isHeld),
             lyricsAdvance: lyricsAdvance, transitionsEnd: ends))
+    }
+
+    /// Whether `layer` needs the frame clock: a still album gradient under
+    /// Reduce Motion does not.
+    private func animatesWithClock(_ layer: BackgroundLayer) -> Bool {
+        layer.animatesWithClock && !(reduceMotion && layer == .albumGradient)
     }
 
     var body: some View {
@@ -595,6 +608,7 @@ struct NowPlayingView: View {
         }
         .onAppear {
             updatePalette(nowPlaying.artwork, for: nowPlaying.artworkTrack)
+            rememberVideoCover()
             let layer = desiredLayer
             prepareEffect(for: layer)
             // A desktop surface fades in from its black window once its

@@ -31,10 +31,12 @@ enum WallpaperTransition {
         /// A GPU effect: holds until it has compiled on this display's GPU.
         case compile
         /// Holds until it draws its first frame (a visualiser, an imported
-        /// picture, animated cover art), or `firstFrameWait` passes.
+        /// picture), or `firstFrameWait` passes.
         case firstFrame
-        /// A music video: holds until its player shows a picture (or its
-        /// still, under Reduce Motion), or `videoFirstFrameWait` passes.
+        /// A video player -- a music video, or animated cover art: holds
+        /// until it shows a picture (a music video's still, under Reduce
+        /// Motion), or `videoFirstFrameWait` passes. Over Your wallpaper it
+        /// does not hold (see `canDraw`).
         case video
         /// The stand-in while the song's video is looked for: never faded to
         /// over something on screen, only shown as a surface's first layer.
@@ -66,15 +68,32 @@ enum WallpaperTransition {
     /// it can run. `firstFrameDrawn`: its view reported a picture.
     /// `overdue`: its wait ran out. `firstLayer`: nothing is on screen to
     /// hold instead (the surface's first layer). `compiled`: a GPU effect is
-    /// ready on this display.
+    /// ready on this display. `overOpaque`: the layer on screen beneath
+    /// covers the desktop. Leaving Your wallpaper, the wallpaper window
+    /// turns opaque once the incoming layer should have faded in
+    /// (`WallpaperOpacityPolicy`): a video or its stand-in is not held there,
+    /// as before, or the screen would go black under it.
     static func canDraw(_ gate: Gate, firstFrameDrawn: Bool, overdue: Bool, firstLayer: Bool = false,
-                        compiled: Bool = true) -> Bool {
+                        compiled: Bool = true, overOpaque: Bool = true) -> Bool {
         switch gate {
         case .none: return true
         case .compile: return compiled
-        case .firstFrame, .video: return firstFrameDrawn || overdue
-        case .videoLookup: return firstLayer || overdue
+        case .firstFrame: return firstFrameDrawn || overdue
+        case .video: return firstFrameDrawn || overdue || !overOpaque
+        case .videoLookup: return firstLayer || overdue || !overOpaque
         }
+    }
+
+    /// Whether the wallpaper's frame clock must keep running for its
+    /// background. While the incoming layer is held, the layers beneath stay
+    /// on screen and a clock-driven one (a visualiser, an effect, a
+    /// pattern) must keep moving rather than freeze until the fade starts.
+    /// `layers` bottom first, the last being the one faded to.
+    static func backgroundAnimates(layers: [(animates: Bool, isReady: Bool)], held: Bool) -> Bool {
+        guard let top = layers.last else { return false }
+        if top.animates { return true }
+        guard held else { return false }
+        return layers.dropLast().contains { $0.animates && $0.isReady }
     }
 
     /// How long a held layer waits before it is shown anyway.
@@ -99,7 +118,7 @@ extension NowPlayingView.BackgroundLayer {
     var transitionGate: WallpaperTransition.Gate {
         switch self {
         case .desktop, .albumGradient, .generated: return .none
-        case .motion(_, let still, _): return still ? .none : .firstFrame
+        case .motion(_, let still, _): return still ? .none : .video
         case .custom, .visualizer: return .firstFrame
         case .shader: return .compile
         case .musicVideo: return .video

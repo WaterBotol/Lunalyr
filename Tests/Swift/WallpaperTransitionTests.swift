@@ -34,7 +34,7 @@ final class WallpaperTransitionTests: XCTestCase {
         XCTAssertEqual(Layer.musicVideoPending.transitionGate, .videoLookup)
         XCTAssertEqual(visualiser.transitionGate, .firstFrame)
         XCTAssertEqual(Layer.custom(URL(fileURLWithPath: "/tmp/p.png")).transitionGate, .firstFrame)
-        XCTAssertEqual(Layer.motion(URL(fileURLWithPath: "/tmp/m.mp4"), still: false).transitionGate, .firstFrame)
+        XCTAssertEqual(Layer.motion(URL(fileURLWithPath: "/tmp/m.mp4"), still: false).transitionGate, .video)
         XCTAssertEqual(Layer.shader(.aurora, epoch: 1).transitionGate, .compile)
         for layer in [videoA, library, .musicVideoPending, visualiser] {
             XCTAssertFalse(readyAtOnce(layer), "\(layer.traceName) would fade in before it has a picture")
@@ -65,6 +65,40 @@ final class WallpaperTransitionTests: XCTestCase {
         // backstop never fires before it, so a slow look-up does not go
         // video -> stand-in -> fallback.
         XCTAssertGreaterThan(WallpaperTransition.firstFrameWait(for: .videoLookup), WallpaperTransition.videoLookupWait)
+    }
+
+    /// Leaving Your wallpaper the window turns opaque on a timer
+    /// (`WallpaperOpacityPolicy`): a video or its stand-in held there at no
+    /// opacity would leave black, so neither holds over the desktop.
+    func testNothingIsHeldOverYourWallpaperThatWouldLeaveBlack() {
+        XCTAssertTrue(WallpaperTransition.canDraw(.video, firstFrameDrawn: false, overdue: false, overOpaque: false))
+        XCTAssertTrue(WallpaperTransition.canDraw(.videoLookup, firstFrameDrawn: false, overdue: false, overOpaque: false))
+        XCTAssertFalse(Layer.desktop.isOpaque)
+        var fade = Fade(.desktop)
+        fade.change(to: videoB, ready: WallpaperTransition.canDraw(.video, firstFrameDrawn: false, overdue: false,
+                                                                   overOpaque: Layer.desktop.isOpaque),
+                    at: start, duration: duration)
+        XCTAssertFalse(fade.isHeld)
+        XCTAssertEqual(fade.fadesEnd(duration: duration), at(duration))
+    }
+
+    /// While the incoming layer is held, a clock-driven layer beneath it (the
+    /// fallback visualiser, say) keeps moving instead of freezing until the
+    /// fade starts.
+    func testTheClockKeepsRunningForWhatIsHeldOnScreen() {
+        // A visualiser on screen, a video held over it.
+        XCTAssertTrue(WallpaperTransition.backgroundAnimates(
+            layers: [(animates: true, isReady: true), (animates: false, isReady: false)], held: true))
+        // The video shown: only it counts, and it draws itself.
+        XCTAssertFalse(WallpaperTransition.backgroundAnimates(
+            layers: [(animates: true, isReady: true), (animates: false, isReady: true)], held: false))
+        // A video held over a video: nothing needs the clock.
+        XCTAssertFalse(WallpaperTransition.backgroundAnimates(
+            layers: [(animates: false, isReady: true), (animates: false, isReady: false)], held: true))
+        // A clock-driven layer faded to needs it, as before.
+        XCTAssertTrue(WallpaperTransition.backgroundAnimates(layers: [(animates: true, isReady: true)], held: false))
+        XCTAssertTrue(visualiser.animatesWithClock)
+        XCTAssertFalse(videoB.animatesWithClock)
     }
 
     func testAnEffectWaitsOnlyForItsCompile() {
@@ -143,8 +177,10 @@ final class WallpaperTransitionTests: XCTestCase {
         XCTAssertEqual(drawn(fade, wait + duration), [.init(layer: videoB, opacity: 1)])
     }
 
-    /// The outgoing wallpaper is never held for long: at most the look-up
-    /// and then the new player's first picture.
+    /// The outgoing wallpaper is never held for long: on a song change in
+    /// Music video, at most the look-up and then the new player's first
+    /// picture. (Each new held layer starts its own wait, so a look-up
+    /// that times out onto a fallback that itself waits adds that wait.)
     func testTheHoldIsBounded() {
         XCTAssertEqual(WallpaperTransition.longestHold,
                        WallpaperTransition.videoLookupWait + WallpaperTransition.videoFirstFrameWait)
