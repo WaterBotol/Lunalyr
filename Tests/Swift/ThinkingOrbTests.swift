@@ -20,6 +20,112 @@ final class ThinkingOrbTests: XCTestCase {
         ThinkingOrb.pose(cue, reduceMotion: reduceMotion, increaseContrast: false)
     }
 
+    // MARK: Style
+
+    @MainActor
+    func testStyleDefaultsToListeningAndPersists() {
+        let defaults = LunalyrTestEnvironment.isolatedDefaults("LunalyrTests.OrbStyle")
+        let settings = VersoCustom.Settings(defaults: defaults, notifications: NotificationCenter())
+        XCTAssertEqual(ThinkingOrb.styleKey, "custom.thinkingOrb.style")
+        XCTAssertEqual(settings.thinkingOrbStyle, "listening")
+        settings.thinkingOrbStyle = "weaving"
+        XCTAssertEqual(defaults.string(forKey: "custom.thinkingOrb.style"), "weaving")
+        XCTAssertEqual(VersoCustom.Settings(defaults: defaults, notifications: NotificationCenter()).thinkingOrbStyle, "weaving")
+        // An unknown stored value reads as Listening.
+        defaults.set("sparkles", forKey: "custom.thinkingOrb.style")
+        XCTAssertEqual(VersoCustom.Settings(defaults: defaults, notifications: NotificationCenter()).thinkingOrbStyle, "listening")
+        settings.reloadLyricStyle()
+        XCTAssertEqual(settings.thinkingOrbStyle, "listening")
+        // Part of a lyric style, so each surface keeps its own.
+        XCTAssertTrue(LyricStyleProfiles.keys.contains(ThinkingOrb.styleKey))
+        XCTAssertEqual(ThinkingOrb.styles.count, 10)
+        XCTAssertEqual(ThinkingOrb.title(of: "mix"), "Mix")
+        XCTAssertEqual(ThinkingOrb.title(of: "nonsense"), "Listening")
+    }
+
+    func testNamedStylesDrawTheirOwnStateAndUnknownIsListening() {
+        for name in ThinkingOrb.styles.dropLast() {
+            XCTAssertEqual(ThinkingOrb.state(style: name, seed: 5).rawValue, name)
+        }
+        XCTAssertEqual(ThinkingOrb.state(style: "nonsense", seed: 5), .listening)
+    }
+
+    func testMixIsStablePerBreakAndNeverRepeatsThePreviousStyle() {
+        var seen = Set<OrbEngine.State>()
+        var previous: OrbEngine.State?
+        for index in 0..<400 {
+            let seed = LyricPhraseTiming.timeSeed(Double(index) * 37.5) ^ 0x1D07_5EED
+            let state = ThinkingOrb.state(style: "mix", seed: seed, avoiding: previous)
+            XCTAssertEqual(state, ThinkingOrb.state(style: "mix", seed: seed, avoiding: previous), "stable for a break")
+            XCTAssertNotEqual(state, previous)
+            seen.insert(state)
+            previous = state
+        }
+        XCTAssertEqual(seen.count, 9, "every style turns up")
+    }
+
+    func testEveryStyleDrawsAtBothSizesAndWithReduceMotion() throws {
+        let gap = VCVocalGap(start: 10, end: 30, nextVocal: 1)
+        let loud = ThinkingOrb.Audio(level: 0.9, onset: 0.8, phase: 2)
+        for state in OrbEngine.State.allCases {
+            for diameter in [30.0, 60.0] {
+                for reduceMotion in [false, true] {
+                    for time in [11.5, 28.1] {
+                        let pose = ThinkingOrb.pose(try cue(gap, time, audio: loud), diameter: diameter, state: state,
+                                                    reduceMotion: reduceMotion, increaseContrast: false)
+                        let frames = ThinkingOrb.frames(pose, diameter: diameter)
+                        XCTAssertFalse(frames.isEmpty, "\(state)")
+                        XCTAssertEqual(pose.layers.map(\.weight).reduce(0, +), 1, accuracy: 1e-9)
+                        for (frame, _) in frames {
+                            XCTAssertFalse(frame.dots.isEmpty, "\(state) \(diameter) \(reduceMotion)")
+                            XCTAssertTrue(frame.dots.allSatisfy { $0.x.isFinite && $0.y.isFinite && $0.r.isFinite })
+                            XCTAssertTrue(frame.lines.allSatisfy { $0.x1.isFinite && $0.w.isFinite })
+                        }
+                    }
+                }
+            }
+        }
+        // Breathing has nothing to cross-fade into.
+        let late = ThinkingOrb.pose(try cue(gap, 28.6), state: .breathing, reduceMotion: false, increaseContrast: false)
+        XCTAssertEqual(late.layers.map(\.state), [.breathing])
+        XCTAssertEqual(late.layers.map(\.weight), [1])
+        let early = ThinkingOrb.pose(try cue(gap, 12), state: .breathing, reduceMotion: false, increaseContrast: false)
+        XCTAssertEqual(early.layers.map(\.state), [.breathing])
+        // Every other style still focuses into breathing at the end.
+        let weaving = ThinkingOrb.pose(try cue(gap, 28.6), state: .weaving, reduceMotion: false, increaseContrast: false)
+        XCTAssertEqual(weaving.layers.map(\.state), [.breathing])
+    }
+
+    @MainActor
+    func testWriteOrbStyleSheet() throws {
+        guard let path = ProcessInfo.processInfo.environment["LUNALYR_ORB_STYLES_PNG"] else { return }
+        let gap = VCVocalGap(start: 10, end: 30, nextVocal: 1)
+        let cue = try cue(gap, 19.5, audio: nil)
+        let ink = ink(backdrop: 0.03, mode: .standard)
+        let colours = [Color(red: 0.10, green: 0.08, blue: 0.22), Color(red: 0.03, green: 0.04, blue: 0.09)]
+        let sheet = VStack(spacing: 0) {
+            ForEach(0..<3, id: \.self) { row in
+                HStack(spacing: 0) {
+                    ForEach(0..<3, id: \.self) { column in
+                        let state = OrbEngine.State.allCases[row * 3 + column]
+                        ZStack {
+                            LinearGradient(colors: colours, startPoint: .topLeading, endPoint: .bottomTrailing)
+                            ThinkingOrbView(cue: cue, accent: .orange, baseSize: 90, state: state)
+                                .environment(\.lyricInk, ink)
+                            Text(state.rawValue).font(.system(size: 11)).foregroundStyle(Color.white.opacity(0.6))
+                                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading).padding(8)
+                        }
+                        .frame(width: 220, height: 200)
+                    }
+                }
+            }
+        }
+        let renderer = ImageRenderer(content: sheet)
+        renderer.scale = 2
+        let rep = NSBitmapImageRep(cgImage: try XCTUnwrap(renderer.cgImage))
+        try XCTUnwrap(rep.representation(using: .png, properties: [:])).write(to: URL(fileURLWithPath: path))
+    }
+
     // MARK: Focus
 
     func testOpenBreakNeitherFocusesNorEnds() throws {

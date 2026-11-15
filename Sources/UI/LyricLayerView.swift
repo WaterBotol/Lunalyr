@@ -406,7 +406,8 @@ struct LyricLayer: View {
                                                       audio: cache.orbAudio(wall: wall)) {
                         // In the floating window the opening title takes the
                         // middle, where the dots are: they wait for it.
-                        ThinkingOrbView(cue: cue, accent: accent, baseSize: baseSize)
+                        ThinkingOrbView(cue: cue, accent: accent, baseSize: baseSize,
+                                        state: cache.orbState(style: settings.thinkingOrbStyle, seed: cue.seed))
                             .opacity(backdropOverride == nil ? 1
                                      : OpeningTitle.yields(to: openingSchedule(content, key: key), at: time))
                     }
@@ -1393,6 +1394,21 @@ final class LyricLayerCache: ObservableObject {
     private var energy = VCFollower()
     private var energyWall: Double?
     private var orbFollower = ThinkingOrb.AudioFollower()
+    /// The state the current break draws, and the one before it, so a Mix
+    /// never repeats itself from one break to the next.
+    private var orbBreak: (seed: UInt64, state: OrbEngine.State)?
+    private var orbPrevious: OrbEngine.State?
+
+    func orbState(style: String, seed: UInt64) -> OrbEngine.State {
+        guard ThinkingOrb.normalised(style) == ThinkingOrb.mixStyle else {
+            return ThinkingOrb.state(style: style, seed: seed)
+        }
+        if let current = orbBreak, current.seed == seed { return current.state }
+        if let current = orbBreak { orbPrevious = current.state }
+        let state = ThinkingOrb.state(style: style, seed: seed, avoiding: orbPrevious)
+        orbBreak = (seed, state)
+        return state
+    }
 
     /// The music for the thinking orb, while a break is on screen: level
     /// and onsets with a 60 ms attack and 250 ms release, and the extra spin

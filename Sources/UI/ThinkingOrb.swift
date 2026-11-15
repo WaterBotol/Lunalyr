@@ -41,8 +41,49 @@ enum ThinkingOrb {
 
     // MARK: States and clock
 
-    /// Through the break.
+    /// Through the break, by default.
     static let breakState = OrbEngine.State.listening
+
+    // MARK: Style
+
+    /// The user's pick (`custom.thinkingOrb.style`): one of the nine
+    /// upstream states by name, or `mix`.
+    static let styleKey = "custom.thinkingOrb.style"
+    static let defaultStyle = "listening"
+    static let mixStyle = "mix"
+    /// Every value the setting takes, in the picker's order.
+    static let styles: [String] = [
+        "listening", "searching", "solving", "working", "weaving", "connecting", "composing", "shaping",
+        "breathing", mixStyle,
+    ]
+
+    /// A stored value as a style: unknown or missing values are `listening`.
+    static func normalised(_ raw: String?) -> String {
+        guard let raw, styles.contains(raw) else { return defaultStyle }
+        return raw
+    }
+
+    /// The picker's friendly name.
+    static func title(of style: String) -> String {
+        let value = normalised(style)
+        return value == mixStyle ? "Mix" : value.prefix(1).uppercased() + value.dropFirst()
+    }
+
+    /// The state a break draws: the style itself, or for `mix` one of the
+    /// nine chosen from the break's seed, never `avoiding` (the previous
+    /// break's) when there is a choice.
+    static func state(style: String, seed: UInt64, avoiding previous: OrbEngine.State? = nil) -> OrbEngine.State {
+        let value = normalised(style)
+        guard value == mixStyle else { return OrbEngine.State(rawValue: value) ?? breakState }
+        let all = styles.dropLast().compactMap(OrbEngine.State.init(rawValue:))
+        // SplitMix64 finaliser: neighbouring seeds spread across the nine.
+        var z = seed &+ 0x9E37_79B9_7F4A_7C15
+        z = (z ^ (z >> 30)) &* 0xBF58_476D_1CE4_E5B9
+        z = (z ^ (z >> 27)) &* 0x94D0_49BB_1331_11EB
+        z ^= z >> 31
+        let pool = all.filter { $0 != previous }
+        return pool[Int(z % UInt64(pool.count))]
+    }
     /// The last seconds before the next line.
     static let concludingState = OrbEngine.State.breathing
     /// Upstream's `speed` prop: its tunings are for a busy spinner; an
@@ -156,8 +197,8 @@ enum ThinkingOrb {
         var increaseContrast: Bool
     }
 
-    static func pose(_ cue: InstrumentalCue, diameter: Double = 48, reduceMotion: Bool,
-                     increaseContrast: Bool) -> Pose {
+    static func pose(_ cue: InstrumentalCue, diameter: Double = 48, state style: OrbEngine.State = breakState,
+                     reduceMotion: Bool, increaseContrast: Bool) -> Pose {
         let audio = reduceMotion ? nil : cue.audio
         let level = audio?.level ?? 0, onset = audio?.onset ?? 0
         let focus = focus(elapsed: cue.elapsed, span: cue.span)
@@ -170,8 +211,13 @@ enum ThinkingOrb {
                   : seconds * OrbEngine.resolve(state, design(diameter: diameter)).speed, weight: weight)
         }
         var layers: [Layer] = []
-        if focus < 1 { layers.append(layer(breakState, 1 - focus)) }
-        if focus > 0 { layers.append(layer(concludingState, focus)) }
+        if style == concludingState {
+            // Already breathing: nothing to cross-fade.
+            layers.append(layer(style, 1))
+        } else {
+            if focus < 1 { layers.append(layer(style, 1 - focus)) }
+            if focus > 0 { layers.append(layer(concludingState, focus)) }
+        }
         let arrive = enterScale + (1 - enterScale) * cue.entering
         let leave = 1 - (1 - exitScale) * cue.leaving
         let tighten = 1 - (1 - focusScale) * focus
@@ -276,12 +322,14 @@ struct ThinkingOrbView: View {
     /// The album accent: the orb's colour when the ink has none of its own.
     let accent: Color
     let baseSize: CGFloat
+    /// The state drawn through the break (`ThinkingOrb.state`).
+    var state: OrbEngine.State = ThinkingOrb.breakState
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.lyricInk) private var ink
 
     var body: some View {
         let diameter = ThinkingOrb.diameter(baseSize: Double(baseSize))
-        let pose = ThinkingOrb.pose(cue, diameter: diameter, reduceMotion: reduceMotion,
+        let pose = ThinkingOrb.pose(cue, diameter: diameter, state: state, reduceMotion: reduceMotion,
                                     increaseContrast: ink.contrast >= LyricInk.increasedContrast)
         let frames = ThinkingOrb.frames(pose, diameter: diameter)
         let colours = Self.colours(ink: ink, accent: accent)

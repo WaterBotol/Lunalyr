@@ -70,7 +70,7 @@ struct LyricStyleProfiles {
         // Settings
         "fontChoice", "googleFontFamily", "lyricComposition", "constellationSpread", "constellationLinkOpacity",
         "custom.wordRevealByStyle", "custom.wordArrivalByStyle", "custom.nextWordPreviewByStyle",
-        "custom.nextWordPreviewLead", "custom.wordEntranceMix", "echoStrength", "lyricScale", "custom.showInterludes",
+        "custom.nextWordPreviewLead", "custom.wordEntranceMix", "echoStrength", "lyricScale", "custom.showInterludes", ThinkingOrb.styleKey,
         "custom.editorialTypography", "custom.editorialAmount", "custom.randomizeLyricFonts",
         // The two switches; their word lists are shared by both surfaces.
         Settings.wordSymbolsKey, Settings.actionWordsKey,

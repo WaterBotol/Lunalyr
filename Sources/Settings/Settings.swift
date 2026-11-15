@@ -245,6 +245,8 @@ final class Settings: ObservableObject {
     @Published var lyricOffset: Double { didSet { store(lyricOffset, "custom.lyricOffset") } }
     @Published var lyricScale: Double { didSet { store(lyricScale, "lyricScale") } }
     @Published var showInterludes: Bool { didSet { store(showInterludes, "custom.showInterludes") } }
+    /// The thinking orb's style (`ThinkingOrb.styles`); unknown values read as Listening.
+    @Published var thinkingOrbStyle: String { didSet { store(thinkingOrbStyle, ThinkingOrb.styleKey) } }
     /// "Word symbols": a small symbol beside a listed word as it is sung.
     @Published var wordSymbols: Bool {
         didSet { store(wordSymbols, Self.wordSymbolsKey); refreshWordAccentLists() }
@@ -491,6 +493,7 @@ final class Settings: ObservableObject {
         lyricOffset = d.object(forKey: "custom.lyricOffset") as? Double ?? 0
         lyricScale = d.object(forKey: "lyricScale") as? Double ?? 1.0
         showInterludes = d.object(forKey: "custom.showInterludes") as? Bool ?? true
+        thinkingOrbStyle = ThinkingOrb.normalised(d.string(forKey: ThinkingOrb.styleKey))
         wordSymbols = d.object(forKey: Self.wordSymbolsKey) as? Bool ?? true
         wordSymbolList = d.dictionary(forKey: Self.wordSymbolListKey) as? [String: String]
         actionWords = d.object(forKey: Self.actionWordsKey) as? Bool ?? true
@@ -582,6 +585,7 @@ final class Settings: ObservableObject {
         set(\.echoStrength, d.object(forKey: "echoStrength") as? Double ?? 1.0)
         set(\.lyricScale, d.object(forKey: "lyricScale") as? Double ?? 1.0)
         set(\.showInterludes, d.object(forKey: "custom.showInterludes") as? Bool ?? true)
+        set(\.thinkingOrbStyle, ThinkingOrb.normalised(d.string(forKey: ThinkingOrb.styleKey)))
         set(\.wordSymbols, d.object(forKey: Self.wordSymbolsKey) as? Bool ?? true)
         set(\.actionWords, d.object(forKey: Self.actionWordsKey) as? Bool ?? true)
         set(\.editorialTypography, d.bool(forKey: "custom.editorialTypography"))

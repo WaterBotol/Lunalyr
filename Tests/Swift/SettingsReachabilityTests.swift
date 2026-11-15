@@ -295,6 +295,7 @@ private enum SourceKeys {
         "custom.styleMemory.songs",
         "custom.textBacking",
         "custom.textBackingAutomatic",
+        "custom.thinkingOrb.style",
         "custom.updates.adoptedDailyChecks",
         "custom.visualizerHeavyScenesOnMainDisplay",
         "custom.visualizerPunch",

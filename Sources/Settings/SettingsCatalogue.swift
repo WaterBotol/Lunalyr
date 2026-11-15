@@ -337,6 +337,8 @@ enum SettingsCatalogue {
                   keywords: ["echo", "strength"]),
             .init(.typography, "Instrumental breaks", "Show a glowing orb during instrumental breaks", .toggle,
                   keys: ["custom.showInterludes"], keywords: ["interlude", "orb", "dots", "instrumental"]),
+            .init(.typography, "Instrumental breaks", "Orb style", .choice,
+                  keys: [ThinkingOrb.styleKey], keywords: ["orb", "instrumental", "style", "chaotic"]),
             .init(.typography, "Word symbols", "Show symbols beside listed words", .toggle,
                   keys: ["custom.wordSymbols.enabled"], keywords: ["emoji", "symbol", "icon", "word symbols"]),
             .init(.typography, "Word symbols", "Word symbol list", .textField,

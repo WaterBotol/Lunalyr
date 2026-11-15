@@ -47,6 +47,13 @@ struct LyricStylePage: View {
             InspectorSection("Instrumental breaks") {
                 Toggle("Show a glowing orb during instrumental breaks", isOn: $s.showInterludes)
                     .toggleStyle(StudioCheckboxStyle())
+                HStack(spacing: 12) {
+                    ChoiceMenu("Orb style", selection: $s.thinkingOrbStyle,
+                               selectedTitle: { ThinkingOrb.title(of: $0) }) {
+                        ForEach(ThinkingOrb.styles, id: \.self) { Text(ThinkingOrb.title(of: $0)).tag($0) }
+                    }
+                    OrbStylePreview(style: s.thinkingOrbStyle)
+                }
             }
             WordAccentsSection()
             // Custom Mix can pick either, so both stay reachable there.
@@ -317,5 +324,70 @@ private struct GoogleFontStatus: View {
         case .idle:
             InspectorCaption(message)
         }
+    }
+}
+
+
+/// A small live thinking orb beside the "Orb style" picker. It animates only
+/// while its window is on screen, and holds upstream's still frame with
+/// Reduce Motion (the orb's own rule).
+private struct OrbStylePreview: View {
+    let style: String
+    @State private var visible = false
+    @State private var started = Date()
+    @Environment(\.colorScheme) private var scheme
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 30, paused: !visible)) { timeline in
+            let elapsed = timeline.date.timeIntervalSince(started)
+            // A Mix shows a new style every four seconds, as it would break by break.
+            let index = UInt64(max(0, elapsed / 4))
+            let previous = index > 0 ? ThinkingOrb.state(style: style, seed: index - 1) : nil
+            let state = ThinkingOrb.state(style: style, seed: index, avoiding: ThinkingOrb.normalised(style) == ThinkingOrb.mixStyle ? previous : nil)
+            ThinkingOrbView(cue: InstrumentalCue(elapsed: elapsed, opacity: 1, progress: nil, seed: index),
+                            accent: scheme == .dark ? .white : .black, baseSize: 40, state: state)
+        }
+        .frame(width: 64, height: 64)
+        .background(WindowVisibility(visible: $visible))
+        .accessibilityHidden(true)
+    }
+}
+
+/// Reports whether the hosting window is on screen (not closed, minimised or covered).
+private struct WindowVisibility: NSViewRepresentable {
+    @Binding var visible: Bool
+
+    func makeNSView(context: Context) -> NSView {
+        let view = TrackingView()
+        view.onChange = { visible = $0 }
+        return view
+    }
+
+    func updateNSView(_ view: NSView, context: Context) {}
+
+    final class TrackingView: NSView {
+        var onChange: (Bool) -> Void = { _ in }
+        private var tokens: [NSObjectProtocol] = []
+
+        override func viewDidMoveToWindow() {
+            tokens.forEach(NotificationCenter.default.removeObserver)
+            tokens = []
+            guard let window else { return onChange(false) }
+            let center = NotificationCenter.default
+            for name in [NSWindow.didChangeOcclusionStateNotification, NSWindow.didMiniaturizeNotification,
+                         NSWindow.didDeminiaturizeNotification, NSWindow.willCloseNotification] {
+                tokens.append(center.addObserver(forName: name, object: window, queue: .main) { [weak self] _ in
+                    self?.report()
+                })
+            }
+            report()
+        }
+
+        private func report() {
+            guard let window else { return onChange(false) }
+            onChange(window.isVisible && !window.isMiniaturized && window.occlusionState.contains(.visible))
+        }
+
+        deinit { tokens.forEach(NotificationCenter.default.removeObserver) }
     }
 }
