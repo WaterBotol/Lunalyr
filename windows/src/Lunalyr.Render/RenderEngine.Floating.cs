@@ -273,16 +273,7 @@ public sealed partial class RenderEngine
     /// <summary>The floating window's frame: the stage (the lyric, on the floating scene), then the shade, its shadow and the chrome.</summary>
     private void DrawFloating(RenderSurface s, in FrameContext frame)
     {
-        if (FloatTrace)
-        {
-            // Diagnostics (LUNALYR_FLOAT_TRACE=1): any gap of over 100 ms between floating frames, with the hover state.
-            var at = System.Diagnostics.Stopwatch.GetTimestamp() / (double)System.Diagnostics.Stopwatch.Frequency;
-            if (_traceLast > 0 && at - _traceLast > 0.1)
-                _log.Info($"FLOATTRACE gap {(at - _traceLast) * 1000:0} ms, over {_pointerOver}, opacity {_floatOpacity:0.00}, song {frame.SongSeconds:0.00}");
-            if (_pointerOver != _traceOver) _log.Info($"FLOATTRACE pointer {( _pointerOver ? "over" : "left")} at song {frame.SongSeconds:0.00}");
-            _traceOver = _pointerOver;
-            _traceLast = at;
-        }
+        WatchFloatingStalls(frame);
         var dc = frame.Dc;
         var o = _floatOptions;
         var look = _floatLook;
@@ -302,8 +293,45 @@ public sealed partial class RenderEngine
     }
 
     private static readonly bool FloatTrace = Environment.GetEnvironmentVariable("LUNALYR_FLOAT_TRACE") == "1";
-    private double _traceLast;
+    private double _traceLast, _traceSong = double.NaN, _songStill, _lastStallWarning = double.NegativeInfinity;
     private bool _traceOver;
+
+    /// <summary>
+    /// Diagnostics for a tester's "floating lyrics freeze after a hover" (Apple Music): always on, as warnings (so Copy
+    /// diagnostics carries them), at most one per 10 s: the window not drawing for over 0.25 s, or the song clock standing
+    /// still for over 0.3 s while playing, each with the hover state. LUNALYR_FLOAT_TRACE=1 also logs every gap over
+    /// 0.1 s and each hover change.
+    /// </summary>
+    private void WatchFloatingStalls(in FrameContext frame)
+    {
+        var at = System.Diagnostics.Stopwatch.GetTimestamp() / (double)System.Diagnostics.Stopwatch.Frequency;
+        var song = frame.SongSeconds;
+        var gap = _traceLast > 0 ? at - _traceLast : 0;
+        if (frame.IsPlaying && double.IsFinite(song) && double.IsFinite(_traceSong) && gap > 0 && gap < 1)
+        {
+            // The song clock holding still (or stepping back) while the wall clock moves on.
+            _songStill = song - _traceSong < gap * 0.25 ? _songStill + gap : 0;
+            if (_songStill > 0.3 && at - _lastStallWarning > 10)
+            {
+                _lastStallWarning = at;
+                _log.Warn($"Floating lyrics: the song clock stood still for {_songStill * 1000:0} ms while playing (pointer {(_pointerOver ? "over" : "away")}, opacity {_floatOpacity:0.00}, song {song:0.00} s)");
+            }
+        }
+        else _songStill = 0;
+        if (gap > 0.25 && _floatOpacity > 0.002 && at - _lastStallWarning > 10)
+        {
+            _lastStallWarning = at;
+            _log.Warn($"Floating lyrics: no frame for {gap * 1000:0} ms (pointer {(_pointerOver ? "over" : "away")}, opacity {_floatOpacity:0.00}, song {song:0.00} s)");
+        }
+        if (FloatTrace)
+        {
+            if (gap > 0.1) _log.Info($"FLOATTRACE gap {gap * 1000:0} ms, over {_pointerOver}, opacity {_floatOpacity:0.00}, song {song:0.00}");
+            if (_pointerOver != _traceOver) _log.Info($"FLOATTRACE pointer {(_pointerOver ? "over" : "left")} at song {song:0.00}");
+        }
+        _traceOver = _pointerOver;
+        _traceLast = at;
+        _traceSong = song;
+    }
 
     /// <summary>The floating stage's scene, made again only when the shared scene or the shade changes (never per frame).</summary>
     private SceneSnapshot FloatingScene(SceneSnapshot scene, FloatingLyricsOptions o, FloatingLook look)
