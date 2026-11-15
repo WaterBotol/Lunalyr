@@ -116,6 +116,8 @@ internal sealed partial class YouTubeWallpaperHost : IMusicVideoPlaybackSurface,
         {
             Follow();
             ApplyLook();
+            // Playing again wakes a resting loop too, so a player closed during a long pause comes back.
+            FollowPause();
         });
         // The loop rests once a paused, covered or hidden wallpaper has paused the video; these wake it again. Power
         // saving arrives the same way, and may draw another type instead of the video.
@@ -403,8 +405,14 @@ internal sealed partial class YouTubeWallpaperHost : IMusicVideoPlaybackSurface,
     /// <summary>Tells the sync loop whether the wallpaper is paused, covered or hidden (from outside the loop, which may rest).</summary>
     private void FollowPause()
     {
-        if (_disposed || _videoId is null || _controller is null) return;
-        _loop.SetSurfacePaused(SurfacePaused());
+        // Not only while a player is open: after a long pause the idle player closes it, and the loop (resting behind a
+        // covered or hidden wallpaper) is what reopens it when the song plays again. Waiting for a player here left the
+        // video gone for good once both had happened (seen live on the Yoga, 15 Nov 2026: Apple Music paused for over
+        // ten minutes, the screen off, then playing again showed only the still).
+        if (_disposed || _videoId is null) return;
+        var paused = SurfacePaused();
+        _loop.SetSurfacePaused(paused);
+        if (!paused && !_loop.IsRunning) _loop.Start();
     }
 
     private bool SurfacePaused()
