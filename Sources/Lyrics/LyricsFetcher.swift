@@ -803,6 +803,8 @@ final class LyricsFetcher {
         case .lrclib: return try await original { try await lrclib($0) }
         case .lyrimuse: return try LocalLyricBridge.candidate(query, folder: localFolder)
         case .amll: return try await original { try await AMLLLyricsProvider.lookup($0) }
+        // One lookup per song, under the names the player gave: no other-name or alias retries.
+        case .musixmatch: return try await MusixmatchLyricsProvider.lookup(query)
         }
     }
     private static func lyricsPlus(_ query: LyricQuery) async throws -> LyricCandidate? {

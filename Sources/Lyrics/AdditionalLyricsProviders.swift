@@ -32,7 +32,7 @@ enum AdditionalLyricsProviders {
         }
         if returned > ordered.count { LyricTrace.note("\(returned - ordered.count) result(s) scored 0 and were dropped") }
     }
-    private static func candidate(_ source: LyricSourceID, lrc: String, query: LyricQuery,
+    static func candidate(_ source: LyricSourceID, lrc: String, query: LyricQuery,
                                   title: String, artist: String, duration: Double?) -> LyricCandidate? {
         let lines = LyricsFetcher.parseLRC(LyricHTTP.text(lrc), trackDuration: query.duration)
         guard !lines.isEmpty else {

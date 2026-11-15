@@ -143,6 +143,7 @@ enum SettingsCatalogue {
         "custom.lyricCardLinesBefore": "Stored by LunalyrExtras; no control sets it.",
         "custom.lyricCardLinesAfter": "Stored by LunalyrExtras; no control sets it.",
         "custom.lyricSourcesSeenAMLL": "One-time migration that offered AMLL.",
+        "custom.lyricSourcesSeenMusixmatch": "One-time migration that offered Musixmatch.",
         "custom.lyricStyle.": "The Desktop and Floating styles, swapped by Show lyrics.",
         "custom.musicVideoAutoOffsets": "Retired; read once to migrate.",
         "custom.musicVideoCache": "Cache of each song's video.",

@@ -3,7 +3,7 @@ import CryptoKit
 import Foundation
 
 enum LyricSourceID: String, CaseIterable, Identifiable, Codable {
-    case appleMusicCache, lyricsPlus, netEase, qqMusic, kugou, lrclib, lyrimuse, kuwo, lyricsOVH, amll
+    case appleMusicCache, lyricsPlus, netEase, qqMusic, kugou, lrclib, lyrimuse, kuwo, lyricsOVH, amll, musixmatch
     var id: String { rawValue }
     var title: String {
         switch self {
@@ -17,6 +17,7 @@ enum LyricSourceID: String, CaseIterable, Identifiable, Codable {
         case .lyricsOVH: return "lyrics.ovh"
         case .amll: return "AMLL TTML DB"
         case .lyrimuse: return "Lyrimuse · local files"
+        case .musixmatch: return "Musixmatch"
         }
     }
     var timing: String {
@@ -26,7 +27,7 @@ enum LyricSourceID: String, CaseIterable, Identifiable, Codable {
         case .netEase: return "Word or line timing"
         case .qqMusic, .kuwo: return "Line timing"
         case .kugou: return "Word or line timing"
-        case .lrclib: return "Word or line timing"
+        case .lrclib, .musixmatch: return "Word or line timing"
         case .lyricsOVH: return "Plain text fallback"
         case .amll: return "Word / syllable timing"
         case .lyrimuse: return "LRC / TTML / YRC + readings, translations"
@@ -117,7 +118,42 @@ final class LyricSourceOptions: ObservableObject {
     @Published var mode: Mode {
         didSet { UserDefaults.standard.set(mode.rawValue, forKey: "custom.lyricMatchMode") }
     }
-    static let recommendedOrder: [LyricSourceID] = [.appleMusicCache, .lyrimuse, .lyricsPlus, .amll, .netEase, .lrclib, .qqMusic, .kugou, .kuwo, .lyricsOVH]
+    static let recommendedOrder: [LyricSourceID] = [.appleMusicCache, .lyrimuse, .musixmatch, .lyricsPlus, .amll, .netEase, .lrclib, .qqMusic, .kugou, .kuwo, .lyricsOVH]
+    /// Sources added after people saved an order, and the source each joins
+    /// that order after. Others missing from a saved order go at the end.
+    static let placedAfter: [LyricSourceID: LyricSourceID] = [.musixmatch: .lyrimuse]
+    /// Sources added after people saved their choices: each starts switched
+    /// on once, recorded under its `custom.lyricSourcesSeen…` key.
+    static let switchedOnOnce: [(source: LyricSourceID, seenKey: String)] = [
+        (.amll, "custom.lyricSourcesSeenAMLL"), (.musixmatch, "custom.lyricSourcesSeenMusixmatch"),
+    ]
+    /// The order to show for a saved one (nil: never saved): every source
+    /// once, a newer source after the one it is `placedAfter`.
+    static func order(saved: [String]?) -> [LyricSourceID] {
+        guard let saved else { return recommendedOrder }
+        var unique: [LyricSourceID] = []
+        for item in saved.compactMap(LyricSourceID.init(rawValue:)) where !unique.contains(item) { unique.append(item) }
+        for item in recommendedOrder where !unique.contains(item) {
+            if let anchor = placedAfter[item], let index = unique.firstIndex(of: anchor) {
+                unique.insert(item, at: index + 1)
+            } else {
+                unique.append(item)
+            }
+        }
+        return unique
+    }
+    /// The switched-on sources for a saved choice (nil: never saved), with
+    /// each newer source not yet `seen` switched on; also returns the
+    /// seen keys to record.
+    static func enabled(saved: [String]?, seen: (String) -> Bool) -> (enabled: Set<LyricSourceID>, newlySeen: [String]) {
+        var chosen = Set((saved ?? LyricSourceID.allCases.filter { !$0.isLocal }.map(\.rawValue)).compactMap(LyricSourceID.init(rawValue:)))
+        var newlySeen: [String] = []
+        for entry in switchedOnOnce where !seen(entry.seenKey) {
+            chosen.insert(entry.source)
+            newlySeen.append(entry.seenKey)
+        }
+        return (chosen, newlySeen)
+    }
     // "custom.preferWordTiming" and "custom.preferWordTimedLRCLIB" are no
     // longer read: word and mixed timing always rank first, with LRCLIB
     // after Music's own lyrics. Stored values are left as they are.
@@ -133,18 +169,11 @@ final class LyricSourceOptions: ObservableObject {
     var fingerprint: String { snapshot.fingerprint }
     private init() {
         let d = UserDefaults.standard
-        let saved = (d.stringArray(forKey: "custom.lyricSourceOrder") ?? []).compactMap(LyricSourceID.init(rawValue:))
-        var unique: [LyricSourceID] = []
-        for item in saved + Self.recommendedOrder where !unique.contains(item) { unique.append(item) }
-        order = unique
-        var chosen = Set((d.stringArray(forKey: "custom.lyricSources") ?? LyricSourceID.allCases.filter { $0 != .lyrimuse && $0 != .appleMusicCache }.map(\.rawValue))
-            .compactMap(LyricSourceID.init(rawValue:)))
+        order = Self.order(saved: d.stringArray(forKey: "custom.lyricSourceOrder"))
         // A source added after someone saved their choices starts switched on, once.
-        if !d.bool(forKey: "custom.lyricSourcesSeenAMLL") {
-            chosen.insert(.amll)
-            d.set(true, forKey: "custom.lyricSourcesSeenAMLL")
-        }
-        enabled = chosen
+        let chosen = Self.enabled(saved: d.stringArray(forKey: "custom.lyricSources"), seen: { d.bool(forKey: $0) })
+        for key in chosen.newlySeen { d.set(true, forKey: key) }
+        enabled = chosen.enabled
         mode = Mode(rawValue: d.string(forKey: "custom.lyricMatchMode") ?? "") ?? .smart
         repairQQGaps = d.object(forKey: "custom.repairQQGaps") as? Bool ?? true
     }
