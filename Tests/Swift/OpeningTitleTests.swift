@@ -290,4 +290,109 @@ final class OpeningTitleTests: XCTestCase {
         XCTAssertNil(memory.stay(track: 2, kind: .missing, notFoundAt: Date().addingTimeInterval(-5), at: 1))
         XCTAssertNil(memory.currentStay(track: 3))
     }
+
+    // MARK: A card up while the lyrics are looked up
+
+    /// The playing song's loading stage, frame by frame from `from` to `to`
+    /// (song time), as `LyricLayer` reports it.
+    @MainActor
+    private func loading(_ memory: OpeningTitleMemory, track: Int = 1, from: Double, to: Double) {
+        let card = T.schedule(words: .none)
+        var time = from
+        while time < to {
+            XCTAssertNil(memory.hold(track: track, kind: .loading, card: card, at: time))
+            time += 1.0 / 60
+        }
+    }
+
+    /// Music reports where a new song really is a moment after it starts
+    /// (2 s in, on the reporter's Mac), and the lyrics often land after that:
+    /// the loading stage's card was up, and the lyrics' scene drew its own
+    /// card while the two scenes cross-faded -- two titles, often of
+    /// different sizes, stacked for half a second. The card on screen now
+    /// carries on as the only card, drawn once above the scenes.
+    @MainActor
+    func testACardUpWhileLookingUpCarriesOnAsTheOnlyCardWhenTheLyricsLand() throws {
+        let memory = OpeningTitleMemory()
+        loading(memory, from: 0.05, to: 0.1)
+        loading(memory, from: 2.17, to: 2.37)
+        let arrival = 2.37
+        let hold = try XCTUnwrap(memory.hold(track: 1, kind: .synced, card: nil, at: arrival))
+        XCTAssertEqual(hold.arrival, arrival, accuracy: 1e-9)
+        let up = try XCTUnwrap(T.schedule(words: .none))
+        XCTAssertEqual(hold.card, up)
+        // The first line at 4 s leaves room only for the compact card.
+        let next = try XCTUnwrap(T.schedule(words: .timed(firstLine: 4), previewLead: 0.45))
+        XCTAssertEqual(next.size, .compact)
+        let carried = T.carried(hold.card, into: next, at: hold.arrival)
+        // The same card at the same point of its entrance: nothing jumps.
+        let before = try XCTUnwrap(T.phase(up, at: arrival - 0.01))
+        let after = try XCTUnwrap(T.phase(carried, at: arrival))
+        XCTAssertEqual(after.size, before.size)
+        XCTAssertEqual(after.age, before.age + 0.01, accuracy: 1e-6)
+        XCTAssertEqual(after.exit, 0)
+        // Gone by the time the compact card would have been.
+        XCTAssertLessThanOrEqual(carried.end, next.end + 1e-9)
+        XCTAssertGreaterThanOrEqual(carried.leave, arrival)
+        // The loading scene, fading out, leaves its card to that one card,
+        // so it is drawn once.
+        let loadingKey = LyricSceneKey(kind: .loading, track: 1, fingerprint: 0)
+        XCTAssertTrue(LyricLayer.yieldsToStaying(loadingKey, ownStart: up.start, staying: carried, track: 1))
+        // It stays that card after the cross-fade, not the compact one.
+        XCTAssertEqual(memory.hold(track: 1, kind: .synced, card: nil, at: 3.2)?.card, up)
+    }
+
+    @MainActor
+    func testACarriedCardIsTheLyricsCardWhenTheyMatch() throws {
+        let memory = OpeningTitleMemory()
+        loading(memory, from: 0.6, to: 2.3)
+        let hold = try XCTUnwrap(memory.hold(track: 1, kind: .synced, card: nil, at: 2.3))
+        let next = try XCTUnwrap(T.schedule(words: .timed(firstLine: 13), previewLead: 0.45))
+        XCTAssertEqual(next.size, .full)
+        XCTAssertEqual(T.carried(hold.card, into: next, at: hold.arrival), next)
+    }
+
+    @MainActor
+    func testACarriedCardWithNoRoomLeavesAtOnce() throws {
+        let memory = OpeningTitleMemory()
+        loading(memory, from: 0.6, to: 2.3)
+        let hold = try XCTUnwrap(memory.hold(track: 1, kind: .synced, card: nil, at: 2.3))
+        // The first line is about to be drawn: no card of its own.
+        XCTAssertNil(T.schedule(words: .timed(firstLine: 2.4), previewLead: 0.45))
+        let carried = T.carried(hold.card, into: nil, at: hold.arrival)
+        XCTAssertEqual(carried.leave, 2.3, accuracy: 1e-9)
+        // No longer over the first line than the loading scene's dissolve.
+        XCTAssertLessThanOrEqual(carried.end - carried.leave, WallpaperMotion.sceneOut + 1e-9)
+        XCTAssertNil(T.phase(carried, at: carried.end))
+        // A card already leaving when the lyrics land keeps its own exit,
+        // never brought back.
+        for next in [nil, T.schedule(words: .timed(firstLine: 30), joined: 0, previewLead: 0.45)] {
+            let late = T.carried(hold.card, into: next, at: hold.card.leave + 0.2)
+            XCTAssertEqual(late.leave, hold.card.leave, accuracy: 1e-9)
+            XCTAssertEqual(late.end, hold.card.end, accuracy: 1e-9)
+        }
+    }
+
+    @MainActor
+    func testLyricsInBeforeTheCardKeepTheirOwnCard() {
+        let memory = OpeningTitleMemory()
+        // The card starts at 0.5 s; the lyrics landed at 0.2 s.
+        loading(memory, from: 0.05, to: 0.2)
+        XCTAssertNil(memory.hold(track: 1, kind: .synced, card: nil, at: 0.2))
+        XCTAssertNil(memory.hold(track: 1, kind: .synced, card: nil, at: 2.4))
+    }
+
+    @MainActor
+    func testACarriedCardIsForgottenOnAReplayAndANewSong() throws {
+        let memory = OpeningTitleMemory()
+        loading(memory, from: 0.6, to: 2.3)
+        XCTAssertNotNil(memory.hold(track: 1, kind: .synced, card: nil, at: 2.3))
+        // Repeat One: the same song from its start shows its lyrics' card.
+        XCTAssertNil(memory.hold(track: 1, kind: .synced, card: nil, at: 0.1))
+        XCTAssertNil(memory.hold(track: 1, kind: .synced, card: nil, at: 2.3))
+        loading(memory, track: 2, from: 0.6, to: 1)
+        XCTAssertNotNil(memory.hold(track: 2, kind: .synced, card: nil, at: 1))
+        XCTAssertNil(memory.currentHold(track: 1))
+        XCTAssertNil(memory.hold(track: 3, kind: .synced, card: nil, at: 1))
+    }
 }
