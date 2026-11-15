@@ -448,7 +448,66 @@ enum OpeningTitle {
     static let rowArtist: CGFloat = 0.3
     /// The height kept clear for the row: its margin, the cover, and a gap
     /// before the lyrics.
-    static func rowBand(baseSize: CGFloat) -> CGFloat { baseSize * (rowMargin + rowCover + 0.16) }
+    static func rowBand(baseSize: CGFloat, scale: Double = 1) -> CGFloat {
+        baseSize * (rowMargin + (rowCover + 0.16) * CGFloat(RowPlacement.clamped(scale)))
+    }
+
+    /// Where the floating window's title row sits, as set by dragging it on
+    /// the Settings picture (Floating over apps): across the window (its
+    /// centre, as a share of the window's width), at the window's top or
+    /// bottom edge (the lyrics make room on that side, so it never covers
+    /// them), and a scale.
+    struct RowPlacement: Equatable {
+        static let centreKey = "custom.floatingTitleCentre"
+        static let edgeKey = "custom.floatingTitleEdge"
+        static let scaleKey = "custom.floatingTitleScale"
+        static let scales: ClosedRange<Double> = 0.6...1.6
+
+        var centre = 0.5
+        var bottom = false
+        var scale = 1.0
+
+        static let standard = RowPlacement()
+        var isStandard: Bool { abs(centre - 0.5) < 0.001 && !bottom && abs(scale - 1) < 0.001 }
+
+        static func clamped(_ scale: Double) -> Double {
+            scale.isFinite ? min(scales.upperBound, max(scales.lowerBound, scale)) : 1
+        }
+
+        static func stored(_ defaults: UserDefaults = .standard) -> RowPlacement {
+            var placement = RowPlacement()
+            if let centre = defaults.object(forKey: centreKey) as? Double, centre.isFinite {
+                placement.centre = min(1, max(0, centre))
+            }
+            placement.bottom = defaults.string(forKey: edgeKey) == "bottom"
+            if let scale = defaults.object(forKey: scaleKey) as? Double { placement.scale = clamped(scale) }
+            return placement
+        }
+
+        func store(_ defaults: UserDefaults = .standard) {
+            if abs(centre - 0.5) < 0.001 { defaults.removeObject(forKey: Self.centreKey) }
+            else { defaults.set(min(1, max(0, centre)), forKey: Self.centreKey) }
+            if bottom { defaults.set("bottom", forKey: Self.edgeKey) } else { defaults.removeObject(forKey: Self.edgeKey) }
+            if abs(scale - 1) < 0.001 { defaults.removeObject(forKey: Self.scaleKey) }
+            else { defaults.set(Self.clamped(scale), forKey: Self.scaleKey) }
+        }
+
+        static func reset(_ defaults: UserDefaults = .standard) {
+            for key in [centreKey, edgeKey, scaleKey] { defaults.removeObject(forKey: key) }
+        }
+    }
+
+    /// The title row's frame in a window of `window` (origin top left) for a
+    /// row `size` across: centred where it was put, kept inside the window,
+    /// `rowMargin` in from the top or bottom edge.
+    static func rowFrame(in window: CGSize, size: CGSize, baseSize: CGFloat, placement: RowPlacement) -> CGRect {
+        let edge = baseSize * 0.2
+        let width = min(size.width, max(1, window.width - 2 * edge))
+        let x = min(max(edge, CGFloat(placement.centre) * window.width - width / 2), max(edge, window.width - width - edge))
+        let margin = baseSize * rowMargin
+        let y = placement.bottom ? window.height - margin - size.height : margin
+        return CGRect(x: x, y: y, width: width, height: size.height)
+    }
 
     /// 1 for a title of up to 24 characters, down to 0.7 for a long one.
     static func lengthScale(_ title: String) -> CGFloat {
@@ -659,8 +718,12 @@ struct OpeningTitleCard: View {
             let unit = floating ? baseSize * 0.95 : (compact ? baseSize * 0.8 : baseSize) * CGFloat(place.scale)
             let dark = Self.isDark(ink.base.rest)
             if row {
-                titleRow(reveal: reveal, leaving: leaving, dark: dark, width: size.width * 0.9)
-                    .frame(width: size.width, height: size.height, alignment: .top)
+                let rowPlace = OpeningTitle.RowPlacement.stored()
+                PlacedRow(baseSize: baseSize, placement: rowPlace) {
+                    titleRow(reveal: reveal, leaving: leaving, dark: dark, width: size.width * 0.9,
+                             scale: CGFloat(rowPlace.scale), bottom: rowPlace.bottom)
+                }
+                .frame(width: size.width, height: size.height)
             } else {
             let block = card(unit: unit, compact: compact, reveal: reveal, dark: dark,
                              width: floating ? size.width * 0.9 : box.width)
@@ -830,8 +893,11 @@ struct OpeningTitleCard: View {
     /// The floating window's kept title: the cover, the title and the
     /// artist on one centred line, settling down from above as it enters
     /// and lifting away as it leaves.
-    private func titleRow(reveal: OpeningTitle.Reveal, leaving: Double, dark: Bool, width: CGFloat) -> some View {
+    private func titleRow(reveal: OpeningTitle.Reveal, leaving: Double, dark: Bool, width: CGFloat,
+                          scale: CGFloat, bottom: Bool) -> some View {
         let type: Color = dark ? Color(white: 0.08) : .white
+        // The row's own size: the lyric size at the row's scale.
+        let baseSize = self.baseSize * scale
         let side = baseSize * OpeningTitle.rowCover
         let glow = OpeningTitle.glowStrength(dark: dark)
         let arrival = reduceMotion ? reveal.title : Easing.smoothstep(reveal.title)
@@ -864,10 +930,11 @@ struct OpeningTitleCard: View {
             .shadow(color: (dark ? Color.white : .black).opacity(0.5), radius: baseSize * 0.1, y: baseSize * 0.015)
             .shadow(color: accent.opacity(0.45 * glow), radius: baseSize * 0.3)
         }
-        .frame(maxWidth: width)
+        // Hugs its words (at most `width`), so it can be placed across the window.
+        .modifier(CappedWidthModifier(maximum: width))
         .opacity(min(1, arrival * 1.4) * (1 - leaving) * phase.opacity)
-        .offset(y: reduceMotion ? 0 : -(1 - arrival + leaving) * baseSize * 0.18)
-        .padding(.top, baseSize * OpeningTitle.rowMargin)
+        // Settles in from beyond its edge, and lifts back out that way.
+        .offset(y: reduceMotion ? 0 : (bottom ? 1 : -1) * (1 - arrival + leaving) * baseSize * 0.18)
     }
 
     /// The animated cover to play: none under Reduce Motion, where the
@@ -951,6 +1018,32 @@ struct FirstThatFits: Layout {
         let dimensions = subviews[pick.index].dimensions(in: ProposedViewSize(width: pick.size.width,
                                                                               height: pick.size.height))
         return bounds.minY + dimensions[guide]
+    }
+}
+
+/// `CappedWidth` as a modifier.
+struct CappedWidthModifier: ViewModifier {
+    let maximum: CGFloat
+    func body(content: Content) -> some View { CappedWidth(maximum: maximum) { content } }
+}
+
+/// Places the floating window's title row (its one subview) where the
+/// user put it (`OpeningTitle.rowFrame`): kept inside the window, at its
+/// top or bottom edge.
+struct PlacedRow: Layout {
+    let baseSize: CGFloat
+    let placement: OpeningTitle.RowPlacement
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        proposal.replacingUnspecifiedDimensions()
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        guard let row = subviews.first else { return }
+        let size = row.sizeThatFits(ProposedViewSize(width: bounds.width * 0.9, height: nil))
+        let frame = OpeningTitle.rowFrame(in: bounds.size, size: size, baseSize: baseSize, placement: placement)
+        row.place(at: CGPoint(x: bounds.minX + frame.minX, y: bounds.minY + frame.minY),
+                  proposal: ProposedViewSize(width: frame.width, height: frame.height))
     }
 }
 

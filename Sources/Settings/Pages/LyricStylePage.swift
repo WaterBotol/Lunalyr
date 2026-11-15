@@ -63,6 +63,10 @@ struct LyricStylePage: View {
     @AppStorage(OpeningTitle.Placement.leftKey) private var titleLeft: Double?
     @AppStorage(OpeningTitle.Placement.liftKey) private var titleLift: Double?
     @AppStorage(OpeningTitle.Placement.scaleKey) private var titleScale: Double = 1
+    @AppStorage(OpeningTitle.RowPlacement.centreKey) private var rowCentre: Double = 0.5
+    @AppStorage(OpeningTitle.RowPlacement.edgeKey) private var rowEdge: String = ""
+    @AppStorage(OpeningTitle.RowPlacement.scaleKey) private var rowScale: Double = 1
+    private var floatingRowIsStandard: Bool { abs(rowCentre - 0.5) < 0.001 && rowEdge != "bottom" && abs(rowScale - 1) < 0.001 }
     @ObservedObject private var rotation = LyricLayoutRotation.shared
 
     /// What the chosen layout does, a style remembered for this song, the
@@ -132,13 +136,20 @@ struct LyricStylePage: View {
                     .disabled(!showOpeningTitle)
                     .help("The title stays for the whole song, quieter once the singing starts, so you always know what’s playing. Low on the left beside the lyrics; in the floating lyrics, a small line above them.")
                 Button("Reset Title Position") {
-                    titleLeft = nil
-                    titleLift = nil
-                    titleScale = 1
+                    if floating.isFloating {
+                        OpeningTitle.RowPlacement.reset()
+                    } else {
+                        titleLeft = nil
+                        titleLift = nil
+                        titleScale = 1
+                    }
                 }
                 .padding(.leading, 23)
-                .disabled(!showOpeningTitle || (titleLeft == nil && titleLift == nil && abs(titleScale - 1) < 0.001))
-                .help("Drag the song title on the picture to move it, or its corner to resize it. This puts it back low on the left at its usual size.")
+                .disabled(!showOpeningTitle || (floating.isFloating ? floatingRowIsStandard
+                    : titleLeft == nil && titleLift == nil && abs(titleScale - 1) < 0.001))
+                .help(floating.isFloating
+                      ? "Drag the song title on the picture to move it along the floating window's top or bottom, or its corner to resize it. This puts it back at the top, centred, at its usual size."
+                      : "Drag the song title on the picture to move it, or its corner to resize it. This puts it back low on the left at its usual size.")
                 Toggle("Show credits in the background", isOn: $showCredits)
                     .help("Lines like “Produced by: …” appear one at a time behind the lyrics.")
                 Toggle("Backing vocals in the background", isOn: $backingLayer)

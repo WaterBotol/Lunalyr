@@ -9,6 +9,8 @@ struct LyricViewportMetrics {
     /// The song title is kept on screen (`OpeningTitle.keeps`): in the
     /// floating window it is a row above the lyrics, which give it room.
     var titleRow = false
+    /// The title row's place in the floating window (`OpeningTitle.RowPlacement`).
+    var titlePlacement = OpeningTitle.RowPlacement.standard
     var baseSize: CGFloat { textSize ?? min(124, max(24, min(size.width, size.height * 16 / 9) * 0.046)) }
     var stageSize: CGSize {
         textSize == nil ? CGSize(width: size.width * 0.80, height: size.height * 0.72)
@@ -16,7 +18,9 @@ struct LyricViewportMetrics {
     }
     /// The floating window's title row and its margin, kept clear above
     /// the lyrics; none on the desktop, where the card sits beside them.
-    var titleBand: CGFloat { textSize != nil && titleRow ? OpeningTitle.rowBand(baseSize: baseSize) : 0 }
+    var titleBand: CGFloat {
+        textSize != nil && titleRow ? OpeningTitle.rowBand(baseSize: baseSize, scale: titlePlacement.scale) : 0
+    }
 
     static func previewScale(desktop: CGSize, inside box: CGSize) -> CGFloat {
         guard desktop.width > 0, desktop.height > 0 else { return 0 }

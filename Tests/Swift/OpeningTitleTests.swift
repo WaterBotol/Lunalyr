@@ -606,4 +606,67 @@ final class OpeningTitleTests: XCTestCase {
         XCTAssertTrue(OpeningTitle.reservesCover(age: OpeningTitle.coverWait - 0.1))
         XCTAssertFalse(OpeningTitle.reservesCover(age: OpeningTitle.coverWait + 0.1))
     }
+
+    // MARK: The floating title row, moved and resized
+
+    func testTheRowStaysInsideTheWindowAtItsEdge() {
+        let window = CGSize(width: 836, height: 202)
+        let row = CGSize(width: 260, height: 27)
+        let standard = OpeningTitle.rowFrame(in: window, size: row, baseSize: 44, placement: .standard)
+        XCTAssertEqual(standard.midX, window.width / 2, accuracy: 0.5, "centred at the top by default")
+        XCTAssertEqual(standard.minY, 44 * OpeningTitle.rowMargin, accuracy: 0.001)
+        for centre in [-1.0, 0, 0.1, 0.9, 1, 3] {
+            for bottom in [false, true] {
+                let frame = OpeningTitle.rowFrame(in: window, size: row, baseSize: 44,
+                                                  placement: .init(centre: centre, bottom: bottom, scale: 1))
+                XCTAssertGreaterThanOrEqual(frame.minX, 0)
+                XCTAssertLessThanOrEqual(frame.maxX, window.width)
+                XCTAssertGreaterThanOrEqual(frame.minY, 0)
+                XCTAssertLessThanOrEqual(frame.maxY, window.height)
+            }
+        }
+        let foot = OpeningTitle.rowFrame(in: window, size: row, baseSize: 44, placement: .init(centre: 0.5, bottom: true))
+        XCTAssertEqual(window.height - foot.maxY, 44 * OpeningTitle.rowMargin, accuracy: 0.001)
+    }
+
+    func testTheLyricsMakeRoomOnTheRowsSide() {
+        let size = CGSize(width: 836, height: 202)
+        let standard = LyricViewportMetrics(size: size, textSize: 44, titleRow: true)
+        let large = LyricViewportMetrics(size: size, textSize: 44, titleRow: true,
+                                         titlePlacement: .init(centre: 0.5, bottom: true, scale: 1.5))
+        XCTAssertGreaterThan(large.titleBand, standard.titleBand, "a larger row takes a deeper band")
+        XCTAssertLessThan(large.stageSize.height, standard.stageSize.height)
+        // The row (its margin and cover) fits within its band.
+        XCTAssertGreaterThan(large.titleBand, 44 * (OpeningTitle.rowMargin + OpeningTitle.rowCover * 1.5))
+    }
+
+    func testTheRowPlacementIsSavedAndClamped() throws {
+        let name = "OpeningTitleRow-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: name))
+        defer { defaults.removePersistentDomain(forName: name) }
+        XCTAssertTrue(OpeningTitle.RowPlacement.stored(defaults).isStandard)
+        let placed = OpeningTitle.RowPlacement(centre: 0.2, bottom: true, scale: 1.3)
+        placed.store(defaults)
+        XCTAssertEqual(OpeningTitle.RowPlacement.stored(defaults), placed)
+        defaults.set(9.0, forKey: OpeningTitle.RowPlacement.scaleKey)
+        XCTAssertEqual(OpeningTitle.RowPlacement.stored(defaults).scale, OpeningTitle.RowPlacement.scales.upperBound)
+        OpeningTitle.RowPlacement.reset(defaults)
+        XCTAssertTrue(OpeningTitle.RowPlacement.stored(defaults).isStandard)
+    }
+
+    @MainActor
+    func testDraggingTheRowOnThePicture() {
+        let window = CGRect(x: 100, y: 200, width: 400, height: 100)
+        let moved = FloatingTitleHandles.moved(.standard, translation: CGSize(width: 100, height: 60),
+                                               location: CGPoint(x: 400, y: 280), window: window)
+        XCTAssertEqual(moved.centre, 0.75, accuracy: 1e-9)
+        XCTAssertTrue(moved.bottom, "dropped in the window's lower half: its foot")
+        let back = FloatingTitleHandles.moved(moved, translation: CGSize(width: -900, height: -60),
+                                              location: CGPoint(x: 120, y: 210), window: window)
+        XCTAssertEqual(back.centre, 0)
+        XCTAssertFalse(back.bottom)
+        XCTAssertEqual(FloatingTitleHandles.resized(.standard, width: 100, dx: 30).scale, 1.3, accuracy: 1e-9)
+        XCTAssertEqual(FloatingTitleHandles.resized(.standard, width: 100, dx: -90).scale,
+                       OpeningTitle.RowPlacement.scales.lowerBound)
+    }
 }

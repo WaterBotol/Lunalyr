@@ -37,6 +37,8 @@ struct LyricLayer: View {
     /// Kept clear at the top for the floating window's title row
     /// (`LyricViewportMetrics.titleBand`): the lyrics sit below it.
     var titleBand: CGFloat = 0
+    /// The band is at the window's foot (the row put at the bottom).
+    var titleAtBottom = false
     @EnvironmentObject private var nowPlaying: NowPlayingMonitor
     @ObservedObject private var lyricsVM = LyricsViewModel.shared
     @ObservedObject private var settings = Settings.shared
@@ -216,7 +218,7 @@ struct LyricLayer: View {
                                 scene(leaving.scene.content, key: leaving.scene.key,
                                       time: leaving.scene.renderTime(at: wall), wall: wall, live: false, energy: energy,
                                       ink: ink)
-                                    .padding(.top, titleBand)
+                                    .padding(titleAtBottom ? .bottom : .top, titleBand)
                                 // The staying card is drawn once, below;
                                 // a card this scene held before it leaves
                                 // with the scene.
@@ -234,7 +236,7 @@ struct LyricLayer: View {
                     }
                     ZStack {
                         scene(content, key: key, time: time, wall: wall, live: true, energy: energy, ink: ink)
-                            .padding(.top, titleBand)
+                            .padding(titleAtBottom ? .bottom : .top, titleBand)
                         if staying == nil { openingTitle(content, key: key, time: time, coverFade: coverFade) }
                     }
                         .opacity(transition.incomingPresence)
@@ -1677,7 +1679,8 @@ struct LyricStage: View, Equatable {
 
     var body: some View {
         let layout = LyricViewportMetrics(size: size, textSize: textSize,
-                                          titleRow: OpeningTitle.isOn && OpeningTitle.keeps)
+                                          titleRow: OpeningTitle.isOn && OpeningTitle.keeps,
+                                          titlePlacement: textSize == nil ? .standard : .stored())
         let previewed = scrubPreview.songTime(on: displayID)
         TimelineView(.animation(minimumInterval: previewed == nil ? pace.interval(full: interval) : interval,
                                 paused: paused || (pace.rests && previewed == nil))) { timeline in
@@ -1692,7 +1695,7 @@ struct LyricStage: View, Equatable {
             LyricLayer(time: time, baseSize: layout.baseSize, maxWidth: layout.stageSize.width,
                        maxHeight: layout.stageSize.height, mood: mood, accent: accent, trackSeed: trackSeed,
                        wall: now, palette: palette, measuredBackdrop: backdrop, animating: !paused, pace: pace,
-                       titleBand: layout.titleBand)
+                       titleBand: layout.titleBand, titleAtBottom: layout.titlePlacement.bottom)
         }
     }
 }

@@ -275,6 +275,12 @@ extension UISnapshotCatalogue {
             UISnapshotCase("settings/look-floating", note: "Look, Floating over apps, Text selected",
                            chrome: .settingsWindow, size: .frame(CGSize(width: 1100, height: 720)), player: .playing,
                            prepare: { $0.showSettingsPage("typography") }, view: floatingSettingsWindow),
+            UISnapshotCase("settings/look-floating-title", note: "Look, Floating over apps, Text: the kept title's row and its handles",
+                           chrome: .settingsWindow, size: .frame(CGSize(width: 1100, height: 720)), player: .playing,
+                           prepare: { scene in
+                               scene.showSettingsPage("typography")
+                               scene.defaults.set(true, forKey: OpeningTitle.alwaysKey)
+                           }, view: floatingSettingsWindow),
             UISnapshotCase("settings/look-smallest", note: "Look at the smallest window, 860 x 420",
                            chrome: .settingsWindow, size: .frame(CGSize(width: 860, height: 420)), player: .playing,
                            prepare: { $0.showSettingsPage("typography") }, view: settingsWindow),

@@ -75,6 +75,9 @@ struct LookPicture: View {
                 case .lyrics, .animation:
                     if showsFloating {
                         FloatingHandles(desktop: desktop, picture: size, options: floating)
+                        if object == .lyrics, showsOpeningTitle, keepsOpeningTitle {
+                            FloatingTitleHandles(desktop: desktop, picture: size, options: floating)
+                        }
                     } else {
                         SelectionHandles(size: box.size)
                             .offset(x: box.minX, y: box.minY)
@@ -203,6 +206,17 @@ struct FloatingScene: View {
     var sample: Bool
     @Environment(\.lunalyrModels) private var models
     @Model(\.nowPlaying) private var playing
+    @AppStorage(OpeningTitle.settingKey) private var showsTitle = true
+    @AppStorage(OpeningTitle.alwaysKey) private var keepsTitleSetting = false
+    @AppStorage(OpeningTitle.RowPlacement.centreKey) private var rowCentre: Double = 0.5
+    @AppStorage(OpeningTitle.RowPlacement.edgeKey) private var rowEdge: String = ""
+    @AppStorage(OpeningTitle.RowPlacement.scaleKey) private var rowScale: Double = 1
+
+    private var keepsTitle: Bool { showsTitle && keepsTitleSetting }
+    private var rowPlacement: OpeningTitle.RowPlacement {
+        OpeningTitle.RowPlacement(centre: rowCentre, bottom: rowEdge == "bottom",
+                                  scale: OpeningTitle.RowPlacement.clamped(rowScale))
+    }
 
     /// The model desktop's menu bar and Dock, in points.
     static let menuBar: CGFloat = 24
@@ -255,6 +269,9 @@ struct FloatingScene: View {
                     .frame(width: size.width * 0.36, height: Self.dock * unit * 0.8)
                     .offset(x: size.width * 0.32, y: size.height - Self.dock * unit * 0.9)
                 lyrics(textSize: CGFloat(options.textSize) * unit)
+                    // The kept title's row takes a band at its edge.
+                    .padding(rowPlacement.bottom ? .bottom : .top, keepsTitle
+                             ? OpeningTitle.rowBand(baseSize: CGFloat(options.textSize), scale: rowPlacement.scale) * unit : 0)
                     .frame(width: box.width, height: box.height)
                     .background(RoundedRectangle(cornerRadius: 10 * max(0.4, unit * 2), style: .continuous)
                         .fill(Color.black.opacity(0.7 * options.backdrop)))
@@ -430,6 +447,128 @@ struct TitleCardHandles: View {
         // Kept on screen, as the card itself is.
         let kept = OpeningTitle.box(in: desktop, baseSize: baseSize, placement: wanted)
         return OpeningTitle.placement(for: kept, in: desktop, scale: placement.scale)
+    }
+}
+
+/// The floating window's kept title row on the picture (Floating over
+/// apps, Text): a sample row where it sits, with handles. Dragging it moves
+/// it across the window and to its top or bottom edge, whichever half the
+/// pointer is in (the lyrics make room on that side); dragging its right
+/// corner scales it. Saved as it moves (`OpeningTitle.RowPlacement`).
+@MainActor
+struct FloatingTitleHandles: View {
+    let desktop: CGSize
+    let picture: CGSize
+    @ObservedObject var options: FloatingLyricsOptions
+    @Model(\.nowPlaying) private var playing
+    @AppStorage(OpeningTitle.RowPlacement.centreKey) private var centre: Double = 0.5
+    @AppStorage(OpeningTitle.RowPlacement.edgeKey) private var edge: String = ""
+    @AppStorage(OpeningTitle.RowPlacement.scaleKey) private var scale: Double = 1
+    @State private var start: OpeningTitle.RowPlacement?
+
+    private var placement: OpeningTitle.RowPlacement {
+        OpeningTitle.RowPlacement(centre: centre, bottom: edge == "bottom", scale: OpeningTitle.RowPlacement.clamped(scale))
+    }
+
+    var body: some View {
+        let window = FloatingScene.box(desktop: desktop, picture: picture, options: options)
+        let unit = LyricViewportMetrics.previewScale(desktop: desktop, inside: picture)
+        let frame = Self.rowBox(window: window, unit: unit, textSize: CGFloat(options.textSize),
+                                title: playing.current?.title ?? "Song Title",
+                                artist: playing.current?.artist ?? "Artist", placement: placement)
+        ZStack(alignment: .topLeading) {
+            sampleRow(height: frame.height)
+                .frame(width: frame.width, height: frame.height, alignment: .leading)
+                .offset(x: frame.minX, y: frame.minY)
+                .allowsHitTesting(false)
+            Color.clear
+                .frame(width: frame.width, height: frame.height)
+                .contentShape(Rectangle())
+                .offset(x: frame.minX, y: frame.minY)
+                .help("Drag to move the song title along the window's top or bottom; drag its corner to resize it")
+                .gesture(move(window: window))
+            SelectionHandles(size: frame.size)
+                .offset(x: frame.minX, y: frame.minY)
+            Color.clear
+                .frame(width: 18, height: 18)
+                .contentShape(Rectangle())
+                .position(x: frame.maxX, y: placement.bottom ? frame.minY : frame.maxY)
+                .gesture(resize(width: frame.width))
+        }
+        .frame(width: picture.width, height: picture.height, alignment: .topLeading)
+        .coordinateSpace(name: "floatingTitlePicture")
+        .accessibilityHidden(true)
+    }
+
+    /// The row's box on the picture: its size estimated from the words
+    /// (the real row hugs them), placed as the window places it.
+    static func rowBox(window: CGRect, unit: CGFloat, textSize: CGFloat, title: String, artist: String,
+                       placement: OpeningTitle.RowPlacement) -> CGRect {
+        let base = textSize * CGFloat(placement.scale)
+        let width = base * (OpeningTitle.rowCover + 0.2 + OpeningTitle.rowTitle * 0.55 * CGFloat(title.count)
+                            + (artist.isEmpty ? 0 : 0.16 + OpeningTitle.rowArtist * 0.5 * CGFloat(artist.count)))
+        let size = CGSize(width: width, height: base * OpeningTitle.rowCover)
+        let windowSize = CGSize(width: window.width / max(0.0001, unit), height: window.height / max(0.0001, unit))
+        let frame = OpeningTitle.rowFrame(in: windowSize, size: size, baseSize: textSize, placement: placement)
+        return CGRect(x: window.minX + frame.minX * unit, y: window.minY + frame.minY * unit,
+                      width: frame.width * unit, height: frame.height * unit)
+    }
+
+    /// The placement after a drag that has reached `location` (on the
+    /// picture) having moved `translation`, from `start`, in `window`.
+    static func moved(_ start: OpeningTitle.RowPlacement, translation: CGSize, location: CGPoint,
+                      window: CGRect) -> OpeningTitle.RowPlacement {
+        var placement = start
+        placement.centre = min(1, max(0, start.centre + Double(translation.width / max(1, window.width))))
+        placement.bottom = location.y > window.midY
+        return placement
+    }
+
+    /// The scale after the corner of a row `width` wide moved by `dx`.
+    static func resized(_ start: OpeningTitle.RowPlacement, width: CGFloat, dx: CGFloat) -> OpeningTitle.RowPlacement {
+        var placement = start
+        placement.scale = OpeningTitle.RowPlacement.clamped(start.scale * Double(max(0.1, (width + dx) / max(1, width))))
+        return placement
+    }
+
+    private func move(window: CGRect) -> some Gesture {
+        DragGesture(minimumDistance: 1, coordinateSpace: .named("floatingTitlePicture"))
+            .onChanged { value in
+                let origin = start ?? placement
+                if start == nil { start = origin }
+                Self.moved(origin, translation: value.translation, location: value.location, window: window).store()
+            }
+            .onEnded { _ in start = nil }
+    }
+
+    private func resize(width: CGFloat) -> some Gesture {
+        DragGesture(minimumDistance: 1)
+            .onChanged { value in
+                let origin = start ?? placement
+                if start == nil { start = origin }
+                Self.resized(origin, width: width, dx: value.translation.width).store()
+            }
+            .onEnded { _ in start = nil }
+    }
+
+    /// A small stand-in for the row: the cover, then the title.
+    private func sampleRow(height: CGFloat) -> some View {
+        HStack(spacing: height * 0.3) {
+            Group {
+                if let art = OpeningTitle.cover(playing.currentTrackArtwork, enabled: OpeningTitle.showsCover) {
+                    Image(nsImage: art).resizable().aspectRatio(contentMode: .fill)
+                } else {
+                    Color.white.opacity(0.25)
+                }
+            }
+            .frame(width: height, height: height)
+            .clipShape(RoundedRectangle(cornerRadius: height * 0.14, style: .continuous))
+            Text([playing.current?.title ?? "Song Title", playing.current?.artist ?? "Artist"].joined(separator: "  "))
+                .font(.system(size: max(3, height * 0.55), weight: .bold))
+                .foregroundStyle(.white.opacity(0.9))
+                .lineLimit(1)
+                .minimumScaleFactor(0.5)
+        }
     }
 }
 

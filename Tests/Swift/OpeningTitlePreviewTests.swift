@@ -276,6 +276,33 @@ final class OpeningTitlePreviewTests: XCTestCase {
                     "desktop-\(shot.0)-\(scene.rawValue).png"))
             }
         }
+        // Moved and resized on the Settings picture: at the foot, to the
+        // left, smaller; and at the top, to the right, larger.
+        let savedRow = OpeningTitle.RowPlacement.stored()
+        defer { savedRow.store() }
+        for (name, placed) in [("placed-bottom-left", OpeningTitle.RowPlacement(centre: 0.1, bottom: true, scale: 0.7)),
+                               ("placed-top-right", OpeningTitle.RowPlacement(centre: 0.95, bottom: false, scale: 1.5))] {
+            placed.store()
+            let textSize = CGFloat(FloatingLyricsOptions.SizePreset.medium.rawValue)
+            let window = FloatingFrame.defaultSize(textSize: textSize,
+                in: CGRect(origin: .zero, size: Self.screen).insetBy(dx: 0, dy: 60))
+            var wall = Date().timeIntervalSinceReferenceDate + 60
+            let renderer = ImageRenderer(content: FloatingFrameShot(size: window, textSize: textSize, time: 0.1,
+                                                                    wall: wall, monitor: harness.monitor))
+            renderer.scale = 2
+            renderer.render { _, _ in }
+            var now = 94.4
+            while now < 96 {
+                now = min(96, now + 1.0 / 30)
+                wall += 1.0 / 30
+                renderer.content = FloatingFrameShot(size: window, textSize: textSize, time: now, wall: wall,
+                                                     monitor: harness.monitor)
+                renderer.render { _, _ in }
+            }
+            let image = try XCTUnwrap(renderer.cgImage)
+            try DesktopPlayerPreviewTests.write(image, to: folder.appendingPathComponent("floating-\(name).png"))
+        }
+        OpeningTitle.RowPlacement.reset()
         for preset in [FloatingLyricsOptions.SizePreset.medium, .small] {
             let textSize = CGFloat(preset.rawValue)
             let window = FloatingFrame.defaultSize(textSize: textSize,
@@ -314,7 +341,8 @@ final class OpeningTitlePreviewTests: XCTestCase {
 
         var body: some View {
             let metrics = LyricViewportMetrics(size: size, textSize: textSize,
-                                               titleRow: OpeningTitle.isOn && OpeningTitle.keeps)
+                                               titleRow: OpeningTitle.isOn && OpeningTitle.keeps,
+                                               titlePlacement: .stored())
             ZStack {
                 Color(white: light ? 0.93 : 0.16)
                 FloatingLyricsFrame(backdrop: FloatingLyricsOptions.defaultBackdrop, reduceTransparency: false,
@@ -322,7 +350,7 @@ final class OpeningTitlePreviewTests: XCTestCase {
                     LyricLayer(time: time, baseSize: metrics.baseSize, maxWidth: metrics.stageSize.width,
                                maxHeight: metrics.stageSize.height, mood: .neutral,
                                accent: Color(.sRGB, red: 0.95, green: 0.55, blue: 0.42), trackSeed: 4242, wall: wall,
-                               titleBand: metrics.titleBand)
+                               titleBand: metrics.titleBand, titleAtBottom: metrics.titlePlacement.bottom)
                         .frame(width: size.width, height: size.height)
                         .environmentObject(monitor)
                 }
