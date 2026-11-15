@@ -143,14 +143,16 @@ struct LyricLayer: View {
             palette: palette, scrim: settings.scrimStrength, measured: measuredBackdrop,
             backing: DesktopOptions.shared.manualTextBacking,
             target: LyricLegibility.targetContrast(baseSize: baseSize), tinted: nowPlaying.artwork != nil,
-            pastelText: colour != .standard, increaseContrast: contrast == .increased)
+            pastelText: colour != .standard, increaseContrast: contrast == .increased,
+            videoDim: settings.musicVideoDim)
         // Without the automatic dark backing: what decides dark text.
         let unbacked = backdropOverride ?? LyricBackdrop.luminance(mode: mode,
             motion: mode == .auto && settings.motionArtworkEnabled && nowPlaying.motionArtwork != nil,
             palette: palette, scrim: settings.scrimStrength, measured: measuredBackdrop,
             backing: DesktopOptions.shared.manualTextBacking ?? 0,
             target: LyricLegibility.targetContrast(baseSize: baseSize), tinted: nowPlaying.artwork != nil,
-            pastelText: false, increaseContrast: contrast == .increased)
+            pastelText: false, increaseContrast: contrast == .increased,
+            videoDim: settings.musicVideoDim)
         return cache.ink(.init(mode: colour, speed: colours.speed, strength: colours.strength, custom: colours.customColours,
             album: palette, backdrop: backdrop, audio: audio.running ? audio.levels : nil,
             vocal: active.map { OrganicMotion.vocalIntensity(lyricsVM.lines[$0].words, at: time) } ?? energy,

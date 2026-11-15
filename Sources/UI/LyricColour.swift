@@ -465,6 +465,9 @@ enum LyricBackdrop {
     /// at the stage's ends. Colours lifted against the darker middle came
     /// out at about 2.3:1 at the ends of long lines and scattered words.
     static let edgeBacking = 0.5
+    /// The most an unmeasured music video is taken to be: under
+    /// `LyricInkDirector.lightBelow`, so lyrics over it stay light.
+    static let unmeasuredVideoCeiling = 0.2
 
     /// The backdrop at the brightest place a line reaches: the ends of the
     /// stage, which get `edgeBacking` of the text backing.
@@ -478,9 +481,10 @@ enum LyricBackdrop {
     ///     imported picture, as it does whenever the song has a cover.
     static func luminance(mode: Settings.BackgroundMode, motion: Bool, palette: [SIMD3<Float>], scrim: Double,
                           measured: Double? = nil, backing: Double? = nil, target: Double = 4.5,
-                          tinted: Bool = false, pastelText: Bool = false, increaseContrast: Bool = false) -> Double {
+                          tinted: Bool = false, pastelText: Bool = false, increaseContrast: Bool = false,
+                          videoDim: Double = 0) -> Double {
         let behind = beforeBacking(mode: mode, motion: motion, palette: palette, scrim: scrim, measured: measured,
-                                   tinted: tinted)
+                                   tinted: tinted, videoDim: videoDim)
         if backing == nil, pastelText {
             let target = LyricLegibility.pastelBackingTarget(increaseContrast: increaseContrast)
             let shade = LyricLegibility.stageBacking(forLuminance: behind, existingDarkening: 0, target: target)
@@ -499,7 +503,8 @@ enum LyricBackdrop {
 
     /// The wallpaper and its scrim, before the text backing.
     static func beforeBacking(mode: Settings.BackgroundMode, motion: Bool, palette: [SIMD3<Float>],
-                              scrim: Double, measured: Double? = nil, tinted: Bool = false) -> Double {
+                              scrim: Double, measured: Double? = nil, tinted: Bool = false,
+                              videoDim: Double = 0) -> Double {
         // Called every frame: a plain loop, no intermediate arrays.
         var brightest = 0.0, total = 0.0
         for stop in palette {
@@ -529,9 +534,14 @@ enum LyricBackdrop {
             }
             return LyricLegibility.darkened(picture, by: min(1, 0.12 * strength))
         case .musicVideo:
-            // Unmeasured footage under the video's dimming and the scrim.
+            // Footage under the video's dimming, then the scrim.
             let footage = min(1, max(0, measured ?? LyricLegibility.unknownBackdropLuminance))
-            return LyricLegibility.darkened(footage, by: min(1, 0.12 * strength))
+            let dimmed = LyricLegibility.darkened(footage, by: min(1, max(0, videoDim)))
+            let shaded = LyricLegibility.darkened(dimmed, by: min(1, 0.12 * strength))
+            // Unmeasured footage changes every shot: never guess it light
+            // enough for dark text, which turned muddy with a pale glow
+            // over a dim video. Light text and its backing hold on any shot.
+            return measured == nil ? min(shaded, unmeasuredVideoCeiling) : shaded
         case .colourOnly where measured != nil:
             return LyricLegibility.darkened(measured ?? field, by: WallpaperShade.scrimAtStage(strength: strength))
         case .visualizer:
