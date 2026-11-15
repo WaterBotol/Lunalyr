@@ -194,7 +194,7 @@ enum LookChoices {
     }
 
     /// The typefaces, in the order the tiles show them.
-    static let typefaces: [Settings.FontChoice] = [.auto, .manrope, .appleMusic, .sans, .serif, .slab, .soft, .google]
+    static let typefaces: [Settings.FontChoice] = [.auto, .manrope, .appleMusic, .sans, .serif, .slab, .soft, .google, .installed]
 
     /// The short name under a typeface tile.
     static func shortName(_ face: Settings.FontChoice) -> String {
@@ -206,7 +206,8 @@ enum LookChoices {
         case .serif: return "Charter"
         case .slab: return "Rockwell"
         case .soft: return "Rounded"
-        case .google: return "Other…"
+        case .google: return "Google"
+        case .installed: return "Installed"
         }
     }
 }

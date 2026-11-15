@@ -71,7 +71,7 @@ final class LookStore: ObservableObject {
         // A chosen layout with no entry of its own uses Match the style.
         if entrance == nil, layout != nil { entrance = .automatic }
         return LookValues(wallpaper: settings.backgroundMode, layout: layout, typeface: settings.fontChoice,
-                          fontFamily: settings.googleFontFamily, entrance: entrance,
+                          fontFamily: settings.chosenFontFamily, entrance: entrance,
                           entranceMix: settings.wordEntranceMix, highlight: highlights.mode,
                           highlightCustomHex: highlights.customHex)
     }
@@ -134,6 +134,11 @@ final class LookStore: ObservableObject {
             if settings.fontChoice != .google || settings.googleFontFamily != family {
                 if family.isEmpty { settings.selectFontChoice(.google) } else { settings.applyGoogleFont(family: family) }
             }
+        } else if values.typeface == .installed {
+            let family = values.fontFamily ?? ""
+            if settings.fontChoice != .installed || settings.installedFontFamily != family {
+                if family.isEmpty { settings.selectFontChoice(.installed) } else { settings.applyInstalledFont(family: family) }
+            }
         } else if settings.fontChoice != values.typeface {
             settings.selectFontChoice(values.typeface)
         }
@@ -195,6 +200,7 @@ final class LookStore: ObservableObject {
         let layout: LyricComposition?
         let fontChoice: Settings.FontChoice
         let fontFamily: String
+        let installedFamily: String
         let arrivals: [String: String]
         let mix: [String]
         let highlight: LyricHighlightMode
@@ -208,6 +214,7 @@ final class LookStore: ObservableObject {
             layout = s.lyricComposition
             fontChoice = s.fontChoice
             fontFamily = s.googleFontFamily
+            installedFamily = s.installedFontFamily
             arrivals = s.wordArrivalByStyle
             mix = s.wordEntranceMix
             highlight = store.highlights.mode
@@ -226,8 +233,15 @@ final class LookStore: ObservableObject {
             if settings.fontChoice != .google || settings.googleFontFamily != snapshot.fontFamily {
                 settings.applyGoogleFont(family: snapshot.fontFamily)
             }
+            if settings.installedFontFamily != snapshot.installedFamily { settings.installedFontFamily = snapshot.installedFamily }
+        } else if snapshot.fontChoice == .installed {
+            if settings.googleFontFamily != snapshot.fontFamily { settings.googleFontFamily = snapshot.fontFamily }
+            if settings.fontChoice != .installed || settings.installedFontFamily != snapshot.installedFamily {
+                settings.applyInstalledFont(family: snapshot.installedFamily)
+            }
         } else {
             if settings.googleFontFamily != snapshot.fontFamily { settings.googleFontFamily = snapshot.fontFamily }
+            if settings.installedFontFamily != snapshot.installedFamily { settings.installedFontFamily = snapshot.installedFamily }
             if settings.fontChoice != snapshot.fontChoice { settings.selectFontChoice(snapshot.fontChoice) }
         }
         if settings.wordArrivalByStyle != snapshot.arrivals { settings.wordArrivalByStyle = snapshot.arrivals }
@@ -249,6 +263,7 @@ final class LookStore: ObservableObject {
             settings.$lyricComposition.map { _ in () }.eraseToAnyPublisher(),
             settings.$fontChoice.map { _ in () }.eraseToAnyPublisher(),
             settings.$googleFontFamily.map { _ in () }.eraseToAnyPublisher(),
+            settings.$installedFontFamily.map { _ in () }.eraseToAnyPublisher(),
             settings.$wordArrivalByStyle.map { _ in () }.eraseToAnyPublisher(),
             settings.$wordEntranceMix.map { _ in () }.eraseToAnyPublisher(),
             highlights.$mode.map { _ in () }.eraseToAnyPublisher(),

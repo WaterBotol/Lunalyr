@@ -10,7 +10,7 @@ import Foundation
 /// | `wallpaper` | `Settings.backgroundMode` | `backgroundMode` |
 /// | `layout` | `Settings.lyricComposition` (nil = Custom Mix) | `lyricComposition` |
 /// | `typeface` | `Settings.fontChoice`, via `selectFontChoice(_:)` / `applyGoogleFont(family:)` | `fontChoice` |
-/// | `fontFamily` | `Settings.googleFontFamily`, only when `typeface == .google` | `googleFontFamily` |
+/// | `fontFamily` | `Settings.googleFontFamily` when `typeface == .google`; `Settings.installedFontFamily` when `.installed` | `googleFontFamily`, `custom.installedFontFamily` |
 /// | `entrance` | `Settings.wordArrivalByStyle[layout key]` -- the entry `arrival(in:)` reads for the Look's layout (`"automatic"` for Custom Mix) | `custom.wordArrivalByStyle` |
 /// | `entranceMix` | `Settings.wordEntranceMix`, only when `entrance == .mix` | `custom.wordEntranceMix` |
 /// | `highlight` | `LyricHighlightOptions.mode` (the colour treatment) | `custom.lyricHighlightMode` |
@@ -37,7 +37,7 @@ struct LookValues: Equatable, Hashable {
     /// nil is Custom Mix.
     var layout: LyricComposition?
     var typeface: Settings.FontChoice
-    /// The Google or installed family, when `typeface` is `.google`.
+    /// The family, when `typeface` is `.google` or `.installed`.
     var fontFamily: String?
     /// The entrance for the Look's layout. nil only in a user Look saved
     /// while Custom Mix had no entrance of its own (each layout used
@@ -55,7 +55,7 @@ struct LookValues: Equatable, Hashable {
         self.wallpaper = wallpaper
         self.layout = layout
         self.typeface = typeface
-        self.fontFamily = typeface == .google ? fontFamily : nil
+        self.fontFamily = typeface.takesFamily ? fontFamily : nil
         self.entrance = entrance
         self.entranceMix = entrance == .mix ? entranceMix : nil
         self.highlight = highlight
@@ -78,7 +78,7 @@ struct LookValues: Equatable, Hashable {
         case .serif: return "Charter"
         case .slab: return "Rockwell"
         case .soft: return "SF Rounded"
-        case .google:
+        case .google, .installed:
             let name = family?.trimmingCharacters(in: .whitespaces) ?? ""
             return name.isEmpty ? "Custom font" : name
         }

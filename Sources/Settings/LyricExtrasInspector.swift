@@ -133,7 +133,7 @@ struct LyricStyleMemorySection: View {
     private var chosen: StyleMemory.Style {
         .init(composition: settings.lyricComposition?.rawValue ?? "automatic", colour: colours.mode.rawValue,
               font: settings.fontChoice.rawValue,
-              fontFamily: settings.fontChoice == .google ? settings.googleFontFamily : nil)
+              fontFamily: settings.chosenFontFamily)
     }
 
     var body: some View {
@@ -277,7 +277,7 @@ struct RememberedStyleNote: View {
         case .colour: style.colour = colours.mode.rawValue
         case .font:
             style.font = settings.fontChoice.rawValue
-            style.fontFamily = settings.fontChoice == .google ? settings.googleFontFamily : nil
+            style.fontFamily = settings.chosenFontFamily
         }
         return style
     }

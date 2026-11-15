@@ -4,7 +4,7 @@ import SwiftUI
 enum TypefaceSpecimen {
     static func font(_ face: Settings.FontChoice, size: CGFloat) -> Font {
         switch face {
-        case .auto, .appleMusic, .google: return .system(size: size, weight: .bold)
+        case .auto, .appleMusic, .google, .installed: return .system(size: size, weight: .bold)
         case .manrope: return .custom("Manrope", size: size).weight(.bold)
         case .sans: return .custom("Avenir Next", size: size).weight(.semibold)
         case .serif: return .custom("Charter", size: size).weight(.bold)
@@ -14,14 +14,17 @@ enum TypefaceSpecimen {
     }
 }
 
-/// Typeface as eight specimen tiles, four to a row: Match, the built-in
-/// faces, and Other… (a Google Fonts or installed family). Selecting one is
+/// Typeface as specimen tiles, four to a row: Match, the built-in faces,
+/// Google (a Google Fonts family) and Installed (a font on this Mac,
+/// picked from `InstalledFontPicker`). Selecting one is
 /// the old Typeface menu's choice (`selectFontChoice`).
 @MainActor
 struct TypefaceTiles: View {
     @Model(\.settings) private var settings
     static let columns = 4
     static let gap: CGFloat = 10
+    static var rows: Int { (LookChoices.typefaces.count + columns - 1) / columns }
+    static var height: CGFloat { CGFloat(rows) * (38 + 19) + CGFloat(rows - 1) * gap + 4 }
 
     var body: some View {
         GeometryReader { proxy in
@@ -35,7 +38,7 @@ struct TypefaceTiles: View {
             }
             .padding(.top, 4)
         }
-        .frame(height: 2 * (38 + 19) + Self.gap + 4)
+        .frame(height: Self.height)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Typeface")
     }
@@ -73,7 +76,8 @@ struct TypefaceTiles: View {
     @ViewBuilder private func specimen(_ face: Settings.FontChoice) -> some View {
         switch face {
         case .auto: Image(systemName: "wand.and.stars").font(.system(size: 15, weight: .medium))
-        case .google: Image(systemName: "ellipsis").font(.system(size: 15, weight: .semibold))
+        case .google: Image(systemName: "globe").font(.system(size: 15, weight: .medium))
+        case .installed: Image(systemName: "laptopcomputer").font(.system(size: 15, weight: .medium))
         default: Text("Aa").font(TypefaceSpecimen.font(face, size: 18))
         }
     }

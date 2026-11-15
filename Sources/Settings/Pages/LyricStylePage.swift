@@ -218,6 +218,10 @@ struct LyricStylePage: View {
                 }
                 .revealRow()
             }
+            if s.fontChoice == .installed {
+                InstalledFontPicker()
+                    .revealRow()
+            }
         }
     }
 

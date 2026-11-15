@@ -18,8 +18,12 @@ final class Settings: ObservableObject {
     }
 
     enum FontChoice: String, CaseIterable, Identifiable {
-        case manrope, appleMusic, auto, sans, serif, slab, soft, google
+        case manrope, appleMusic, auto, sans, serif, slab, soft, google, installed
         var id: String { rawValue }
+
+        /// Google Fonts and Installed font draw a family named elsewhere
+        /// (`googleFontFamily`, `installedFontFamily`).
+        var takesFamily: Bool { self == .google || self == .installed }
 
         var title: String {
             switch self {
@@ -30,7 +34,8 @@ final class Settings: ObservableObject {
             case .serif: return "Serif — Charter"
             case .slab: return "Slab — Rockwell"
             case .soft: return "Soft — SF Rounded"
-            case .google: return "Google Fonts or installed font"
+            case .google: return "Google Fonts"
+            case .installed: return "Installed font"
             }
         }
     }
@@ -116,6 +121,12 @@ final class Settings: ObservableObject {
 
     @Published var fontChoice: FontChoice { didSet { store(fontChoice.rawValue, "fontChoice") } }
     @Published var googleFontFamily: String { didSet { store(googleFontFamily, "googleFontFamily") } }
+    /// The family for `.installed`, picked from the fonts on this Mac.
+    @Published var installedFontFamily: String { didSet { store(installedFontFamily, Self.installedFontFamilyKey) } }
+    static let installedFontFamilyKey = "custom.installedFontFamily"
+    /// The saved installed family is no longer on this Mac: the lyrics are
+    /// drawn in the default typeface until it returns.
+    @Published private(set) var installedFontMissing = false
     @Published var backgroundMode: BackgroundMode {
         didSet {
             // Music video falls back to whatever was chosen before it.
@@ -392,7 +403,7 @@ final class Settings: ObservableObject {
     /// saved here: the pickers and Looks keep showing the general choice.
     struct SongFont: Equatable {
         var choice: FontChoice
-        /// The Google or installed family, for `.google`.
+        /// The family, for `.google` or `.installed`.
         var family: String = ""
     }
     @Published private(set) var songFont: SongFont?
@@ -406,11 +417,27 @@ final class Settings: ObservableObject {
     /// general choice.
     var effectiveFontChoice: FontChoice { songFont?.choice ?? fontChoice }
 
+    /// The family the general choice draws, when it takes one.
+    var chosenFontFamily: String? {
+        switch fontChoice {
+        case .google: return googleFontFamily
+        case .installed: return installedFontFamily
+        default: return nil
+        }
+    }
+
+    /// The typeface actually drawn: an installed family that is missing (or
+    /// not picked yet) falls back to the default, Manrope.
+    var drawnFontChoice: FontChoice {
+        let choice = effectiveFontChoice
+        return choice == .installed && activeCustomFaces.regular == nil ? .manrope : choice
+    }
+
     /// The regular and bold faces of the family in use, when it is a
     /// Google or installed family that has loaded.
     var activeCustomFaces: (regular: String?, bold: String?, voice: LyricFace) {
-        guard let songFont, songFont.choice == .google else { return (googleRegular, googleBold, googleVoice) }
-        if songFontRegular == nil, songFont.family == googleFontFamily, googleRegular != nil {
+        guard let songFont, songFont.choice.takesFamily else { return (googleRegular, googleBold, googleVoice) }
+        if songFontRegular == nil, songFont.choice == fontChoice, songFont.family == chosenFontFamily, googleRegular != nil {
             return (googleRegular, googleBold, googleVoice)
         }
         return (songFontRegular, songFontBold, songFontVoice)
@@ -421,11 +448,21 @@ final class Settings: ObservableObject {
     /// general one does, and never inside the test host.
     func applySongFont(_ font: SongFont?) {
         var font = font
-        if font?.choice == .google, Self.normalizedFontFamily(font?.family ?? "") == nil { font = nil }
+        if font?.choice.takesFamily == true, Self.normalizedFontFamily(font?.family ?? "") == nil { font = nil }
         guard font != songFont else { return }
         songFont = font
         songFontLoadID = UUID()
         songFontRegular = nil; songFontBold = nil
+        // An installed family is on this Mac or not: no download to wait for.
+        if let font, font.choice == .installed {
+            if let installed = InstalledFontFamily.resolve(font.family) {
+                songFontRegular = installed.regular
+                songFontBold = installed.bold
+                songFontVoice = GoogleFontsCatalog.voice(of: installed.family)
+                    ?? Self.voice(ofFontNamed: installed.regular) ?? .sans
+            }
+            return
+        }
         guard let font, font.choice == .google, !AppRuntime.isUnitTesting else { return }
         let id = songFontLoadID
         Task { await loadSongFont(family: font.family, id: id) }
@@ -468,6 +505,7 @@ final class Settings: ObservableObject {
         self.loginItem = loginItem
         fontChoice = FontChoice(rawValue: d.string(forKey: "fontChoice") ?? "") ?? .manrope
         googleFontFamily = d.string(forKey: "googleFontFamily") ?? ""
+        installedFontFamily = d.string(forKey: Self.installedFontFamilyKey) ?? ""
         backgroundMode = BackgroundMode(rawValue: d.string(forKey: "backgroundMode") ?? "") ?? .auto
         let fallback = BackgroundMode(rawValue: d.string(forKey: "custom.musicVideoFallback") ?? "") ?? .auto
         musicVideoFallback = fallback == .musicVideo ? .auto : fallback
@@ -561,6 +599,14 @@ final class Settings: ObservableObject {
         if fontChoice == .google, !googleFontFamily.isEmpty, !AppRuntime.isUnitTesting {
             Task { await loadGoogleFont(family: googleFontFamily) }
         }
+        resolveInstalledFont()
+        // A font installed or removed while Lunalyr runs: the chosen
+        // installed family is looked for again.
+        for name in InstalledFontLibrary.changeNotifications {
+            systemObservers.append(notifications.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.resolveInstalledFont() }
+            })
+        }
     }
 
     /// Rereads every lyric-style preference (`LyricStyleProfiles.keys`)
@@ -593,10 +639,14 @@ final class Settings: ObservableObject {
         set(\.randomizeLyricFonts, d.bool(forKey: "custom.randomizeLyricFonts"))
         let choice = FontChoice(rawValue: d.string(forKey: "fontChoice") ?? "") ?? .manrope
         let family = d.string(forKey: "googleFontFamily") ?? ""
-        let fontChanged = choice != fontChoice || family != googleFontFamily
+        let installed = d.string(forKey: Self.installedFontFamilyKey) ?? ""
+        let fontChanged = choice != fontChoice || family != googleFontFamily || installed != installedFontFamily
         set(\.googleFontFamily, family)
+        set(\.installedFontFamily, installed)
         set(\.fontChoice, choice)
         guard fontChanged else { return }
+        if choice == .installed { resolveInstalledFont(); return }
+        installedFontMissing = false
         googleFontLoadID = UUID()
         // A Google or installed family loads as it does at launch; never
         // inside the test host (see `init`).
@@ -615,7 +665,7 @@ final class Settings: ObservableObject {
     /// track's own character.
     func face(for mood: TrackMood) -> LyricFace {
         switch effectiveFontChoice {
-        case .manrope, .appleMusic, .auto, .google: return mood.face
+        case .manrope, .appleMusic, .auto, .google, .installed: return mood.face
         case .sans: return .sans
         case .serif: return .serif
         case .slab: return .slab
@@ -629,7 +679,7 @@ final class Settings: ObservableObject {
     /// beside Manrope.
     func renderedFace(for mood: TrackMood) -> LyricFace {
         let custom = activeCustomFaces
-        return Self.renderedFace(choice: effectiveFontChoice, moodFace: mood.face, manropeLoaded: AppFont.regular != nil,
+        return Self.renderedFace(choice: drawnFontChoice, moodFace: mood.face, manropeLoaded: AppFont.regular != nil,
                                  customVoice: custom.regular == nil ? nil : custom.voice)
     }
 
@@ -644,7 +694,7 @@ final class Settings: ObservableObject {
         // Manrope and SF Pro are both sans.
         case .manrope: return manropeLoaded ? .sans : moodFace
         case .appleMusic: return .sans
-        case .google: return customVoice ?? moodFace
+        case .google, .installed: return customVoice ?? moodFace
         case .auto: return moodFace
         case .sans: return .sans
         case .serif: return .serif
@@ -661,7 +711,7 @@ final class Settings: ObservableObject {
             return faces[Int(seed % UInt64(faces.count))].font(size: size, hero: hero)
         }
         if alternate { return renderedFace(for: mood).contrasting.font(size: size, hero: hero) }
-        let choice = effectiveFontChoice, custom = activeCustomFaces
+        let choice = drawnFontChoice, custom = activeCustomFaces
         // Manrope is the shipped default, fetched and registered like any
         // other Google family.
         if choice == .manrope, let regular = AppFont.regular {
@@ -674,14 +724,14 @@ final class Settings: ObservableObject {
         if choice == .appleMusic {
             return .system(size: size, weight: hero ? .heavy : .bold, design: .default)
         }
-        if choice == .google, let regular = custom.regular {
+        if choice.takesFamily, let regular = custom.regular {
             return .custom(hero ? (custom.bold ?? regular) : regular, fixedSize: size)
         }
         return face(for: mood).font(size: size, hero: hero)
     }
 
     func uiFont(size: CGFloat, bold: Bool = false, mood: TrackMood) -> Font {
-        let choice = effectiveFontChoice, custom = activeCustomFaces
+        let choice = drawnFontChoice, custom = activeCustomFaces
         if choice == .manrope, let regular = AppFont.regular {
             return .custom(bold ? (AppFont.bold ?? regular) : regular, fixedSize: size)
         }
@@ -692,7 +742,7 @@ final class Settings: ObservableObject {
         if choice == .appleMusic {
             return .system(size: size, weight: bold ? .bold : .medium, design: .default)
         }
-        if choice == .google, let regular = custom.regular {
+        if choice.takesFamily, let regular = custom.regular {
             return .custom(bold ? (custom.bold ?? regular) : regular, fixedSize: size)
         }
         return face(for: mood).uiFont(size: size, bold: bold)
@@ -1049,6 +1099,38 @@ final class Settings: ObservableObject {
         } else {
             fontChoice = choice
             googleFontLoadID = UUID()
+            resolveInstalledFont()
+        }
+    }
+
+    /// Draws the lyrics in `family`, one of the fonts on this Mac.
+    func applyInstalledFont(family: String) {
+        installedFontFamily = family
+        fontChoice = .installed
+        googleFontLoadID = UUID()
+        resolveInstalledFont()
+    }
+
+    /// Looks for the installed family on this Mac and uses its faces, or
+    /// marks it missing so the default typeface stands in. The saved family
+    /// is kept, so reinstalling it brings it back.
+    func resolveInstalledFont() {
+        guard fontChoice == .installed else { installedFontMissing = false; return }
+        googleFontAwaitsNetwork = false
+        guard !installedFontFamily.isEmpty else {
+            installedFontMissing = false
+            applyCustomFont(nil, status: nil)
+            return
+        }
+        if let installed = InstalledFontFamily.resolve(installedFontFamily) {
+            installedFontMissing = false
+            // Unchanged by a font-set notification: nothing to redraw.
+            guard googleRegular != installed.regular || googleBold != installed.bold || googleStatus != nil else { return }
+            applyCustomFont(GoogleFontsProvider.LoadedFont(regular: installed.regular, bold: installed.bold),
+                            family: installed.family, status: nil)
+        } else {
+            installedFontMissing = true
+            applyCustomFont(nil, status: nil)
         }
     }
 
