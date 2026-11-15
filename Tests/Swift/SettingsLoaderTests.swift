@@ -7,8 +7,8 @@ final class SettingsLoaderTests: XCTestCase {
     func testShowsOncePerLaunchWithMotionAllowedOutsideTests() {
         XCTAssertTrue(SettingsLoader.shouldShow(reduceMotion: false, alreadyShown: false, isUnitTesting: false, hasVideo: true))
         XCTAssertFalse(SettingsLoader.shouldShow(reduceMotion: true, alreadyShown: false, isUnitTesting: false, hasVideo: true))
-        XCTAssertFalse(SettingsLoader.shouldShow(reduceMotion: false, alreadyShown: true, isUnitTesting: false, hasVideo: true),
-                       "only the first opening of a launch")
+        XCTAssertTrue(SettingsLoader.shouldShow(reduceMotion: false, alreadyShown: true, isUnitTesting: false, hasVideo: true),
+                       "every opening, not only the first of a launch")
         XCTAssertFalse(SettingsLoader.shouldShow(reduceMotion: false, alreadyShown: false, isUnitTesting: true, hasVideo: true))
         XCTAssertFalse(SettingsLoader.shouldShow(reduceMotion: false, alreadyShown: false, isUnitTesting: false, hasVideo: false))
         XCTAssertFalse(SettingsLoader.shouldShow(alreadyShown: false), "never inside the unit-test host")

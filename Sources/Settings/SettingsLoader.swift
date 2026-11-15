@@ -7,8 +7,8 @@ import AppKit
 /// silent, at double speed, the logo filling the window), builds Settings
 /// behind it, and fades the logo away as soon as Settings is ready and the
 /// glass has formed. Never a wait of its own making: a fast Mac sees it for
-/// `minimumShown` at most. Once per launch; Reduce Motion, the test host or a
-/// missing video skip it; a click skips it.
+/// `minimumShown` at most. Every time Settings opens (the user's choice, 16 Nov
+/// 2026); Reduce Motion, the test host or a missing video skip it; a click skips it.
 @MainActor
 enum SettingsLoader {
     /// The video plays this much faster than in the welcome.
@@ -28,7 +28,8 @@ enum SettingsLoader {
                            alreadyShown: Bool,
                            isUnitTesting: Bool = AppRuntime.isUnitTesting,
                            hasVideo: Bool = WelcomeGlass.url != nil) -> Bool {
-        !reduceMotion && !alreadyShown && !isUnitTesting && hasVideo
+        // `alreadyShown` is no longer a reason to skip: it plays on every opening.
+        !reduceMotion && !isUnitTesting && hasVideo
     }
 
     /// How long to keep the logo up once Settings is ready, `elapsed` after
