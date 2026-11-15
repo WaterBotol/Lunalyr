@@ -59,6 +59,17 @@ final class InstalledFontsTests: XCTestCase {
         let again = await library.refresh()
         XCTAssertEqual(again, 0)
 
+        // A font the automatic refresh picked up still counts when the
+        // button is pressed afterwards.
+        let announced = await library.findNewFonts()
+        XCTAssertEqual(announced, 2)
+        installed.append("Inter")
+        await library.refresh()
+        let pressed = await library.findNewFonts()
+        XCTAssertEqual(pressed, 1)
+        let pressedAgain = await library.findNewFonts()
+        XCTAssertEqual(pressedAgain, 0)
+
         XCTAssertEqual(InstalledFontLibrary.newFamilies(old: ["A", "B"], new: ["B", "C", "D"]), ["C", "D"])
         XCTAssertEqual(InstalledFontLibrary.foundMessage(0), "No new fonts found.")
         XCTAssertEqual(InstalledFontLibrary.foundMessage(1), "Found 1 new family.")
@@ -170,8 +181,10 @@ final class InstalledFontsTests: XCTestCase {
     }
 
     /// Draws the Typeface section with the list open, for a look by eye:
-    /// written to the temporary directory, its path printed.
+    /// written to the temporary directory, its path printed. Only on request.
     func testSnapshotTheTypefaceSectionWithTheListOpen() async throws {
+        try XCTSkipUnless(ProcessInfo.processInfo.environment["LUNALYR_FONT_SNAPSHOT"] != nil,
+                          "Set TEST_RUNNER_LUNALYR_FONT_SNAPSHOT=1 to draw it")
         let scene = UISnapshotScene(player: .playing)
         defer { scene.tearDown() }
         let library = InstalledFontLibrary(notifications: NotificationCenter())
@@ -179,11 +192,11 @@ final class InstalledFontsTests: XCTestCase {
         XCTAssertGreaterThan(library.families.count, 20)
         scene.settings.applyInstalledFont(family: "Helvetica Neue")
         let width = LunalyrDesign.Studio.Layout.inspectorWidth - 40
-        for look in [UISnapshotRenderer.Look.light, .dark] {
+        for (look, query) in [(UISnapshotRenderer.Look.light, ""), (.dark, "helv")] {
             let view = VStack(alignment: .leading) {
                 InspectorSection("Typeface", value: scene.settings.fontChoice.title) {
                     TypefaceTiles()
-                    InstalledFontPicker(library: library, open: true)
+                    InstalledFontPicker(library: library, open: true, query: query)
                 }
             }
             .padding(20)

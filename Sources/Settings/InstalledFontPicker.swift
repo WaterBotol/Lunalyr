@@ -26,6 +26,9 @@ final class InstalledFontLibrary: ObservableObject {
     private let notifications: NotificationCenter
     private var observers: [NSObjectProtocol] = []
     private var pendingRefresh: Task<Void, Never>?
+    /// The list as "Find new fonts" last reported on it (or as first read),
+    /// so a font the automatic refresh already picked up still counts.
+    private var announced: [String]?
 
     /// Tests pass their own families and filter, and a private centre.
     init(source: @escaping @MainActor () -> [String] = InstalledFontLibrary.systemFamilies,
@@ -63,6 +66,17 @@ final class InstalledFontLibrary: ObservableObject {
         let added = hasLoaded ? Self.newFamilies(old: families, new: usable).count : 0
         if usable != families { families = usable }
         hasLoaded = true
+        if announced == nil { announced = usable }
+        return added
+    }
+
+    /// "Find new fonts": rereads the list and returns how many families are
+    /// new since the button was last pressed (or the list first read).
+    func findNewFonts() async -> Int {
+        let before = announced
+        await refresh()
+        let added = before.map { Self.newFamilies(old: $0, new: families).count } ?? 0
+        announced = families
         return added
     }
 
@@ -149,7 +163,7 @@ struct InstalledFontPicker: View {
     @Model(\.settings) private var settings
     @ObservedObject private var library: InstalledFontLibrary
     @State private var open: Bool
-    @State private var query = ""
+    @State private var query: String
     @State private var found: String?
     @State private var finding = false
     @State private var foundClear: Task<Void, Never>?
@@ -157,9 +171,10 @@ struct InstalledFontPicker: View {
     static let listHeight: CGFloat = 196
     static let rowHeight: CGFloat = 26
 
-    init(library: InstalledFontLibrary? = nil, open: Bool = false) {
+    init(library: InstalledFontLibrary? = nil, open: Bool = false, query: String = "") {
         self.library = library ?? .shared
         _open = State(initialValue: open)
+        _query = State(initialValue: query)
     }
 
     private var family: String { settings.installedFontFamily }
@@ -171,7 +186,7 @@ struct InstalledFontPicker: View {
                 WarningCaption("“\(family)” isn’t installed any more, so the lyrics use Manrope, the default. Reinstall it or pick another.")
                     .revealRow()
             }
-            if open || family.isEmpty {
+            if open {
                 search
                 list
                     .revealRow()
@@ -190,7 +205,11 @@ struct InstalledFontPicker: View {
             InspectorCaption("Fonts installed on this Mac.",
                              more: "Every font family installed on this Mac that can set lyrics. Install a font in Font Book, then Find new fonts.")
         }
-        .onAppear { library.loadIfNeeded() }
+        .onAppear {
+            library.loadIfNeeded()
+            // Nothing picked yet: the list is what there is to do.
+            if family.isEmpty { open = true }
+        }
         .animation(.easeOut(duration: 0.2), value: found)
     }
 
@@ -209,7 +228,7 @@ struct InstalledFontPicker: View {
                 Image(systemName: "chevron.down")
                     .font(.system(size: 10, weight: .semibold))
                     .foregroundStyle(Color.studio(.ink2))
-                    .rotationEffect(.degrees(open || family.isEmpty ? 180 : 0))
+                    .rotationEffect(.degrees(open ? 180 : 0))
                     .accessibilityHidden(true)
             }
             .padding(.horizontal, 8)
@@ -264,7 +283,11 @@ struct InstalledFontPicker: View {
                         .padding(.horizontal, 12)
                 }
             }
-            .onAppear { if !family.isEmpty { proxy.scrollTo(family, anchor: .center) } }
+            .onAppear {
+                guard !family.isEmpty else { return }
+                // After the first layout, or there is nothing to scroll yet.
+                DispatchQueue.main.async { proxy.scrollTo(family, anchor: .center) }
+            }
             .onChange(of: library.hasLoaded) { _, _ in
                 if !family.isEmpty { proxy.scrollTo(family, anchor: .center) }
             }
@@ -324,7 +347,7 @@ struct InstalledFontPicker: View {
         finding = true
         foundClear?.cancel()
         Task {
-            let count = await library.refresh()
+            let count = await library.findNewFonts()
             settings.resolveInstalledFont()
             finding = false
             found = InstalledFontLibrary.foundMessage(count)

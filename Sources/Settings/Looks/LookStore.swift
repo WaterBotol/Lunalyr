@@ -233,6 +233,7 @@ final class LookStore: ObservableObject {
             if settings.fontChoice != .google || settings.googleFontFamily != snapshot.fontFamily {
                 settings.applyGoogleFont(family: snapshot.fontFamily)
             }
+            if settings.installedFontFamily != snapshot.installedFamily { settings.installedFontFamily = snapshot.installedFamily }
         } else if snapshot.fontChoice == .installed {
             if settings.googleFontFamily != snapshot.fontFamily { settings.googleFontFamily = snapshot.fontFamily }
             if settings.fontChoice != .installed || settings.installedFontFamily != snapshot.installedFamily {
