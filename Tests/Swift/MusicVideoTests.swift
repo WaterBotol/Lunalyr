@@ -614,7 +614,8 @@ final class MusicVideoTests: XCTestCase {
         XCTAssertTrue(html.contains("mute: 1"))
         XCTAssertTrue(html.contains("player.mute(); player.playVideo()"), "muted again before every play")
         XCTAssertTrue(html.contains("player.mute(); player.seekTo"), "and before every seek")
-        XCTAssertTrue(html.contains("video: '4NRXx6U8ABQ', page: 3"), "messages name their video and page")
+        XCTAssertTrue(html.contains("var currentVideo = '4NRXx6U8ABQ', currentPage = 3;")
+                      && html.contains("video: currentVideo, page: currentPage"), "messages name their video and page")
     }
 
     // MARK: Round 2 review: the embed page's life (R2-13, R2-15)

@@ -158,7 +158,8 @@ final class MusicVideoFramingTests: XCTestCase {
         XCTAssertFalse(whole.followsVideo)
         XCTAssertFalse(MusicVideoFraming.fill.isWhole)
         XCTAssertEqual(ambient.rect(aspect: hd, in: laptop), whole.rect(aspect: hd, in: laptop))
-        XCTAssertEqual(ambient.revealHold, whole.revealHold)
+        XCTAssertEqual(MusicVideoOverlayMask.covers(framing: ambient, wasShowing: false),
+                       MusicVideoOverlayMask.covers(framing: whole, wasShowing: false))
         XCTAssertEqual(ambient.youTubeOverscan, 1)
         XCTAssertEqual(ambient.videoGravity(contentAspect: hd, in: laptop), whole.videoGravity(contentAspect: hd, in: laptop))
     }
@@ -208,14 +209,6 @@ final class MusicVideoFramingTests: XCTestCase {
         XCTAssertTrue(YouTubeEmbed.html(videoID: "4NRXx6U8ABQ", start: 0, overscan: .nan).contains("overscan = 1.25,"))
         XCTAssertTrue(YouTubeEmbed.html(videoID: "4NRXx6U8ABQ", start: 0, overscan: 9).contains("overscan = 2.0,"))
         XCTAssertTrue(YouTubeEmbed.html(videoID: "4NRXx6U8ABQ", start: 0, overscan: 0.5).contains("overscan = 1.0,"))
-    }
-
-    func testWholeHoldsTheRevealUntilYouTubesTitleHasFaded() {
-        XCTAssertEqual(YouTubeEmbed.revealDelay(framing: .fill, showing: false), 0, "filled: the title is off-screen")
-        XCTAssertEqual(YouTubeEmbed.revealDelay(framing: .whole, showing: false), MusicVideoFraming.titleOverlayHold)
-        XCTAssertEqual(YouTubeEmbed.revealDelay(framing: .whole, showing: true), 0, "already up: not hidden again")
-        XCTAssertGreaterThanOrEqual(MusicVideoFraming.titleOverlayHold, 4.5, "measured: overlays gone 4.0–4.4 s in")
-        XCTAssertLessThanOrEqual(MusicVideoFraming.titleOverlayHold, 6)
     }
 
     func testWholeHidesABufferingPlayerAtOnce() {

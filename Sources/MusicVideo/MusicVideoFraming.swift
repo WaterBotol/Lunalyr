@@ -13,9 +13,9 @@ enum MusicVideoFraming: String, CaseIterable, Identifiable, Sendable {
     /// nothing is cut from its sides. A picture wider than the screen leaves
     /// space above and below, which shows a blurred, darkened copy of the
     /// album cover or the video's own still, never black bars; a taller one
-    /// (4:3 on a laptop) loses a little of its top and bottom. A YouTube player stays hidden
-    /// for its first `titleOverlayHold` of play, behind the still, while
-    /// YouTube's title overlay fades.
+    /// (4:3 on a laptop) loses a little of its top and bottom. A YouTube
+    /// player shows as soon as it plays; YouTube's controls over its first
+    /// seconds are covered (`MusicVideoOverlayMask`).
     case whole
     /// Shown whole, with a glow around it that follows the picture: a
     /// blurred copy of the playing video, sampled about once a second
@@ -52,19 +52,8 @@ enum MusicVideoFraming: String, CaseIterable, Identifiable, Sendable {
     static let fillOverscan: Double = 1.25
     /// A fitted picture is grown this much, so no hairline shows at its edge.
     static let wholeBleed: CGFloat = 1.01
-    /// YouTube shows the video's title, channel, a pause button, "More
-    /// videos" and its logo over the first seconds of play, and again after
-    /// a pause or a seek. Filled, they are off-screen; fitted, the player is
-    /// revealed only once they have faded. Measured on four official videos
-    /// (13 Nov 2026): gone 4.0–4.4 s after playing starts, after a start, a
-    /// resume and a seek alike.
-    static let titleOverlayHold: TimeInterval = 5
-
     /// The YouTube page's zoom of its player.
     var youTubeOverscan: Double { self == .fill ? Self.fillOverscan : 1 }
-
-    /// How long a YouTube player that starts playing stays hidden.
-    var revealHold: TimeInterval { isWhole ? Self.titleOverlayHold : 0 }
 
     /// How a library video's AVPlayerLayer draws a picture of
     /// `contentAspect` (nil until known) in `container`: whole matches the
