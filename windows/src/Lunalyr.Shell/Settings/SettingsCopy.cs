@@ -33,7 +33,7 @@ public static class SettingsCopy
 
     /// <summary>What Custom Mix does with the layout (the Mac's <c>WorkspaceCopy.automaticLayoutDetail</c>).</summary>
     public const string AutomaticLayoutDetail =
-        "Picks Constellation, Echo, Editorial or Scattered to suit each track’s energy and feel.";
+        "Picks a layout to suit each track’s energy and feel.";
 
     public const string ReduceMotionEntrances = "Animation effects are off in Windows, so every entrance plays as a simple fade.";
 
@@ -118,10 +118,10 @@ public static class SettingsCopy
     public static (double Min, double Max) SongOffsetRange(double offset) =>
         Math.Abs(offset) > 10 ? (-30, 30) : (-10, 10);
 
-    /// <summary>What "Treat long pauses as instrumental" changes (the Mac's <c>TimingPage.pauseCaption</c>).</summary>
+    /// <summary>What "Treat long pauses as breaks" (Lyrics › Instrumental breaks) changes (the Mac's <c>TimingPage.pauseCaption</c>).</summary>
     public static string PauseCaption(bool showInterludes)
     {
-        const string caption = "Lyrics timed only by line don’t say when singing stops. With Show a glowing orb during instrumental breaks on (Lyric style), a long gap after a line is shown as an instrumental break instead of one held line. Turn this off for songs with long held notes.";
+        const string caption = "Lyrics timed only by line don’t say when singing stops. With the glowing orb on, a long gap after a line is shown as a break instead of one held line. Turn this off for songs with long held notes.";
         return showInterludes
             ? caption
             : caption + " The orb is off, so this changes only QQ Music’s lyrics, whose held lines end early, and how long the words of a line before a long gap take to light up.";

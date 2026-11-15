@@ -6,6 +6,7 @@ using Lunalyr.Shell.Visualisers;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
+using static Lunalyr.App.Settings.SettingsGroups;
 using static Lunalyr.App.Settings.SettingsKit;
 
 namespace Lunalyr.App.Settings;
@@ -46,7 +47,7 @@ internal static partial class WallpaperPage
             v => Calm() ? "Off" : Percent(v), s => s.VisualizerPunch, (s, v) => s with { VisualizerPunch = v }, "Off", "Strong",
             v => Calm() ? "Off while Animation effects are off" : Percent(v));
         var punchCard = Card("Beat punch", null, "", punch);
-        page.Children.Add(punchCard);
+        page.Children.Add(Advanced(punchCard));
         var safety = Caption("");
         page.Children.Add(safety);
         ctx.OnRefresh(_ =>
@@ -74,9 +75,9 @@ internal static partial class WallpaperPage
         var sensitivity = Slider(ctx, AppSettings.SensitivityMin, AppSettings.SensitivityMax, 0.05,
             v => v.ToString("0.0#", CultureInfo.CurrentCulture) + "×", s => s.AudioSensitivity, (s, v) => s with { AudioSensitivity = v },
             "Low", "High");
-        page.Children.Add(Card("Sensitivity", null, "", sensitivity));
+        page.Children.Add(Advanced(Card("Sensitivity", null, "", sensitivity)));
         var sensitivityReason = Caption("Switch on System audio to set how strongly scenes respond.");
-        page.Children.Add(sensitivityReason);
+        page.Children.Add(Advanced(sensitivityReason));
 
         // What capture is doing: a caption while it works, a warning with Reconnect once it needs attention.
         var status = Caption("", selectable: true);
@@ -111,7 +112,7 @@ internal static partial class WallpaperPage
         ToolTipService.SetToolTip(copy, "Copies a report of how audio capture is set up, to paste into a bug report");
         meters.Children.Add(copy);
         var diagnostics = Expander("Audio setup and diagnostics", "Live levels from the analysis; nothing is recorded.", "", meters);
-        page.Children.Add(diagnostics);
+        page.Children.Add(Advanced(diagnostics));
 
         void Follow(object? sender, EventArgs e) => ctx.QueueRefresh();
         if (VisualiserServices.Audio is { } service)
@@ -156,9 +157,9 @@ internal static partial class WallpaperPage
     /// <summary>A scene's "Colours" menu, shown while that scene is chosen.</summary>
     private static void AddColours(StackPanel page, SettingsContext ctx, string description, string original,
         Func<AppSettings, string> get, Func<AppSettings, string, AppSettings> set, Func<AppSettings, bool> shown) =>
-        page.Children.Add(Card("Colours", description, "",
+        page.Children.Add(Advanced(Card("Colours", description, "",
                 Combo(ctx, [new SettingsChoice("album", "Album cover"), new SettingsChoice("original", original)], get, set, width: 220))
-            .ShowWhen(ctx, shown));
+            .ShowWhen(ctx, shown)));
 
     private static (StackPanel Panel, ProgressBar Bar) Meter(string name)
     {

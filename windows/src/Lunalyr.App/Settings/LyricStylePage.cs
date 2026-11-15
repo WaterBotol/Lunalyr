@@ -7,6 +7,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
+using static Lunalyr.App.Settings.SettingsGroups;
 using static Lunalyr.App.Settings.SettingsKit;
 
 namespace Lunalyr.App.Settings;
@@ -41,49 +42,47 @@ internal static class LyricStylePage
         ctx.OnRefresh(s => layoutCard.Description = SettingsCopy.Layouts.FirstOrDefault(c => c.Value == s.LyricComposition)?.Detail ?? "");
         page.Children.Add(layoutCard);
         page.Children.Add(RememberedNote(ctx, Playing, StyleAspect.Layout));
-
-        page.Children.Add(Card("Change layout every song",
-                "Each new song takes the next layout, skipping ones that don’t suit its energy. Off: the layout follows the song’s energy alone.",
+        page.Children.Add(Card("Change layout every song", "Custom Mix takes the next layout for each new song.",
                 "", Toggle(ctx, s => s.RotateLayouts, (s, v) => s with { RotateLayouts = v }))
             .ShowWhen(ctx, s => s.LyricComposition == Automatic));
-        page.Children.Add(Expander("Layouts in the rotation",
-                "How many songs in a row each layout gets before the next one. 0 leaves a layout out.", "", RotationList(ctx))
-            .ShowWhen(ctx, s => s.LyricComposition == Automatic && s.RotateLayouts));
-
-        page.Children.Add(Card("Show the song title at the start",
-            "The song’s title, artist and album appear low on the left as a song begins, in the lyrics’ typeface, and leave before the first line is sung. A song that starts singing straight away gets a shorter one, or none.",
+        page.Children.Add(Card("Show the song title at the start", "Title, artist and album as a song begins.",
             "", Toggle(ctx, s => s.OpeningTitle, (s, v) => s with { OpeningTitle = v })));
-        var cover = Card("Show the album cover", "The cover beside the song’s title.", null,
-            Toggle(ctx, s => s.OpeningTitleCover, (s, v) => s with { OpeningTitleCover = v }).EnableWhen(ctx, s => s.OpeningTitle));
-        page.Children.Add(Indented(cover));
-        page.Children.Add(Card("Show credits in the background",
-            "Lines like “Produced by: …” and “作词 : …” appear one at a time behind the lyrics, at full size, in the same layout as backing vocals.",
-            "", Toggle(ctx, s => s.CreditsLayer, (s, v) => s with { CreditsLayer = v })));
-        page.Children.Add(Card("Backing vocals in the background", LyricStyleCopy.BackingVocals, "",
-            Toggle(ctx, s => s.BackingVocalsLayer, (s, v) => s with { BackingVocalsLayer = v })));
-        page.Children.Add(Indented(Card("Backing vocals animate like", null, null,
-                Combo(ctx, LyricStyleCopy.BackingChoices, s => s.BackingVocalStyle, (s, v) => s with { BackingVocalStyle = v })))
-            .ShowWhen(ctx, s => s.BackingVocalsLayer));
-        var editorial = Card("Add Editorial typography", LyricStyleCopy.EditorialTypography, "",
-            Toggle(ctx, s => s.EditorialTypography, (s, v) => s with { EditorialTypography = v }));
-        ctx.OnRefresh(s => editorial.Description = LyricStyleCopy.EditorialNote(SettingsCopy.Kind(s.LyricComposition)) is { } note
-            ? $"{LyricStyleCopy.EditorialTypography} {note}" : LyricStyleCopy.EditorialTypography);
-        page.Children.Add(editorial);
-        page.Children.Add(Indented(Card("Editorial amount", null, null,
-                Slider(ctx, 0, 1, 0.01, SettingsCopy.Percent, s => s.EditorialAmount, (s, v) => s with { EditorialAmount = Math.Round(v, 2) })))
-            .ShowWhen(ctx, s => s.EditorialTypography));
-        // Floating has its own size (Floating lyrics, above).
-        page.Children.Add(Card("Lyric size", null, "",
-            Slider(ctx, 0.7, 1.5, 0.01, SettingsCopy.Percent, s => s.LyricScale, (s, v) => s with { LyricScale = Math.Round(v, 2) }))
-            .ShowWhen(ctx, s => !s.IsFloating));
-        page.Children.Add(Card("Follow Windows’ Animation effects",
-            "On: when Animation effects is off in Windows (Accessibility › Visual effects), lyrics keep still and the music video shows a still picture. Off: Lunalyr animates anyway. Visualiser beat flashes always follow Windows.",
-            "", Toggle(ctx, s => s.MotionFollowsWindows, (s, v) => s with { MotionFollowsWindows = v, MotionNoticeShown = true })));
 
-        // ---- Typeface ----
-        Section(page, "Typeface");
-        page.Children.Add(Card("Randomise lyric fonts", LyricStyleCopy.Randomise, "",
-            Toggle(ctx, s => s.RandomizeLyricFonts, (s, v) => s with { RandomizeLyricFonts = v })));
+        // Advanced layout
+        page.Children.Add(Advanced(Expander("Layouts in the rotation",
+                "How many songs in a row each layout gets. 0 leaves a layout out.", "", RotationList(ctx))
+            .ShowWhen(ctx, s => s.LyricComposition == Automatic && s.RotateLayouts)));
+        page.Children.Add(Advanced(Card("Album cover with the title", "The cover beside the song’s title at the start.", "",
+            Toggle(ctx, s => s.OpeningTitleCover, (s, v) => s with { OpeningTitleCover = v }).EnableWhen(ctx, s => s.OpeningTitle))));
+        page.Children.Add(Advanced(Card("Credits in the background", "Lines like “Produced by: …” behind the lyrics, one at a time.",
+            "", Toggle(ctx, s => s.CreditsLayer, (s, v) => s with { CreditsLayer = v }))));
+        page.Children.Add(Advanced(Card("Backing vocals in the background", LyricStyleCopy.BackingVocals, "",
+            Toggle(ctx, s => s.BackingVocalsLayer, (s, v) => s with { BackingVocalsLayer = v }))));
+        page.Children.Add(Advanced(Indented(Card("Backing vocals move like", null, null,
+                Combo(ctx, LyricStyleCopy.BackingChoices, s => s.BackingVocalStyle, (s, v) => s with { BackingVocalStyle = v })))
+            .ShowWhen(ctx, s => s.BackingVocalsLayer)));
+        // The layouts' own sliders, only while the layout can use them.
+        page.Children.Add(Advanced(Card("Constellation spread", null, "",
+                Slider(ctx, AppSettings.SpreadMin, AppSettings.SpreadMax, 0.01, SettingsCopy.Percent, s => s.ConstellationSpread,
+                    (s, v) => s with { ConstellationSpread = Math.Round(v, 2) }))
+            .ShowWhen(ctx, s => s.LyricComposition is Automatic or "constellation")));
+        page.Children.Add(Advanced(Card("Constellation links", null, "",
+                Slider(ctx, AppSettings.LinksMin, AppSettings.LinksMax, 0.01, SettingsCopy.Percent, s => s.ConstellationLinkOpacity,
+                    (s, v) => s with { ConstellationLinkOpacity = Math.Round(v, 2) }))
+            .ShowWhen(ctx, s => s.LyricComposition is Automatic or "constellation")));
+        page.Children.Add(Advanced(Card("Echo repeats", null, "",
+                Slider(ctx, AppSettings.RepeatsMin, AppSettings.RepeatsMax, 0.01, SettingsCopy.Percent, s => s.EchoStrength,
+                    (s, v) => s with { EchoStrength = Math.Round(v, 2) }))
+            .ShowWhen(ctx, s => s.LyricComposition is Automatic or "echo")));
+        // Remembered styles: a layout and colour kept for a song or an artist.
+        var memoryStart = page.Children.Count;
+        page.Children.Add(Card("Use remembered styles", "A layout and colour kept for a song or artist wins while it plays.", "",
+            Toggle(ctx, s => s.StyleMemoryEnabled, (s, v) => s with { StyleMemoryEnabled = v })));
+        AddMemory(page, ctx, Playing);
+        AdvancedFrom(page, memoryStart);
+
+        // ---- Text ----
+        Section(page, "Text");
         var typeface = Card("Typeface", null, "",
             Combo(ctx, SettingsCopy.FontChoices, s => s.FontChoice, (s, v) => s with { FontChoice = v }));
         ctx.OnRefresh(s =>
@@ -92,35 +91,53 @@ internal static class LyricStylePage
             typeface.Description = s.RandomizeLyricFonts ? $"{detail} {LyricStyleCopy.RandomisedTypeface}".Trim() : detail;
         });
         page.Children.Add(typeface);
-        page.Children.Add(Card("Font family", "Type to jump to a family installed on this PC.", null, FontList(ctx, installedFonts))
+        page.Children.Add(Indented(Card("Font family", "Type to jump to a family.", null, FontList(ctx, installedFonts)))
             .ShowWhen(ctx, s => s.FontChoice == "installed"));
+        // Floating has its own size (Floating lyrics, above).
+        page.Children.Add(Card("Lyric size", null, "",
+            Slider(ctx, 0.7, 1.5, 0.01, SettingsCopy.Percent, s => s.LyricScale, (s, v) => s with { LyricScale = Math.Round(v, 2) }))
+            .ShowWhen(ctx, s => !s.IsFloating));
 
-        // ---- Colours ----
-        Section(page, "Colours");
+        // Advanced text
+        page.Children.Add(Advanced(Card("Randomise lyric fonts", LyricStyleCopy.Randomise, "",
+            Toggle(ctx, s => s.RandomizeLyricFonts, (s, v) => s with { RandomizeLyricFonts = v }))));
+        var editorial = Card("Mix in a second typeface", LyricStyleCopy.EditorialTypography, "",
+            Toggle(ctx, s => s.EditorialTypography, (s, v) => s with { EditorialTypography = v }));
+        ctx.OnRefresh(s => editorial.Description = LyricStyleCopy.EditorialNote(SettingsCopy.Kind(s.LyricComposition)) is { } note
+            ? $"{LyricStyleCopy.EditorialTypography} {note}" : LyricStyleCopy.EditorialTypography);
+        page.Children.Add(Advanced(editorial));
+        page.Children.Add(Advanced(Indented(Card("How much", null, null,
+                Slider(ctx, 0, 1, 0.01, SettingsCopy.Percent, s => s.EditorialAmount, (s, v) => s with { EditorialAmount = Math.Round(v, 2) })))
+            .ShowWhen(ctx, s => s.EditorialTypography)));
+
+        // ---- Colour ----
+        Section(page, "Colour");
         var colour = Card("Colour", null, "",
             Combo(ctx, LyricStyleCopy.ColourChoices, s => s.ColourMode.RawValue(), (s, v) => s with { LyricColourMode = v }));
-        ctx.OnRefresh(s => colour.Description = $"{LyricStyleCopy.ColourDetail(s.ColourMode)} {LyricStyleCopy.ColourBacking}");
+        ctx.OnRefresh(s => colour.Description = LyricStyleCopy.ColourDetail(s.ColourMode));
         page.Children.Add(colour);
         page.Children.Add(RememberedNote(ctx, Playing, StyleAspect.Colour));
-        page.Children.Add(Indented(Card("Colour strength", null, null,
-            Slider(ctx, LyricColourOptions.StrengthMin, LyricColourOptions.StrengthMax, 0.01, SettingsCopy.Percent,
-                s => s.LyricColourStrength, (s, v) => s with { LyricColourStrength = Math.Round(v, 2) }, "Neutral", "Vivid"))));
-        page.Children.Add(Indented(Card("Colour speed", null, null,
-                Slider(ctx, LyricColourOptions.SpeedMin, LyricColourOptions.SpeedMax, 0.01, SettingsCopy.Percent,
-                    s => s.LyricColourSpeed, (s, v) => s with { LyricColourSpeed = Math.Round(v, 2) }, "Slow", "Lively")))
-            .ShowWhen(ctx, s => s.ColourMode.Drifts()));
         page.Children.Add(Indented(Card("Your colours", null, null, CustomColours(ctx)))
             .ShowWhen(ctx, s => s.ColourMode == LyricColourMode.CustomGradient));
+
+        // Advanced colour
+        page.Children.Add(Advanced(Card("Colour strength", LyricStyleCopy.ColourBacking, "",
+            Slider(ctx, LyricColourOptions.StrengthMin, LyricColourOptions.StrengthMax, 0.01, SettingsCopy.Percent,
+                s => s.LyricColourStrength, (s, v) => s with { LyricColourStrength = Math.Round(v, 2) }, "Neutral", "Vivid"))));
+        page.Children.Add(Advanced(Card("Colour speed", null, "",
+                Slider(ctx, LyricColourOptions.SpeedMin, LyricColourOptions.SpeedMax, 0.01, SettingsCopy.Percent,
+                    s => s.LyricColourSpeed, (s, v) => s with { LyricColourSpeed = Math.Round(v, 2) }, "Slow", "Lively"))
+            .ShowWhen(ctx, s => s.ColourMode.Drifts())));
         var highlight = Card("Highlight colour", null, "",
             Combo(ctx, SettingsCopy.HighlightModes, s => s.LyricHighlightMode, (s, v) => s with { LyricHighlightMode = v }));
         ctx.OnRefresh(s => highlight.Description = (SettingsCopy.HighlightModes.FirstOrDefault(c => c.Value == s.LyricHighlightMode)?.Detail ?? "")
-            + " Used for Cutout labels, tiles and Cascade’s held words.");
-        page.Children.Add(highlight);
-        page.Children.Add(Card("Your highlight colour", "The text on a tile always keeps at least 4.5:1 contrast.", null, HighlightPicker(ctx))
-            .ShowWhen(ctx, s => s.LyricHighlightMode == "custom"));
+            + " For Cutout labels, tiles and Cascade’s held words.");
+        page.Children.Add(Advanced(highlight));
+        page.Children.Add(Advanced(Indented(Card("Your highlight colour", "Text on a tile always keeps 4.5:1 contrast.", null, HighlightPicker(ctx)))
+            .ShowWhen(ctx, s => s.LyricHighlightMode == "custom")));
 
-        // ---- Word entrances ----
-        Section(page, "Word entrances");
+        // ---- Word motion ----
+        Section(page, "Word motion");
         var revealToggle = new ToggleSwitch { OnContent = "On", OffContent = "Off", MinWidth = 0 };
         var reveal = Card("Reveal sung words", LyricStyleCopy.RevealSungWords, "", revealToggle);
         ctx.OnRefresh(s =>
@@ -153,7 +170,7 @@ internal static class LyricStylePage
             entrance.SelectedIndex = AppSettings.WordArrivals.ToList().IndexOf(current);
             var parts = new List<string>
             {
-                s.LyricComposition == Automatic ? "These controls apply to layouts picked by Custom Mix." : "These controls apply to the selected layout.",
+                s.LyricComposition == Automatic ? "For the layouts Custom Mix picks." : "For the layout chosen above.",
             };
             if (EntranceSupport.Note(WordArrivals.Parse(current), SettingsCopy.Kind(s.LyricComposition), s.MixEntrances()) is { } note) parts.Add(note);
             if (reduceMotion()) parts.Add(SettingsCopy.ReduceMotionEntrances);
@@ -167,36 +184,31 @@ internal static class LyricStylePage
         page.Children.Add(entranceCard);
         page.Children.Add(Expander("Mixed entrances", "Each word takes one of the entrances ticked here.", "", MixList(ctx), expanded: true)
             .ShowWhen(ctx, s => s.EntranceForControls() == "mix"));
-        page.Children.Add(Card("Faint next-word preview", LyricStyleCopy.NextWordPreview, "",
-            Toggle(ctx, s => s.PreviewsNextWordForControls(), (s, v) => s.WithPreviewsNextWordForControls(v))));
-        page.Children.Add(Indented(Card("Preview lead", "How long before each word its faint preview appears.", null,
+        // Word symbols and action words (the Mac's ad5a6a6 and cba108f).
+        page.Children.Add(Card("Symbols beside listed words", "Love, fire, home… in English lines timed by word.", "",
+            Toggle(ctx, s => s.WordSymbolsEnabled, (s, v) => s with { WordSymbolsEnabled = v })));
+        page.Children.Add(Card("Animate action words", "Spin, fall, freeze… move as they are sung.", "",
+            Toggle(ctx, s => s.ActionWordsEnabled, (s, v) => s with { ActionWordsEnabled = v })));
+
+        // Advanced word motion
+        page.Children.Add(Advanced(Card("Faint next-word preview", LyricStyleCopy.NextWordPreview, "",
+            Toggle(ctx, s => s.PreviewsNextWordForControls(), (s, v) => s.WithPreviewsNextWordForControls(v)))));
+        page.Children.Add(Advanced(Indented(Card("Preview lead", "How long before each word its preview appears.", null,
                 Slider(ctx, AppSettings.PreviewLeadMin, AppSettings.PreviewLeadMax, 0.05, LyricStyleCopy.Seconds,
                     s => s.NextWordPreviewLead, (s, v) => s with { NextWordPreviewLead = Math.Round(v / 0.05) * 0.05 },
                     spoken: LyricStyleCopy.SpokenPreviewLead)))
-            .ShowWhen(ctx, s => s.PreviewsNextWordForControls()));
-
-        // ---- The layouts' own controls ----
-        Section(page, "Constellation").ShowWhen(ctx, s => s.LyricComposition is Automatic or "constellation" or "constellationEditorial");
-        page.Children.Add(Card("Spread", null, "",
-                Slider(ctx, AppSettings.SpreadMin, AppSettings.SpreadMax, 0.01, SettingsCopy.Percent, s => s.ConstellationSpread,
-                    (s, v) => s with { ConstellationSpread = Math.Round(v, 2) }))
-            .ShowWhen(ctx, s => s.LyricComposition is Automatic or "constellation" or "constellationEditorial"));
-        page.Children.Add(Card("Links", null, "",
-                Slider(ctx, AppSettings.LinksMin, AppSettings.LinksMax, 0.01, SettingsCopy.Percent, s => s.ConstellationLinkOpacity,
-                    (s, v) => s with { ConstellationLinkOpacity = Math.Round(v, 2) }))
-            .ShowWhen(ctx, s => s.LyricComposition is Automatic or "constellation" or "constellationEditorial"));
-        page.Children.Add(Caption("Used when Custom Mix picks Constellation.").ShowWhen(ctx, s => s.LyricComposition == Automatic));
-
-        Section(page, "Echo").ShowWhen(ctx, s => s.LyricComposition is Automatic or "echo");
-        page.Children.Add(Card("Repeats", null, "",
-                Slider(ctx, AppSettings.RepeatsMin, AppSettings.RepeatsMax, 0.01, SettingsCopy.Percent, s => s.EchoStrength,
-                    (s, v) => s with { EchoStrength = Math.Round(v, 2) }))
-            .ShowWhen(ctx, s => s.LyricComposition is Automatic or "echo"));
-        page.Children.Add(Caption("Used when Custom Mix picks Echo.").ShowWhen(ctx, s => s.LyricComposition == Automatic));
+            .ShowWhen(ctx, s => s.PreviewsNextWordForControls())));
+        page.Children.Add(Advanced(SettingsKit.Expander("Symbol words", "The words that take a symbol, and which.", "",
+            WordListEditor.Build(ctx, "word symbol list", s => s.WordSymbolsWords, (s, v) => s with { WordSymbolsWords = v },
+                WordAccents.DefaultSymbols, WordListEditor.SymbolChoices, "star"))));
+        page.Children.Add(Advanced(SettingsKit.Expander("Action words", "The words that move, and how.", "",
+            WordListEditor.Build(ctx, "action word list", s => s.ActionWordsWords, (s, v) => s with { ActionWordsWords = v },
+                WordAccents.DefaultActions.Select(pair => new KeyValuePair<string, string>(pair.Key, pair.Value.Name())).ToList(),
+                WordListEditor.ActionChoices, "spin"))));
 
         // ---- Instrumental breaks ----
         Section(page, "Instrumental breaks");
-        page.Children.Add(Card("Show a glowing orb during instrumental breaks", null, "",
+        page.Children.Add(Card("Glowing orb during breaks", null, "",
             Toggle(ctx, s => s.ShowInterludes, (s, v) => s with { ShowInterludes = v })));
         // The orb's style (the Mac's 13b8ed6): thinking-orbs' nine states, or Mix, with a live 64 pt preview.
         var orbPreview = new OrbPreview(() => ctx.Current.ThinkingOrbStyle, reduceMotion);
@@ -213,30 +225,14 @@ internal static class LyricStylePage
         var orbControls = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12 };
         orbControls.Children.Add(orbPreview);
         orbControls.Children.Add(orbPicker);
-        page.Children.Add(Card("Orb style", "How the orb moves while the music plays on. Mix picks a different one for each break.", "",
-            orbControls).ShowWhen(ctx, s => s.ShowInterludes));
+        page.Children.Add(Indented(Card("Orb style", "Mix picks a different one for each break.", null,
+            orbControls)).ShowWhen(ctx, s => s.ShowInterludes));
 
-        // ---- Word symbols and action words (the Mac's ad5a6a6 and cba108f) ----
-        Section(page, "Word symbols");
-        page.Children.Add(Card("Show symbols beside listed words", "A small symbol beside words like love, fire or home, in English lines timed by word.", "",
-            Toggle(ctx, s => s.WordSymbolsEnabled, (s, v) => s with { WordSymbolsEnabled = v })));
-        page.Children.Add(SettingsKit.Expander("Word symbol list", "The words that take a symbol, and which.", null,
-            WordListEditor.Build(ctx, "word symbol list", s => s.WordSymbolsWords, (s, v) => s with { WordSymbolsWords = v },
-                WordAccents.DefaultSymbols, WordListEditor.SymbolChoices, "star")));
-
-        Section(page, "Action words");
-        page.Children.Add(Card("Animate listed action words", "Words like spin, fall or freeze move as they are sung, in English lines timed by word.", "",
-            Toggle(ctx, s => s.ActionWordsEnabled, (s, v) => s with { ActionWordsEnabled = v })));
-        page.Children.Add(SettingsKit.Expander("Action word list", "The words that move, and how.", null,
-            WordListEditor.Build(ctx, "action word list", s => s.ActionWordsWords, (s, v) => s with { ActionWordsWords = v },
-                WordAccents.DefaultActions.Select(pair => new KeyValuePair<string, string>(pair.Key, pair.Value.Name())).ToList(),
-                WordListEditor.ActionChoices, "spin")));
-
-        // ---- Remember a style ----
-        Section(page, "Remember a style");
-        page.Children.Add(Card("Use remembered styles", "A layout and text colour kept for a song or an artist wins while it plays.", "",
-            Toggle(ctx, s => s.StyleMemoryEnabled, (s, v) => s with { StyleMemoryEnabled = v })));
-        AddMemory(page, ctx, Playing);
+        // Advanced instrumental breaks (moved from Timing: it decides when a break is shown).
+        var pauses = Card("Treat long pauses as breaks", null, "",
+            Toggle(ctx, s => s.RepairQQGaps, (s, v) => s with { RepairQQGaps = v }));
+        ctx.OnRefresh(s => pauses.Description = SettingsCopy.PauseCaption(s.ShowInterludes));
+        page.Children.Add(Advanced(pauses));
         return page;
     }
 

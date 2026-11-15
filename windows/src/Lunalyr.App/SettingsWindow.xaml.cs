@@ -9,8 +9,7 @@ using Microsoft.UI.Xaml.Controls;
 namespace Lunalyr.App;
 
 /// <summary>
-/// The settings window: Mica, a NavigationView with the Mac's pages (grouped Look, Words and App as the Mac's sidebar
-/// is), each built in code on first visit from <see cref="SettingsKit"/> rows that write to the settings store, which the
+/// The settings window: Mica, a NavigationView with seven pages (the owner's reorganisation, 15 Nov 2026), each built in code on first visit from <see cref="SettingsKit"/> rows that write to the settings store, which the
 /// running wallpaper follows at once. Values are set from code (no runtime data binding, which Native AOT would trim).
 /// </summary>
 public sealed partial class SettingsWindow : Window
@@ -46,33 +45,46 @@ public sealed partial class SettingsWindow : Window
         // The first opening of a launch builds its page behind the glass logo (SettingsWindow.Loader.cs).
         if (!StartLoader(page))
         {
-            ShowPage(page ?? "Lyric style");
+            ShowPage(page ?? "Lyrics");
             RefreshStatus();
         }
         if (_host.SettingsCapturePath is { } capture) CaptureSettings(capture);
     }
 
-    /// <summary>Shows a page by its title or a short name ("lyric-style", "players"…).</summary>
+    /// <summary>
+    /// The pages' old names and other short names, for links made before the Settings reorganisation (15 Nov 2026):
+    /// <c>--settings-page</c>, the tray, the welcome and onboarding.
+    /// </summary>
+    private static readonly Dictionary<string, string> PageAliases = new()
+    {
+        ["lyricstyle"] = "Lyrics", ["style"] = "Lyrics",
+        ["covers"] = "Wallpaper", ["animatedcovers"] = "Wallpaper",
+        ["timing"] = "Lyrics & timing", ["sources"] = "Lyrics & timing", ["lyricsources"] = "Lyrics & timing",
+        ["readings"] = "Readings & translations", ["romanisation"] = "Readings & translations", ["translations"] = "Readings & translations",
+        ["musicplayers"] = "General", ["players"] = "General", ["player"] = "General",
+        ["discord"] = "Sharing", ["lyriccard"] = "Sharing", ["extras"] = "Sharing",
+    };
+
+    /// <summary>Shows a page by its title, an old title ("Lyric style", "Covers") or a short name ("lyric-style", "players"…).</summary>
     internal void ShowPage(string page)
     {
         var wanted = Normalise(page);
         if (wanted.Contains("floating", StringComparison.Ordinal))
         {
-            // The floating lyrics live on Lyric style: open it there, scrolled to their section.
-            ShowPage("Lyric style");
+            // The floating lyrics live on Lyrics: open it there, scrolled to their section.
+            ShowPage("Lyrics");
             if (PageHost.Content is Panel host && host.Children.OfType<FrameworkElement>().FirstOrDefault(e => e.Tag as string == FloatingLyricsSection.SectionTag) is { } section)
                 DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
                     section.StartBringIntoView(new BringIntoViewOptions { AnimationDesired = false, VerticalAlignmentRatio = 0 }));
             return;
         }
-        foreach (var item in Nav.MenuItems.Concat(Nav.FooterMenuItems).OfType<NavigationViewItem>())
-        {
-            if (item.Tag is string tag && wanted.Length > 0 && Normalise(tag).Contains(wanted, StringComparison.Ordinal))
-            {
-                Nav.SelectedItem = item;
-                return;
-            }
-        }
+        if (PageAliases.TryGetValue(wanted, out var alias)) wanted = Normalise(alias);
+        var items = Nav.MenuItems.Concat(Nav.FooterMenuItems).OfType<NavigationViewItem>().ToList();
+        var item = items.FirstOrDefault(i => i.Tag is string tag && Normalise(tag) == wanted)
+            ?? items.FirstOrDefault(i => i.Tag is string tag && wanted.Length > 0 && Normalise(tag).Contains(wanted, StringComparison.Ordinal));
+        // A name nothing matches still opens a page.
+        if (item is null && Nav.SelectedItem is null) item = items.FirstOrDefault();
+        if (item is not null) Nav.SelectedItem = item;
 
         static string Normalise(string text) => new([.. text.ToLowerInvariant().Where(char.IsLetter)]);
     }
@@ -132,7 +144,7 @@ public sealed partial class SettingsWindow : Window
         AboutPanel.Visibility = about ? Visibility.Visible : Visibility.Collapsed;
         PageHost.Visibility = about ? Visibility.Collapsed : Visibility.Visible;
         PageHost.Content = about ? null : PageFor(page);
-        _preview?.SetActive(page == "Lyric style");
+        _preview?.SetActive(page == "Lyrics");
         Scroller.ChangeView(null, 0, null, disableAnimation: true);
         if (about) RefreshStatus();
         _host.Log.App.Debug($"Settings page: {page}.");
@@ -162,15 +174,14 @@ public sealed partial class SettingsWindow : Window
     private UIElement BuildPage(string page) =>
         page switch
         {
-            "General" => GeneralPage.Build(_ctx, _host.Version, () => _host.ThemeOverride, _host.DiscordHooks, _host.Packaging,
-                _host.Mirroring),
-            "Lyric style" => LyricStylePage.Build(_ctx, InstalledFonts.Families, () => _host.ReduceMotion, Preview(),
+            "Lyrics" => LyricStylePage.Build(_ctx, InstalledFonts.Families, () => _host.ReduceMotion, Preview(),
                 new FloatingHooks(AppHost.FloatingDisplays, () => _host.FloatingEditing, _host.SetFloatingEditing), () => _host.Controller),
-            "Readings" => ReadingsPage.Build(_ctx, () => _host.Controller, ChooseReadingFileAsync),
-            "Timing" => TimingPage.Build(_ctx, () => _host.Controller, ChooseFolderAsync, new TimingTools(_host.ToggleTapSync, ChooseLyricsFileAsync)),
-            "Wallpaper" => WallpaperPage.Build(_ctx, Importer(), ChooseWallpaperFileAsync, () => _host.ReduceMotion),
-            "Covers" => CoversPage.Build(_ctx, () => _host.Controller, () => _host.ReduceMotion),
-            "Music players" => PlayersPage.Build(_ctx, () => _host.Controller, () => _host.SharingPlayers()),
+            "Wallpaper" => WallpaperPage.Build(_ctx, Importer(), ChooseWallpaperFileAsync, () => _host.ReduceMotion, () => _host.Controller),
+            "Lyrics & timing" => TimingPage.Build(_ctx, () => _host.Controller, ChooseFolderAsync, new TimingTools(_host.ToggleTapSync, ChooseLyricsFileAsync)),
+            "Readings & translations" => ReadingsPage.Build(_ctx, () => _host.Controller, ChooseReadingFileAsync),
+            "Sharing" => SharingPage.Build(_ctx, _host.DiscordHooks),
+            "General" => GeneralPage.Build(_ctx, _host.Version, () => _host.ThemeOverride, () => _host.Controller, () => _host.SharingPlayers(),
+                _host.Packaging, _host.Mirroring),
             "Performance" => PerformancePage.Build(_ctx, () => _host.Controller),
             _ => new TextBlock { Text = page },
         };

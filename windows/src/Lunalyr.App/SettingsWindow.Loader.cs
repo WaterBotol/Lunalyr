@@ -75,7 +75,7 @@ public sealed partial class SettingsWindow
         // Once the logo has been drawn, Settings is built under it, then the logo fades.
         loader.Loaded += (_, _) => After(TimeSpan.FromMilliseconds(50), () =>
         {
-            ShowPage(page ?? "Lyric style");
+            ShowPage(page ?? "Lyrics");
             RefreshStatus();
             DispatcherQueue.TryEnqueue(DispatcherQueuePriority.Low, () =>
             {

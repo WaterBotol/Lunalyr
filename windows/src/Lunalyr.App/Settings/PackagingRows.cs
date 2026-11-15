@@ -95,9 +95,9 @@ internal static class PackagingRows
         ctx.OnRefresh(_ => Show());
         page.Children.Add(card);
         page.Children.Add(progress);
-        page.Children.Add(Card("Check for updates automatically",
+        page.Children.Add(SettingsGroups.Advanced(Card("Check for updates automatically",
             "Once a day. A new version downloads in the background and installs only when you choose Restart and update.", "",
-            Toggle(ctx, s => s.AutomaticUpdateChecks, (s, v) => s with { AutomaticUpdateChecks = v })));
+            Toggle(ctx, s => s.AutomaticUpdateChecks, (s, v) => s with { AutomaticUpdateChecks = v }))));
     }
 
     private static void Announce(UIElement source, string text)

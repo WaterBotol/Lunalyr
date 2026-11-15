@@ -1,9 +1,11 @@
+using Lunalyr.Shell;
 using Lunalyr.Shell.Settings;
 using Lunalyr.Shell.Wallpaper;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
+using static Lunalyr.App.Settings.SettingsGroups;
 using static Lunalyr.App.Settings.SettingsKit;
 
 namespace Lunalyr.App.Settings;
@@ -18,7 +20,9 @@ internal static partial class WallpaperPage
 {
     /// <param name="chooseFile">Windows' file picker for a picture or video; null when cancelled.</param>
     /// <param name="reduceMotion">Windows' "Animation effects" are off.</param>
-    public static StackPanel Build(SettingsContext ctx, WallpaperImporter importer, Func<Task<string?>> chooseFile, Func<bool> reduceMotion)
+    /// <param name="controller">For the animated covers in Custom Mix (once the Covers page).</param>
+    public static StackPanel Build(SettingsContext ctx, WallpaperImporter importer, Func<Task<string?>> chooseFile, Func<bool> reduceMotion,
+                                   Func<AppController?> controller)
     {
         var page = Page();
 
@@ -38,7 +42,7 @@ internal static partial class WallpaperPage
         page.Children.Add(importNote);
 
         // ---- The type's own section ----
-        page.Children.Add(MatchSection(ctx).ShowWhen(ctx, s => s.BackgroundMode == "auto"));
+        page.Children.Add(MatchSection(ctx, controller, reduceMotion).ShowWhen(ctx, s => s.BackgroundMode == "auto"));
         page.Children.Add(EffectsSection(ctx, "GPU effects").ShowWhen(ctx, s => s.BackgroundMode == "shader"));
         page.Children.Add(PatternsSection(ctx, "Line patterns").ShowWhen(ctx, s => s.BackgroundMode == "pattern"));
         var visualiser = new StackPanel { Spacing = 4 }.ShowWhen(ctx, s => s.BackgroundMode == "visualizer");
@@ -71,36 +75,34 @@ internal static partial class WallpaperPage
         ctx.Detached += () => importer.Changed -= ShowImport;
         ctx.OnRefresh(_ => ShowImport());
 
-        // ---- Legibility ----
-        Section(page, "Legibility");
-        var backing = Card("Automatic text backing", null, "",
+        // ---- Readability: darkening up front; text backing and the adjustments every drawn type shares in Advanced ----
+        Section(page, "Readability");
+        // Not for Your wallpaper: nothing of Lunalyr's is drawn to adjust.
+        page.Children.Add(Card("Darkening", null, "\uE793",
+            Slider(ctx, AppSettings.ScrimMin, AppSettings.ScrimMax, 0.01, SettingsCopy.Percent, s => s.ScrimStrength, (s, v) => s with { ScrimStrength = v }))
+            .ShowWhen(ctx, s => s.BackgroundMode != "desktop"));
+        var backing = Card("Automatic text backing", null, "\uE7B3",
             Toggle(ctx, s => s.TextBackingAutomatic, (s, v) => s with { TextBackingAutomatic = v }));
         ctx.OnRefresh(s => backing.Description = SettingsCopy.BackingCaption(s.BackgroundMode == "desktop", s.TextBackingAutomatic));
-        page.Children.Add(backing);
-        page.Children.Add(Card("Text backing", null, "",
-            Slider(ctx, 0, 1, 0.01, SettingsCopy.PercentOrNone, s => s.TextBacking, (s, v) => s with { TextBacking = v }))
-            .ShowWhen(ctx, s => !s.TextBackingAutomatic));
-
-        // ---- Adjustments (not for Your wallpaper: nothing of Lunalyr's is drawn to adjust) ----
-        var adjustments = new StackPanel { Spacing = 4 }.ShowWhen(ctx, s => s.BackgroundMode != "desktop");
-        Section(adjustments, "Adjustments");
-        adjustments.Children.Add(Card("Motion speed", null, "",
+        page.Children.Add(Advanced(backing));
+        page.Children.Add(Advanced(Indented(Card("Text backing", null, null,
+            Slider(ctx, 0, 1, 0.01, SettingsCopy.PercentOrNone, s => s.TextBacking, (s, v) => s with { TextBacking = v })))
+            .ShowWhen(ctx, s => !s.TextBackingAutomatic)));
+        page.Children.Add(Advanced(Card("Motion speed", null, "\uEC4A",
             Slider(ctx, AppSettings.SpeedMin, AppSettings.SpeedMax, 0.05, SettingsCopy.Multiplier, s => s.EffectSpeed, (s, v) => s with { EffectSpeed = v }))
-            .ShowWhen(ctx, s => s.BackgroundMode is not ("custom" or "musicVideo")));
-        adjustments.Children.Add(Card("Colour richness", null, "",
+            .ShowWhen(ctx, s => s.BackgroundMode is not ("custom" or "musicVideo" or "desktop"))));
+        page.Children.Add(Advanced(Card("Colour richness", null, "\uE790",
             Slider(ctx, AppSettings.VividnessMin, AppSettings.VividnessMax, 0.01, SettingsCopy.Percent, s => s.Vividness, (s, v) => s with { Vividness = v }))
-            .ShowWhen(ctx, s => s.BackgroundMode is not ("custom" or "musicVideo")));
-        adjustments.Children.Add(Card("Darkening", null, "",
-            Slider(ctx, AppSettings.ScrimMin, AppSettings.ScrimMax, 0.01, SettingsCopy.Percent, s => s.ScrimStrength, (s, v) => s with { ScrimStrength = v })));
-        adjustments.Children.Add(Card("Pattern visibility", null, "",
+            .ShowWhen(ctx, s => s.BackgroundMode is not ("custom" or "musicVideo" or "desktop"))));
+        page.Children.Add(Advanced(Card("Pattern visibility", null, "\uE76D",
             Slider(ctx, 0, 1, 0.01, SettingsCopy.Percent, s => s.PatternOpacity, (s, v) => s with { PatternOpacity = v }))
-            .ShowWhen(ctx, s => s.BackgroundMode == "pattern"));
-        var reset = Button("Reset adjustments", () => ctx.Update(s => s.WithDefaultAdjustments()));
+            .ShowWhen(ctx, s => s.BackgroundMode == "pattern")));
+        var reset = Button("Reset", () => ctx.Update(s => s.WithDefaultAdjustments()), "Reset adjustments");
         ToolTipService.SetToolTip(reset, SettingsCopy.ResetAdjustmentsHelp);
         AutomationProperties.SetHelpText(reset, SettingsCopy.ResetAdjustmentsHelp);
         ctx.OnRefresh(s => reset.IsEnabled = !s.AdjustmentsAreDefault);
-        adjustments.Children.Add(new Border { Style = Resource<Style>("Card"), Child = reset });
-        page.Children.Add(adjustments);
+        page.Children.Add(Advanced(Card("Reset adjustments", SettingsCopy.ResetAdjustmentsHelp, "", reset)
+            .ShowWhen(ctx, s => s.BackgroundMode != "desktop")));
         return page;
     }
 
@@ -164,15 +166,19 @@ internal static partial class WallpaperPage
         return grid;
     }
 
-    private static StackPanel MatchSection(SettingsContext ctx)
+    /// <summary>Custom Mix: which effect and pattern it may pick (Advanced), and the animated covers it plays.</summary>
+    private static StackPanel MatchSection(SettingsContext ctx, Func<AppController?> controller, Func<bool> reduceMotion)
     {
         var section = new StackPanel { Spacing = 4 };
         Section(section, "Custom Mix");
+        var start = section.Children.Count;
         section.Children.Add(EffectMenu(ctx));
         AddEffectOptions(section, ctx);
         section.Children.Add(PatternMenu(ctx));
         AddPatternOptions(section, ctx);
         section.Children.Add(Caption(SettingsCopy.MatchTheMusicPicks));
+        AdvancedFrom(section, start);
+        CoversRows.Add(section, ctx, controller, reduceMotion);
         return section;
     }
 

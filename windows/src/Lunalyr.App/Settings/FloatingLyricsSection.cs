@@ -48,23 +48,8 @@ internal static class FloatingLyricsSection
         section.Margin = new Thickness(0, 18, 0, 0);
         Section(section, "Floating lyrics");
 
-        // Size: the presets, and the text size itself.
-        var sizes = new RadioButtons { MaxColumns = 4 };
-        foreach (var (title, points) in AppSettings.FloatingSizePresets) sizes.Items.Add(new RadioButton { Content = title, Tag = points });
-        ctx.OnRefresh(s =>
-        {
-            var index = -1;
-            for (var i = 0; i < AppSettings.FloatingSizePresets.Count; i++)
-                if (Math.Abs(AppSettings.FloatingSizePresets[i].Points - s.FloatingTextSize) < 0.01) index = i;
-            sizes.SelectedIndex = index;
-        });
-        sizes.SelectionChanged += (_, _) =>
-        {
-            if (sizes.SelectedItem is RadioButton { Tag: double points }) ctx.Update(s => s.WithFloatingTextSize(points));
-        };
-        var sizeCard = Card("Size", null, "", sizes);
-        ctx.OnRefresh(s => sizeCard.Description = FloatingCopy.SizeName(s.FloatingTextSize));
-        section.Children.Add(sizeCard);
+        // Size: the text size itself. The Small / Medium / Large buttons set the same value and were cut in the
+        // Settings reorganisation (15 Nov 2026).
         section.Children.Add(Card("Text size", null, "", Slider(ctx, AppSettings.FloatingTextSizeMin, AppSettings.FloatingTextSizeMax, 1,
             FloatingCopy.Points, s => s.FloatingTextSize, (s, v) => s.WithFloatingTextSize(Math.Round(v)))));
         section.Children.Add(Card("Shade behind lyrics", FloatingCopy.ShadeCaption, "", Slider(ctx, 0, 1, 0.01, SettingsCopy.Percent,

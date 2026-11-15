@@ -19,17 +19,13 @@
             </StackPanel>
         </Grid>
         <NavigationView Grid.Row="1" x:Name="Nav" IsBackButtonVisible="Collapsed" IsSettingsVisible="False"
-                        PaneDisplayMode="Left" OpenPaneLength="240" SelectionChanged="Nav_SelectionChanged">
+                        PaneDisplayMode="Left" OpenPaneLength="280" SelectionChanged="Nav_SelectionChanged">
             <NavigationView.MenuItems>
-                <NavigationViewItemHeader Content="Look" />
-                <NavigationViewItem Content="Lyric style" Tag="Lyric style" AutomationProperties.AutomationId="LyricStyle"><NavigationViewItem.Icon><FontIcon Glyph="&#xE8D2;" /></NavigationViewItem.Icon></NavigationViewItem>
+                <NavigationViewItem Content="Lyrics" Tag="Lyrics" AutomationProperties.AutomationId="Lyrics"><NavigationViewItem.Icon><FontIcon Glyph="&#xE8D2;" /></NavigationViewItem.Icon></NavigationViewItem>
                 <NavigationViewItem Content="Wallpaper" Tag="Wallpaper" AutomationProperties.AutomationId="Wallpaper"><NavigationViewItem.Icon><FontIcon Glyph="&#xE771;" /></NavigationViewItem.Icon></NavigationViewItem>
-                <NavigationViewItem Content="Covers" Tag="Covers" AutomationProperties.AutomationId="Covers"><NavigationViewItem.Icon><FontIcon Glyph="&#xE93C;" /></NavigationViewItem.Icon></NavigationViewItem>
-                <NavigationViewItemHeader Content="Words" />
-                <NavigationViewItem Content="Timing" Tag="Timing" AutomationProperties.AutomationId="Timing"><NavigationViewItem.Icon><FontIcon Glyph="&#xE916;" /></NavigationViewItem.Icon></NavigationViewItem>
-                <NavigationViewItem Content="Readings" Tag="Readings" AutomationProperties.AutomationId="Readings"><NavigationViewItem.Icon><FontIcon Glyph="&#xF2B7;" /></NavigationViewItem.Icon></NavigationViewItem>
-                <NavigationViewItemHeader Content="App" />
-                <NavigationViewItem Content="Music players" Tag="Music players" AutomationProperties.AutomationId="MusicPlayers"><NavigationViewItem.Icon><FontIcon Glyph="&#xE8D6;" /></NavigationViewItem.Icon></NavigationViewItem>
+                <NavigationViewItem Content="Lyrics &amp; timing" Tag="Lyrics &amp; timing" AutomationProperties.AutomationId="LyricsTiming"><NavigationViewItem.Icon><FontIcon Glyph="&#xE916;" /></NavigationViewItem.Icon></NavigationViewItem>
+                <NavigationViewItem Content="Readings &amp; translations" Tag="Readings &amp; translations" AutomationProperties.AutomationId="ReadingsTranslations"><NavigationViewItem.Icon><FontIcon Glyph="&#xF2B7;" /></NavigationViewItem.Icon></NavigationViewItem>
+                <NavigationViewItem Content="Sharing" Tag="Sharing" AutomationProperties.AutomationId="Sharing"><NavigationViewItem.Icon><FontIcon Glyph="&#xE72D;" /></NavigationViewItem.Icon></NavigationViewItem>
                 <NavigationViewItem Content="General" Tag="General" AutomationProperties.AutomationId="General"><NavigationViewItem.Icon><FontIcon Glyph="&#xE713;" /></NavigationViewItem.Icon></NavigationViewItem>
                 <NavigationViewItem Content="Performance" Tag="Performance" AutomationProperties.AutomationId="Performance"><NavigationViewItem.Icon><FontIcon Glyph="&#xEC4A;" /></NavigationViewItem.Icon></NavigationViewItem>
             </NavigationView.MenuItems>

@@ -31,7 +31,7 @@ internal static class LyricsOnScreenSection
     {
         var card = Card(LyricsOnScreenCopy.HideWhileMirroring, null, "\uE7F4",
             Toggle(ctx, s => s.HidesWhileMirroring, (s, v) => s with { HideLyricsWhileMirroring = v }));
-        page.Children.Add(card);
+        page.Children.Add(SettingsGroups.Advanced(card));
         var anyway = Button(LunalyrExtras.ShowLyricsAnywayTitle, () => hooks?.OnExtrasThread(e => e.ShowLyrics()));
         ToolTipService.SetToolTip(anyway, "Shows the lyrics on every display until mirroring ends");
         var anywayRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 4) };

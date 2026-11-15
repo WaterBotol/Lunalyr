@@ -10,6 +10,7 @@ using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media.Imaging;
+using static Lunalyr.App.Settings.SettingsGroups;
 using static Lunalyr.App.Settings.SettingsKit;
 
 namespace Lunalyr.App.Settings;
@@ -56,9 +57,9 @@ internal static partial class WallpaperPage
     static partial void AddMusicVideoSections(StackPanel sections, SettingsContext ctx, ref bool added)
     {
         added = true;
-        Section(sections, "Music video");
         if (MusicVideoUi.Controller is not { } video)
         {
+            Section(sections, "Music video");
             sections.Children.Add(Caption("Music video starts once Lunalyr is following now playing."));
             return;
         }
@@ -74,26 +75,8 @@ internal static partial class WallpaperPage
         };
         sections.Children.Add(open);
 
-        // ---- Search YouTube for videos, and the key it needs ----
-        var online = Card("Search YouTube for videos", PrivacyCaption, "",
-            Toggle(ctx, s => s.MusicVideoOnline, (s, v) => s with { MusicVideoOnline = v }));
-        sections.Children.Add(online);
-        sections.Children.Add(Caption(PrivacyDetail));
-        sections.Children.Add(Card("Search YouTube with", null, "",
-            Combo(ctx, [new SettingsChoice("site", SiteChoice), new SettingsChoice("apiKey", KeyChoice)],
-                s => s.MusicVideoSearch, (s, v) => s with { MusicVideoSearch = v }, width: 240)));
-        sections.Children.Add(Caption(SearchWithDetail));
-        sections.Children.Add(KeyRow(ctx));
-        if (MusicVideoUi.YouTubeOffReason is { } off)
-            sections.Children.Add(Caption($"YouTube is off for this run ({off}): nothing is looked up or loaded from YouTube. Video files still play."));
-
-        // ---- Without a video ----
-        var fallbacks = AppSettings.MusicVideoFallbacks
-            .Select(v => new SettingsChoice(v, SettingsCopy.WallpaperTypes.First(t => t.Value == v).Title)).ToList();
-        sections.Children.Add(Card("Without a video", "What the wallpaper shows while the song has no video.", "",
-            Combo(ctx, fallbacks, s => s.MusicVideoFallback, (s, v) => s with { MusicVideoFallback = v }, width: 220)));
-
         // ---- This song's video: a file, a link, or a pick from YouTube's results ----
+        Section(sections, "This song’s video");
         var fileName = Caption("");
         var choose = Button("Choose…", () => _ = ChooseFileAsync(sections, video), name: "Choose a video file for this song");
         var clearFile = Button("Clear", video.ClearVideoFile, name: "Stop using the video file for this song");
@@ -101,8 +84,8 @@ internal static partial class WallpaperPage
         fileButtons.Children.Add(choose);
         fileButtons.Children.Add(clearFile);
         var fileCard = Card("Video file", "A music video on this PC for the playing song; tried first, and nothing is sent anywhere.", "", fileButtons);
-        sections.Children.Add(fileCard);
-        sections.Children.Add(fileName);
+        sections.Children.Add(Advanced(fileCard));
+        sections.Children.Add(Advanced(fileName));
 
         var link = new TextBox { PlaceholderText = "Paste a link for this song", Width = 260 };
         AutomationProperties.SetName(link, "YouTube link for this song");
@@ -162,26 +145,47 @@ internal static partial class WallpaperPage
         var timing = new StackPanel { Spacing = 4, HorizontalAlignment = HorizontalAlignment.Right };
         timing.Children.Add(nudges);
         timing.Children.Add(originRow);
-        sections.Children.Add(Card("Video timing", "For this song: how far into the video the song begins. Set it with Tap to sync, Align or the nudges.", "", timing));
+        sections.Children.Add(Advanced(Card("Video timing", "For this song: how far into the video the song begins. Set it with Tap to sync, Align or the nudges.", "", timing)));
         var tapNote = Caption("");
         AutomationProperties.SetLiveSetting(tapNote, AutomationLiveSetting.Polite);
-        sections.Children.Add(tapNote);
-        sections.Children.Add(Caption(TimingDetail));
+        sections.Children.Add(Advanced(tapNote));
+        sections.Children.Add(Advanced(Caption(TimingDetail)));
 
-        // ---- Look: fill or whole for each source (the Mac's framingChoice), then dimming and blur ----
+        // ---- Look: dimming, then fill or whole (the Mac's framingChoice) and blur ----
+        Section(sections, "Look");
         var framings = MusicVideoFramings.All.Select(f => new SettingsChoice(f.Value(), f.Title())).ToList();
-        sections.Children.Add(Card("YouTube videos", null, "",
-            Combo(ctx, framings, s => s.MusicVideoFraming, (s, v) => s with { MusicVideoFraming = v }, width: 220)));
-        sections.Children.Add(Card("Video files", null, "",
-            Combo(ctx, framings, s => s.LibraryVideoFraming, (s, v) => s with { LibraryVideoFraming = v }, width: 220)));
-        sections.Children.Add(Caption(FramingCaption));
-        sections.Children.Add(Caption(FramingDetail));
         sections.Children.Add(Card("Video dimming", null, "",
             Slider(ctx, 0, AppSettings.MusicVideoDimMax, 0.01, SettingsCopy.Percent, s => s.MusicVideoDim, (s, v) => s with { MusicVideoDim = v })));
-        sections.Children.Add(Card("Video blur", null, "",
+        // One menu for both sources (the Settings reorganisation): it shows the YouTube setting and sets both. Nothing is
+        // written until it is changed, so different values kept from before stay as they are.
+        sections.Children.Add(Advanced(Card("Video framing", "YouTube videos and your own video files.", "",
+            Combo(ctx, framings, s => s.MusicVideoFraming, (s, v) => s with { MusicVideoFraming = v, LibraryVideoFraming = v }, width: 220))));
+        sections.Children.Add(Advanced(Caption(FramingCaption)));
+        sections.Children.Add(Advanced(Caption(FramingDetail)));
+        sections.Children.Add(Advanced(Card("Video blur", null, "",
             Slider(ctx, 0, AppSettings.MusicVideoBlurMax, 0.5, v => v.ToString("0", CultureInfo.InvariantCulture) + " pt",
-                s => s.MusicVideoBlur, (s, v) => s with { MusicVideoBlur = v })));
-        sections.Children.Add(Caption("Video files play on every display; a YouTube video on the main display only, the others show the album’s colours."));
+                s => s.MusicVideoBlur, (s, v) => s with { MusicVideoBlur = v }))));
+        sections.Children.Add(Advanced(Caption("Video files play on every display; a YouTube video on the main display only, the others show the album’s colours.")));
+
+        // ---- Finding videos: Search YouTube, its key, and what shows without a video ----
+        Section(sections, "Finding videos");
+        var online = Card("Search YouTube for videos", PrivacyCaption, "",
+            Toggle(ctx, s => s.MusicVideoOnline, (s, v) => s with { MusicVideoOnline = v }));
+        sections.Children.Add(online);
+        sections.Children.Add(Advanced(Caption(PrivacyDetail)));
+        sections.Children.Add(Advanced(Card("Search YouTube with", null, "",
+            Combo(ctx, [new SettingsChoice("site", SiteChoice), new SettingsChoice("apiKey", KeyChoice)],
+                s => s.MusicVideoSearch, (s, v) => s with { MusicVideoSearch = v }, width: 240))));
+        sections.Children.Add(Advanced(Caption(SearchWithDetail)));
+        sections.Children.Add(Advanced(KeyRow(ctx)));
+        if (MusicVideoUi.YouTubeOffReason is { } off)
+            sections.Children.Add(Advanced(Caption($"YouTube is off for this run ({off}): nothing is looked up or loaded from YouTube. Video files still play.")));
+
+        // ---- Without a video ----
+        var fallbacks = AppSettings.MusicVideoFallbacks
+            .Select(v => new SettingsChoice(v, SettingsCopy.WallpaperTypes.First(t => t.Value == v).Title)).ToList();
+        sections.Children.Add(Advanced(Card("Without a video", "What the wallpaper shows while the song has no video.", "",
+            Combo(ctx, fallbacks, s => s.MusicVideoFallback, (s, v) => s with { MusicVideoFallback = v }, width: 220))));
 
         Button Nudge(string text, double delta, string name, string help)
         {

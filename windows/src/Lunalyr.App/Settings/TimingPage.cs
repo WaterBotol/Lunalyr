@@ -5,13 +5,14 @@ using Lunalyr.Shell.Settings;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
+using static Lunalyr.App.Settings.SettingsGroups;
 using static Lunalyr.App.Settings.SettingsKit;
 
 namespace Lunalyr.App.Settings;
 
 /// <summary>
-/// Timing (the Mac's "Timing &amp; sources"): this song's offset, which services are asked and in what order, the local
-/// lyric folder, and timing for every song.
+/// Lyrics &amp; timing (once Timing; the Mac's "Timing &amp; sources"): this song's offset, Tap to sync and other lyrics up
+/// front; in Advanced, which services are asked and in what order, the local lyric folder, and timing for every song.
 /// </summary>
 internal static class TimingPage
 {
@@ -79,40 +80,35 @@ internal static class TimingPage
         // ---- Find lyrics ----
         LyricToolsRows.AddFindLyrics(page, ctx, controller, tools);
 
-        // ---- Without synced lyrics ----
+        // ---- Without synced lyrics (Advanced: what most people never change) ----
+        var withoutStart = page.Children.Count;
         LyricToolsRows.AddWithoutSyncedLyrics(page, ctx);
+        AdvancedFrom(page, withoutStart);
 
-        // ---- Selection ----
-        Section(page, "Selection");
+        // ---- Sources: which services are asked, in what order, how the match is chosen, the local folder ----
+        Section(page, "Sources");
+        // Who receives what stays in view (a disclosure); the controls are in Advanced.
+        page.Children.Add(Caption("Online services receive song metadata. Apple Music’s lyrics on this PC stay on this PC. New sources are available to enable here; existing choices are preserved."));
+        var sourcesStart = page.Children.Count;
+        page.Children.Add(SourceList(ctx));
         var mode = Card("Choose by", null, "",
             Combo(ctx, SettingsCopy.MatchModes, s => s.LyricMatchMode, (s, v) => s with { LyricMatchMode = v }, width: 200));
         ctx.OnRefresh(s => mode.Description = SettingsCopy.MatchModes.FirstOrDefault(c => c.Value == s.LyricMatchMode)?.Detail ?? "");
         page.Children.Add(mode);
         page.Children.Add(Card("Ranking", LyricSourceSnapshot.RankingText, "",
             Button("Restore recommended order", () => ctx.Update(SettingsCopy.RestoreRecommendedOrder), "Restore recommended source order")));
-
-        // ---- Sources ----
-        Section(page, "Sources · priority order");
-        page.Children.Add(SourceList(ctx));
         page.Children.Add(Card("Search under other names", SettingsCopy.ArtistAliasesCaption, "",
             Toggle(ctx, s => s.ArtistAliases, (s, v) => s with { ArtistAliases = v })));
-        page.Children.Add(Caption("Online services receive song metadata. Apple Music’s lyrics on this PC stay on this PC. New sources are available to enable here; existing choices are preserved."));
-
-        // ---- Local exports ----
-        Section(page, "Local exports");
         var folderCard = Card("Lyrimuse lyrics folder", null, "", FolderButtons(ctx, chooseFolder));
         ctx.OnRefresh(s => folderCard.Description = string.IsNullOrEmpty(s.LyrimuseFolder) ? "None chosen" : s.LyrimuseFolder);
         page.Children.Add(folderCard);
+        AdvancedFrom(page, sourcesStart);
 
-        // ---- Advanced timing ----
-        Section(page, "Advanced timing");
-        page.Children.Add(Card("Global offset", "Moves every song’s lyrics; the song offset above adds to it.", "",
+        // ---- Every song (once "Advanced timing"; its long-pauses switch moved to Lyrics › Instrumental breaks) ----
+        Section(page, "Every song");
+        page.Children.Add(Advanced(Card("Global offset", "Moves every song’s lyrics; a song’s own offset adds to it.", "",
             Slider(ctx, -3, 3, 0.05, SettingsCopy.FormatOffset, s => s.LyricOffset, (s, v) => s with { LyricOffset = Math.Round(v / 0.05) * 0.05 },
-                "Later", "Earlier", SettingsCopy.SpokenOffset)));
-        var pauses = Card("Treat long pauses as instrumental", null, "",
-            Toggle(ctx, s => s.RepairQQGaps, (s, v) => s with { RepairQQGaps = v }));
-        ctx.OnRefresh(s => pauses.Description = SettingsCopy.PauseCaption(s.ShowInterludes));
-        page.Children.Add(pauses);
+                "Later", "Earlier", SettingsCopy.SpokenOffset))));
         return page;
     }
 

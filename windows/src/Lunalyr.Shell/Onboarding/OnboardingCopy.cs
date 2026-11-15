@@ -184,7 +184,7 @@ public static class OnboardingCopy
 
     public const string FloatingTitle = "Floating lyrics";
 
-    public const string Floating = "Lyrics over your apps instead of on the desktop. Turn them on in Settings › Lyric style.";
+    public const string Floating = "Lyrics over your apps instead of on the desktop. Turn them on in Settings › Lyrics.";
 
     public const string DiscordTitle = "Discord status";
 

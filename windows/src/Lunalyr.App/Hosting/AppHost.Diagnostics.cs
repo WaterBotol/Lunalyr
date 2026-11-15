@@ -78,7 +78,7 @@ internal sealed partial class AppHost
                 && !entry.Message.Contains("failed to render", StringComparison.OrdinalIgnoreCase)
                 && !entry.Message.Contains("Creating layer", StringComparison.OrdinalIgnoreCase)) return;
             if (Interlocked.Exchange(ref _wallpaperProblemShown, 1) != 0) return;
-            _tray.Post(() => ShowHud("The wallpaper couldn’t start on a display. Settings › General › Copy diagnostics has the details.",
+            _tray.Post(() => ShowHud("The wallpaper couldn’t start on a display. Settings › Performance › Copy diagnostics has the details.",
                 "exclamationmark.triangle"));
         };
     }

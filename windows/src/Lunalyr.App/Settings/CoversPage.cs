@@ -2,44 +2,42 @@ using Lunalyr.Shell;
 using Lunalyr.Shell.Settings;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using static Lunalyr.App.Settings.SettingsGroups;
 using static Lunalyr.App.Settings.SettingsKit;
 
 namespace Lunalyr.App.Settings;
 
 /// <summary>
-/// Covers (the Mac's CoversPage.swift, Lunalyr's own lines; its one Verso-attributed line is a declaration): Apple
-/// Music's animated covers behind the lyrics in Custom Mix, what they are doing for the playing song, how they are
-/// framed and softened, and the albums left out. Edit › Undo for "Allow" has no Windows counterpart.
+/// Animated covers (the Mac's CoversPage.swift, Lunalyr's own lines; its one Verso-attributed line is a declaration):
+/// Apple Music's animated covers behind the lyrics in Custom Mix, what they are doing for the playing song, how they are
+/// framed and softened, and the albums left out. Once a page of its own; since the Settings reorganisation (15 Nov 2026)
+/// a section of Wallpaper › Custom Mix, the only wallpaper type that plays them, so the "covers play with Custom Mix"
+/// banner went. Edit › Undo for "Allow" has no Windows counterpart.
 /// </summary>
-internal static class CoversPage
+internal static class CoversRows
 {
-    public static StackPanel Build(SettingsContext ctx, Func<AppController?> controller, Func<bool> reduceMotion)
+    public static void Add(StackPanel section, SettingsContext ctx, Func<AppController?> controller, Func<bool> reduceMotion)
     {
-        var page = Page();
-        Section(page, "Animated covers");
-        page.Children.Add(Card("Use animated covers", SettingsCopy.UseAnimatedCovers, "",
+        Section(section, "Animated covers");
+        section.Children.Add(Card("Animated covers", SettingsCopy.UseAnimatedCovers, "",
             Toggle(ctx, s => s.UseMotionArtwork, (s, v) => s with { UseMotionArtwork = v })));
-
-        // On, with another wallpaper type: say so and offer Custom Mix; otherwise what covers are doing now.
-        var banner = new InfoBar { Severity = InfoBarSeverity.Informational, Title = SettingsCopy.CoversWithMatchTitle, IsClosable = false };
-        banner.ActionButton = Button("Use Custom Mix", () => ctx.Update(s => s with { BackgroundMode = "auto" }), "Use Custom Mix wallpaper");
-        page.Children.Add(banner);
+        // What covers are doing now.
         var status = Caption("");
-        page.Children.Add(status);
+        section.Children.Add(status);
         var still = Caption(SettingsCopy.ReduceMotionCovers);
-        page.Children.Add(still);
+        section.Children.Add(still);
 
-        Section(page, "Framing");
+        // Advanced animated covers: framing, softening and the albums left out.
         var placement = Card("Placement", null, "",
             Combo(ctx, SettingsCopy.Placements, s => s.MotionPlacement, (s, v) => s with { MotionPlacement = v }, width: 200));
-        page.Children.Add(placement);
-        page.Children.Add(Card("Softening", SettingsCopy.SofteningHelp, "",
+        section.Children.Add(Advanced(placement));
+        section.Children.Add(Advanced(Card("Softening", SettingsCopy.SofteningHelp, "",
             Slider(ctx, 0, AppSettings.MotionBlurMax, 0.5, v => v <= 0 ? "None" : SettingsCopy.Percent(v / AppSettings.MotionBlurMax),
-                s => s.MotionBlur, (s, v) => s with { MotionBlur = v })));
+                s => s.MotionBlur, (s, v) => s with { MotionBlur = v }))));
         // Only for a song whose cover is looked up: only then is there an album to exclude.
         var excludeToggle = new ToggleSwitch { OnContent = "On", OffContent = "Off", MinWidth = 0 };
         var exclude = Card("Exclude this album", null, "", excludeToggle);
-        page.Children.Add(exclude);
+        section.Children.Add(Advanced(exclude));
         (string? Artist, string? Album) looked = default;
         excludeToggle.Toggled += (_, _) =>
         {
@@ -48,23 +46,18 @@ internal static class CoversPage
             ctx.Update(s => s.WithMotionExcluded(excludeToggle.IsOn, artist, album));
         };
 
-        var excludedHeading = Section(page, "Excluded albums");
+        var excludedTitle = Caption("Excluded albums");
+        excludedTitle.Margin = new Thickness(1, 8, 0, 0);
+        section.Children.Add(Advanced(excludedTitle));
         var excluded = new StackPanel { Spacing = 4 };
-        page.Children.Add(excluded);
+        section.Children.Add(Advanced(excluded));
         IReadOnlyList<string>? listed = null;
-
-        page.Children.Add(Caption("The album cover beside the song’s title at the start is under Lyric style › Layout."));
 
         ctx.OnRefresh(s =>
         {
             var app = controller();
             var motion = app?.MotionStatus ?? new MotionCoverStatus(MotionCoverState.Unavailable);
-            var wrongType = s.UseMotionArtwork && s.BackgroundMode != "auto";
-            banner.Message = SettingsCopy.CoversWithMatch(s.BackgroundMode);
-            banner.IsOpen = wrongType;
-            banner.Visibility = wrongType ? Visibility.Visible : Visibility.Collapsed;
             status.Text = SettingsCopy.CoverStatus(motion, app?.MotionCoversOffReason ?? "Lunalyr is still starting");
-            status.Visibility = wrongType ? Visibility.Collapsed : Visibility.Visible;
             still.Visibility = reduceMotion() && s.UseMotionArtwork ? Visibility.Visible : Visibility.Collapsed;
             placement.Description = SettingsCopy.Placements.FirstOrDefault(p => p.Value == s.MotionPlacement)?.Detail ?? "";
 
@@ -80,7 +73,7 @@ internal static class CoversPage
             }
 
             var list = s.MotionExclusions ?? [];
-            excludedHeading.Visibility = excluded.Visibility = list.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+            excludedTitle.Visibility = excluded.Visibility = list.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
             if (!ReferenceEquals(list, listed))
             {
                 listed = list;
@@ -95,6 +88,5 @@ internal static class CoversPage
                 }
             }
         });
-        return page;
     }
 }
