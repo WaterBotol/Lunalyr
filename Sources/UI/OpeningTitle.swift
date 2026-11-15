@@ -248,6 +248,15 @@ enum OpeningTitle {
     static let restAfter = 30.0
     static let restEase = 2.0
     static let restOpacity = 0.55
+    /// "Title strength": how strong a kept card (`keeps`) stays once it
+    /// has rested, 30% to 100% (solid); `restOpacity` by default.
+    static let strengthKey = "custom.openingTitleStrength"
+    static let strengthRange: ClosedRange<Double> = 0.3...1
+
+    static func keptStrength(_ defaults: UserDefaults = .standard) -> Double {
+        guard let value = defaults.object(forKey: strengthKey) as? Double, value.isFinite else { return restOpacity }
+        return min(strengthRange.upperBound, max(strengthRange.lowerBound, value))
+    }
 
     /// When the first line may first be drawn: its own start, less the
     /// next-word preview lead and the line's attack.
@@ -369,7 +378,9 @@ enum OpeningTitle {
         var kept = false
 
         /// The card's strength before its exit.
-        var opacity: Double { 1 - (1 - OpeningTitle.restOpacity) * rest }
+        /// A kept card rests at the user's Title strength; one staying for
+        /// want of lyrics at `restOpacity`.
+        var opacity: Double { 1 - (1 - (kept ? OpeningTitle.keptStrength() : OpeningTitle.restOpacity)) * rest }
     }
 
     static func phase(_ schedule: Schedule?, at time: Double) -> Phase? {

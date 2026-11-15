@@ -47,6 +47,7 @@ struct LyricStylePage: View {
         .lunalyrReveal(backingLayer)
         .lunalyrReveal(s.editorialTypography)
         .lunalyrReveal(s.randomizeLyricFonts)
+        .lunalyrReveal(keepsOpeningTitle)
         .lunalyrReveal(s.fontChoice)
         .lunalyrReveal(s.googleFontState)
         .onAppear { familyDraft = s.googleFontFamily }
@@ -63,6 +64,7 @@ struct LyricStylePage: View {
     @AppStorage(OpeningTitle.Placement.leftKey) private var titleLeft: Double?
     @AppStorage(OpeningTitle.Placement.liftKey) private var titleLift: Double?
     @AppStorage(OpeningTitle.Placement.scaleKey) private var titleScale: Double = 1
+    @AppStorage(OpeningTitle.strengthKey) private var titleStrength: Double = OpeningTitle.restOpacity
     @AppStorage(OpeningTitle.RowPlacement.centreKey) private var rowCentre: Double = 0.5
     @AppStorage(OpeningTitle.RowPlacement.edgeKey) private var rowEdge: String = ""
     @AppStorage(OpeningTitle.RowPlacement.scaleKey) private var rowScale: Double = 1
@@ -135,6 +137,13 @@ struct LyricStylePage: View {
                     .padding(.leading, 23)
                     .disabled(!showOpeningTitle)
                     .help("The title stays for the whole song, quieter once the singing starts, so you always know what’s playing. Low on the left beside the lyrics; in the floating lyrics, a small line above them.")
+                if keepsOpeningTitle && showOpeningTitle {
+                    ValueSlider("Title strength", value: $titleStrength, in: OpeningTitle.strengthRange, step: 0.01,
+                                format: SettingsFormat.percent)
+                        .padding(.leading, 23)
+                        .help("How strong the song title stays once the singing has started. 100% keeps it fully solid.")
+                        .revealRow()
+                }
                 Button("Reset Title Position") {
                     if floating.isFloating {
                         OpeningTitle.RowPlacement.reset()

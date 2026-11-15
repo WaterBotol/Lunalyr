@@ -325,6 +325,8 @@ enum SettingsCatalogue {
               keywords: ["opening title", "artist", "intro"]),
         .init(.typography, "Shown with the lyrics", "Keep the song title on screen", .toggle, keys: ["custom.openingTitleAlways"],
               keywords: ["opening title", "song title", "now playing", "whole song", "always", "artist"]),
+        .init(.typography, "Shown with the lyrics", "Title strength", .slider, keys: ["custom.openingTitleStrength"],
+              keywords: ["opening title", "song title", "opacity", "fade", "dim", "solid", "kept"]),
         .init(.typography, "Shown with the lyrics", "Reset Title Position", .action,
               keys: ["custom.openingTitleLeft", "custom.openingTitleLift", "custom.openingTitleScale",
                      "custom.floatingTitleCentre", "custom.floatingTitleEdge", "custom.floatingTitleScale"],

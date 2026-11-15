@@ -33,6 +33,12 @@ extension UISnapshotCatalogue {
                                         chrome: .plain, size: .fitting(width: width),
                                         player: .playing, view: { _ in SettingsInspectorProbe(page: page) }))
         }
+        cases.append(UISnapshotCase("settings/typography-inspector-kept-title",
+                                    note: "Text inspector with Keep the song title on screen: Title strength",
+                                    chrome: .plain, size: .fitting(width: LunalyrDesign.Studio.Layout.inspectorWidth),
+                                    player: .playing,
+                                    prepare: { $0.defaults.set(true, forKey: OpeningTitle.alwaysKey) },
+                                    view: { _ in SettingsInspectorProbe(page: .typography) }))
         cases += wallpaperStates + otherPageStates + colourStates + lookStates
         return cases
     }

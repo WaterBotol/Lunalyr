@@ -669,4 +669,29 @@ final class OpeningTitleTests: XCTestCase {
         XCTAssertEqual(FloatingTitleHandles.resized(.standard, width: 100, dx: -90).scale,
                        OpeningTitle.RowPlacement.scales.lowerBound)
     }
+
+    // MARK: Title strength
+
+    func testTitleStrengthSetsWhereAKeptCardRests() throws {
+        let saved = UserDefaults.standard.object(forKey: OpeningTitle.strengthKey)
+        defer {
+            if let saved { UserDefaults.standard.set(saved, forKey: OpeningTitle.strengthKey) }
+            else { UserDefaults.standard.removeObject(forKey: OpeningTitle.strengthKey) }
+        }
+        UserDefaults.standard.removeObject(forKey: OpeningTitle.strengthKey)
+        let kept = try XCTUnwrap(OpeningTitle.schedule(words: .timed(firstLine: 14), keep: true))
+        let rested = kept.restsFrom + OpeningTitle.restEase + 1
+        XCTAssertEqual(try XCTUnwrap(OpeningTitle.phase(kept, at: rested)).opacity, OpeningTitle.restOpacity, accuracy: 1e-9,
+                       "55% by default, as before")
+        for (set, expected) in [(1.0, 1.0), (0.3, 0.3), (0.8, 0.8), (0.05, 0.3), (4.0, 1.0)] {
+            UserDefaults.standard.set(set, forKey: OpeningTitle.strengthKey)
+            XCTAssertEqual(try XCTUnwrap(OpeningTitle.phase(kept, at: rested)).opacity, expected, accuracy: 1e-9, "\(set)")
+            XCTAssertEqual(try XCTUnwrap(OpeningTitle.phase(kept, at: kept.settled + 0.1)).opacity, 1, accuracy: 1e-9,
+                           "full strength before it rests")
+        }
+        // A card staying for want of lyrics keeps its own rest.
+        let staying = OpeningTitle.staying()
+        let late = staying.restsFrom + OpeningTitle.restEase + 1
+        XCTAssertEqual(try XCTUnwrap(OpeningTitle.phase(staying, at: late)).opacity, OpeningTitle.restOpacity, accuracy: 1e-9)
+    }
 }

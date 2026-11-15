@@ -300,6 +300,7 @@ private enum SourceKeys {
         "custom.openingTitleLeft",
         "custom.openingTitleLift",
         "custom.openingTitleScale",
+        "custom.openingTitleStrength",
         "custom.pauseWhenCovered",
         "custom.player",
         "custom.player.localPlayers",
