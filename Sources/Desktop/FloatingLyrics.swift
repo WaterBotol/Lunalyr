@@ -81,7 +81,7 @@ struct LyricStyleProfiles {
         RomanizationOptions.displayKey, LunalyrExtras.Keys.translations,
         // Text and highlight colours
         LyricColourOptions.Keys.mode, LyricColourOptions.Keys.speed, LyricColourOptions.Keys.strength,
-        LyricColourOptions.Keys.custom, LyricHighlightOptions.Keys.mode, LyricHighlightOptions.Keys.custom,
+        LyricColourOptions.Keys.custom, LyricColourOptions.Keys.pastel, LyricHighlightOptions.Keys.mode, LyricHighlightOptions.Keys.custom,
     ]
 
     /// Where each surface's style is kept while the other is in use.

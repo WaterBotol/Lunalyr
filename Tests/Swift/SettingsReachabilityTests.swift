@@ -253,6 +253,7 @@ private enum SourceKeys {
         "custom.lyricCardUseSong",
         "custom.lyricColourCustom",
         "custom.lyricColourMode",
+        "custom.lyricColourPastel",
         "custom.lyricColourSpeed",
         "custom.lyricColourStrength",
         "custom.lyricHighlightCustom",

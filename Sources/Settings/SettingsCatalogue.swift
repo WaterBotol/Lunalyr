@@ -301,6 +301,8 @@ enum SettingsCatalogue {
               keywords: ["color", "custom gradient", "colour picker", "remove colour"]),
         .init(.typography, "Colour", "Add Colour", .action, keys: ["custom.lyricColourCustom"],
               keywords: ["color", "custom gradient", "fourth colour"]),
+        .init(.typography, "Colour", "Make the colours pastel", .toggle, keys: ["custom.lyricColourPastel"],
+              keywords: ["color", "pastel", "custom gradient", "exact colours", "saturated", "vivid"]),
         .init(.typography, "Colour", "Your highlight colour", .choice, keys: ["custom.lyricHighlightCustom"],
               keywords: ["color", "custom", "highlight"]),
         .init(.typography, "Readability", "Automatic text backing", .toggle, keys: ["custom.textBackingAutomatic"],

@@ -80,6 +80,8 @@ enum LyricCard {
         var custom: [OKLab] = []
         var speed = 1.0
         var strength = 1.0
+        /// `LyricInkDirector.Inputs.pastel`.
+        var pastel = true
         var highlight: LyricHighlightMode = .complement
         var highlightCustom: OKLab?
         var reduceMotion = false
@@ -147,7 +149,8 @@ enum LyricCard {
             let backdrop = LyricLegibility.darkened(palette.gradientLuminance(vividness: 1), by: LyricCard.lightestScrim)
             return .init(mode: mode, speed: speed, strength: strength, custom: custom, album: palette.artworkStops,
                          backdrop: max(0.06, backdrop), vocal: vocal, reduceMotion: reduceMotion,
-                         increaseContrast: increaseContrast, highlight: highlight, highlightCustom: highlightCustom)
+                         increaseContrast: increaseContrast, highlight: highlight, highlightCustom: highlightCustom,
+                         pastel: pastel)
         }
     }
 
@@ -265,6 +268,7 @@ enum LyricCard {
         return Content(pages: pages, title: track.title, artist: track.artist, artwork: artwork,
                        palette: AlbumWallpaperPalette(grid: grid), mode: remembered?.colourMode ?? colours.mode,
                        custom: colours.customColours, speed: colours.speed, strength: colours.strength,
+                       pastel: colours.pastelApplies(to: remembered?.colourMode ?? colours.mode),
                        highlight: highlights.mode, highlightCustom: highlights.customColour,
                        reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
                        increaseContrast: NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast,

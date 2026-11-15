@@ -93,7 +93,8 @@ struct LyricColourSwatch: View {
             custom: colours.customColours,
             album: AlbumWallpaperPalette(grid: grid).artworkStops,
             backdrop: Self.backdropLuminance, vocal: 0.5, reduceMotion: reduceMotion,
-            increaseContrast: contrast == .increased, highlight: options.mode, highlightCustom: options.customColour)
+            increaseContrast: contrast == .increased, highlight: options.mode, highlightCustom: options.customColour,
+            pastel: colours.pastelApplies(to: colours.mode))
     }
 }
 
@@ -112,6 +113,7 @@ final class LyricHighlightSwatchModel: ObservableObject {
         var highlightCustom: OKLab?
         var reduceMotion: Bool
         var increaseContrast: Bool
+        var pastel: Bool
     }
     private var key: Key?
     private var clock = 0.0
@@ -122,7 +124,8 @@ final class LyricHighlightSwatchModel: ObservableObject {
         lastNow = now
         let key = Key(mode: inputs.mode, speed: inputs.speed, strength: inputs.strength, custom: inputs.custom, album: inputs.album,
                       highlight: inputs.highlight, highlightCustom: inputs.highlightCustom,
-                      reduceMotion: inputs.reduceMotion, increaseContrast: inputs.increaseContrast)
+                      reduceMotion: inputs.reduceMotion, increaseContrast: inputs.increaseContrast,
+                      pastel: inputs.pastel)
         if key != self.key {
             // A setting changed: show where the colours settle, not the fade.
             self.key = key

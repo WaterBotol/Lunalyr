@@ -17,12 +17,18 @@ final class LyricColourOptions: ObservableObject {
         static let speed = "custom.lyricColourSpeed"
         static let strength = "custom.lyricColourStrength"
         static let custom = "custom.lyricColourCustom"
+        static let pastel = "custom.lyricColourPastel"
     }
 
     @Published var mode: LyricColourMode { didSet { defaults.set(mode.rawValue, forKey: Keys.mode) } }
     /// Drift speed. Readers clamp it to `speedRange`.
     @Published var speed: Double { didSet { defaults.set(speed, forKey: Keys.speed) } }
     @Published var strength: Double { didSet { defaults.set(strength, forKey: Keys.strength) } }
+    /// The custom gradient's colours eased to pastel (on by default). Off
+    /// keeps them as picked, still lightened as far as contrast needs. Only
+    /// the custom gradient offers it: the cover's own colours, unpastelled,
+    /// came out muddy on dark wallpapers and grey for muted covers.
+    @Published var pastel: Bool { didSet { defaults.set(pastel, forKey: Keys.pastel) } }
     /// Two to four colours, as `#RRGGBB`.
     @Published private(set) var customHex: [String] {
         didSet {
@@ -40,6 +46,7 @@ final class LyricColourOptions: ObservableObject {
         let savedSpeed = defaults.object(forKey: Keys.speed) as? Double ?? 1
         speed = savedSpeed.isFinite ? min(Self.speedRange.upperBound, max(Self.speedRange.lowerBound, savedSpeed)) : 1
         strength = Self.clampedStrength(defaults.object(forKey: Keys.strength) as? Double ?? 1)
+        pastel = defaults.object(forKey: Keys.pastel) as? Bool ?? true
         customHex = Self.sanitised(defaults.stringArray(forKey: Keys.custom) ?? Self.defaultCustom)
         customColours = customHex.compactMap(Self.oklab(hex:))
     }
@@ -50,8 +57,17 @@ final class LyricColourOptions: ObservableObject {
         if mode != fresh.mode { mode = fresh.mode }
         if speed != fresh.speed { speed = fresh.speed }
         if strength != fresh.strength { strength = fresh.strength }
+        if pastel != fresh.pastel { pastel = fresh.pastel }
         if customHex != fresh.customHex { customHex = fresh.customHex }
     }
+
+    /// Whether `mode`'s colours are eased to pastel (`LyricInkDirector.Inputs.pastel`):
+    /// always, but for a custom gradient with `pastel` off.
+    nonisolated static func pastel(_ pastel: Bool, appliesTo mode: LyricColourMode) -> Bool {
+        pastel || mode != .customGradient
+    }
+
+    func pastelApplies(to mode: LyricColourMode) -> Bool { Self.pastel(pastel, appliesTo: mode) }
 
     nonisolated static func clampedStrength(_ value: Double) -> Double {
         value.isFinite ? min(strengthRange.upperBound, max(strengthRange.lowerBound, value)) : 1

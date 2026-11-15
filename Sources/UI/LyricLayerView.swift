@@ -158,7 +158,8 @@ struct LyricLayer: View {
             vocal: active.map { OrganicMotion.vocalIntensity(lyricsVM.lines[$0].words, at: time) } ?? energy,
             reduceMotion: reduceMotion, increaseContrast: contrast == .increased, accent: cache.oklab(accent),
             highlight: highlights.mode, highlightCustom: highlights.customColour,
-            toneBackdrop: unbacked, publishesTone: backdropOverride == nil),
+            toneBackdrop: unbacked, publishesTone: backdropOverride == nil,
+            pastel: colours.pastelApplies(to: colour)),
             wall: wall)
     }
 
