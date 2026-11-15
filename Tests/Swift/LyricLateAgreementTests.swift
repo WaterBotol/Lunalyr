@@ -124,8 +124,8 @@ final class LyricLateAgreementTests: XCTestCase {
         XCTAssertTrue(LyricsFetcher.couldDemote(lrclib, from: .netEase, among: [lrclib], query: query))
         XCTAssertFalse(LyricsFetcher.couldBeat(lrclib, from: .netEase, query: query, options: options(.priority)))
         XCTAssertTrue(LyricsFetcher.matters(.netEase, best: lrclib, onlineBest: lrclib, query: query, options: options(.priority), among: [lrclib]))
-        // Line timing alone could only demote it beside a word-timed match in hand.
-        XCTAssertFalse(LyricsFetcher.couldDemote(lrclib, from: .kuwo, among: [lrclib], query: query))
+        // Kuwo's lrcx word timing could be the first of two, as could any word-capable source.
+        XCTAssertTrue(LyricsFetcher.couldDemote(lrclib, from: .kuwo, among: [lrclib], query: query))
         let netEase = candidate(.netEase)
         XCTAssertTrue(LyricsFetcher.couldDemote(lrclib, from: .kuwo, among: [lrclib, netEase], query: query))
         // Plain text never times anything.

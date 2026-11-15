@@ -25,7 +25,7 @@ enum LyricSourceID: String, CaseIterable, Identifiable, Codable {
         case .appleMusicCache: return "Word or line timing from Music on this Mac"
         case .lyricsPlus: return "Word / syllable timing"
         case .netEase: return "Word or line timing"
-        case .qqMusic, .kuwo: return "Line timing"
+        case .qqMusic, .kuwo: return "Word or line timing"
         case .kugou: return "Word or line timing"
         case .lrclib, .musixmatch: return "Word or line timing"
         case .lyricsOVH: return "Plain text fallback"
@@ -41,7 +41,7 @@ enum LyricSourceID: String, CaseIterable, Identifiable, Codable {
     var timingCeiling: Int {
         switch self {
         case .lyricsOVH: return 0
-        case .kuwo: return 1 // Kuwo's line list is converted to line-level LRC.
+        case .kuwo: return 3 // Kuwo's lrcx lyrics are word-timed; its line list is only the fallback.
         default: return 3
         }
     }
@@ -528,6 +528,33 @@ enum LyricHTTP {
             throw Failure(message: "Unexpected response format")
         }
         return value
+    }
+    /// A raw reply: a GET with `parameters` as its query, or a form POST when
+    /// `form` is given (QQ's `lyric_download.fcg`, Kuwo's binary lrcx reply).
+    static func data(_ base: String, _ parameters: [String: String] = [:], form: [String: String]? = nil,
+                     referer: String? = nil, session: URLSession = .shared) async throws -> Data {
+        try Task.checkCancellation()
+        var parts = URLComponents(string: base)
+        if !parameters.isEmpty {
+            parts?.queryItems = parameters.sorted { $0.key < $1.key }.map { URLQueryItem(name: $0.key, value: $0.value) }
+        }
+        guard let url = parts?.url else { throw Failure(message: "Invalid service address") }
+        var request = URLRequest(url: url, timeoutInterval: 6)
+        request.setValue("Lunalyr/0.4.6 (personal desktop lyrics)", forHTTPHeaderField: "User-Agent")
+        if let referer { request.setValue(referer, forHTTPHeaderField: "Referer") }
+        if let form {
+            var body = URLComponents()
+            body.queryItems = form.sorted { $0.key < $1.key }.map { URLQueryItem(name: $0.key, value: $0.value) }
+            request.httpMethod = "POST"
+            request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+            request.httpBody = Data((body.percentEncodedQuery ?? "").utf8)
+        }
+        let (data, response) = try await LyricTrace.data(session, for: request)
+        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+            throw Failure(message: "Service response: HTTP \((response as? HTTPURLResponse)?.statusCode ?? 0)")
+        }
+        guard data.count <= 2_000_000 else { throw Failure(message: "Response too large") }
+        return data
     }
     /// A plain-text GET (a few lyric files are served as text, not JSON).
     static func fetchText(_ address: String, session: URLSession = .shared) async throws -> String {

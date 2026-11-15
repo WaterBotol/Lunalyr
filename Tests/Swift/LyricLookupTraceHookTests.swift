@@ -85,8 +85,8 @@ final class LyricLookupTraceHookTests: XCTestCase {
 
     func testAnAutomaticLookupRecordsTheSourcesItStopped() async throws {
         let recorder = LyricLookupTraceRecorder()
-        // LRCLIB's word timing: neither Kuwo (line timing at best) nor lyrics.ovh (plain text) could beat it.
-        let options = LyricSourceOptions.Snapshot(enabled: [.lrclib, .kuwo, .lyricsOVH], mode: .smart, localFolder: "", localVersion: "")
+        // LRCLIB's word timing: lyrics.ovh (plain text) could not beat it.
+        let options = LyricSourceOptions.Snapshot(enabled: [.lrclib, .lyricsOVH], mode: .smart, localFolder: "", localVersion: "")
         let good = candidate(.lrclib)
         let fetcher = LyricsFetcher(cacheFolder: folder, timing: fast, isOnline: { true }, fetch: { id, _, _ in
             if id == .lrclib { return good }
@@ -96,8 +96,8 @@ final class LyricLookupTraceHookTests: XCTestCase {
         _ = await fetcher.lookup(query, options: options)
         let stopped = recorder.events(.stop)
         XCTAssertTrue(stopped.allSatisfy { $0.message?.hasPrefix(LyricsFetcher.notNeeded) == true })
-        XCTAssertEqual(Set(stopped.flatMap { $0.sources ?? [] }), ["kuwo", "lyricsOVH"])
-        XCTAssertEqual(recorder.events(.final).last?.states?["kuwo"]?.hasPrefix(LyricsFetcher.notNeeded), true)
+        XCTAssertEqual(Set(stopped.flatMap { $0.sources ?? [] }), ["lyricsOVH"])
+        XCTAssertEqual(recorder.events(.final).last?.states?["lyricsOVH"]?.hasPrefix(LyricsFetcher.notNeeded), true)
         XCTAssertEqual(recorder.events(.cache).last?.message, "online choice saved to the cache")
     }
 

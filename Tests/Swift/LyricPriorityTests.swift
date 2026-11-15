@@ -210,10 +210,10 @@ final class LyricPriorityTests: XCTestCase {
             XCTAssertTrue(LyricsFetcher.couldBeat(candidate(.lrclib, .mixed), from: .lyricsPlus, query: query, options: options))
             // Music's line timing waits for every source that can have word timing.
             let ownLines = candidate(.appleMusicCache, .line)
-            for source in [LyricSourceID.lrclib, .lyricsPlus, .netEase, .qqMusic, .kugou] {
+            for source in [LyricSourceID.lrclib, .lyricsPlus, .netEase, .qqMusic, .kugou, .kuwo] {
                 XCTAssertTrue(LyricsFetcher.couldBeat(ownLines, from: source, query: query, options: options), "\(source)")
             }
-            XCTAssertTrue(LyricsFetcher.isSettled(ownLines, pending: [.kuwo, .lyricsOVH], query: query, options: options))
+            XCTAssertTrue(LyricsFetcher.isSettled(ownLines, pending: [.lyricsOVH], query: query, options: options))
             // Another source's word timing waits for LRCLIB and Music.
             let other = candidate(.netEase, .word)
             XCTAssertTrue(LyricsFetcher.couldBeat(other, from: .lrclib, query: query, options: options))
@@ -233,7 +233,8 @@ final class LyricPriorityTests: XCTestCase {
             let words = candidate(.lrclib, .word)
             // A service that could still be the second of two agreeing against LRCLIB's timing keeps answering.
             XCTAssertTrue(LyricsFetcher.matters(.netEase, best: words, onlineBest: words, query: query, options: options))
-            XCTAssertFalse(LyricsFetcher.matters(.kuwo, best: words, onlineBest: words, query: query, options: options))
+            XCTAssertTrue(LyricsFetcher.matters(.kuwo, best: words, onlineBest: words, query: query, options: options))
+            XCTAssertFalse(LyricsFetcher.matters(.lyricsOVH, best: words, onlineBest: words, query: query, options: options))
             XCTAssertTrue(LyricsFetcher.matters(.appleMusicCache, best: words, onlineBest: words, query: query, options: options))
             // Another source's word timing never makes LRCLIB unnecessary.
             let other = candidate(.netEase, .word)
@@ -380,8 +381,8 @@ final class LyricPriorityTests: XCTestCase {
     func testLRCLIBsWordTimingStopsTheOtherServicesOnceMusicHasNone() async {
         // Services with word timing keep answering: two of them agreeing against LRCLIB's timing
         // would take its lead (`LyricsFetcher.couldDemote`), and Lyrics+ may relay Apple Music's.
-        // Those that cannot (line timing only, plain text) are stopped.
-        let others: [LyricSourceID] = [.kuwo, .lyricsOVH]
+        // Those that cannot (plain text) are stopped.
+        let others: [LyricSourceID] = [.lyricsOVH]
         for options in modes(userOrder) {
             // Music has line timing, or nothing even on its second look.
             for own in [candidate(.appleMusicCache, .line), nil] {
@@ -402,7 +403,7 @@ final class LyricPriorityTests: XCTestCase {
     }
 
     func testMusicsSecondLookStillRunsAfterLRCLIBStopsTheOthers() async {
-        let others: [LyricSourceID] = [.kuwo, .lyricsOVH]
+        let others: [LyricSourceID] = [.lyricsOVH]
         for options in modes(userOrder) {
             let log = Log(), never = Gate()
             let stub = stub([.lrclib: candidate(.lrclib, .word)], gates: Dictionary(uniqueKeysWithValues: others.map { ($0, never) }),
@@ -410,7 +411,7 @@ final class LyricPriorityTests: XCTestCase {
             let report = await stub.fetcher.lookup(query, options: options) { await log.update($0) }
             let first = await log.shown(1)
             XCTAssertEqual(source(of: first?.result), lrclib, "\(options.mode)")
-            XCTAssertEqual(first?.states[.kuwo], couldNotBeat, "\(options.mode)")
+            XCTAssertEqual(first?.states[.lyricsOVH], couldNotBeat, "\(options.mode)")
             XCTAssertEqual(report.revision, 2, "\(options.mode)")
             XCTAssertEqual(source(of: report.result), music, "\(options.mode)")
             XCTAssertEqual(report.states[.appleMusicCache], "Match found · showing", "\(options.mode)")
