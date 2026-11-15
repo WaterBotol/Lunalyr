@@ -212,7 +212,7 @@ enum LyricColourMode: String, CaseIterable, Identifiable {
         switch self {
         case .standard: return "White type, as before."
         case .albumDrift: return "Colours from the cover drift slowly through the words."
-        case .sungSweep: return "White lyrics fill with colour as each word or line is sung, stepping through the cover’s colours (or your custom colours) word by word. Unsynced lyrics use Album Drift."
+        case .sungSweep: return "White lyrics fill with colour as each word or line is sung, stepping through the cover’s colours word by word. Unsynced lyrics use Album Drift."
         case .musicReactive: return "Bass and treble shift the emphasis between cover colours; brightness and depth follow loudness. Uses live audio when a visualiser is capturing it, and the vocal timing otherwise."
         case .customGradient: return "Your own two to four colours, drifting through the line."
         }
@@ -690,7 +690,7 @@ final class LyricInkDirector {
         let calm = inputs.reduceMotion
         // Your own colours with pastel off are kept nearer what you picked:
         // a gentler floor, with the text's shadow and backing carrying the rest.
-        let ownColours = !inputs.pastel && !inputs.custom.isEmpty
+        let ownColours = inputs.mode == .customGradient && !inputs.pastel && !inputs.custom.isEmpty
         let ratio = inputs.increaseContrast ? LyricInk.increasedContrast
             : ownColours ? LyricInk.ownColourContrast : LyricInk.minimumContrast
         let textRatio = inputs.increaseContrast ? LyricHighlight.increasedTextContrast : LyricHighlight.textContrast
@@ -999,16 +999,13 @@ final class LyricInkDirector {
             // has a different number of colours.
             return (inputs.pastel ? albumStops : albumRawStops, 4)
         case .sungSweep:
-            // The cover's colours, or the custom colours when set, each
-            // made as strong as the single sung colour used to be.
+            // The cover's colours, each made as strong as the single sung
+            // colour used to be. Not the custom gradient's colours: those
+            // always exist (there are defaults), so they took over every
+            // song's sweep and it never followed the cover.
             func strong(_ colour: OKLab) -> OKLab {
                 guard inputs.pastel else { return colour }
                 return LyricInk.applyingStrength(1.35, to: LyricInk.pastel(colour, fallbackHue: vivid.hue))
-            }
-            if !inputs.custom.isEmpty {
-                let count = min(4, inputs.custom.count)
-                func at(_ index: Int) -> OKLab { strong(inputs.custom[index % count]) }
-                return ((at(0), at(1), at(2), at(3)), count)
             }
             let album = inputs.pastel ? albumStops : albumRawStops
             return ((strong(album.0), strong(album.1), strong(album.2), strong(album.3)), 4)

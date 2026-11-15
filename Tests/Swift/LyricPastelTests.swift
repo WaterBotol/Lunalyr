@@ -81,4 +81,15 @@ final class LyricPastelTests: XCTestCase {
         let eased = settled(inputs(.customGradient, custom: [red, red], backdrop: 0.2, pastel: true))
         XCTAssertEqual(eased.contrast, LyricInk.minimumContrast, "pastel on keeps the usual floor")
     }
+
+    /// Sung sweep follows the cover, never the custom gradient's colours
+    /// (which always exist, so they used to take over every sweep).
+    func testSungSweepUsesTheCoverNotCustomColours() throws {
+        let red = try XCTUnwrap(LyricColourOptions.oklab(hex: "#FF0000"))
+        let ink = settled(inputs(.sungSweep, custom: [red, red, red], backdrop: 0.03, pastel: true))
+        let hues = [ink.stops.0, ink.stops.1].map(\.hue)
+        XCTAssertTrue(hues.contains { abs($0 - red.hue) > 0.5 }, "cover colours, not red: \(hues)")
+        let withoutCustom = settled(inputs(.sungSweep, custom: [], backdrop: 0.03, pastel: true))
+        XCTAssertEqual(ink.stops.0.hue, withoutCustom.stops.0.hue, accuracy: 0.01)
+    }
 }
