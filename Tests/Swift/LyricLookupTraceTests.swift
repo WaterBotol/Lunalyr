@@ -82,7 +82,7 @@ final class LyricLookupTraceTests: XCTestCase {
             "Mode: Accuracy first (smart), \(mode), ",
             "iTunes storefront `\(storefront)`, empty cache, nothing pinned.\n\n",
             "Cells: **PICK** shown, `#n` accepted at rank n, `rej …` failed the recording check, `none` no match, ",
-            "`stopped` not needed, `timeout`, `error: …`; then the timing tier (word, mixed, line, phrase-timed, plain, faulty).\n\n",
+            "`stopped` not needed, `timeout`, `error: …`; then the timing tier (word, mixed, spread, line, phrase-timed, plain, faulty).\n\n",
             header, numbered, "\n",
         ]
         let summary: String = parts.joined()

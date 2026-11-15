@@ -570,8 +570,14 @@ final class LyricsFetcher {
         !candidate.languageMismatch && VersionTags.mismatch(query, title: candidate.title).isEmpty
     }
     /// The timing matches are ranked by: 2 for word-by-word or mixed timing,
-    /// which rank together, 1 for line timing and 0 for plain text.
-    static func rankedTiming(_ result: Result) -> Int { min(timingTier(result), 2) }
+    /// which rank together, 1 for line timing and 0 for plain text. Word
+    /// stamps a tool spread over each line (`hasEvenlySpreadWordTiming`)
+    /// rank as the line timing they are; `couldBeat` and `matters` weigh
+    /// the same tier.
+    static func rankedTiming(_ result: Result) -> Int {
+        let tier = min(timingTier(result), 2)
+        return tier == 2 && hasEvenlySpreadWordTiming(result) ? 1 : tier
+    }
     /// Where a source stands ahead of the configured order at a ranked
     /// timing, at best: Music's own cache leads timed lyrics, then Apple
     /// Music's lyrics relayed by Lyrics+ (`isAppleRelay`; Music's own is the
@@ -687,6 +693,9 @@ final class LyricsFetcher {
             if candidate.viaOriginalTitle { found += " · found under the original title" }
             if isAppleRelay(candidate) { found += " · Apple Music’s lyrics" }
             if let fault = LyricsFetcher.timingFault(candidate.result) { found += " · \(fault)" }
+            if timingTier(candidate.result) >= 2, hasEvenlySpreadWordTiming(candidate.result) {
+                found += " · word timing spread evenly over each line (ranked as line timing)"
+            }
             if candidate.agreement.timingOutlier { found += " · timing differs from other sources" }
             else if candidate.agreement.peers > 0 {
                 found += candidate.agreement.peers == 1 ? " · 1 other source agrees" : " · \(candidate.agreement.peers) other sources agree"

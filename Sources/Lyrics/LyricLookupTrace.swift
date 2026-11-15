@@ -309,7 +309,9 @@ struct LyricTraceCandidate: Codable, Sendable {
     static func timing(_ result: LyricsFetcher.Result) -> String {
         if LyricsFetcher.hasTimingFault(result) { return "faulty" }
         guard case .synced(let lines, _) = result else { return "plain" }
-        switch LyricsFetcher.timingTier(result) {
+        let tier = LyricsFetcher.timingTier(result)
+        if tier >= 2, LyricsFetcher.hasEvenlySpreadWordTiming(result) { return "spread" }
+        switch tier {
         case 3: return "word"
         case 2: return "mixed"
         case 1: return lines.contains { $0.wordTimed && LyricsFetcher.isPhraseTimed($0) } ? "phrase-timed" : "line"
