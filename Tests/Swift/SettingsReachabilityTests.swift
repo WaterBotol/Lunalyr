@@ -261,6 +261,7 @@ private enum SourceKeys {
         "custom.lyricOffset",
         "custom.lyricSourceOrder",
         "custom.lyricSources",
+        "custom.lyricSourcesSeen",
         "custom.lyricSourcesSeenAMLL",
         "custom.lyricSourcesSeenMusixmatch",
         "custom.lyricStyle.",

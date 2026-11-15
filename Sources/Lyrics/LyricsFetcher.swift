@@ -807,6 +807,14 @@ final class LyricsFetcher {
         case .amll: return try await original { try await AMLLLyricsProvider.lookup($0) }
         // One lookup per song, under the names the player gave: no other-name or alias retries.
         case .musixmatch: return try await MusixmatchLyricsProvider.lookup(query)
+        // East Asian catalogues, which often index only an artist's native name.
+        case .sodaMusic: return try await original { q in try await alias(q) { try await MoreLyricsProviders.sodaMusic($0) } }
+        case .petitLyrics: return try await original { q in try await alias(q) { try await MoreLyricsProviders.petitLyrics($0) } }
+        case .migu: return try await original { q in try await alias(q) { try await MoreLyricsProviders.migu($0) } }
+        case .vibe: return try await original { q in try await alias(q) { try await MoreLyricsProviders.vibe($0) } }
+        case .genie: return try await original { q in try await alias(q) { try await MoreLyricsProviders.genie($0) } }
+        case .deezer: return try await original { try await MoreLyricsProviders.deezer($0) }
+        case .lyricFind: return try await original { try await MoreLyricsProviders.lyricFind($0) }
         }
     }
     private static func lyricsPlus(_ query: LyricQuery) async throws -> LyricCandidate? {

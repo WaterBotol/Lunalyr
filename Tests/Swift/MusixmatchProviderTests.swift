@@ -223,7 +223,7 @@ final class MusixmatchProviderTests: XCTestCase {
         let saved = ["lrclib", "netEase", "lyrimuse", "lyricsPlus", "appleMusicCache", "qqMusic", "kugou", "kuwo", "lyricsOVH", "amll"]
         let order = LyricSourceOptions.order(saved: saved)
         XCTAssertEqual(order.firstIndex(of: .musixmatch), order.firstIndex(of: .lyrimuse)! + 1)
-        XCTAssertEqual(order.filter { $0 != .musixmatch }.map(\.rawValue), saved)
+        XCTAssertEqual(order.map(\.rawValue).filter(saved.contains), saved, "the saved order is kept")
         XCTAssertEqual(LyricSourceOptions.order(saved: nil), LyricSourceOptions.recommendedOrder)
         XCTAssertEqual(Array(LyricSourceOptions.recommendedOrder.prefix(3)), [.appleMusicCache, .lyrimuse, .musixmatch])
         XCTAssertEqual(Set(LyricSourceOptions.order(saved: saved)), Set(LyricSourceID.allCases))

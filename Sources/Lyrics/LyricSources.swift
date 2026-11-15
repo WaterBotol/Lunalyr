@@ -4,6 +4,7 @@ import Foundation
 
 enum LyricSourceID: String, CaseIterable, Identifiable, Codable {
     case appleMusicCache, lyricsPlus, netEase, qqMusic, kugou, lrclib, lyrimuse, kuwo, lyricsOVH, amll, musixmatch
+    case sodaMusic, petitLyrics, deezer, migu, vibe, genie, lyricFind
     var id: String { rawValue }
     var title: String {
         switch self {
@@ -18,6 +19,13 @@ enum LyricSourceID: String, CaseIterable, Identifiable, Codable {
         case .amll: return "AMLL TTML DB"
         case .lyrimuse: return "Lyrimuse · local files"
         case .musixmatch: return "Musixmatch"
+        case .sodaMusic: return "Soda Music"
+        case .petitLyrics: return "PetitLyrics"
+        case .deezer: return "Deezer"
+        case .migu: return "Migu Music"
+        case .vibe: return "VIBE"
+        case .genie: return "Genie Music"
+        case .lyricFind: return "LyricFind (YouTube Music)"
         }
     }
     var timing: String {
@@ -31,6 +39,9 @@ enum LyricSourceID: String, CaseIterable, Identifiable, Codable {
         case .lyricsOVH: return "Plain text fallback"
         case .amll: return "Word / syllable timing"
         case .lyrimuse: return "LRC / TTML / YRC + readings, translations"
+        case .sodaMusic, .deezer, .migu: return "Word or line timing"
+        case .petitLyrics: return "Word timing"
+        case .vibe, .genie, .lyricFind: return "Line timing"
         }
     }
     /// Read from this Mac rather than a lyric service. Local sources are
@@ -42,6 +53,7 @@ enum LyricSourceID: String, CaseIterable, Identifiable, Codable {
         switch self {
         case .lyricsOVH: return 0
         case .kuwo: return 3 // Kuwo's lrcx lyrics are word-timed; its line list is only the fallback.
+        case .vibe, .genie, .lyricFind: return 1 // These services time lines only.
         default: return 3
         }
     }
@@ -119,10 +131,20 @@ final class LyricSourceOptions: ObservableObject {
     @Published var mode: Mode {
         didSet { UserDefaults.standard.set(mode.rawValue, forKey: "custom.lyricMatchMode") }
     }
-    static let recommendedOrder: [LyricSourceID] = [.appleMusicCache, .lyrimuse, .musixmatch, .lyricsPlus, .amll, .netEase, .lrclib, .qqMusic, .kugou, .kuwo, .lyricsOVH]
+    static let recommendedOrder: [LyricSourceID] = [.appleMusicCache, .lyrimuse, .musixmatch, .lyricsPlus, .amll, .netEase, .lrclib, .qqMusic, .kugou, .kuwo,
+                                                    .sodaMusic, .petitLyrics, .deezer, .migu, .vibe, .genie, .lyricFind, .lyricsOVH]
     /// Sources added after people saved an order, and the source each joins
     /// that order after. Others missing from a saved order go at the end.
-    static let placedAfter: [LyricSourceID: LyricSourceID] = [.musixmatch: .lyrimuse]
+    static let placedAfter: [LyricSourceID: LyricSourceID] = [
+        .musixmatch: .lyrimuse, .sodaMusic: .kuwo, .petitLyrics: .sodaMusic, .deezer: .petitLyrics, .migu: .deezer,
+        .vibe: .migu, .genie: .vibe, .lyricFind: .genie,
+    ]
+    /// Listed but off until switched on: Soda Music's search answered
+    /// nothing to new queries when it was added (16 Nov 2026).
+    static let offByDefault: Set<LyricSourceID> = [.sodaMusic]
+    /// Sources added on 16 Nov 2026 that start switched on once, recorded
+    /// together under `custom.lyricSourcesSeen`.
+    static let addedLater: [LyricSourceID] = [.petitLyrics, .deezer, .migu, .vibe, .genie, .lyricFind]
     /// Sources added after people saved their choices: each starts switched
     /// on once, recorded under its `custom.lyricSourcesSeen…` key.
     static let switchedOnOnce: [(source: LyricSourceID, seenKey: String)] = [
@@ -152,15 +174,25 @@ final class LyricSourceOptions: ObservableObject {
     /// run during init).
     static func loadEnabled(_ defaults: UserDefaults) -> Set<LyricSourceID> {
         let saved = defaults.stringArray(forKey: "custom.lyricSources")
-        let chosen = enabled(saved: saved, seen: { defaults.bool(forKey: $0) })
+        var chosen = enabled(saved: saved, seen: { defaults.bool(forKey: $0) })
         for key in chosen.newlySeen { defaults.set(true, forKey: key) }
-        if saved != nil, !chosen.newlySeen.isEmpty {
+        var changed = !chosen.newlySeen.isEmpty
+        var seen = Set(defaults.stringArray(forKey: "custom.lyricSourcesSeen") ?? [])
+        let fresh = addedLater.filter { !seen.contains($0.rawValue) }
+        if !fresh.isEmpty {
+            changed = changed || !chosen.enabled.isSuperset(of: fresh)
+            chosen.enabled.formUnion(fresh)
+            seen.formUnion(fresh.map(\.rawValue))
+            defaults.set(seen.sorted(), forKey: "custom.lyricSourcesSeen")
+        }
+        if saved != nil, changed {
             defaults.set(chosen.enabled.map(\.rawValue).sorted(), forKey: "custom.lyricSources")
         }
         return chosen.enabled
     }
     static func enabled(saved: [String]?, seen: (String) -> Bool) -> (enabled: Set<LyricSourceID>, newlySeen: [String]) {
-        var chosen = Set((saved ?? LyricSourceID.allCases.filter { !$0.isLocal }.map(\.rawValue)).compactMap(LyricSourceID.init(rawValue:)))
+        var chosen = Set((saved ?? LyricSourceID.allCases.filter { !$0.isLocal && !offByDefault.contains($0) }.map(\.rawValue))
+            .compactMap(LyricSourceID.init(rawValue:)))
         var newlySeen: [String] = []
         for entry in switchedOnOnce where !seen(entry.seenKey) {
             chosen.insert(entry.source)

@@ -142,6 +142,7 @@ enum SettingsCatalogue {
         "custom.lyricCardUseSong": "Set in the lyric card window.",
         "custom.lyricCardLinesBefore": "Stored by LunalyrExtras; no control sets it.",
         "custom.lyricCardLinesAfter": "Stored by LunalyrExtras; no control sets it.",
+        "custom.lyricSourcesSeen": "One-time migration that offers lyric sources added later.",
         "custom.lyricSourcesSeenAMLL": "One-time migration that offered AMLL.",
         "custom.lyricSourcesSeenMusixmatch": "One-time migration that offered Musixmatch.",
         "custom.lyricStyle.": "The Desktop and Floating styles, swapped by Show lyrics.",
