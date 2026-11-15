@@ -615,11 +615,14 @@ final class SungSweepPaletteTests: XCTestCase {
         }
     }
 
-    func testCustomColoursAreUsedWhenSet() {
+    /// The custom gradient's colours always exist (there are defaults), so
+    /// Sung sweep ignores them and follows the cover (16 Nov 2026).
+    func testCustomColoursDoNotReplaceTheCover() {
         let green = [OKLab(l: 0.8, chroma: 0.15, hue: 2.5)]
-        let ink = settled(.init(mode: .sungSweep, custom: green, album: album, backdrop: 0.05))
+        let withCustom = settled(.init(mode: .sungSweep, custom: green, album: album, backdrop: 0.05))
+        let without = settled(.init(mode: .sungSweep, custom: [], album: album, backdrop: 0.05))
         for slot in [0.0, 0.5, 1.0] {
-            XCTAssertLessThan(hueGap(lab(ink.sample(slot: slot).sung), green[0]), 0.35)
+            XCTAssertLessThan(hueGap(lab(withCustom.sample(slot: slot).sung), lab(without.sample(slot: slot).sung)), 0.01)
         }
     }
 
