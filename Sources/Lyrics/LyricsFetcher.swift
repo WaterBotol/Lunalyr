@@ -173,7 +173,15 @@ final class LyricsFetcher {
                 // Its artist's language is being learnt in the background; the next lookup decides.
                 LyricTrace.emit(LyricTraceEvent(kind: .cache, source: best.source.rawValue,
                                                 message: "online choice not saved: the artist's language is not known yet"))
-            } else if Self.isSettled(best, pending: collected.stopped.filter { !$0.isLocal }, query: query, options: options) {
+            } else if let missing = Self.unansweredRival(best, collected: collected, query: query, options: options,
+                                                         among: report.candidates.filter { !$0.source.isLocal }) {
+                // Saved for two weeks, it would stand without asking again while
+                // a search would find the better match: kept for an hour only.
+                SavedLyrics.save(best, key: key, in: cacheFolder, provisional: true)
+                LyricTrace.emit(LyricTraceEvent(kind: .cache, source: best.source.rawValue,
+                                                message: "online choice saved for an hour only: \(missing.rawValue), which could have beaten it, did not answer"))
+            } else if Self.isSettled(best, pending: collected.stopped.filter { !$0.isLocal }, query: query, options: options,
+                                     among: report.candidates.filter { !$0.source.isLocal }) {
                 SavedLyrics.save(best, key: key, in: cacheFolder)
                 misses.remove(key)
                 LyricTrace.emit(LyricTraceEvent(kind: .cache, source: best.source.rawValue, message: "online choice saved to the cache"))
@@ -211,6 +219,31 @@ final class LyricsFetcher {
         }
         misses.copy(from: fromKey, to: toKey)
         musixmatch.link(to, to: from)
+    }
+    /// An online source that was asked but gave no answer (it timed out,
+    /// failed or was paused) whose answer could have led `best`: a higher
+    /// timing, or a better lead at its timing (`couldOutlead`), or word
+    /// timing for a leading text in hand (`couldLendTiming`). The choice is
+    /// then not saved, so the next automatic lookup asks again. Sources
+    /// that could only win a tie-break do not count, so one that keeps
+    /// failing does not stop every choice being saved.
+    private static func unansweredRival(_ best: LyricCandidate, collected: Collected, query: LyricQuery,
+                                        options: LyricSourceOptions.Snapshot, among found: [LyricCandidate]) -> LyricSourceID? {
+        let failed = collected.asked.subtracting(collected.answered).subtracting(collected.stopped).filter { !$0.isLocal }
+        return failed.sorted { $0.rawValue < $1.rawValue }.first {
+            couldOutlead(best, from: $0, query: query)
+                || couldLendTiming(best, from: $0, among: found, query: query, options: options)
+        }
+    }
+    /// Whether the best answer `source` could give would rank above `best`
+    /// on timing, version or lead alone, before any tie-break (`couldBeat`).
+    static func couldOutlead(_ best: LyricCandidate, from source: LyricSourceID, query: LyricQuery) -> Bool {
+        guard source != best.source else { return false }
+        let timing = rankedTiming(best.result), ceiling = min(source.timingCeiling, 2)
+        if (ceiling > 0) != (timing > 0) { return ceiling > 0 }
+        if timing > 0, !fitsVersion(best, query) { return true }
+        if ceiling != timing { return ceiling > timing }
+        return lead(source, timing: timing) < lead(best, timing: timing)
     }
     /// Re-reads only the local lyric files after they change, keeping the
     /// online candidates already found. Nil when nothing relevant changed.
@@ -345,7 +378,7 @@ final class LyricsFetcher {
                 }
                 let screened = Self.screen(Array(found.values), query: query, options: options)
                 let best = Self.choose(screened.accepted, query: query, options: options)
-                let settled = Self.isSettled(best, pending: pending, query: query, options: options)
+                let settled = Self.isSettled(best, pending: pending, query: query, options: options, among: screened.accepted)
                 let shownBefore = LyricTrace.isOn ? publication.shown : nil
                 let step = publication.step(best: best, settled: settled, graceOver: graceOver, settleOver: settleOver,
                                             latest: screened.accepted)
@@ -411,6 +444,7 @@ final class LyricsFetcher {
         if best.source == .appleMusicCache, rankedTiming(best.result) == 2 { return false }
         if couldBeat(best, from: source, query: query, options: options) { return true }
         if couldDemote(best, from: source, among: found, query: query) { return true }
+        if couldLendTiming(best, from: source, among: found, query: query, options: options) { return true }
         guard !source.isLocal else { return false }
         return onlineBest.map { couldBeat($0, from: source, query: query, options: options) } ?? true
     }
@@ -423,6 +457,7 @@ final class LyricsFetcher {
     /// is in hand, or `source` could give one.
     static func couldDemote(_ best: LyricCandidate, from source: LyricSourceID, among found: [LyricCandidate],
                             query: LyricQuery) -> Bool {
+        if couldShift(best, from: source, among: found, query: query) { return true }
         guard best.source == .lrclib, source != .lrclib, source.timingCeiling >= 1, rankedTiming(best.result) == 2,
               !best.agreement.timingOutlier, fitsVersion(best, query) else { return false }
         let others = found.filter { $0.source != .lrclib && fitsVersion($0, query) }
@@ -434,6 +469,32 @@ final class LyricsFetcher {
         guard !backed else { return false }
         let rival = others.contains { rankedTiming($0.result) == 2 && !hasTimingFault($0.result) }
         return rival || source.timingCeiling >= 2
+    }
+    /// Whether `source`'s word timing could still be merged into line-timed
+    /// lyrics in hand (`mergingTiming`) that would then outrank `best`:
+    /// a match from a leading source that no word timing in hand could be
+    /// merged into yet.
+    static func couldLendTiming(_ best: LyricCandidate, from source: LyricSourceID, among found: [LyricCandidate],
+                                query: LyricQuery, options: LyricSourceOptions.Snapshot) -> Bool {
+        // Below word timing, `couldBeat` already keeps every word-capable source.
+        guard source.timingCeiling >= 2, rankedTiming(best.result) == 2 else { return false }
+        let bestLead = lead(best, timing: 2)
+        return found.contains { $0.source != source && isMergeRecipient($0, query: query) && lead($0, timing: 2) < bestLead }
+    }
+    /// Whether `source`'s answer could show the timing on screen to be
+    /// shifted to another recording (`LyricAgreement.shift`), taking away
+    /// its lead: Music's own cache could on its own; another source only
+    /// when a match in hand already runs steadily off from it and no other
+    /// service's timing in hand agrees with it.
+    static func couldShift(_ best: LyricCandidate, from source: LyricSourceID, among found: [LyricCandidate],
+                           query: LyricQuery) -> Bool {
+        guard best.source != .appleMusicCache, best.agreement.shift == nil, source != best.source, source.timingCeiling >= 1,
+              rankedTiming(best.result) >= 1, fitsVersion(best, query) else { return false }
+        if source == .appleMusicCache { return true }
+        let family = agreementFamily(best), timing = agreementTiming(best)
+        let others = found.filter { agreementFamily($0) != family && fitsVersion($0, query) }.map(agreementTiming).filter { !$0.isEmpty }
+        guard !others.contains(where: { timingAgrees(timing, $0) }) else { return false }
+        return others.contains { isShifted($0, timing) != nil }
     }
     private static func nanoseconds(_ seconds: Double) -> UInt64 { UInt64(max(0, seconds) * 1_000_000_000) }
 
@@ -501,8 +562,17 @@ final class LyricsFetcher {
             show(best)
             return .publish
         }
+        /// Another source's match that ranks higher, or the same source's
+        /// lyrics given better timing (`LyricsFetcher.mergingTiming`). A
+        /// merge that took word timing from a better donor once more
+        /// sources answered replaces the earlier merge of the same text, so
+        /// what shows is what is listed and saved.
         func isUpgrade(_ next: LyricCandidate, over current: LyricCandidate) -> Bool {
-            next.source != current.source && LyricsFetcher.outranks(next, current, query: query, options: options)
+            let nextTiming = LyricsFetcher.rankedTiming(next.result), currentTiming = LyricsFetcher.rankedTiming(current.result)
+            if next.source == current.source, LyricsFetcher.timingDonor(next) != nil, LyricsFetcher.timingDonor(current) != nil,
+               nextTiming == currentTiming, !LyricsFetcher.sameResult(next.result, current.result) { return true }
+            let better = next.source != current.source || nextTiming > currentTiming
+            return better && LyricsFetcher.outranks(next, current, query: query, options: options)
         }
         private mutating func show(_ candidate: LyricCandidate) {
             shown = candidate
@@ -525,6 +595,8 @@ final class LyricsFetcher {
         // Only matches for the playing version are compared: a live take has the same words but its own timing.
         let fitting = accepted.indices.filter { fitsVersion(accepted[$0], query) }
         for (index, weighed) in zip(fitting, weighAgreement(fitting.map { accepted[$0] })) { accepted[index] = weighed }
+        // The leading text, line-timed, with another match's word timing (`mergingTiming`).
+        accepted = mergingTiming(accepted, query: query, options: options)
         accepted.sort { outranks($0, $1, query: query, options: options) }
         rejected.sort { order($0.candidate.source, in: options) < order($1.candidate.source, in: options) }
         return (accepted, rejected)
@@ -591,8 +663,14 @@ final class LyricsFetcher {
         !candidate.languageMismatch && VersionTags.mismatch(query, title: candidate.title).isEmpty
     }
     /// The timing matches are ranked by: 2 for word-by-word or mixed timing,
-    /// which rank together, 1 for line timing and 0 for plain text.
-    static func rankedTiming(_ result: Result) -> Int { min(timingTier(result), 2) }
+    /// which rank together, 1 for line timing and 0 for plain text. Word
+    /// stamps a tool spread over each line (`hasEvenlySpreadWordTiming`)
+    /// rank as the line timing they are; `couldBeat` and `matters` weigh
+    /// the same tier.
+    static func rankedTiming(_ result: Result) -> Int {
+        let tier = min(timingTier(result), 2)
+        return tier == 2 && hasEvenlySpreadWordTiming(result) ? 1 : tier
+    }
     /// Where a source stands ahead of the configured order at a ranked
     /// timing, at best: Music's own cache leads timed lyrics, then Apple
     /// Music's lyrics relayed by Lyrics+ (`isAppleRelay`; Music's own is the
@@ -613,8 +691,12 @@ final class LyricsFetcher {
     /// other sources at its timing, when two other services agree on the
     /// timing and LRCLIB's disagrees with both
     /// (`LyricAgreement.timingOutlier`): its timing is made by listeners.
-    private static func lead(_ candidate: LyricCandidate, timing: Int) -> Int {
+    /// Timing shifted to another recording or master
+    /// (`LyricAgreement.shift`) ranks after the other sources at its timing
+    /// in the same way.
+    static func lead(_ candidate: LyricCandidate, timing: Int) -> Int {
         if candidate.source == .lrclib, candidate.agreement.timingOutlier { return 5 }
+        if candidate.agreement.shift != nil { return 5 }
         if candidate.source == .lyricsPlus, !isAppleRelay(candidate) { return 4 }
         return lead(candidate.source, timing: timing)
     }
@@ -626,7 +708,7 @@ final class LyricsFetcher {
     static func isAppleRelay(_ candidate: LyricCandidate) -> Bool {
         guard candidate.source == .lyricsPlus else { return false }
         switch candidate.result {
-        case .synced(_, let p), .plain(_, let p): return isAppleRelay(provenanceSource: p.source)
+        case .synced(_, let p), .plain(_, let p): return isAppleRelay(provenanceSource: textSource(ofProvenance: p.source))
         }
     }
     static func isAppleRelay(provenanceSource source: String) -> Bool {
@@ -707,8 +789,15 @@ final class LyricsFetcher {
             else if candidate.languageMismatch { found += " · lyrics in another language" }
             if candidate.viaOriginalTitle { found += " · found under the original title" }
             if isAppleRelay(candidate) { found += " · Apple Music’s lyrics" }
+            if let donor = timingDonor(candidate) { found += " · word timing from \(donor)" }
             if let fault = LyricsFetcher.timingFault(candidate.result) { found += " · \(fault)" }
-            if candidate.agreement.timingOutlier { found += " · timing differs from other sources" }
+            if timingTier(candidate.result) >= 2, hasEvenlySpreadWordTiming(candidate.result) {
+                found += " · word timing spread evenly over each line (ranked as line timing)"
+            }
+            if let shift = candidate.agreement.shift {
+                found += " · timed to another recording (\(String(format: "%.1f", abs(shift))) s \(shift > 0 ? "later" : "earlier") than "
+                    + (screened.accepted.contains { $0.source == .appleMusicCache } ? "Music’s own" : "the others") + ")"
+            } else if candidate.agreement.timingOutlier { found += " · timing differs from other sources" }
             else if candidate.agreement.peers > 0 {
                 found += candidate.agreement.peers == 1 ? " · 1 other source agrees" : " · \(candidate.agreement.peers) other sources agree"
             }
@@ -718,12 +807,17 @@ final class LyricsFetcher {
         return states
     }
     /// Whether no pending source could change what `choose` picks.
+    /// `among`: the matches in hand, whose line timing a pending source's
+    /// word timing could still upgrade past `best` (`couldLendTiming`).
     static func isSettled(_ best: LyricCandidate?, pending: Set<LyricSourceID>, query: LyricQuery,
-                          options: LyricSourceOptions.Snapshot) -> Bool {
+                          options: LyricSourceOptions.Snapshot, among found: [LyricCandidate] = []) -> Bool {
         let open = pending.filter { options.enabled.contains($0) }
         guard !open.isEmpty else { return true }
         guard let best else { return false }
-        return !open.contains { couldBeat(best, from: $0, query: query, options: options) }
+        return !open.contains {
+            couldBeat(best, from: $0, query: query, options: options)
+                || couldLendTiming(best, from: $0, among: found, query: query, options: options)
+        }
     }
     /// Whether the best result a source could still return would rank above
     /// `best`. Nothing ranks above Music's own word-by-word or mixed timing.
@@ -827,7 +921,14 @@ final class LyricsFetcher {
         case .lyrimuse: return try LocalLyricBridge.candidate(query, folder: localFolder)
         case .amll: return try await original { try await AMLLLyricsProvider.lookup($0) }
         // One lookup per song, under the names the player gave: no other-name or alias retries.
-        case .musixmatch: return try await MusixmatchLyricsProvider.lookup(query)
+        case .musixmatch:
+            let found = try await MusixmatchLyricsProvider.lookup(query)
+            // Paused after being turned away is no answer: not remembered as a
+            // miss, and no choice it might have beaten is saved.
+            if found == nil, let left = MusixmatchState.shared.blockedFor() {
+                throw LyricHTTP.Failure(message: "Musixmatch is paused for \(Int(left / 60) + 1) min after turning this Mac away")
+            }
+            return found
         // East Asian catalogues, which often index only an artist's native name.
         case .sodaMusic: return try await original { q in try await alias(q) { try await MoreLyricsProviders.sodaMusic($0) } }
         case .petitLyrics: return try await original { q in try await alias(q) { try await MoreLyricsProviders.petitLyrics($0) } }

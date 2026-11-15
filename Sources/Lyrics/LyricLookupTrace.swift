@@ -228,7 +228,7 @@ struct LyricTracePublication: Codable, Sendable {
 
 /// A candidate as the ranking sees it.
 struct LyricTraceCandidate: Codable, Sendable {
-    struct Agreement: Codable, Sendable { var peers: Int; var timedCompared: Int; var timingOutlier: Bool }
+    struct Agreement: Codable, Sendable { var peers: Int; var timedCompared: Int; var timingOutlier: Bool; var shift: Double? = nil }
     var source: String
     var title: String
     var artist: String
@@ -295,7 +295,7 @@ struct LyricTraceCandidate: Codable, Sendable {
         lead = LyricsFetcher.traceLead(candidate)
         appleRelay = LyricsFetcher.isAppleRelay(candidate)
         agreement = .init(peers: candidate.agreement.peers, timedCompared: candidate.agreement.timedCompared,
-                          timingOutlier: candidate.agreement.timingOutlier)
+                          timingOutlier: candidate.agreement.timingOutlier, shift: candidate.agreement.shift)
         let reason = given ?? LyricsFetcher.rejection(candidate, query: query)
         verdict = reason == nil ? "accepted" : "rejected"
         self.reason = reason
@@ -309,7 +309,9 @@ struct LyricTraceCandidate: Codable, Sendable {
     static func timing(_ result: LyricsFetcher.Result) -> String {
         if LyricsFetcher.hasTimingFault(result) { return "faulty" }
         guard case .synced(let lines, _) = result else { return "plain" }
-        switch LyricsFetcher.timingTier(result) {
+        let tier = LyricsFetcher.timingTier(result)
+        if tier >= 2, LyricsFetcher.hasEvenlySpreadWordTiming(result) { return "spread" }
+        switch tier {
         case 3: return "word"
         case 2: return "mixed"
         case 1: return lines.contains { $0.wordTimed && LyricsFetcher.isPhraseTimed($0) } ? "phrase-timed" : "line"

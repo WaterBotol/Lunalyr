@@ -16,6 +16,10 @@ struct LyricAgreement: Equatable {
     /// Its timing disagrees with every other timed source with the same
     /// words, while two of those agree with each other.
     var timingOutlier = false
+    /// How far its lines run from the timing the others agree on, in
+    /// seconds (positive: later), when it is timed to another recording or
+    /// master (`LyricsFetcher.timelineShift`); nil otherwise.
+    var shift: Double? = nil
 }
 
 extension LyricsFetcher {
@@ -49,9 +53,73 @@ extension LyricsFetcher {
                     sameWordsTimed.dropFirst(index + 1).contains { families[a] != families[$0] && timingAgrees(timings[a], timings[$0]) }
                 }
             }
+            agreement.shift = timelineShift(i, timings: timings, texts: texts, families: families, candidates: candidates)
             result[i].agreement = agreement
         }
         return result
+    }
+
+    /// The least offset, in seconds, that counts as a timeline shifted to
+    /// another recording or master: more than a lyric's sync slips.
+    static let timelineShiftMinimum = 1.5
+    /// How closely a shifted timeline's lines keep to its own offset: at
+    /// least `timelineShiftShare` of them within this many seconds of it.
+    static let timelineShiftSpread = 0.5
+    static let timelineShiftShare = 0.8
+    /// Lines paired by their words needed to judge an offset.
+    static let timelineShiftMinPairs = 6
+
+    /// How `b`'s sung lines run against `a`'s: the median of their start
+    /// differences (b minus a) over lines with the same words, paired in
+    /// order, and whether nearly all of them keep to it
+    /// (`timelineShiftSpread`). Nil with fewer than
+    /// `timelineShiftMinPairs` pairs.
+    static func timelineOffset(_ a: [(text: String, start: Double)],
+                               _ b: [(text: String, start: Double)]) -> (median: Double, steady: Bool)? {
+        var gaps: [Double] = [], from = 0
+        for line in a {
+            guard from < b.count, let match = b[from...].firstIndex(where: { $0.text == line.text }) else { continue }
+            gaps.append(b[match].start - line.start)
+            from = match + 1
+        }
+        guard gaps.count >= timelineShiftMinPairs else { return nil }
+        let median = gaps.sorted()[gaps.count / 2]
+        let near = gaps.filter { abs($0 - median) <= timelineShiftSpread }.count
+        return (median, Double(near) >= timelineShiftShare * Double(gaps.count))
+    }
+
+    /// Whether `b` runs steadily `timelineShiftMinimum` or more from `a`.
+    static func isShifted(_ a: [(text: String, start: Double)], _ b: [(text: String, start: Double)]) -> Double? {
+        guard let offset = timelineOffset(a, b), offset.steady, abs(offset.median) >= timelineShiftMinimum else { return nil }
+        return offset.median
+    }
+
+    /// The offset of candidate `i`'s timeline when it is timed to another
+    /// recording or master, or nil. Music's own cache is the recording
+    /// playing, so a timeline steadily off from its timing is shifted, and
+    /// it never is itself. Otherwise it takes two timed matches from other
+    /// services that agree with each other (`timingAgrees`), with the same
+    /// words, both steadily off from `i` by about the same offset, while no
+    /// other service's timing agrees with `i`'s: of two that disagree there
+    /// is no telling which is right.
+    static func timelineShift(_ i: Int, timings: [[(text: String, start: Double)]], texts: [[String]], families: [String],
+                              candidates: [LyricCandidate]) -> Double? {
+        guard candidates[i].source != .appleMusicCache, !timings[i].isEmpty else { return nil }
+        let others = candidates.indices.filter {
+            $0 != i && families[$0] != families[i] && !timings[$0].isEmpty && sameWords(texts[i], texts[$0])
+        }
+        if let music = others.first(where: { candidates[$0].source == .appleMusicCache }) {
+            return isShifted(timings[music], timings[i])
+        }
+        guard !others.contains(where: { timingAgrees(timings[i], timings[$0]) }) else { return nil }
+        let shifted = others.compactMap { j in isShifted(timings[j], timings[i]).map { (j, $0) } }
+        for (index, a) in shifted.enumerated() {
+            for b in shifted.dropFirst(index + 1) where families[a.0] != families[b.0]
+                && abs(a.1 - b.1) <= timelineShiftSpread && timingAgrees(timings[a.0], timings[b.0]) {
+                return (a.1 + b.1) / 2
+            }
+        }
+        return nil
     }
 
     /// Sung lines, normalised for comparison. Credits and the song's own

@@ -60,7 +60,8 @@ The songs run one after another, about one to three seconds each.
   accepted match at rank n, `rej …` a match that failed the recording check
   (with the reason), `none` no match, `stopped` not needed (the automatic
   lookup stopped it), `timeout`, or `error: …`. Timing is `word`, `mixed`,
-  `line`, `phrase-timed` (a whole line or long phrases timed as words),
+  `spread` (word stamps a tool spread evenly over each line: ranked as line
+  timing), `line`, `phrase-timed` (a whole line or long phrases timed as words),
   `plain`, or `faulty` (lines stamped faster than they could be sung).
 - `NN-title-artist.json`: the full trace for one song.
 

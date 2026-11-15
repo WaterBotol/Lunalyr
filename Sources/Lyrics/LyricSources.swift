@@ -113,7 +113,10 @@ final class LyricSourceOptions: ObservableObject {
         /// is searched under its original title even when Latin-script
         /// lyrics (an English version) were found, and NetEase search works
         /// again (no cookies).
-        static let cachePolicy = "v16"
+        /// v17: word stamps spread evenly rank as line timing, a timeline
+        /// shifted to another recording ranks lower, and the leading text
+        /// timed by the line takes another match's word timing.
+        static let cachePolicy = "v17"
         /// Keys the cached online choice. Only settings that change which
         /// online result wins take part: local sources are always evaluated
         /// afresh.
@@ -433,7 +436,7 @@ enum SavedLyrics {
     private static func entry(_ key: String, pin: Bool, in folder: URL) -> Entry? {
         guard let data = try? Data(contentsOf: file(key, pin: pin, in: folder)), data.count <= 2_000_000,
               let entry = try? JSONDecoder().decode(Entry.self, from: data),
-              pin || Date().timeIntervalSince(entry.storedAt) < 14 * 86400 else { return nil }
+              pin || Date().timeIntervalSince(entry.storedAt) < keptFor else { return nil }
         return entry
     }
     static func read(_ key: String, pin: Bool, in folder: URL = defaultFolder) -> LyricsFetcher.Result? {
@@ -445,9 +448,18 @@ enum SavedLyrics {
               let source = LyricSourceID(rawValue: raw), let title = entry.title, let artist = entry.artist else { return nil }
         return LyricCandidate(source: source, result: entry.result, title: title, artist: artist, duration: entry.duration, score: 0)
     }
+    /// How long an automatic choice is kept.
+    static let keptFor: TimeInterval = 14 * 86400
+    /// How long a provisional one is: a source that could have beaten it gave
+    /// no answer, so it is asked again after this, while replays meanwhile
+    /// ask nothing.
+    static let provisionalFor: TimeInterval = 3600
+    /// `provisional`: kept for `provisionalFor` instead of `keptFor` (its
+    /// time is set back so it expires then).
     @discardableResult
-    static func save(_ candidate: LyricCandidate, key: String, in folder: URL = defaultFolder) -> Bool {
-        write(Entry(result: candidate.result, storedAt: Date(), source: candidate.source.rawValue,
+    static func save(_ candidate: LyricCandidate, key: String, in folder: URL = defaultFolder, provisional: Bool = false) -> Bool {
+        let stored = provisional ? Date().addingTimeInterval(provisionalFor - keptFor) : Date()
+        return write(Entry(result: candidate.result, storedAt: stored, source: candidate.source.rawValue,
                     title: candidate.title, artist: candidate.artist, duration: candidate.duration), key: key, pin: false, in: folder)
     }
     @discardableResult
