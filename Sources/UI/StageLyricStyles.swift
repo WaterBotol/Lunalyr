@@ -234,6 +234,8 @@ struct StageLyricView: View {
     @Environment(\.lyricReduceMotion) var reduceMotion
     /// Word symbols and action words (`WordAccentPlan`), by each run's first token.
     @Environment(\.lyricWordAccents) var accents
+    /// Word presence (`WordPresence`): each word's arrive, sung and leave layer.
+    @Environment(\.lyricWordPresence) var wordPresence
 
     // MARK: Shared
 

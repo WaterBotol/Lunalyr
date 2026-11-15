@@ -53,6 +53,7 @@ struct SpokenTypographyView: View {
     @Environment(\.lyricReduceMotion) private var reduceMotion
     @Environment(\.lyricInk) private var ink
     @Environment(\.lyricWordAccents) private var accents
+    @Environment(\.lyricWordPresence) private var wordPresence
     @ObservedObject private var settings = Settings.shared
     @StateObject private var typography = RenderMemo<SpokenTypography.Key, [SpokenTypography.Word]>()
 
@@ -203,10 +204,11 @@ struct SpokenTypographyView: View {
     private func token(_ token: SpokenTypography.Word, next: Int?, rank: Double, size: CGSize, arrival: WordArrival,
                        intensity: Double, eligibleSince: Double,
                        highlight: LyricHighlightTiming.Pose = .hidden) -> some View {
+        let presence = WordPresence.effective(wordPresence, reduceMotion: reduceMotion)
         let state = RollingTokenState.make(token, next: next, rank: rank, time: time, composition: composition,
             baseSize: baseSize, stageWidth: size.width, intensity: intensity, reduceMotion: reduceMotion,
             arrival: arrival, eligibleSince: eligibleSince,
-            highlightOpacity: highlight.opacity)
+            highlightOpacity: highlight.opacity, presence: presence)
         let presentation = state.presentation
         let colours = ink.sample(slot: token.slot, seed: token.seed)
         let hero = composition == .cascade && token.hero && !colours.sweeps
@@ -257,9 +259,12 @@ struct SpokenTypographyView: View {
                         .opacity(tile.opacity)
                 }
             }
+            // Drawn at the word presence; the stack and the fit below keep
+            // the plain entrance (`state.slot`), so placement never changes.
             .modifier(WordEntrance(progress: presentation.progress, style: arrival,
                 size: token.pointSize, direction: token.hash % 2 == 0 ? 1 : -1, visibility: state.shown,
-                arrival: presentation.arrival, maxTurn: state.maxTurn))
+                arrival: presentation.arrival, maxTurn: state.maxTurn,
+                presence: presence, softRise: !presentation.preview))
             .visualEffect { ink, geometry in
                 // Fitted where the stack actually placed it, word and
                 // reading together as one unit, including the travel and
@@ -271,8 +276,8 @@ struct SpokenTypographyView: View {
                     centre: CGPoint(x: placed.midX, y: placed.midY), scale: scale * max(1, Double(entrance.entranceScale)),
                     angle: abs(angle) + abs(entrance.turn) + entrance.tilt, margin: stageMargin, marginY: stageMarginY))
             }
-            .scaleEffect(CGFloat(scale))
-            .rotationEffect(.degrees(angle))
+            .scaleEffect(CGFloat(state.drawScale))
+            .rotationEffect(.degrees(state.drawAngle))
             // An action word's motion: outside the stage fit, which measures
             // where the stack placed the word, never where it moves to.
             .wordAction(wordAccent, start: token.source.start, time: time, size: token.pointSize, glow: colours.glow)
@@ -295,6 +300,11 @@ struct RollingTokenState {
     let scale: Double
     /// Degrees.
     let angle: Double
+    /// `scale` and `angle` as drawn: the word in focus holds them more
+    /// strongly at a word presence above 1 (`WordPresence.hold`). The
+    /// stack and the stage fit keep `scale` and `angle`.
+    var drawScale: Double
+    var drawAngle: Double
     /// The entrance turn this unit may make (see `RollingStack.turnLimit`).
     let maxTurn: Double
     let slot: RollingStack.Slot
@@ -303,7 +313,7 @@ struct RollingTokenState {
     static func make(_ token: SpokenTypography.Word, next: Int?, rank: Double, time: Double,
                      composition: LyricComposition, baseSize: CGFloat, stageWidth: CGFloat, intensity: Double,
                      reduceMotion: Bool, arrival: WordArrival, eligibleSince: Double = -.infinity,
-                     highlightOpacity: Double = 0) -> RollingTokenState {
+                     highlightOpacity: Double = 0, presence: Double = 1) -> RollingTokenState {
         let word = token.source
         let motion = vc_word_motion(time, word.start, word.end, token.cadence, .infinity, 0, token.seed,
                                     intensity, reduceMotion ? 1 : 0)
@@ -332,6 +342,13 @@ struct RollingTokenState {
         let indent: CGFloat = composition == .cascade && !token.hero ? baseSize * 0.34 * direction : 0
         let scale = pose.scale * drift.scale
         let angle = pose.angle + drift.angle
+        // Word presence: the focus word's pose (its scale's distance from
+        // 1, and its angle) held more strongly, eased out with focus so a
+        // word stepping back never shrinks or steps. Receding words' blur
+        // is unchanged. 1 under Reduce Motion (the caller passes it so).
+        let hold = 1 + (WordPresence.hold(reduceMotion ? 1 : presence) - 1) * focus
+        let drawScale = WordPresence.about1(pose.scale, hold) * drift.scale
+        let drawAngle = pose.angle * hold + drift.angle
         // The entrance exactly as WordEntrance will draw it: its travel,
         // turn and scale are reserved continuously while they unwind (a
         // preview shows the entrance's starting pose, so it needs the most).
@@ -348,7 +365,7 @@ struct RollingTokenState {
             tilt: token.tile && !reduceMotion ? 1.2 : 0, shown: shown,
             align: composition == .cascade ? direction : 0)
         return RollingTokenState(presentation: presentation, pose: pose, shown: shown, focus: focus, scale: scale,
-                                 angle: angle, maxTurn: maxTurn, slot: slot)
+                                 angle: angle, drawScale: drawScale, drawAngle: drawAngle, maxTurn: maxTurn, slot: slot)
     }
 }
 

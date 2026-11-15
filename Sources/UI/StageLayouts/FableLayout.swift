@@ -86,7 +86,7 @@ extension StageLyricView {
             : FablePose()
         let side: Double = plan.rightToLeft ? -1 : 1
         let live = Self.torqueLive(run, runs: runs, at: time)
-        fableFace(run, size: size, live: live, sample: sample(run, of: runs.count))
+        fableFace(run, size: size, live: live, sample: sample(run, of: runs.count), lineTimed: plan.lineTimed)
             .modifier(FableStroke(progress: native && plan.writes[run.id] ? written : 1, rightToLeft: plan.rightToLeft))
             .scaleEffect(CGFloat(pose.scale), anchor: .bottom)
             .rotationEffect(.degrees(pose.spin * side), anchor: .bottom)
@@ -100,7 +100,8 @@ extension StageLyricView {
 
     /// A word with its reading under it.
     @ViewBuilder
-    private func fableFace(_ run: StageRun, size: CGFloat, live: Double, sample: LyricInkSample) -> some View {
+    private func fableFace(_ run: StageRun, size: CGFloat, live: Double, sample: LyricInkSample,
+                           lineTimed: Bool = false) -> some View {
         let tile = tiled(run)
         let tight = LyricScript.keepsSyllables(run.text)
         let reading = Self.revealedReading(of: run, in: readings, at: time, colour: sample.rest.opacity(0.9))
@@ -114,6 +115,8 @@ extension StageLyricView {
         .lineLimit(1).fixedSize()
         .background { tileBackground(tile, size: size) }
         .wordAction(accent(run), start: run.start, time: time, size: size, glow: sample.glow)
+        // Word presence, about the word's centre with its action.
+        .modifier(presence(run, size: size, speed: 1, live: !lineTimed))
         VStack(spacing: size * 0.06) {
             word
             if let reading {

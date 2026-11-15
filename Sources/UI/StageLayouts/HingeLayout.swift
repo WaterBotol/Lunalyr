@@ -414,6 +414,8 @@ extension StageLyricView {
         }
         .lyricShadow(tile ? 0 : 0.3, radius: max(2, size * 0.06), y: 2)
         .wordAction(accent(run), start: run.start, time: time, size: size, glow: sample.glow)
+        // Word presence, about the word's centre with its action.
+        .modifier(presence(run, size: size, speed: speed, live: live && !phrasing.lineTimed))
         // The burst grows about a point a quarter in from the spine, so a big
         // word does not run far past the page's outer margin.
         .scaleEffect(pose.grow, anchor: UnitPoint(x: side == .right ? 0.25 : 0.75, y: 0.6))
