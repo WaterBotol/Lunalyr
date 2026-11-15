@@ -125,8 +125,9 @@ final class InstalledFontLibrary: ObservableObject {
         }
     }
 
-    /// Whether the family can set ordinary Latin text: not a symbol face
-    /// (Wingdings, Zapf Dingbats, Bodoni Ornaments), and it has letters.
+    /// Whether the family can set lyrics: not a symbol face (Wingdings, Zapf
+    /// Dingbats, Bodoni Ornaments), and it has Latin letters or another
+    /// script's (Geeza Pro for Arabic lyrics, PingFang, Hiragino).
     nonisolated static func drawsLatin(_ family: String) -> Bool {
         let descriptor = CTFontDescriptorCreateWithAttributes([kCTFontFamilyNameAttribute: family] as CFDictionary)
         let font = CTFontCreateWithFontDescriptor(descriptor, 12, nil)
@@ -135,8 +136,13 @@ final class InstalledFontLibrary: ObservableObject {
         let style = CTFontGetSymbolicTraits(font).rawValue & CTFontSymbolicTraits.traitClassMask.rawValue
         if CTFontStylisticClass(rawValue: style) == .classSymbolic { return false }
         let covered = CTFontCopyCharacterSet(font) as CharacterSet
-        return CharacterSet(charactersIn: "AaBbEeGgRrSs").isSubset(of: covered)
+        if CharacterSet(charactersIn: "AaBbEeGgRrSs").isSubset(of: covered) { return true }
+        // A face for another script's lyrics: Arabic, Hebrew, Cyrillic, Greek,
+        // Devanagari, Thai, Chinese, Japanese or Korean.
+        return otherScripts.contains { CharacterSet(charactersIn: $0).isSubset(of: covered) }
     }
+
+    private nonisolated static let otherScripts = ["ابتث", "אבגד", "абвг", "αβγδ", "कखगघ", "กขคง", "的一是不", "あいうえ", "가나다라"]
 
     /// Every family AppKit lists.
     static func systemFamilies() -> [String] {

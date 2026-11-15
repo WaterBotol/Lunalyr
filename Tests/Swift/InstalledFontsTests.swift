@@ -208,4 +208,10 @@ final class InstalledFontsTests: XCTestCase {
             print("SNAPSHOT \(url.path)")
         }
     }
+
+    func testFontsForOtherScriptsAreListedButSymbolFontsAreNot() {
+        XCTAssertTrue(InstalledFontLibrary.drawsLatin("Geeza Pro"), "Arabic lyrics")
+        XCTAssertTrue(InstalledFontLibrary.drawsLatin("Helvetica Neue"))
+        XCTAssertFalse(InstalledFontLibrary.drawsLatin("Zapf Dingbats"))
+    }
 }
