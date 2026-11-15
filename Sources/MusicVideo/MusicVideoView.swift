@@ -1391,6 +1391,8 @@ final class YouTubeMusicVideoCoordinator: NSObject, WKNavigationDelegate, WKScri
     /// Shown whole: told each time the player starts showing, so its view
     /// covers YouTube's controls for a moment (`MusicVideoOverlayMask`).
     var onCoverOverlays: (() -> Void)?
+    /// When YouTube's controls were last covered (uptime).
+    private var coveredAt: TimeInterval?
     /// The page's player is up and well, so another video can be switched
     /// to inside it (`YouTubePlayerReuse`).
     private var pageReady = false
@@ -1598,7 +1600,10 @@ final class YouTubeMusicVideoCoordinator: NSObject, WKNavigationDelegate, WKScri
     }
 
     private func reveal() {
-        if MusicVideoOverlayMask.covers(framing: framing, wasShowing: playerVisible) { onCoverOverlays?() }
+        if MusicVideoOverlayMask.covers(framing: framing, wasShowing: playerVisible) {
+            coveredAt = ProcessInfo.processInfo.systemUptime
+            onCoverOverlays?()
+        }
         freeze.notePlayer(showing: true)
         let first = !reportedFirstFrame
         fade(visible: true, atOnce: first && revealsAtOnce)
@@ -1680,8 +1685,11 @@ final class YouTubeMusicVideoCoordinator: NSObject, WKNavigationDelegate, WKScri
 
     /// Our own web view's picture, as drawn: the page's crop, overscan and
     /// blur are in it, and the wallpaper's dimming lies over the host.
+    /// Not while YouTube's controls are drawn over the picture (covered
+    /// on screen, but not in a snapshot): a frozen frame would keep them.
     func captureFrame(_ done: @escaping @MainActor (CGImage?) -> Void) {
-        guard let view, view.bounds.width > 0, view.bounds.height > 0 else { done(nil); return }
+        guard MusicVideoOverlayMask.capturable(now: ProcessInfo.processInfo.systemUptime, coveredAt: coveredAt),
+              let view, view.bounds.width > 0, view.bounds.height > 0 else { done(nil); return }
         view.takeSnapshot(with: WKSnapshotConfiguration()) { image, _ in
             MainActor.assumeIsolated {
                 let picture = image?.cgImage(forProposedRect: nil, context: nil, hints: nil)
@@ -1691,9 +1699,12 @@ final class YouTubeMusicVideoCoordinator: NSObject, WKNavigationDelegate, WKScri
     }
 
     /// A small copy of the picture for the ambient glow: only while the
-    /// player shows, so YouTube's overlays and a blank page never tint it.
+    /// player shows and YouTube's controls are not drawn over it, so they
+    /// and a blank page never tint it.
     func captureAmbient(_ done: @escaping @MainActor (CGImage?) -> Void) {
-        guard playerVisible, let view, view.alphaValue > 0.5, view.bounds.width > 0, view.bounds.height > 0 else {
+        guard playerVisible,
+              MusicVideoOverlayMask.capturable(now: ProcessInfo.processInfo.systemUptime, coveredAt: coveredAt),
+              let view, view.alphaValue > 0.5, view.bounds.width > 0, view.bounds.height > 0 else {
             done(nil)
             return
         }

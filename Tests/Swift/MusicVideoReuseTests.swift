@@ -52,6 +52,13 @@ final class MusicVideoReuseTests: XCTestCase {
         XCTAssertTrue(MusicVideoOverlayMask.regions(player: .zero, visible: layout.visible).isEmpty)
     }
 
+    func testNoPictureIsTakenWhileTheControlsAreDrawn() {
+        XCTAssertTrue(MusicVideoOverlayMask.capturable(now: 10, coveredAt: nil))
+        XCTAssertFalse(MusicVideoOverlayMask.capturable(now: 10, coveredAt: 9), "a frozen frame would keep them")
+        XCTAssertFalse(MusicVideoOverlayMask.capturable(now: 9 + MusicVideoOverlayMask.hold - 0.1, coveredAt: 9))
+        XCTAssertTrue(MusicVideoOverlayMask.capturable(now: 9 + MusicVideoOverlayMask.hold, coveredAt: 9))
+    }
+
     func testTheWholePlayerIsNoLongerHeldHidden() {
         // The hold that kept a whole player hidden for 5 s is gone: a player
         // that starts playing is shown, and only buffering hides it.
@@ -69,6 +76,8 @@ final class MusicVideoReuseTests: XCTestCase {
         XCTAssertFalse(YouTubePlayerReuse.mayPark(pageReady: true, failed: true), "a failed player is rebuilt")
         XCTAssertFalse(YouTubePlayerReuse.mayPark(pageReady: false, failed: false))
         XCTAssertTrue(YouTubePlayerReuse.mayReuse(parkedFor: 5))
+        XCTAssertTrue(YouTubePlayerReuse.mayReuse(parkedFor: 8 * 60),
+                      "parked when the next video has faded in, it waits out that whole song")
         XCTAssertFalse(YouTubePlayerReuse.mayReuse(parkedFor: YouTubePlayerReuse.parkedLimit))
         XCTAssertFalse(YouTubePlayerReuse.mayReuse(parkedFor: .nan))
     }

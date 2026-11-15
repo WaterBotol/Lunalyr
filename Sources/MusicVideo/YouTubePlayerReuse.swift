@@ -11,7 +11,10 @@ import WebKit
 // Each song's video is its own wallpaper layer (`WallpaperTransition` holds
 // the old one on its last frame until the new one shows), so the player is
 // handed from layer to layer: the outgoing layer's page is parked here when
-// its layer goes, and the next layer's player takes it.
+// its layer goes (after the next song's video has faded in), and the video
+// after that takes it. So the first change of video still loads a new page,
+// and each one after reuses the page from two songs before. One page is
+// parked: with several displays, one of their players gets it.
 
 enum YouTubePlayerReuse {
     /// How the page shows a video.
@@ -34,8 +37,10 @@ enum YouTubePlayerReuse {
     /// instead (`releasePlayer`), as before: it frees its memory.
     static func mayPark(pageReady: Bool, failed: Bool) -> Bool { pageReady && !failed }
 
-    /// A parked page is closed after this long unused.
-    static let parkedLimit: TimeInterval = 120
+    /// A parked page is closed after this long unused. The outgoing
+    /// layer's page is parked once the next song's video has faded in, so
+    /// it waits out that whole song: longer than nearly any song.
+    static let parkedLimit: TimeInterval = 15 * 60
 
     static func mayReuse(parkedFor: TimeInterval) -> Bool {
         parkedFor.isFinite && parkedFor >= 0 && parkedFor < parkedLimit
@@ -126,6 +131,13 @@ enum MusicVideoOverlayMask {
     /// whenever it was not already showing (a start, a resume, a seek).
     static func covers(framing: MusicVideoFraming, wasShowing: Bool) -> Bool {
         framing.isWhole && !wasShowing
+    }
+
+    /// Whether the picture may be taken (a frozen frame, the ambient glow's
+    /// sample): not while the controls are drawn, covered only on screen.
+    static func capturable(now: TimeInterval, coveredAt: TimeInterval?) -> Bool {
+        guard let coveredAt else { return true }
+        return now - coveredAt >= hold || now < coveredAt
     }
 
     /// The covered regions in the visible part of a whole video, whose 16:9
