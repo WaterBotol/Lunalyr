@@ -366,8 +366,17 @@ public sealed unsafe class FloatingWindowHost : IDisposable
         else KillTimer(_hwnd, TimerTopmost);
     }
 
+    private static readonly bool HoverSim = Environment.GetEnvironmentVariable("LUNALYR_FLOAT_HOVER_SIM") == "1";
+
     private void CheckPointer()
     {
+        if (HoverSim)
+        {
+            // Diagnostics (LUNALYR_FLOAT_HOVER_SIM=1): the pointer "over" the window 2 s in every 6, through the same path
+            // as a real hover, to reproduce hover problems without moving the mouse.
+            SetPointerOver(_visible && Environment.TickCount64 / 1000 % 6 < 2);
+            return;
+        }
         if (!GetCursorPos(out var p)) return;
         SetPointerOver(_visible && p.X >= _rect.X && p.X < _rect.X + _rect.Width && p.Y >= _rect.Y && p.Y < _rect.Y + _rect.Height);
     }

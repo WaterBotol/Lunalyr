@@ -223,6 +223,7 @@
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
                             <StackPanel Spacing="4">
                                 <ToggleButton x:Name="PauseToggle" Style="{StaticResource QuickToggle}" Click="PauseToggle_Click">
@@ -253,6 +254,14 @@
                                     <FontIcon Glyph="&#xE7C2;" FontSize="16" />
                                 </ToggleButton>
                                 <TextBlock Text="Edit position" HorizontalAlignment="Center" Style="{StaticResource CaptionTextBlockStyle}"
+                                           AutomationProperties.AccessibilityView="Raw" />
+                            </StackPanel>
+                            <StackPanel Grid.Column="4" Spacing="4">
+                                <ToggleButton x:Name="StayVisibleToggle" Style="{StaticResource QuickToggle}" Click="StayVisibleToggle_Click"
+                                              AutomationProperties.Name="Floating lyrics stay visible under the pointer">
+                                    <FontIcon Glyph="&#xE890;" FontSize="16" />
+                                </ToggleButton>
+                                <TextBlock Text="Stay visible" HorizontalAlignment="Center" Style="{StaticResource CaptionTextBlockStyle}"
                                            AutomationProperties.AccessibilityView="Raw" />
                             </StackPanel>
                         </Grid>

@@ -273,6 +273,16 @@ public sealed partial class RenderEngine
     /// <summary>The floating window's frame: the stage (the lyric, on the floating scene), then the shade, its shadow and the chrome.</summary>
     private void DrawFloating(RenderSurface s, in FrameContext frame)
     {
+        if (FloatTrace)
+        {
+            // Diagnostics (LUNALYR_FLOAT_TRACE=1): any gap of over 100 ms between floating frames, with the hover state.
+            var at = System.Diagnostics.Stopwatch.GetTimestamp() / (double)System.Diagnostics.Stopwatch.Frequency;
+            if (_traceLast > 0 && at - _traceLast > 0.1)
+                _log.Info($"FLOATTRACE gap {(at - _traceLast) * 1000:0} ms, over {_pointerOver}, opacity {_floatOpacity:0.00}, song {frame.SongSeconds:0.00}");
+            if (_pointerOver != _traceOver) _log.Info($"FLOATTRACE pointer {( _pointerOver ? "over" : "left")} at song {frame.SongSeconds:0.00}");
+            _traceOver = _pointerOver;
+            _traceLast = at;
+        }
         var dc = frame.Dc;
         var o = _floatOptions;
         var look = _floatLook;
@@ -290,6 +300,10 @@ public sealed partial class RenderEngine
         dc.Clear(new Color4(0, 0, 0, 0));
         drawer.Compose(dc, _dwrite, _floatOpacity, o.Backdrop, look.ReduceTransparency, hasStage, o.Editing, o.Placeholder, look.Accent);
     }
+
+    private static readonly bool FloatTrace = Environment.GetEnvironmentVariable("LUNALYR_FLOAT_TRACE") == "1";
+    private double _traceLast;
+    private bool _traceOver;
 
     /// <summary>The floating stage's scene, made again only when the shared scene or the shade changes (never per frame).</summary>
     private SceneSnapshot FloatingScene(SceneSnapshot scene, FloatingLyricsOptions o, FloatingLook look)

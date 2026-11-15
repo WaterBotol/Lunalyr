@@ -411,6 +411,9 @@ public sealed partial class TrayFlyout : Window
             FloatingToggle.IsChecked = settings.IsFloating;
             EditPositionToggle.IsChecked = settings.IsFloating && _host.FloatingEditing;
             EditPositionToggle.IsEnabled = settings.IsFloating;
+            // "Stay visible": the floating lyrics don't fade while the pointer is over them.
+            StayVisibleToggle.IsChecked = !settings.FloatingFadeUnderPointer;
+            StayVisibleToggle.IsEnabled = settings.IsFloating;
             RefreshPlayers(settings.Player);
             PausedNote.Visibility = state.WallpaperPaused ? Visibility.Visible : Visibility.Collapsed;
             RefreshMusicVideo();
@@ -740,6 +743,14 @@ public sealed partial class TrayFlyout : Window
         if (_updating) return;
         var floating = FloatingToggle.IsChecked == true;
         _host.Settings.Update(s => s.WithLyricsSurface(floating ? Lunalyr.Core.Floating.LyricsSurface.Floating : Lunalyr.Core.Floating.LyricsSurface.Desktop));
+        Refresh();
+    }
+
+    private void StayVisibleToggle_Click(object sender, RoutedEventArgs e)
+    {
+        if (_updating) return;
+        var stay = StayVisibleToggle.IsChecked == true;
+        _host.Settings.Update(s => s with { FloatingFadeUnderPointer = !stay });
         Refresh();
     }
 
