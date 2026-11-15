@@ -69,17 +69,23 @@ struct NowPlayingView: View {
     /// Bumped when a fade or notice ends, so a quiet frame clock can stop.
     @State private var clockCheck = 0
 
-    private static let backgroundFadeDuration: TimeInterval = WallpaperMotion.surfaceFade
+    /// The background crossfade: the surface fade, or a short dissolve under
+    /// Reduce Motion (`WallpaperTransition`).
+    private var backgroundFadeDuration: TimeInterval { WallpaperTransition.fadeDuration(reduceMotion: reduceMotion) }
     private static let paletteFadeDuration: TimeInterval = WallpaperMotion.surfaceFade
     /// How long the "no lyrics" notice stays up, and how long it takes to go.
     private static let noticeHoldDuration: TimeInterval = WallpaperMotion.noticeHold
     private static let noticeFadeDuration: TimeInterval = WallpaperMotion.noticeFade
     private static let idleHoldDuration: TimeInterval = WallpaperMotion.idleNoticeHold
     /// How long a crossfade waits for a layer's first frame.
-    static let firstFrameWait: TimeInterval = 3
-    /// How long a song change in Music video waits on the cover stand-in
-    /// for the song's video before showing the fallback wallpaper.
-    static let musicVideoWait: TimeInterval = 3
+    static let firstFrameWait: TimeInterval = WallpaperTransition.firstFrameWait
+    /// How long a song change in Music video holds what is on screen for
+    /// the song's video before showing the fallback wallpaper.
+    static let musicVideoWait: TimeInterval = WallpaperTransition.videoLookupWait
+    /// The cover each music video layer was shown with, so a video held on
+    /// its last frame after a song change keeps its own backdrop (shown
+    /// whole) rather than the next song's.
+    @State private var videoCovers: [MusicVideoSource: NSImage] = [:]
     /// Ambient motion under Reduce Motion, matching the visualisers.
     private static let reducedMotionRate = 0.15
     /// How long the text backing takes to come or go when the lyric stage
@@ -296,21 +302,37 @@ struct NowPlayingView: View {
 
     private var currentLayer: BackgroundLayer { crossfade.current }
 
-    /// Whether `layer` has something to draw: anything but an effect still
-    /// compiling on this surface's GPU. A crossfade into an effect that has
-    /// never had anything to draw waits instead of fading towards an empty
-    /// view (see `BackgroundCrossfade`).
-    private func canDraw(_ layer: BackgroundLayer) -> Bool {
-        switch layer {
-        case .shader(let style, _):
-            return effects.isSettled(style, display: effectDisplay)
-        case .visualizer, .custom:
-            // A visualiser compiles on first use, a web scene loads, and a
-            // picture decodes: each says when its first frame is up.
-            return drawnLayers.contains(layer) || firstFrameOverdue == layer
-        default:
-            return true
-        }
+    /// Whether `layer` has something to draw. A crossfade into a layer that
+    /// has never had anything to draw waits instead of fading towards an
+    /// empty view (see `BackgroundCrossfade`): an effect compiling on this
+    /// surface's GPU; a visualiser, picture, animated cover or music video
+    /// until its first frame is up; the video stand-in while there is
+    /// anything else to hold (`WallpaperTransition`). `firstLayer`: the
+    /// surface's first layer, with nothing beneath it to hold.
+    private func canDraw(_ layer: BackgroundLayer, firstLayer: Bool = false) -> Bool {
+        var compiled = true
+        if case .shader(let style, _) = layer { compiled = effects.isSettled(style, display: effectDisplay) }
+        return WallpaperTransition.canDraw(layer.transitionGate, firstFrameDrawn: drawnLayers.contains(layer),
+                                           overdue: firstFrameOverdue == layer, firstLayer: firstLayer,
+                                           compiled: compiled, overOpaque: shownLayerIsOpaque)
+    }
+
+    /// The layer on screen beneath any held one covers the desktop.
+    private var shownLayerIsOpaque: Bool {
+        crossfade.entries.last(where: \.isReady)?.layer.isOpaque ?? true
+    }
+
+    /// `layer` is the one being faded to, still held for its first frame:
+    /// drawn at no opacity yet.
+    private func isHeld(_ layer: BackgroundLayer) -> Bool {
+        WallpaperTransition.revealsAtOnce(isCurrent: crossfade.current == layer, held: crossfade.isHeld)
+    }
+
+    /// Notes the cover shown with the playing song's video (see `videoCovers`).
+    private func rememberVideoCover() {
+        guard let artwork = nowPlaying.artwork, let track = nowPlaying.artworkTrack,
+              let source = musicVideo.source(for: track), videoCovers[source] !== artwork else { return }
+        videoCovers[source] = artwork
     }
 
     /// Records that `layer`'s view has drawn, outside the view update that
@@ -373,7 +395,7 @@ struct NowPlayingView: View {
     /// holds still, no lyric is advancing, and fades and notices are done.
     private var quietAfter: Date? {
         var ends: [Date] = []
-        if let end = crossfade.fadesEnd(duration: Self.backgroundFadeDuration) { ends.append(end) }
+        if let end = crossfade.fadesEnd(duration: backgroundFadeDuration) { ends.append(end) }
         ends.append(paletteChangedAt.addingTimeInterval(Self.paletteFadeDuration))
         if nowPlaying.current == nil, let since = nowPlaying.idleSince {
             ends.append(since.addingTimeInterval(Self.idleHoldDuration + Self.noticeFadeDuration))
@@ -386,8 +408,16 @@ struct NowPlayingView: View {
         // An outgoing layer only needs the clock until its fade ends, which
         // is already one of the transition deadlines.
         return FrameClockPolicy.quietAfter(.init(
-            backgroundAnimates: currentLayer.animatesWithClock && !(reduceMotion && currentLayer == .albumGradient),
+            backgroundAnimates: WallpaperTransition.backgroundAnimates(
+                layers: crossfade.entries.map { (animates: animatesWithClock($0.layer), isReady: $0.isReady) },
+                held: crossfade.isHeld),
             lyricsAdvance: lyricsAdvance, transitionsEnd: ends))
+    }
+
+    /// Whether `layer` needs the frame clock: a still album gradient under
+    /// Reduce Motion does not.
+    private func animatesWithClock(_ layer: BackgroundLayer) -> Bool {
+        layer.animatesWithClock && !(reduceMotion && layer == .albumGradient)
     }
 
     var body: some View {
@@ -428,7 +458,7 @@ struct NowPlayingView: View {
                 // state, so a `.transition` here would simply cut. An effect
                 // that has not yet had anything to draw holds the fade at its
                 // start.
-                let layers = crossfade.layers(at: Date(), duration: Self.backgroundFadeDuration, isOpaque: \.isOpaque)
+                let layers = crossfade.layers(at: Date(), duration: backgroundFadeDuration, isOpaque: \.isOpaque)
                 let phases = LayerPhases(colour: colourPhase, flow: flowPhase, pattern: patternPhase,
                                          visualizer: visualizerPhase, economical: economical)
                 let stage = stagePresence(at: Date())
@@ -500,19 +530,28 @@ struct NowPlayingView: View {
         .ignoresSafeArea(edges: isSettingsPreview ? [] : .all)
         .onChange(of: ArtworkKey(image: nowPlaying.artwork, track: nowPlaying.artworkTrack)) {
             updatePalette(nowPlaying.artwork, for: nowPlaying.artworkTrack)
+            rememberVideoCover()
         }
         .onChange(of: desiredLayer) { _, next in
             // Hold the old layers alive just long enough to fade them out.
             // A layer that never had anything to draw was never seen, so the
             // fade carries on from the one that is on screen.
             prepareEffect(for: next)
-            crossfade.change(to: next, ready: canDraw(next), at: fadeStart, duration: Self.backgroundFadeDuration)
+            crossfade.change(to: next, ready: canDraw(next), at: fadeStart, duration: backgroundFadeDuration)
             SongStartLog.note("display \(displayID)\(isSettingsPreview ? " preview" : ""): background → \(next.traceName), "
-                + (crossfade.isReady ? "fading \(Self.backgroundFadeDuration) s" : "held for its first frame")
+                + (crossfade.isReady ? "fading \(backgroundFadeDuration) s" : "held for its first frame")
                 + ", \(crossfade.entries.count) layers")
             let kept = Set(crossfade.entries.map(\.layer))
             if !drawnLayers.isSubset(of: kept) { drawnLayers.formIntersection(kept) }
             if let overdue = firstFrameOverdue, !kept.contains(overdue) { firstFrameOverdue = nil }
+            rememberVideoCover()
+            let keptVideos = Set(kept.compactMap { layer -> MusicVideoSource? in
+                if case .musicVideo(let source) = layer { return source }
+                return nil
+            })
+            if videoCovers.keys.contains(where: { !keptVideos.contains($0) }) {
+                videoCovers = videoCovers.filter { keptVideos.contains($0.key) }
+            }
         }
         .onChange(of: canDraw(currentLayer)) { _, ready in
             // The effect is ready: start the fade into it now. Once shown, it
@@ -521,14 +560,15 @@ struct NowPlayingView: View {
             if ready {
                 crossfade.becameReady(at: fadeStart)
                 SongStartLog.note("display \(displayID)\(isSettingsPreview ? " preview" : ""): background "
-                    + "\(currentLayer.traceName) ready, fading \(Self.backgroundFadeDuration) s")
+                    + "\(currentLayer.traceName) ready, fading \(backgroundFadeDuration) s")
             }
         }
-        // A layer that never reports a first frame is shown anyway.
+        // A layer that never reports a first frame is shown anyway (a music
+        // video onto its stand-in), so the outgoing one is never held long.
         .task(id: crossfade.isHeld ? currentLayer : nil) {
             guard crossfade.isHeld else { return }
             let held = currentLayer
-            try? await Task.sleep(for: .seconds(Self.firstFrameWait))
+            try? await Task.sleep(for: .seconds(WallpaperTransition.firstFrameWait(for: held.transitionGate)))
             if !Task.isCancelled, crossfade.isHeld, currentLayer == held { firstFrameOverdue = held }
         }
         // A song change holds the background until the song's cover and
@@ -568,13 +608,15 @@ struct NowPlayingView: View {
         }
         .onAppear {
             updatePalette(nowPlaying.artwork, for: nowPlaying.artworkTrack)
+            rememberVideoCover()
             let layer = desiredLayer
             prepareEffect(for: layer)
             // A desktop surface fades in from its black window once its
             // first layer can draw, rather than popping in; the Settings
             // preview shows at once.
-            crossfade = isSettingsPreview ? BackgroundCrossfade(layer, ready: canDraw(layer))
-                : BackgroundCrossfade(layer, ready: canDraw(layer), fadingInAt: fadeStart)
+            let ready = canDraw(layer, firstLayer: true)
+            crossfade = isSettingsPreview ? BackgroundCrossfade(layer, ready: ready)
+                : BackgroundCrossfade(layer, ready: ready, fadingInAt: fadeStart)
             SongStartLog.note("display \(displayID)\(isSettingsPreview ? " preview" : ""): wallpaper view appeared, "
                 + "background \(layer.traceName)")
         }
@@ -668,12 +710,16 @@ struct NowPlayingView: View {
                 // Reduce Motion shows a still: a library video's paused
                 // frame, or a YouTube video's own still (no player at all).
                 // A paused or covered wallpaper holds the video's frame.
+                // Held for its first picture while the outgoing layer stays
+                // on screen; that picture shows at once, as the crossfade
+                // is the fade (`WallpaperTransition`).
                 MusicVideoBackground(source: source, paused: renderingPaused,
                                      dim: settings.musicVideoDim, blur: settings.musicVideoBlur,
                                      preview: isSettingsPreview, still: reduceMotion, standIn: cover.gradient,
                                      youTubeFraming: settings.musicVideoFraming,
                                      libraryFraming: settings.libraryVideoFraming,
-                                     artwork: nowPlaying.artwork)
+                                     artwork: videoCovers[source] ?? nowPlaying.artwork,
+                                     revealsAtOnce: isHeld(layer), onFirstFrame: firstFrameDrawn(layer))
                 scrim
                 textBacking(backing, presence: stage, size: size)
             }
@@ -696,7 +742,8 @@ struct NowPlayingView: View {
                     if still {
                         stillCover(artwork)
                     } else {
-                        MotionArtworkView(url: url, placement: settings.motionPlacement, isPaused: renderingPaused)
+                        MotionArtworkView(url: url, placement: settings.motionPlacement, isPaused: renderingPaused,
+                                          onFirstFrame: firstFrameDrawn(layer))
                     }
                 }
                 .ignoresSafeArea()

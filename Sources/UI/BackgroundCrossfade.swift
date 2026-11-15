@@ -74,6 +74,7 @@ struct BackgroundCrossfade<Layer: Hashable>: Equatable {
     var isHeld: Bool { !isReady }
 
     /// Moves to `next`; `ready` says whether it has something to draw now.
+    /// Moving to the layer already current changes nothing.
     /// A layer that never had anything to draw, or was replaced before it
     /// showed, was never seen, so the fade carries on from what is beneath.
     mutating func change(to next: Layer, ready: Bool, at date: Date, duration: TimeInterval) {
@@ -83,6 +84,9 @@ struct BackgroundCrossfade<Layer: Hashable>: Equatable {
         // A first layer shown at once stays as the base even before it is
         // ready: it is what the surface has.
         if unseen || (!top.isReady && entries.count > 1) { entries.removeLast() }
+        // Back to the layer that was held under one that never showed (a
+        // video's stand-in held over the same video): nothing to fade.
+        if entries.last?.layer == next { return }
         while entries.count >= Self.maximumLayers {
             let weights = visibleWeights(at: date, duration: duration)
             guard let least = weights.indices.min(by: { weights[$0] < weights[$1] }) else { break }
