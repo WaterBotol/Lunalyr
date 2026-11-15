@@ -209,7 +209,10 @@ enum MusicVideoCaptionSync {
 
     struct Result: Equatable {
         /// The offset (video time − song time) when the captions agree on
-        /// one well enough to trust; nil otherwise.
+        /// one well enough to trust (at least `minimumMatches` lines within
+        /// `tolerance` of the median, and `minimumAgreement` of all matched
+        /// lines, with no rival offset nearly as well supported); nil
+        /// otherwise.
         var offset: Double?
         /// Each matched line's match, the one nearest the consensus when a
         /// line matched in several places (a chorus).
@@ -300,11 +303,25 @@ enum MusicVideoCaptionSync {
         let agreeing = chosen.map(\.offset).filter { abs($0 - median) <= tolerance }
         let refined = Self.median(agreeing)
         let spread = Self.median(agreeing.map { abs($0 - refined) })
-        let trusted = chosen.count >= minimumMatches
+        // Another offset with nearly as many lines (a chorus heard once
+        // less, one chorus off) leaves it ambiguous.
+        let support = self.support(lines, center: center)
+        let rival = lines.joined().map(\.offset).filter { abs($0 - center) > 1 }
+            .map { self.support(lines, center: $0) }.max() ?? 0
+        let trusted = agreeing.count >= minimumMatches
             && Double(agreeing.count) >= minimumAgreement * Double(chosen.count)
+            && Double(rival) < rivalShare * Double(support)
         return Result(offset: trusted ? (refined * 20).rounded() / 20 : nil,
                       matches: chosen.sorted { $0.songTime < $1.songTime }, agreeing: agreeing.count,
                       spread: spread, segments: segments(lines, first: center))
+    }
+
+    /// A rival offset with this share of the winner's lines makes it ambiguous.
+    static let rivalShare = 0.75
+
+    /// How many lines have a match within `tolerance` of `center`.
+    private static func support(_ lines: [[Match]], center: Double) -> Int {
+        lines.filter { $0.contains { abs($0.offset - center) <= tolerance } }.count
     }
 
     /// The offset with the most lines having a match near it (ties: the

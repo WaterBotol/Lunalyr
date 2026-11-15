@@ -194,6 +194,28 @@ final class MusicVideoCaptionSyncTests: XCTestCase {
         XCTAssertEqual(result.agreeing, 9, "every chorus line picks its own repeat, not another one")
     }
 
+    func testChorusesOneRepeatApartAreAmbiguous() {
+        // Three identical choruses; the captions hold only the second and
+        // third (nothing else matched). Shifting by one chorus explains as
+        // many lines as the truth: no offset.
+        let chorus = ["So can I call you tonight", "I'm trying to make up my mind", "Could you tell me what's real"]
+        var lines: [MusicVideoLyricLine] = []
+        for base in [30.0, 80.0, 130.0] {
+            for (i, text) in chorus.enumerated() { lines.append(.init(start: base + Double(i) * 4, text: text)) }
+        }
+        let cues = asrCues(Array(lines[3...]), offset: 5)
+        let result = Sync.measure(cues: cues, lines: lines)
+        XCTAssertNil(result.offset)
+    }
+
+    func testThreeAgreeingOfFiveIsNotEnough() {
+        let cues = asrCues(Array(lyrics.prefix(5)), offset: 8, jitter: { [0, 0.1, -0.1, 3, -4][$0] })
+        let result = Sync.measure(cues: cues, lines: lyrics)
+        XCTAssertEqual(result.matches.count, 5)
+        XCTAssertEqual(result.agreeing, 3)
+        XCTAssertNil(result.offset, "60 % of five, but only three lines")
+    }
+
     func testAnUploadersLineCaptionsMatchByTheirStart() throws {
         let cues = lyrics.map { MusicVideoCaptionCue(start: $0.start + 3.2, end: $0.start + 6.5, text: $0.text) }
         let result = Sync.measure(cues: cues, lines: lyrics)

@@ -13,6 +13,7 @@
 // With a captions file (a timed-text reply saved earlier) nothing is captured.
 // MV_HARNESS_SAVE=<dir> keeps each capture and the lyrics there.
 // MV_HARNESS_VERBOSE=1 prints each matched line.
+// MV_HARNESS_LRC=<file> uses that LRC file instead of asking LRCLIB.
 
 import AppKit
 import WebKit
@@ -28,7 +29,9 @@ enum Harness {
         let videoID = args[1], title = args[2], artist = args[3]
         let env = ProcessInfo.processInfo.environment
         let save = env["MV_HARNESS_SAVE"]
-        guard let lyrics = lrclib(title: title, artist: artist, duration: duration, save: save.map { "\($0)/\(videoID).lrc" }) else {
+        let given = env["MV_HARNESS_LRC"].flatMap { try? String(contentsOfFile: $0, encoding: .utf8) }.map(parseLRC)
+        guard let lyrics = given ?? lrclib(title: title, artist: artist, duration: duration,
+                                           save: save.map { "\($0)/\(videoID).lrc" }) else {
             print("\(videoID)\tno synced lyrics on LRCLIB")
             exit(3)
         }
