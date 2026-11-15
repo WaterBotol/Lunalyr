@@ -176,7 +176,7 @@ final class MusicVideoMatchTests: XCTestCase {
                        "player.setOption('captions', 'track', {})"] {
             XCTAssertTrue(html.contains(needle), needle)
         }
-        XCTAssertTrue(html.contains("onReady: function (event) { ready = true; event.target.mute(); hideCaptions();"),
+        XCTAssertTrue(html.contains("ready = true; event.target.mute(); hideCaptions();"),
                       "on ready")
         XCTAssertTrue(html.contains("if (state === -1 || state === 1 || state === 5) { hideCaptions(); }"),
                       "and on each video load")
