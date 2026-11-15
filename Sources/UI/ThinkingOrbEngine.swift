@@ -31,7 +31,7 @@
 // Lunalyr's changes: none to the geometry. Option bags are `[String: Double]`
 // (a missing key is JavaScript's `undefined`); `Math.round` is `jsRound`
 // (half up); the far-to-near sort keeps equal depths in their original
-// order, as JavaScript's stable sort does. Colour, size and the countdown
+// order, as JavaScript's stable sort does. Colour, size and the focus
 // are Lunalyr's own, in ThinkingOrb.swift.
 
 import Foundation

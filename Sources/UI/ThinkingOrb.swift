@@ -2,21 +2,16 @@ import SwiftUI
 
 /// The instrumental-break cue: a dotted thought-orb from Jakub Antalik's
 /// thinking-orbs (MIT; the engine is ported in ThinkingOrbEngine.swift),
-/// drawn in the lyric colours, with an outer ring of dots that lights one
-/// by one so the time left in the break reads at a glance.
+/// drawn in the lyric colours.
 ///
 /// - Through the break the orb is upstream's `listening` state (a waveform
 ///   rolling through latitude rings). With audio capture on, the music's
 ///   level deepens the wave, swells the dots and nudges the spin faster;
 ///   onsets pulse the dots larger and brighter. Smoothing: 60 ms attack,
 ///   250 ms release.
-/// - The countdown ring: `ringDots` dots round the orb, lit clockwise from
-///   twelve o'clock, the last as the hand-off to the next line begins.
-///   Breaks shorter than `ringMinimumSpan` have none.
 /// - In the last `focusWindow` seconds the orb tightens and brightens, and
 ///   cross-fades into upstream's `breathing` state (a face-on ring: the
-///   breath before the singing), while the countdown ring draws in round
-///   it. Then the existing hand-off: it shrinks to 30% and fades into the
+///   breath before the singing). Then the existing hand-off: it shrinks to 30% and fades into the
 ///   next line's first word.
 ///
 /// Everything the view draws is worked out in `pose`, a pure function of
@@ -31,8 +26,8 @@ enum ThinkingOrb {
     /// The engine's frame, in diameters: the `listening` sphere fills about
     /// 0.77 of its frame, so the dotted sphere is about one diameter across.
     static let frameFactor = 1.3
-    /// The drawing box, in diameters: room for the countdown ring and halo.
-    static let canvasFactor = 1.75
+    /// The drawing box, in diameters: room for the halo (0.8 diameters in radius).
+    static let canvasFactor = 1.6
     /// Below this diameter the tuned 20 px design is used, else the 64 px one.
     static let smallDesignBelow = 40.0
 
@@ -114,40 +109,12 @@ enum ThinkingOrb {
         }
     }
 
-    // MARK: Countdown
+    // MARK: Focus
 
-    /// Breaks the orb is up for less than this have no countdown ring.
-    static let ringMinimumSpan = 3.0
-    static let ringDotsLarge = 24
-    static let ringDotsSmall = 12
-    /// Ring radius, in diameters; drawn in to `ringFocusRadius` at the end.
-    static let ringRadius = 0.68
-    static let ringFocusRadius = 0.6
-    /// The 20 px design's dots are larger: its ring sits this much further out.
-    static let smallRingOffset = 0.08
     /// The last seconds, before the hand-off, in which the orb focuses.
     static let focusWindow = 2.0
     /// At full focus the orb is this size.
     static let focusScale = 0.86
-
-    static func ringDots(diameter: Double) -> Int {
-        design(diameter: diameter) == .px20 ? ringDotsSmall : ringDotsLarge
-    }
-
-    /// How full the ring is, 0...1: from the break's start to the start of
-    /// the hand-off (`WallpaperMotion.interludeOut` before `span`), when
-    /// the last dot lights. Nil when there is no ring: the end is not known
-    /// or the break is shorter than `ringMinimumSpan`.
-    static func ringFill(elapsed: Double, span: Double?) -> Double? {
-        guard let span, span >= ringMinimumSpan else { return nil }
-        return min(1, max(0, elapsed / (span - WallpaperMotion.interludeOut)))
-    }
-
-    /// Each ring dot's light, 0...1, clockwise from twelve o'clock: each
-    /// takes its own 1/count of the fill.
-    static func ringLights(fill: Double, count: Int) -> [Double] {
-        (0..<count).map { min(1, max(0, fill * Double(count) - Double($0))) }
-    }
 
     /// 0...1: how far the orb has focused, over the `focusWindow` (at most
     /// half the break) that ends as the hand-off begins.
@@ -185,17 +152,12 @@ enum ThinkingOrb {
         /// Added to every dot's ink strength (onsets and focus brighten).
         var brighten: Double
         var focus: Double
-        /// Each countdown dot's light; nil with no ring.
-        var ring: [Double]?
-        /// In diameters.
-        var ringRadius: Double
         var haloAlpha: Double
         var increaseContrast: Bool
     }
 
     static func pose(_ cue: InstrumentalCue, diameter: Double = 48, reduceMotion: Bool,
                      increaseContrast: Bool) -> Pose {
-        let size = design(diameter: diameter)
         let audio = reduceMotion ? nil : cue.audio
         let level = audio?.level ?? 0, onset = audio?.onset ?? 0
         let focus = focus(elapsed: cue.elapsed, span: cue.span)
@@ -205,7 +167,7 @@ enum ThinkingOrb {
             + (audio?.phase ?? 0)
         func layer(_ state: OrbEngine.State, _ weight: Double) -> Layer {
             Layer(state: state, t: reduceMotion ? OrbEngine.reducedMotionTime
-                  : seconds * OrbEngine.resolve(state, size).speed, weight: weight)
+                  : seconds * OrbEngine.resolve(state, design(diameter: diameter)).speed, weight: weight)
         }
         var layers: [Layer] = []
         if focus < 1 { layers.append(layer(breakState, 1 - focus)) }
@@ -213,7 +175,6 @@ enum ThinkingOrb {
         let arrive = enterScale + (1 - enterScale) * cue.entering
         let leave = 1 - (1 - exitScale) * cue.leaving
         let tighten = 1 - (1 - focusScale) * focus
-        let fill = ringFill(elapsed: cue.elapsed, span: cue.span)
         return Pose(opacity: cue.opacity,
                     scale: reduceMotion ? 1 : arrive * leave * tighten,
                     layers: layers,
@@ -221,9 +182,6 @@ enum ThinkingOrb {
                     dotScale: 1 + levelDotGrowth * level + onsetDotGrowth * onset,
                     brighten: onsetBrighten * onset + 0.2 * focus,
                     focus: focus,
-                    ring: fill.map { ringLights(fill: $0, count: ringDots(diameter: diameter)) },
-                    ringRadius: (size == .px20 ? smallRingOffset : 0)
-                        + (reduceMotion ? ringRadius : ringRadius + (ringFocusRadius - ringRadius) * focus),
                     haloAlpha: 0.10 + 0.14 * focus,
                     increaseContrast: increaseContrast)
     }
@@ -399,22 +357,6 @@ struct ThinkingOrbView: View {
                                             width: haloRadius * 2, height: haloRadius * 2)),
                      with: .radialGradient(gradient, center: centre, startRadius: 0, endRadius: haloRadius))
 
-        // The countdown ring, behind the orb.
-        if let ring = pose.ring {
-            let radius = diameter * pose.ringRadius * pose.scale
-            let unit = k * ThinkingOrb.ringDotUnit
-            for (index, light) in ring.enumerated() {
-                let angle = -Double.pi / 2 + Double(index) / Double(ring.count) * 2 * .pi
-                let point = CGPoint(x: centre.x + radius * cos(angle), y: centre.y + radius * sin(angle))
-                let r = unit * (0.75 + 0.45 * light + 0.15 * pose.focus)
-                let strength = min(1, ThinkingOrb.ringRestStrength + (1 - ThinkingOrb.ringRestStrength) * light
-                                   + pose.brighten * light)
-                let a = alpha(ThinkingOrb.ringRestAlpha + (1 - ThinkingOrb.ringRestAlpha) * light)
-                context.fill(Path(ellipseIn: CGRect(x: point.x - r, y: point.y - r, width: 2 * r, height: 2 * r)),
-                             with: .color(colour(strength: strength, y: native / 2).opacity(a)))
-            }
-        }
-
         // The orb: lines first, then dots far to near.
         for (frame, weight) in frames where weight > 0.01 {
             for line in frame.lines {
@@ -433,14 +375,4 @@ struct ThinkingOrbView: View {
             }
         }
     }
-}
-
-extension ThinkingOrb {
-    /// Countdown dot radius, in the design's units (a near `listening` dot
-    /// is about 0.9).
-    static let ringDotUnit = 1.0
-    /// An unlit countdown dot's opacity.
-    static let ringRestAlpha = 0.4
-    /// An unlit countdown dot's ink strength: enough to show the track.
-    static let ringRestStrength = 0.45
 }

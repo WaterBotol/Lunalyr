@@ -63,18 +63,15 @@ final class RenderingPerformanceTests: XCTestCase {
         XCTAssertNil(gap.instrumentalCue(at: 10, previewLead: 0.5))
         let cue = try XCTUnwrap(gap.instrumentalCue(at: 16, previewLead: 0.5))
         XCTAssertEqual(cue.opacity, 1)
-        // The time-remaining cue: the countdown ring fills through the
-        // break, and the orb focuses in its last two seconds.
+        // The time-remaining cue: the orb focuses in its last two seconds.
         func pose(_ time: Double) throws -> ThinkingOrb.Pose {
             ThinkingOrb.pose(try XCTUnwrap(gap.instrumentalCue(at: time, previewLead: 0.5)), reduceMotion: false,
                              increaseContrast: false)
         }
-        func lit(_ time: Double) throws -> Double { try pose(time).ring?.reduce(0, +) ?? -1 }
-        XCTAssertLessThan(try lit(11), 3)
-        XCTAssertGreaterThan(try lit(22), try lit(19))
-        XCTAssertEqual(try lit(25.2), Double(ThinkingOrb.ringDotsLarge), accuracy: 0.01)
         XCTAssertEqual(try pose(20).focus, 0)
         XCTAssertGreaterThan(try pose(24.5).focus, 0.5)
+        XCTAssertGreaterThan(try pose(24.5).brighten, try pose(20).brighten)
+        XCTAssertLessThan(try pose(24.5).scale, try pose(20).scale)
         let unknown = VCVocalGap(start: 10, end: -1, nextVocal: -1).instrumentalCue(at: 17, previewLead: 0.5)
         XCTAssertNil(unknown?.progress)
         XCTAssertNil(gap.instrumentalCue(at: 25.55, previewLead: 0.5))

@@ -4,7 +4,7 @@ import XCTest
 @testable import VersoCustom
 
 /// The thinking orb that stands for an instrumental break (`ThinkingOrb`):
-/// thinking-orbs' dotted `listening` state with a countdown ring, focusing
+/// thinking-orbs' dotted `listening` state focusing
 /// into `breathing` before the next line. Writes PNG stills when
 /// LUNALYR_ORB_STILLS_DIR is set (pass it as TEST_RUNNER_LUNALYR_ORB_STILLS_DIR).
 final class ThinkingOrbTests: XCTestCase {
@@ -20,50 +20,11 @@ final class ThinkingOrbTests: XCTestCase {
         ThinkingOrb.pose(cue, reduceMotion: reduceMotion, increaseContrast: false)
     }
 
-    // MARK: Countdown
+    // MARK: Focus
 
-    func testCountdownRingFillsFromTheBreakStartToTheHandOff() {
-        let span = 10.0, full = span - WallpaperMotion.interludeOut
-        XCTAssertEqual(ThinkingOrb.ringFill(elapsed: 0, span: span), 0)
-        XCTAssertEqual(try XCTUnwrap(ThinkingOrb.ringFill(elapsed: full / 2, span: span)), 0.5, accuracy: 1e-12)
-        XCTAssertEqual(ThinkingOrb.ringFill(elapsed: full, span: span), 1)
-        XCTAssertEqual(ThinkingOrb.ringFill(elapsed: span, span: span), 1, "stays full through the hand-off")
-        XCTAssertEqual(ThinkingOrb.ringFill(elapsed: -1, span: span), 0)
-        // One dot after another, clockwise from twelve o'clock.
-        let lights = ThinkingOrb.ringLights(fill: 0.5, count: 24)
-        XCTAssertEqual(lights.count, 24)
-        XCTAssertEqual(Array(lights[0..<12]), Array(repeating: 1, count: 12))
-        XCTAssertEqual(Array(lights[12...]), Array(repeating: 0, count: 12))
-        let between = ThinkingOrb.ringLights(fill: 12.25 / 24, count: 24)
-        XCTAssertEqual(between[12], 0.25, accuracy: 1e-9, "the next dot is part lit")
-        XCTAssertEqual(between[13], 0)
-        // Through a real break: lit dots only ever increase.
-        let gap = VCVocalGap(start: 10, end: 30, nextVocal: 1)
-        var previous = -1.0
-        for step in 0...190 {
-            guard let cue = gap.instrumentalCue(at: 10.6 + Double(step) / 10, previewLead: 1) else { continue }
-            let lit = try? XCTUnwrap(pose(cue).ring).reduce(0, +)
-            XCTAssertGreaterThanOrEqual(lit ?? -1, previous)
-            previous = lit ?? previous
-        }
-        XCTAssertEqual(previous, 24, accuracy: 1e-9)
-        // The small design has fewer dots.
-        XCTAssertEqual(ThinkingOrb.ringDots(diameter: 32), ThinkingOrb.ringDotsSmall)
-        XCTAssertEqual(ThinkingOrb.ringDots(diameter: 60), ThinkingOrb.ringDotsLarge)
-    }
-
-    func testShortBreaksHaveNoRing() throws {
-        XCTAssertNil(ThinkingOrb.ringFill(elapsed: 1, span: 2.99))
-        XCTAssertNotNil(ThinkingOrb.ringFill(elapsed: 1, span: 3))
-        XCTAssertNil(ThinkingOrb.ringFill(elapsed: 1, span: nil), "an unknown end has no countdown")
-        // A 3 s gap with a 0.5 s preview lead is up for 2.5 s: no ring.
-        let short = VCVocalGap(start: 10, end: 13, nextVocal: 1)
-        XCTAssertNil(pose(try cue(short, 11.5, lead: 0.5)).ring)
-        let long = VCVocalGap(start: 10, end: 14, nextVocal: 1)
-        XCTAssertNotNil(pose(try cue(long, 11.5, lead: 0.5)).ring)
-        // An open break neither counts down nor focuses.
+    func testOpenBreakNeitherFocusesNorEnds() throws {
+        XCTAssertEqual(ThinkingOrb.focus(elapsed: 100, span: nil), 0)
         let open = pose(try cue(VCVocalGap(start: 10, end: -1, nextVocal: -1), 40))
-        XCTAssertNil(open.ring)
         XCTAssertEqual(open.focus, 0)
         XCTAssertEqual(open.layers.map(\.state), [ThinkingOrb.breakState])
     }
@@ -86,16 +47,15 @@ final class ThinkingOrbTests: XCTestCase {
         XCTAssertEqual(crossing.layers.map(\.weight).reduce(0, +), 1, accuracy: 1e-9)
         let focused = pose(try cue(gap, 28.6))
         XCTAssertEqual(focused.layers.map(\.state), [.breathing])
-        // Tighter, brighter, the ring drawn in.
+        // Tighter and brighter.
         XCTAssertLessThan(focused.scale, middle.scale)
         XCTAssertGreaterThan(focused.brighten, middle.brighten)
-        XCTAssertLessThan(focused.ringRadius, middle.ringRadius)
         XCTAssertGreaterThan(focused.haloAlpha, middle.haloAlpha)
     }
 
     // MARK: Motion
 
-    func testReduceMotionKeepsStillDotsAndTheRingStillFills() throws {
+    func testReduceMotionKeepsStillDots() throws {
         let gap = VCVocalGap(start: 10, end: 30, nextVocal: 1)
         let loud = ThinkingOrb.Audio(level: 1, onset: 1, phase: 3)
         let times = [10.6, 11.0, 14.0, 17.3, 22.9]
@@ -107,11 +67,7 @@ final class ThinkingOrbTests: XCTestCase {
             XCTAssertEqual(pose.scale, 1, "no growing in, tightening or shrinking away")
             XCTAssertEqual(pose.swell, 1, "the music does not move it")
             XCTAssertEqual(pose.dotScale, 1)
-            XCTAssertEqual(pose.ringRadius, ThinkingOrb.ringRadius)
         }
-        let lit = poses.map { $0.ring?.reduce(0, +) ?? -1 }
-        XCTAssertEqual(lit, lit.sorted())
-        XCTAssertGreaterThan(lit.last!, lit.first! + 5, "the countdown still fills")
         // Arrival and leaving are opacity alone.
         XCTAssertLessThan(poses.first!.opacity, 1)
         XCTAssertEqual(poses[2].opacity, 1)
