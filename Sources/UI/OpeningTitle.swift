@@ -40,6 +40,81 @@ enum OpeningTitle {
         return artwork
     }
 
+    // MARK: Where it sits
+
+    /// Where the card sits on the desktop and how large, as set by dragging
+    /// it on the Settings picture: its lower-left corner as shares of the
+    /// screen (so it lands in the same place on every display), and a
+    /// scale. Nil `corner`: the default place, low on the left.
+    struct Placement: Equatable {
+        /// The corner's two shares, stored apart (`@AppStorage` reads them).
+        static let leftKey = "custom.openingTitleLeft"
+        static let liftKey = "custom.openingTitleLift"
+        static let scaleKey = "custom.openingTitleScale"
+        static let scales: ClosedRange<Double> = 0.6...1.6
+
+        /// Left edge and distance up from the bottom, as shares of the screen.
+        var corner: CGPoint?
+        var scale = 1.0
+
+        static let standard = Placement()
+        var isStandard: Bool { corner == nil && abs(scale - 1) < 0.001 }
+
+        static func stored(_ defaults: UserDefaults = .standard) -> Placement {
+            var placement = Placement()
+            if let left = defaults.object(forKey: leftKey) as? Double, let lift = defaults.object(forKey: liftKey) as? Double,
+               left.isFinite, lift.isFinite {
+                placement.corner = CGPoint(x: left, y: lift)
+            }
+            if let scale = defaults.object(forKey: scaleKey) as? Double, scale.isFinite {
+                placement.scale = min(scales.upperBound, max(scales.lowerBound, scale))
+            }
+            return placement
+        }
+
+        func store(_ defaults: UserDefaults = .standard) {
+            if let corner {
+                defaults.set(Double(corner.x), forKey: Self.leftKey)
+                defaults.set(Double(corner.y), forKey: Self.liftKey)
+            } else {
+                defaults.removeObject(forKey: Self.leftKey)
+                defaults.removeObject(forKey: Self.liftKey)
+            }
+            if abs(scale - 1) < 0.001 { defaults.removeObject(forKey: Self.scaleKey) }
+            else { defaults.set(min(Self.scales.upperBound, max(Self.scales.lowerBound, scale)), forKey: Self.scaleKey) }
+        }
+
+        static func reset(_ defaults: UserDefaults = .standard) {
+            defaults.removeObject(forKey: leftKey)
+            defaults.removeObject(forKey: liftKey)
+            defaults.removeObject(forKey: scaleKey)
+        }
+    }
+
+    /// Kept clear of the screen's edges (and the menu bar, at the top).
+    static let edgeMargin: CGFloat = 16
+    static let topMargin: CGFloat = 40
+
+    /// The card's box on a desktop of `size` (origin top left): as wide as
+    /// a title may run, and as tall as a full card with a cover, at its
+    /// scale; its lower-left corner where the user put it, kept on screen.
+    static func box(in size: CGSize, baseSize: CGFloat, placement: Placement) -> CGRect {
+        let scale = CGFloat(min(Placement.scales.upperBound, max(Placement.scales.lowerBound, placement.scale)))
+        let width = min(size.width * 0.46 * scale, max(1, size.width - 2 * edgeMargin))
+        let height = min(baseSize * scale * 2.3, max(1, size.height - edgeMargin - topMargin))
+        let leading = placement.corner.map { $0.x * size.width } ?? max(40, size.width * 0.058)
+        let bottom = placement.corner.map { $0.y * size.height } ?? max(96, size.height * 0.13)
+        let x = min(max(edgeMargin, leading), max(edgeMargin, size.width - width - edgeMargin))
+        let lift = min(max(edgeMargin, bottom), max(edgeMargin, size.height - height - topMargin))
+        return CGRect(x: x, y: size.height - lift - height, width: width, height: height)
+    }
+
+    /// The placement that puts the card's box at `box` on a desktop of `size`.
+    static func placement(for box: CGRect, in size: CGSize, scale: Double) -> Placement {
+        Placement(corner: CGPoint(x: box.minX / max(1, size.width), y: (size.height - box.maxY) / max(1, size.height)),
+                  scale: min(Placement.scales.upperBound, max(Placement.scales.lowerBound, scale)))
+    }
+
     /// The animated cover the card plays for `track`: the album's own,
     /// whatever the Animated covers switch says (testers asked for it, Nov
     /// 2026), unless the album is one the user left out of animated covers.
@@ -533,14 +608,18 @@ struct OpeningTitleCard: View {
             let compact = floating || phase.size == .compact
             let reveal = OpeningTitle.Reveal.at(phase.age, size: compact ? .compact : .full, reduceMotion: reduceMotion)
             let leaving = Easing.smoothstep(phase.exit)
-            let unit = floating ? baseSize * 0.95 : (compact ? baseSize * 0.8 : baseSize)
+            // Where the user put it on the desktop, and how large
+            // (Settings › Look, Text: `OpeningTitle.Placement`).
+            let place = OpeningTitle.Placement.stored()
+            let box = OpeningTitle.box(in: size, baseSize: baseSize, placement: place)
+            let unit = floating ? baseSize * 0.95 : (compact ? baseSize * 0.8 : baseSize) * CGFloat(place.scale)
             let dark = Self.isDark(ink.base.rest)
             if row {
                 titleRow(reveal: reveal, leaving: leaving, dark: dark, width: size.width * 0.9)
                     .frame(width: size.width, height: size.height, alignment: .top)
             } else {
             let block = card(unit: unit, compact: compact, reveal: reveal, dark: dark,
-                             width: floating ? size.width * 0.9 : size.width * 0.46)
+                             width: floating ? size.width * 0.9 : box.width)
                 .opacity((1 - leaving) * phase.opacity)
                 .blur(radius: reduceMotion ? 0 : leaving * unit * 0.06)
                 .offset(y: reduceMotion ? 0 : -leaving * unit * 0.14)
@@ -556,11 +635,13 @@ struct OpeningTitleCard: View {
                                                .init(color: shade.opacity(0.28), location: 0.3),
                                                .init(color: shade.opacity(0.1), location: 0.65),
                                                .init(color: shade.opacity(0), location: 1)],
-                                       center: UnitPoint(x: 0.2, y: 0.8), startRadiusFraction: 0, endRadiusFraction: 0.5)
+                                       center: UnitPoint(x: (box.minX + box.width * 0.3) / max(1, size.width),
+                                                         y: (box.maxY - box.height * 0.4) / max(1, size.height)),
+                                       startRadiusFraction: 0, endRadiusFraction: 0.5)
                         .opacity(max(reveal.title, reveal.rule) * (1 - leaving) * phase.opacity)
                     block
-                        .padding(.leading, max(40, size.width * 0.058))
-                        .padding(.bottom, max(96, size.height * 0.13))
+                        .padding(.leading, box.minX)
+                        .padding(.bottom, size.height - box.maxY)
                 }
                 .frame(width: size.width, height: size.height, alignment: .bottomLeading)
             }

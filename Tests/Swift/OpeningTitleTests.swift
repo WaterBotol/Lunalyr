@@ -511,4 +511,81 @@ final class OpeningTitleTests: XCTestCase {
         XCTAssertNil(OpeningTitle.motionCover(motion, track: nil, settings: settings), "no cover, no animated cover")
         XCTAssertFalse(OpeningTitle.wantsMotionCover)
     }
+
+    // MARK: Moved and resized on the Settings picture
+
+    func testTheDefaultPlaceIsUnchanged() {
+        for size in [CGSize(width: 1512, height: 982), CGSize(width: 1280, height: 800), CGSize(width: 2560, height: 1440)] {
+            let base = LyricViewportMetrics(size: size).baseSize
+            let box = OpeningTitle.box(in: size, baseSize: base, placement: .standard)
+            XCTAssertEqual(box.minX, max(40, size.width * 0.058), accuracy: 0.001)
+            XCTAssertEqual(size.height - box.maxY, max(96, size.height * 0.13), accuracy: 0.001)
+            XCTAssertEqual(box.width, size.width * 0.46, accuracy: 0.001)
+        }
+    }
+
+    func testAPlacedCardStaysOnEveryScreen() {
+        let corners = [CGPoint(x: -1, y: -1), CGPoint(x: 0.99, y: 0.99), CGPoint(x: 0.5, y: 2), CGPoint(x: 3, y: 0.1)]
+        for size in [CGSize(width: 1512, height: 982), CGSize(width: 1024, height: 640), CGSize(width: 900, height: 1600),
+                     CGSize(width: 5120, height: 1440)] {
+            let base = LyricViewportMetrics(size: size).baseSize
+            for corner in corners {
+                for scale in [0.6, 1, 1.6, 9] {
+                    let box = OpeningTitle.box(in: size, baseSize: base,
+                                               placement: .init(corner: corner, scale: scale))
+                    XCTAssertGreaterThanOrEqual(box.minX, 0, "\(size) \(corner) \(scale)")
+                    XCTAssertGreaterThanOrEqual(box.minY, 0, "\(size) \(corner) \(scale)")
+                    XCTAssertLessThanOrEqual(box.maxX, size.width, "\(size) \(corner) \(scale)")
+                    XCTAssertLessThanOrEqual(box.maxY, size.height, "\(size) \(corner) \(scale)")
+                }
+            }
+        }
+    }
+
+    func testThePlacementIsSavedAsSharesOfTheScreen() throws {
+        let name = "OpeningTitlePlacement-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: name))
+        defer { defaults.removePersistentDomain(forName: name) }
+        XCTAssertTrue(OpeningTitle.Placement.stored(defaults).isStandard)
+        let placed = OpeningTitle.Placement(corner: CGPoint(x: 0.6, y: 0.5), scale: 1.3)
+        placed.store(defaults)
+        XCTAssertEqual(OpeningTitle.Placement.stored(defaults), placed)
+        // The same share of a different screen.
+        let small = OpeningTitle.box(in: CGSize(width: 1000, height: 600), baseSize: 40,
+                                     placement: .init(corner: CGPoint(x: 0.3, y: 0.5), scale: 1))
+        XCTAssertEqual(small.minX, 300, accuracy: 0.001)
+        XCTAssertEqual(600 - small.maxY, 300, accuracy: 0.001)
+        defaults.set(40.0, forKey: OpeningTitle.Placement.scaleKey)
+        XCTAssertEqual(OpeningTitle.Placement.stored(defaults).scale, OpeningTitle.Placement.scales.upperBound)
+        OpeningTitle.Placement.reset(defaults)
+        XCTAssertTrue(OpeningTitle.Placement.stored(defaults).isStandard)
+    }
+
+    @MainActor
+    func testDraggingTheBoxMovesAndResizesTheCard() {
+        let desktop = CGSize(width: 1512, height: 982)
+        let base = LyricViewportMetrics(size: desktop).baseSize
+        let box = OpeningTitle.box(in: desktop, baseSize: base, placement: .standard)
+        let moved = TitleCardHandles.dragged(box, placement: .standard, by: CGSize(width: 300, height: -200),
+                                             resizing: false, desktop: desktop, baseSize: base)
+        let after = OpeningTitle.box(in: desktop, baseSize: base, placement: moved)
+        XCTAssertEqual(after.minX, box.minX + 300, accuracy: 0.5)
+        XCTAssertEqual(after.minY, box.minY - 200, accuracy: 0.5)
+        // Far off the screen: kept on it.
+        let flung = TitleCardHandles.dragged(box, placement: .standard, by: CGSize(width: 9_000, height: 9_000),
+                                             resizing: false, desktop: desktop, baseSize: base)
+        let kept = OpeningTitle.box(in: desktop, baseSize: base, placement: flung)
+        XCTAssertLessThanOrEqual(kept.maxX, desktop.width)
+        XCTAssertLessThanOrEqual(kept.maxY, desktop.height)
+        // The top-right corner out and up: larger, from the same lower-left corner.
+        let grown = TitleCardHandles.dragged(box, placement: .standard, by: CGSize(width: 100, height: -40),
+                                             resizing: true, desktop: desktop, baseSize: base)
+        XCTAssertGreaterThan(grown.scale, 1)
+        let grownBox = OpeningTitle.box(in: desktop, baseSize: base, placement: grown)
+        XCTAssertEqual(grownBox.minX, box.minX, accuracy: 0.5)
+        XCTAssertEqual(grownBox.maxY, box.maxY, accuracy: 0.5)
+        let shrunk = TitleCardHandles.dragged(box, placement: .standard, by: CGSize(width: -2_000, height: 2_000),
+                                              resizing: true, desktop: desktop, baseSize: base)
+        XCTAssertEqual(shrunk.scale, OpeningTitle.Placement.scales.lowerBound)
+    }
 }

@@ -60,6 +60,9 @@ struct LyricStylePage: View {
     @AppStorage(OpeningTitle.settingKey) private var showOpeningTitle = true
     @AppStorage(OpeningTitle.coverKey) private var showOpeningCover = true
     @AppStorage(OpeningTitle.alwaysKey) private var keepsOpeningTitle = false
+    @AppStorage(OpeningTitle.Placement.leftKey) private var titleLeft: Double?
+    @AppStorage(OpeningTitle.Placement.liftKey) private var titleLift: Double?
+    @AppStorage(OpeningTitle.Placement.scaleKey) private var titleScale: Double = 1
     @ObservedObject private var rotation = LyricLayoutRotation.shared
 
     /// What the chosen layout does, a style remembered for this song, the
@@ -128,6 +131,14 @@ struct LyricStylePage: View {
                     .padding(.leading, 23)
                     .disabled(!showOpeningTitle)
                     .help("The title stays for the whole song, quieter once the singing starts, so you always know what’s playing. Low on the left beside the lyrics; in the floating lyrics, a small line above them.")
+                Button("Reset Title Position") {
+                    titleLeft = nil
+                    titleLift = nil
+                    titleScale = 1
+                }
+                .padding(.leading, 23)
+                .disabled(!showOpeningTitle || (titleLeft == nil && titleLift == nil && abs(titleScale - 1) < 0.001))
+                .help("Drag the song title on the picture to move it, or its corner to resize it. This puts it back low on the left at its usual size.")
                 Toggle("Show credits in the background", isOn: $showCredits)
                     .help("Lines like “Produced by: …” appear one at a time behind the lyrics.")
                 Toggle("Backing vocals in the background", isOn: $backingLayer)
