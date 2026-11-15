@@ -122,8 +122,8 @@ final class LyricMotionPolishTests: XCTestCase {
         XCTAssertTrue(previous.isEmpty)
     }
 
-    /// A seek redraws much the same line: the two scenes together never
-    /// leave it noticeably dimmer, and neither is blurred.
+    /// A seek that keeps the line on screen re-times it in place: it is
+    /// never dimmed, blurred or drawn twice.
     func testASeekNeitherDimsNorBlursTheLine() throws {
         let memory = LyricSceneMemory()
         let key = LyricSceneKey(kind: .synced, track: 1, fingerprint: 3)
@@ -131,18 +131,12 @@ final class LyricMotionPolishTests: XCTestCase {
         _ = memory.observe(key: key, content: content, time: 10, wall: 600, jump: nil)
         let jump = LyricClock.Jump(from: 10.02, to: 10.6, wall: 600.02)
         var wall = 600.02
-        var sawOutgoing = false
         while wall < 601 {
             let t = memory.observe(key: key, content: content, time: 10.6 + (wall - 600.02), wall: wall, jump: jump)
-            if let outgoing = t.outgoing {
-                sawOutgoing = true
-                XCTAssertFalse(outgoing.blurs)
-            }
-            let coverage = 1 - (1 - t.incomingPresence) * (1 - t.outgoingPresence)
-            XCTAssertGreaterThan(coverage, 0.95, "dimmed at +\(wall - 600.02) s")
+            XCTAssertNil(t.outgoing, "a copy of the line at +\(wall - 600.02) s")
+            XCTAssertEqual(t.incomingPresence, 1)
             wall += 1.0 / 60
         }
-        XCTAssertTrue(sawOutgoing)
         // A song change still dissolves softly.
         let other = LyricSceneKey(kind: .synced, track: 2, fingerprint: 4)
         let change = memory.observe(key: other, content: content, time: 0, wall: 602, jump: nil)

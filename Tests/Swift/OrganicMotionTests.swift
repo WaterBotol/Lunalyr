@@ -188,8 +188,11 @@ final class OrganicMotionTests: XCTestCase {
         _ = memory.observe(key: key, content: content, time: before, wall: 200, jump: nil)
         let jump = LyricClock.Jump(from: before, to: before - 0.5, wall: 200.02)
         let transition = memory.observe(key: key, content: content, time: jump.to, wall: 200.22, jump: jump)
-        let outgoing = try XCTUnwrap(transition.outgoing)
-        XCTAssertGreaterThan(transition.outgoingPresence, 0)
+        // The same lines stay on screen: re-timed in place, never a copy.
+        XCTAssertNil(transition.outgoing)
+        XCTAssertEqual(transition.incomingPresence, 1)
+        // A scene that does leave never runs on into the next lyric.
+        let outgoing = LyricSceneMemory.Outgoing(key: key, content: content, time: before, wall: 200.02)
         let time = outgoing.renderTime(at: 200.22)
         XCTAssertEqual(time, second.start.nextDown)
         XCTAssertEqual(LyricLineIndex(lines: content.lines).line(at: time), 0)

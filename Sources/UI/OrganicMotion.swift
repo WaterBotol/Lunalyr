@@ -221,16 +221,52 @@ final class LyricSceneMemory: ObservableObject {
         }
     }
 
-    /// Whether two sheets of the same song show different lines at `time`:
-    /// a different text, or the line starting somewhere else.
+    /// Whether two sheets of the same song show different lines at `time`,
+    /// so that changing from one to the other cross-fades
+    /// (`showsOtherLines(_:at:_:at:)`).
     static func activeLineDiffers(_ old: LyricSceneContent, _ new: LyricSceneContent, at time: Double) -> Bool {
-        let before = LyricLineIndex(lines: old.lines).line(at: time).flatMap { old.lines.indices.contains($0) ? old.lines[$0] : nil }
-        let after = LyricLineIndex(lines: new.lines).line(at: time).flatMap { new.lines.indices.contains($0) ? new.lines[$0] : nil }
-        guard let before, let after else { return (before == nil) != (after == nil) }
-        let text = { (line: LyricsFetcher.Line) in
-            line.text.trimmingCharacters(in: .whitespacesAndNewlines).folding(options: [.caseInsensitive], locale: nil)
+        showsOtherLines(old, at: time, new, at: time)
+    }
+
+    /// Whether `new` at `newTime` would replace lines `old` shows at
+    /// `oldTime` with others. Each stage draws the line under way with the
+    /// one before it leaving and the one after it entering (`drawn`). Two
+    /// stages that share a line must never be cross-faded: two copies of a
+    /// line, each at its own point of its motion, read as the lyrics
+    /// doubled, so a time jump or a re-timed sheet that keeps a line takes
+    /// over in place. So does one from a stage showing no line yet (only
+    /// the opening title or the orb, which a cross-fade would double too).
+    static func showsOtherLines(_ old: LyricSceneContent, at oldTime: Double,
+                                _ new: LyricSceneContent, at newTime: Double) -> Bool {
+        let before = drawn(old.lines, at: oldTime)
+        return !before.isEmpty && before.isDisjoint(with: drawn(new.lines, at: newTime))
+    }
+
+    /// The lines a stage has on screen at `time`, as text: the line under
+    /// way and its neighbours, while each is entering (from 1.5 s before
+    /// it, the longest lead a layout shows a word with) until a second
+    /// after it ends (its exit).
+    static func drawn(_ lines: [LyricsFetcher.Line], at time: Double) -> Set<String> {
+        guard !lines.isEmpty else { return [] }
+        let row = LyricLineIndex(lines: lines).line(at: time) ?? 0
+        var texts = Set<String>()
+        for index in row - 1...row + 1 where lines.indices.contains(index) {
+            let line = lines[index]
+            let text = line.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                .folding(options: [.caseInsensitive], locale: nil)
+            if !text.isEmpty, time >= line.start - 1.5, time <= line.end + 1 { texts.insert(text) }
         }
-        return text(before) != text(after) || abs(before.start - after.start) > 0.3
+        return texts
+    }
+
+    /// How long `fade` takes to bring an arriving scene to `presence`.
+    private static func age(reaching presence: Double, with fade: Fade) -> Double {
+        var low = 0.0, high = 2.0
+        for _ in 0..<30 {
+            let middle = (low + high) / 2
+            if fade.incoming(middle) < presence { low = middle } else { high = middle }
+        }
+        return low
     }
 
     /// What can be on screen and so must fade rather than vanish. A
@@ -270,6 +306,16 @@ final class LyricSceneMemory: ObservableObject {
                     push(last.key, last.content, time: last.time, wall: wall, fade: .song, presence: shown, now: wall)
                 }
                 arriving = (wall, .song)
+                // The same lyrics coming back while they are still leaving
+                // (the song's lookup ran again and found them): that scene
+                // returns from where it had got to rather than a second copy
+                // fading in over it.
+                if key.kind == .synced || key.kind == .plain,
+                   let back = leaving.lastIndex(where: { $0.key == key }) {
+                    let presence = leaving[back].presence(at: wall)
+                    leaving.remove(at: back)
+                    arriving = (wall - Self.age(reaching: presence, with: .song), .song)
+                }
             }
         } else if let jump, jump.wall > lastJumpWall, key.kind == .synced, let last {
             // A seek, or the clock adopting a correction: the scene on
@@ -277,8 +323,11 @@ final class LyricSceneMemory: ObservableObject {
             // while that cross-fade is still in flight (scrubbing) join it:
             // the arriving scene shows the new place and keeps arriving,
             // rather than piling up scenes or restarting from nothing.
+            // A jump that keeps the same lines on screen (Music's report of
+            // where a new song really is, a song offset, a nudge) re-times
+            // them in place: overlaid at the old time, they read as doubled.
             let inFlight = arriving != nil && !leaving.isEmpty
-            if !inFlight {
+            if !inFlight, Self.showsOtherLines(last.content, at: jump.from, content(), at: jump.to) {
                 if shown > Self.dropBelow {
                     push(key, last.content, time: jump.from, wall: jump.wall, fade: .seek, presence: shown, now: wall)
                 }
