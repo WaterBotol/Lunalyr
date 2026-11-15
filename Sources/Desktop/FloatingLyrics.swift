@@ -406,13 +406,30 @@ enum FloatingLyricsVisibility {
 }
 
 /// How dark the backdrop behind the floating lyrics reads, for the text
-/// colours: an unknown app window shaded by the floating backdrop.
+/// colours: an unknown app window shaded by the floating backdrop, or, with
+/// a music video as the wallpaper, that video as the wallpaper's own lyrics
+/// take it.
 enum FloatingBackdrop {
     /// Most an app behind is darkened, at full strength.
     static let maximumShade = 0.72
 
-    static func luminance(strength: Double, reduceTransparency: Bool) -> Double {
+    /// `behind`: what lies under the shade (`behind(mode:scrim:videoDim:)`).
+    static func luminance(strength: Double, reduceTransparency: Bool,
+                          behind: Double = LyricLegibility.unknownBackdropLuminance) -> Double {
         let shade = reduceTransparency ? 0.86 : maximumShade * min(1, max(0, strength))
-        return LyricLegibility.darkened(LyricLegibility.unknownBackdropLuminance, by: shade)
+        return LyricLegibility.darkened(min(1, max(0, behind)), by: shade)
+    }
+
+    /// What the floating lyrics are taken to float over. An app window is
+    /// unknown (`unknownBackdropLuminance`, on the dark-text line with no
+    /// shade). Over a music video wallpaper they take the video as the
+    /// desktop lyrics do (`LyricBackdrop`: unmeasured footage, its dimming
+    /// and the scrim, never guessed light enough for dark text): with
+    /// the shade turned down, the words turned dark and muddy with a pale
+    /// glow over the video.
+    static func behind(mode: Settings.BackgroundMode, scrim: Double, videoDim: Double) -> Double {
+        guard mode == .musicVideo else { return LyricLegibility.unknownBackdropLuminance }
+        return LyricBackdrop.beforeBacking(mode: .musicVideo, motion: false, palette: [], scrim: scrim,
+                                           measured: nil, videoDim: videoDim)
     }
 }
