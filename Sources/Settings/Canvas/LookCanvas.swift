@@ -66,7 +66,20 @@ struct LookInspectorForm<Content: View>: View {
         self.content = content()
     }
 
+    @Environment(\.inspectorMeasuring) private var measuring
+
     var body: some View {
+        if measuring {
+            VStack(alignment: .leading, spacing: LunalyrDesign.Studio.Layout.inspectorSectionSpacing) {
+                content
+            }
+            .environment(\.formDensity, .inspector)
+        } else {
+            form
+        }
+    }
+
+    private var form: some View {
         ThemedForm {
             VStack(alignment: .leading, spacing: LunalyrDesign.Studio.Layout.inspectorSectionSpacing) {
                 content

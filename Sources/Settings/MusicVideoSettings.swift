@@ -100,13 +100,16 @@ private struct PastedVideoLink: View {
     @State private var rejected = false
 
     var body: some View {
-        LabeledContent("YouTube link") {
+        // Stacked: the field takes the panel's width and the buttons sit
+        // under it, so the row never makes the panel wider than the window.
+        VStack(alignment: .leading, spacing: 4) {
+            Text("YouTube link")
+            TextField("Paste a link for this song", text: $text)
+                .textFieldStyle(.roundedBorder)
+                .frame(maxWidth: .infinity)
+                .onSubmit(use)
+                .accessibilityLabel("YouTube link for this song")
             HStack(spacing: LunalyrDesign.Spacing.small) {
-                TextField("Paste a link for this song", text: $text)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(minWidth: 140)
-                    .onSubmit(use)
-                    .accessibilityLabel("YouTube link for this song")
                 Button("Use", action: use)
                     .disabled(text.trimmingCharacters(in: .whitespaces).isEmpty || !controller.hasSong)
                 Button("Search…") { MusicVideoSearchWindowController.shared.show() }
@@ -119,6 +122,7 @@ private struct PastedVideoLink: View {
             }
             .controlSize(.small)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .disabled(!controller.hasSong)
         if rejected {
             DisabledReason("That isn’t a YouTube video link.")

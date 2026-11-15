@@ -19,6 +19,7 @@ struct MoreOptions<Content: View>: View {
     @State private var hovering = false
     @Environment(\.formDensity) private var density
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.moreOptionsOpen) private var forcedOpen
 
     init(@ViewBuilder content: () -> Content) {
         self.content = content()
@@ -27,7 +28,7 @@ struct MoreOptions<Content: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: density.rowSpacing) {
             toggleRow
-            if expanded {
+            if expanded || forcedOpen {
                 VStack(alignment: .leading, spacing: density.rowSpacing) {
                     content
                 }
@@ -86,4 +87,13 @@ struct FittingLabeledContentStyle: LabeledContentStyle {
             }
         }
     }
+}
+
+extension EnvironmentValues {
+    /// Every More options below starts open: for the width tests, which
+    /// check that no hidden row is wider than the inspector.
+    @Entry var moreOptionsOpen = false
+    /// The inspector drawn without its scroll view, so a test can measure
+    /// how wide its content wants to be.
+    @Entry var inspectorMeasuring = false
 }
