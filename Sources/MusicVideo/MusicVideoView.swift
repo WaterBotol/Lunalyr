@@ -877,9 +877,24 @@ enum YouTubeEmbed {
         var script: String { String(format: "[%.3f,%.3f]", width, height) }
     }
 
+    /// The language code a caption language preference may be: 2 or 3
+    /// letters, nil otherwise.
+    static func captionLanguage(_ code: String?) -> String? {
+        guard let base = code?.split(separator: "-").first.map({ String($0).lowercased() }),
+              (2...3).contains(base.count), base.allSatisfy({ $0.isASCII && $0.isLetter }) else { return nil }
+        return base
+    }
+
+    /// - Parameter captions: load the video's captions, unseen, for
+    ///   `MusicVideoCaptionSync` (the capture script hides them in the
+    ///   player's frame); preferring a track in `captions`' language, which
+    ///   the player takes as the uploader's track first, else its automatic
+    ///   one. Unloaded again once captured (`lunalyrCaptionsDone`) or after
+    ///   `captionWait` seconds. Nil: captions stay unloaded, as always.
     static func html(videoID: String, start: Double, page: Int = 0, language: String = playerLanguage(),
-                     overscan: Double = YouTubeEmbed.overscan, box: Box? = nil) -> String {
+                     overscan: Double = YouTubeEmbed.overscan, box: Box? = nil, captions: String? = nil) -> String {
         precondition(YouTubeVideoID.isValid(videoID))
+        let captions = captionLanguage(captions)
         let overscan = overscan.isFinite ? min(2, max(1, overscan)) : YouTubeEmbed.overscan
         let startSecond = max(0, Int(start.isFinite ? start : 0))
         let language = language.allSatisfy({ $0.isASCII && $0.isLetter }) && !language.isEmpty ? language : "en"
@@ -894,6 +909,7 @@ enum YouTubeEmbed {
         </style></head><body><div id="frame"><div id="player"></div></div>
         <script>
         var player = null, ready = false, blurPx = 0, overscan = \(overscan), box = \(box?.script ?? "null");
+        var captionsWanted = \(captions != nil);
         function post(type, value) {
           try { window.webkit.messageHandlers.\(messageName).postMessage({type: type, value: value,
                 video: '\(videoID)', page: \(page)}); } catch (e) {}
@@ -905,7 +921,7 @@ enum YouTubeEmbed {
           document.getElementById('frame').style.opacity = visibleFor(state) ? '1' : '0';
         }
         function hideCaptions() {
-          if (!player) return;
+          if (!player || captionsWanted) return;
           try { player.unloadModule('captions'); } catch (e) {}
           try { player.unloadModule('cc'); } catch (e) {}
           try { player.setOption('captions', 'track', {}); } catch (e) {}
@@ -915,10 +931,13 @@ enum YouTubeEmbed {
             width: '100%', height: '100%', videoId: '\(videoID)',
             host: 'https://www.youtube-nocookie.com',
             playerVars: {autoplay: 0, mute: 1, controls: 0, disablekb: 1, fs: 0, iv_load_policy: 3,
-                         rel: 0, playsinline: 1, loop: 0, cc_load_policy: 0, hl: '\(language)',
+                         rel: 0, playsinline: 1, loop: 0, cc_load_policy: \(captions != nil ? 1 : 0), hl: '\(language)',\(captions.map { " cc_lang_pref: '\($0)'," } ?? "")
                          modestbranding: 1, start: \(startSecond), origin: window.location.origin},
             events: {
-              onReady: function (event) { ready = true; event.target.mute(); hideCaptions(); show(-1); post('ready', 0); },
+              onReady: function (event) {
+                ready = true; event.target.mute(); hideCaptions(); show(-1); post('ready', 0);
+                if (captionsWanted) setTimeout(window.lunalyrCaptionsDone, \(Int(captionWait * 1000)));
+              },
               onError: function (event) { show(-1); post('error', event.data); },
               onApiChange: function () { hideCaptions(); },
               onStateChange: function (event) {
@@ -937,6 +956,7 @@ enum YouTubeEmbed {
           try { if (player.isMuted && !player.isMuted()) player.mute(); } catch (e) {}
           return {time: player.getCurrentTime(), state: player.getPlayerState(), duration: player.getDuration()};
         };
+        window.lunalyrCaptionsDone = function () { captionsWanted = false; hideCaptions(); };
         window.lunalyrPlay = function () { if (ready) { player.mute(); player.playVideo(); } };
         window.lunalyrPause = function () { if (ready) player.pauseVideo(); };
         window.lunalyrSeek = function (t) { if (ready) { player.mute(); player.seekTo(t, true); } };
@@ -956,6 +976,10 @@ enum YouTubeEmbed {
         </body></html>
         """
     }
+
+    /// The captions are unloaded this long after the player is ready even
+    /// if none were captured.
+    static let captionWait: TimeInterval = 60
 
     /// The page itself may load only its own HTML; YouTube's frames inside
     /// it load what they need. Nothing navigates the page away.
@@ -1187,6 +1211,10 @@ final class YouTubeMusicVideoCoordinator: NSObject, WKNavigationDelegate, WKScri
     private(set) var videoID: String?
     private weak var view: WKWebView?
     private var navigation: WKNavigation?
+    /// The web view was opened with the caption capture script.
+    private var captionsWanted = false
+    /// The video whose captions this page already passed on.
+    private var capturedCaptions: String?
     private var blur: Double = -1
     /// Why the video is moving or not, as of the sync loop's last check.
     private var hold: MusicVideoHold = .other
@@ -1230,6 +1258,13 @@ final class YouTubeMusicVideoCoordinator: NSObject, WKNavigationDelegate, WKScri
         guard let host else { return }
         let configuration = YouTubeEmbed.configuration()
         configuration.userContentController.add(WeakScriptHandler(self), name: YouTubeEmbed.messageName)
+        captionsWanted = Settings.shared.musicVideoCaptionSync
+        if captionsWanted {
+            configuration.userContentController.add(WeakScriptHandler(self), name: MusicVideoCaptionSync.messageName)
+            configuration.userContentController.addUserScript(
+                WKUserScript(source: MusicVideoCaptionSync.captureScript, injectionTime: .atDocumentStart,
+                             forMainFrameOnly: false))
+        }
         let view = BackgroundYouTubeView(frame: host.bounds, configuration: configuration)
         view.alphaValue = 0
         playerVisible = false
@@ -1249,6 +1284,9 @@ final class YouTubeMusicVideoCoordinator: NSObject, WKNavigationDelegate, WKScri
         playerVisible = false
         guard let view else { return }
         view.configuration.userContentController.removeScriptMessageHandler(forName: YouTubeEmbed.messageName)
+        if captionsWanted {
+            view.configuration.userContentController.removeScriptMessageHandler(forName: MusicVideoCaptionSync.messageName)
+        }
         view.navigationDelegate = nil
         view.stopLoading()
         view.removeFromSuperview()
@@ -1272,8 +1310,12 @@ final class YouTubeMusicVideoCoordinator: NSObject, WKNavigationDelegate, WKScri
             let start = MusicVideoTiming.videoTime(songTime: NowPlayingMonitor.shared.playbackPosition(),
                                                    offset: MusicVideoController.shared.currentOffset,
                                                    videoDuration: nil) ?? 0
+            capturedCaptions = nil
+            let controller = MusicVideoController.shared
+            let captions = captionsWanted && controller.wantsCaptions(for: .youTube(videoID))
+                ? (controller.captionLanguage() ?? YouTubeEmbed.playerLanguage()) : nil
             let html = YouTubeEmbed.html(videoID: videoID, start: start, page: page,
-                                         overscan: framing.youTubeOverscan, box: box)
+                                         overscan: framing.youTubeOverscan, box: box, captions: captions)
             navigation = view.loadHTMLString(html, baseURL: YouTubeEmbed.baseURL)
         case .visible(let visible):
             setVisible(visible, buffering: buffering)
@@ -1512,6 +1554,10 @@ final class YouTubeMusicVideoCoordinator: NSObject, WKNavigationDelegate, WKScri
     // MARK: Messages
 
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
+        if message.name == MusicVideoCaptionSync.messageName {
+            receiveCaptions(message)
+            return
+        }
         guard let parsed = YouTubeEmbedSession.Message(body: message.body) else { return }
         let origin = message.frameInfo.securityOrigin
         let trusted = message.webView === view
@@ -1519,6 +1565,23 @@ final class YouTubeMusicVideoCoordinator: NSObject, WKNavigationDelegate, WKScri
         var buffering = false
         if case .state(3) = parsed.kind { buffering = true }
         perform(session.receive(parsed, trusted: trusted), buffering: buffering)
+    }
+
+    /// A caption reply from inside YouTube's player frame, believed only
+    /// for this view and video (`MusicVideoCaptionSync.capture`); the first
+    /// one per page is used, then the player unloads its captions.
+    private func receiveCaptions(_ message: WKScriptMessage) {
+        guard captionsWanted, message.webView === view, let videoID, capturedCaptions != videoID,
+              let body = message.body as? [String: Any], let url = body["url"] as? String,
+              let text = body["text"] as? String, text.utf8.count <= MusicVideoCaptionSync.maximumReply else { return }
+        let origin = message.frameInfo.securityOrigin
+        guard MusicVideoCaptionSync.capture(frameHost: origin.host, frameScheme: origin.protocol, url: url,
+                                            videoID: videoID) != nil else { return }
+        let data = Data(text.utf8)
+        guard !MusicVideoCaptionSync.cues(from: data).isEmpty else { return }
+        capturedCaptions = videoID
+        run("window.lunalyrCaptionsDone && window.lunalyrCaptionsDone()")
+        MusicVideoController.shared.noteCaptions(data, of: .youTube(videoID))
     }
 
     // MARK: Navigation

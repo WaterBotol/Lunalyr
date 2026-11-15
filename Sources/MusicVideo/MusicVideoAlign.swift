@@ -287,6 +287,7 @@ struct MusicVideoAlignDisplay: Equatable {
         }
         switch origin {
         case .manual: return "Kept for this video"
+        case .captions: return "From captions"
         case .estimated: return "Estimated"
         case .none: return "No offset"
         }
