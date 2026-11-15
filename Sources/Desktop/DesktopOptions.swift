@@ -50,38 +50,48 @@ final class DesktopOptions: ObservableObject {
     var manualTextBacking: Double? { automaticTextBacking ? nil : textBacking }
 }
 
-/// Performance page: how the desktop answers the pointer.
+/// General › On screen › More options: how the desktop answers the pointer.
 @MainActor
-struct DesktopInteractionSection: View {
+struct DesktopInteractionRows: View {
     @Model(\.desktop) private var options
 
     var body: some View {
-        ThemedSection("Desktop") {
-            Toggle("Show player on hover", isOn: $options.showsControlsOnHover)
-            InspectorCaption(options.showsControlsOnHover
-                 ? "Rest the pointer in the middle of an uncovered desktop to show the player: what played, what plays now and next, and a search. Clicks elsewhere reach the desktop."
-                 : "The desktop never shows the player. Use the menu bar to control playback.")
-        }
+        Toggle("Show player on hover", isOn: $options.showsControlsOnHover)
+        InspectorCaption(options.showsControlsOnHover
+             ? "Rest the pointer in the middle of an uncovered desktop to show the player: what played, what plays now and next, and a search. Clicks elsewhere reach the desktop."
+             : "The desktop never shows the player. Use the menu bar to control playback.")
     }
 }
 
-/// Wallpaper page: legibility of white lyrics on light backdrops.
+/// Text › Readability: legibility of white lyrics on light backdrops, and
+/// in the Floating view, of the floating lyrics over apps. The backing's
+/// strength and the floating rows are under More options.
 @MainActor
-struct LyricBackingSection: View {
+struct ReadabilitySection: View {
+    /// The floating lyrics' options while the Floating view shows.
+    var floating: FloatingLyricsOptions?
     @Model(\.desktop) private var options
     @Model(\.settings) private var settings
 
     var body: some View {
-        ThemedSection("Legibility") {
+        ThemedSection("Readability") {
             Toggle("Automatic text backing", isOn: $options.automaticTextBacking)
-            if !options.automaticTextBacking {
-                ValueSlider("Text backing", value: $options.textBacking, in: 0...1, step: 0.01,
-                            format: { $0 == 0 ? "None" : SettingsFormat.percent($0) })
-            }
             InspectorCaption(caption)
             Toggle("Shade under the menu bar", isOn: $options.shadesMenuBar)
             InspectorCaption("Stops bright wallpapers washing the menu bar out.",
                              more: "macOS lightens the menu bar from whatever is behind it, so a bright cover or picture along the top edge can wash it out to white. This adds a faint dark fade there.")
+            if !options.automaticTextBacking || floating != nil {
+                MoreOptions {
+                    if !options.automaticTextBacking {
+                        ValueSlider("Text backing", value: $options.textBacking, in: 0...1, step: 0.01,
+                                    format: { $0 == 0 ? "None" : SettingsFormat.percent($0) })
+                    }
+                    if let floating {
+                        FloatingReadabilityRows(options: floating)
+                    }
+                }
+                .revealRow()
+            }
         }
     }
 

@@ -43,6 +43,8 @@ struct LookWorkspace: View {
                 WallpaperPage(showPerformance: { select(.performance) }, scrollRequest: scrollRequest, importer: importer)
             case .lyrics:
                 LyricStylePage(floating: floating)
+            case .animation:
+                AnimationPage(floating: floating)
             case .covers:
                 CoversPage()
             }
@@ -125,8 +127,7 @@ struct LookCanvas: View {
             let inner = max(1, proxy.size.width - Self.padding * 2)
             let picture = Self.pictureSize(canvas: proxy.size, aspect: aspect, choices: choicesHeight)
             VStack(spacing: 0) {
-                CanvasSegments(title: "Selected on the picture", selection: Binding(get: { object }, set: { select($0) }),
-                               options: LookObject.allCases.map { ($0, $0.title) })
+                objectSwitch
                     .frame(height: Self.switchBand)
                 LookPicture(object: object, select: select, previewDisplay: previewDisplay, floating: floating)
                     .frame(width: picture.width, height: picture.height)
@@ -154,6 +155,16 @@ struct LookCanvas: View {
         .animation(LunalyrDesign.Motion.animation(LunalyrDesign.Motion.quick, reduceMotion: reduceMotion), value: object)
         .task(id: cover.map(ObjectIdentifier.init)) {
             palette = ArtworkPalette.of(cover)
+        }
+    }
+
+    /// The four objects; in a narrow canvas, the smaller segments.
+    private var objectSwitch: some View {
+        let selection = Binding(get: { object }, set: { select($0) })
+        let options: [(value: LookObject, label: String)] = LookObject.allCases.map { ($0, $0.title) }
+        return ViewThatFits(in: .horizontal) {
+            CanvasSegments(title: "Selected on the picture", selection: selection, options: options)
+            CanvasSegments(title: "Selected on the picture", selection: selection, options: options, small: true)
         }
     }
 
@@ -202,7 +213,8 @@ struct LookCanvas: View {
             WallpaperTypeChoices(width: width, palette: tilePalette, cover: cover,
                                  desktopPicture: previewDisplay.desktopPicture,
                                  chooseImport: { importer.choose(into: settings) })
-        case .lyrics:
+        case .lyrics, .animation:
+            // Word entrances are kept per layout, so Animation shows which.
             LayoutTileChoices(width: width, palette: tilePalette)
         case .covers:
             PlacementChoices(width: width, aspect: aspect, cover: cover)

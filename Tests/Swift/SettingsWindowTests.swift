@@ -70,18 +70,54 @@ final class SettingsWindowTests: XCTestCase {
         for name in ["wallpaper", "typography", "lyrics", "readings", "covers", "performance", "extras", "share", "players", "about"] {
             XCTAssertNotNil(SettingsPage(rawValue: name), "a page remembered as \(name) no longer opens")
         }
+        // Pages folded into General open it.
+        XCTAssertEqual(SettingsPage(rawValue: "players"), .general)
+        XCTAssertEqual(SettingsPage(rawValue: "extras"), .general)
+        XCTAssertEqual(SettingsPage(rawValue: "about"), .general)
+        // Text kept Lyric style's stored value; Discord & sharing kept Share's.
+        XCTAssertEqual(SettingsPage(rawValue: "typography"), .typography)
+        XCTAssertEqual(SettingsPage(rawValue: "share"), .share)
+        XCTAssertNil(SettingsPage(rawValue: "zzqx"))
+        for page in SettingsPage.allCases {
+            XCTAssertEqual(SettingsPage(rawValue: page.rawValue), page, "\(page.title) round-trips")
+        }
         XCTAssertEqual(SettingsPage(.musicResponse), .wallpaper)
         XCTAssertEqual(SettingsAnchor(.musicResponse), .musicResponse)
-        XCTAssertEqual(SettingsPage(.players), .players)
+        XCTAssertEqual(SettingsPage(.lyricStyle), .typography)
+        XCTAssertEqual(SettingsPage(.players), .general)
         XCTAssertEqual(SettingsAnchor(.players), .players)
         XCTAssertEqual(SettingsPage(.timing), .lyrics)
-        XCTAssertEqual(SettingsPage(.menuBarAndShortcuts), .extras)
+        XCTAssertEqual(SettingsPage(.menuBarAndShortcuts), .general)
+        XCTAssertEqual(SettingsAnchor(.menuBarAndShortcuts), .onScreen)
+        XCTAssertEqual(SettingsPage(.about), .general)
+        XCTAssertEqual(SettingsAnchor(.about), .app)
+        XCTAssertEqual(SettingsPage(.general), .general)
         XCTAssertNil(SettingsAnchor(.wallpaper))
-        // Every page is in exactly one sidebar section, About last.
+        // Every page is in exactly one sidebar section, in the approved order.
         let listed = SettingsPage.Group.allCases.flatMap(\.pages)
         XCTAssertEqual(Set(listed), Set(SettingsPage.allCases))
         XCTAssertEqual(listed.count, SettingsPage.allCases.count)
-        XCTAssertEqual(listed.last, .about)
+        XCTAssertEqual(listed.map(\.title), ["Wallpaper", "Text", "Animation", "Animated covers",
+                                             "Timing & sources", "Romanisation & translation",
+                                             "General", "Discord & sharing", "Performance"])
+    }
+
+    /// Every value `custom.settingsPage` has ever held opens a page the
+    /// sidebar shows, and every destination lands on one too.
+    func testEveryOldStoredPageOpensASidebarPage() {
+        let sidebar = Set(SettingsPage.Group.allCases.flatMap(\.pages))
+        let old = ["wallpaper", "typography", "covers", "lyrics", "readings", "players", "general", "extras",
+                   "share", "performance", "about"]
+        for name in Set(old + SettingsPage.storedNames) {
+            let page = SettingsPage(rawValue: name)
+            XCTAssertNotNil(page, "\(name) no longer opens")
+            if let page { XCTAssertTrue(sidebar.contains(page), "\(name) opens \(page.title), not in the sidebar") }
+        }
+        for destination in SettingsDestination.allCases {
+            XCTAssertTrue(sidebar.contains(SettingsPage(destination)), "\(destination) lands off the sidebar")
+            XCTAssertEqual(SettingsPage(rawValue: destination.legacyPageName), SettingsPage(destination),
+                           "\(destination)'s stored name opens its page")
+        }
     }
 
     /// Opening Settings at a destination (the menu panel's Options…, a

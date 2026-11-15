@@ -2,7 +2,8 @@ import SwiftUI
 
 /// Settings › Wallpaper › Music video: what is showing (or why not, quietly,
 /// here rather than on the desktop), online lookups and what they send,
-/// the fallback, this song's video timing, and dimming and blur.
+/// which displays show it and its dimming. The rest is under More options
+/// (`MusicVideoMoreOptions`).
 @MainActor
 struct MusicVideoSection: View {
     @Model(\.settings) private var s
@@ -15,38 +16,11 @@ struct MusicVideoSection: View {
                                                 fallback: s.musicVideoFallback.title) {
             InspectorCaption(note)
         }
-        if controller.showingYouTubeID != nil {
-            Button("Open video on YouTube") { controller.openOnYouTube() }
-                .buttonStyle(.link)
-                .help("Opens the video in your browser at the song’s position")
-        }
         Toggle("Search YouTube for videos", isOn: $s.musicVideoOnline)
         InspectorCaption(Self.privacyCaption, more: Self.privacyDetail)
-        ChoiceMenu("Without a video", selection: $s.musicVideoFallback, selectedTitle: \.title) {
-            ForEach(Settings.BackgroundMode.musicVideoFallbacks) { Text($0.title).tag($0) }
-        }
-        PastedVideoLink(controller: controller)
-        LabeledContent("Video timing") {
-            VStack(alignment: .trailing, spacing: 4) {
-                VideoTimingNudge(offset: controller.currentOffset, enabled: controller.hasSong,
-                                 manual: controller.offsetOrigin == .manual,
-                                 nudge: { controller.nudgeOffset(by: $0) }, reset: { controller.resetOffset() })
-                VideoTimingOrigin(label: MusicVideoController.timingLabel(origin: controller.offsetOrigin),
-                                  tapTitle: MusicVideoTapSync.buttonTitle(controller.tapState),
-                                  canTap: controller.canTapSync, tap: { controller.tapSyncButton() })
-            }
-        }
-        if let note = MusicVideoTapSync.note(controller.tapState) {
-            InspectorCaption(note)
-        }
-        InspectorCaption("For this song: how far into the video the song begins. Set it with Tap to sync, Align or the nudges.",
-                         more: Self.timingDetail)
         displayChoice
-        framingChoice
         ValueSlider("Video dimming", value: $s.musicVideoDim, in: Settings.musicVideoDimRange, step: 0.01,
                     format: SettingsFormat.percent)
-        ValueSlider("Video blur", value: $s.musicVideoBlur, in: Settings.musicVideoBlurRange, step: 0.5,
-                    format: { String(format: "%.0f pt", $0) })
     }
 
     /// "Show the video on", beside dimming and blur.
@@ -65,22 +39,56 @@ struct MusicVideoSection: View {
         }
     }
 
-    /// Fill or whole, for YouTube and library videos.
-    @ViewBuilder private var framingChoice: some View {
+    static let framingCaption = "Fill the screen crops the video’s edges. Show the whole video matches its width to the screen, with a blurred copy of the cover above and below."
+    static let framingDetail = "Filled YouTube videos are zoomed a little further so YouTube’s title and logo stay off-screen. Shown whole, nothing is cut from the sides; a squarer video (4:3) loses a little of its top and bottom. To leave out YouTube’s own black bars, Lunalyr asks YouTube for the video’s shape (only its ID is sent). Shown whole, a YouTube video appears a few seconds after it starts playing, once YouTube’s title has faded; its still shows until then."
+    static let timingDetail = "Official videos often open with a scene, or are a different edit from the album track. A video longer than the song is guessed to have that much intro (Estimated); when searching, an official video as long as the song is preferred, as it needs no guess. Tap to sync: click it, then press any key (or Tap now) the moment the singing starts in the video; later in the song, tap when the next line is sung in the video. Tap again to refine: the taps are averaged. A tap, nudge or Align is kept for the video it was made on. Reset goes back to the estimate."
+    static let privacyCaption = "Off by default. When on, the song’s title and artist are sent to YouTube to find its official video, which then streams from YouTube."
+    static let privacyDetail = "Videos in your Music library are always tried first and need nothing sent. With this on, Lunalyr searches YouTube for “artist title official music video” and picks the artist’s own official upload. The video plays muted in YouTube’s privacy-enhanced player, and each song’s answer is remembered on this Mac so it is searched for once. A link you paste for a song plays even with this off; only that video is loaded from YouTube. Search YouTube… works with this off too: it sends only what is in its search box, when you search, and loads the results’ thumbnails."
+}
+
+/// Music video's rarer rows, under More options: a pasted link or a
+/// search for this song's video, opening it on YouTube, this song's video
+/// timing, what shows without a video, blur and framing.
+@MainActor
+struct MusicVideoMoreOptions: View {
+    @Model(\.settings) private var s
+    @ObservedObject private var controller = MusicVideoController.shared
+
+    var body: some View {
+        PastedVideoLink(controller: controller)
+        if controller.showingYouTubeID != nil {
+            Button("Open video on YouTube") { controller.openOnYouTube() }
+                .buttonStyle(.link)
+                .help("Opens the video in your browser at the song’s position")
+        }
+        LabeledContent("Video timing") {
+            VStack(alignment: .trailing, spacing: 4) {
+                VideoTimingNudge(offset: controller.currentOffset, enabled: controller.hasSong,
+                                 manual: controller.offsetOrigin == .manual,
+                                 nudge: { controller.nudgeOffset(by: $0) }, reset: { controller.resetOffset() })
+                VideoTimingOrigin(label: MusicVideoController.timingLabel(origin: controller.offsetOrigin),
+                                  tapTitle: MusicVideoTapSync.buttonTitle(controller.tapState),
+                                  canTap: controller.canTapSync, tap: { controller.tapSyncButton() })
+            }
+        }
+        if let note = MusicVideoTapSync.note(controller.tapState) {
+            InspectorCaption(note)
+        }
+        InspectorCaption("For this song: how far into the video the song begins. Set it with Tap to sync, Align or the nudges.",
+                         more: MusicVideoSection.timingDetail)
+        ChoiceMenu("Without a video", selection: $s.musicVideoFallback, selectedTitle: \.title) {
+            ForEach(Settings.BackgroundMode.musicVideoFallbacks) { Text($0.title).tag($0) }
+        }
+        ValueSlider("Video blur", value: $s.musicVideoBlur, in: Settings.musicVideoBlurRange, step: 0.5,
+                    format: { String(format: "%.0f pt", $0) })
         ChoiceMenu("YouTube videos", selection: $s.musicVideoFraming, selectedTitle: \.title) {
             ForEach(MusicVideoFraming.allCases) { Text($0.title).tag($0) }
         }
         ChoiceMenu("Library videos", selection: $s.libraryVideoFraming, selectedTitle: \.title) {
             ForEach(MusicVideoFraming.allCases) { Text($0.title).tag($0) }
         }
-        InspectorCaption(Self.framingCaption, more: Self.framingDetail)
+        InspectorCaption(MusicVideoSection.framingCaption, more: MusicVideoSection.framingDetail)
     }
-
-    static let framingCaption = "Fill the screen crops the video’s edges. Show the whole video matches its width to the screen, with a blurred copy of the cover above and below."
-    static let framingDetail = "Filled YouTube videos are zoomed a little further so YouTube’s title and logo stay off-screen. Shown whole, nothing is cut from the sides; a squarer video (4:3) loses a little of its top and bottom. To leave out YouTube’s own black bars, Lunalyr asks YouTube for the video’s shape (only its ID is sent). Shown whole, a YouTube video appears a few seconds after it starts playing, once YouTube’s title has faded; its still shows until then."
-    static let timingDetail = "Official videos often open with a scene, or are a different edit from the album track. A video longer than the song is guessed to have that much intro (Estimated); when searching, an official video as long as the song is preferred, as it needs no guess. Tap to sync: click it, then press any key (or Tap now) the moment the singing starts in the video; later in the song, tap when the next line is sung in the video. Tap again to refine: the taps are averaged. A tap, nudge or Align is kept for the video it was made on. Reset goes back to the estimate."
-    static let privacyCaption = "Off by default. When on, the song’s title and artist are sent to YouTube to find its official video, which then streams from YouTube."
-    static let privacyDetail = "Videos in your Music library are always tried first and need nothing sent. With this on, Lunalyr searches YouTube for “artist title official music video” and picks the artist’s own official upload. The video plays muted in YouTube’s privacy-enhanced player, and each song’s answer is remembered on this Mac so it is searched for once. A link you paste for a song plays even with this off; only that video is loaded from YouTube. Search YouTube… works with this off too: it sends only what is in its search box, when you search, and loads the results’ thumbnails."
 }
 
 /// A YouTube link for the playing song, for when search finds nothing or

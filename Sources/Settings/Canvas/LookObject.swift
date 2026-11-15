@@ -3,15 +3,15 @@ import Foundation
 
 // MARK: - The picture's objects
 //
-// The three Look pages (Wallpaper, Lyric style, Animated covers) are one
+// The four Look pages (Wallpaper, Text, Animation, Animated covers) are one
 // sidebar row, "Look", which opens the picture. The page stored under
-// `custom.settingsPage` still says which of the three is selected, so a page
+// `custom.settingsPage` still says which of the four is selected, so a page
 // remembered by an earlier version, and every destination another surface
 // opens, lands on the right object.
 
 /// What is selected on the picture: each is one of the Look pages.
 enum LookObject: String, CaseIterable, Identifiable {
-    case wallpaper, lyrics, covers
+    case wallpaper, lyrics, animation, covers
 
     var id: String { rawValue }
 
@@ -19,16 +19,23 @@ enum LookObject: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .wallpaper: return "Wallpaper"
-        case .lyrics: return "Lyric style"
+        case .lyrics: return "Text"
+        case .animation: return "Animation"
         case .covers: return "Animated covers"
         }
     }
+
+    /// Whether the object is the lyrics themselves (their text or how
+    /// they move): the picture boxes the line, and the strip offers the
+    /// Desktop and Floating styles.
+    var isLyrics: Bool { self == .lyrics || self == .animation }
 
     /// The page stored for this object.
     var page: SettingsPage {
         switch self {
         case .wallpaper: return .wallpaper
         case .lyrics: return .typography
+        case .animation: return .animation
         case .covers: return .covers
         }
     }
@@ -38,6 +45,7 @@ enum LookObject: String, CaseIterable, Identifiable {
         switch page {
         case .wallpaper: self = .wallpaper
         case .typography: self = .lyrics
+        case .animation: self = .animation
         case .covers: self = .covers
         default: return nil
         }

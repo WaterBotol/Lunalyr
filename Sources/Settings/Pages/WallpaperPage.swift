@@ -1,10 +1,11 @@
 import AppKit
 import SwiftUI
 
-/// The Wallpaper inspector: the Looks, the type's own options, how
-/// visualisers hear the music, how the lyrics stay readable, and the
-/// adjustments every drawn type shares. The type itself is chosen on the
-/// canvas, under the picture (`WallpaperTypeChoices`).
+/// The Wallpaper inspector: the Looks, the type's own options with the
+/// adjustments every drawn type shares (Motion speed and Darkening shown,
+/// the rest under More options), and how visualisers hear the music. The
+/// type itself is chosen on the canvas, under the picture
+/// (`WallpaperTypeChoices`). How the lyrics stay readable is on Text.
 @MainActor
 struct WallpaperPage: View {
     /// Opens the Performance page, where the power settings live.
@@ -52,11 +53,6 @@ struct WallpaperPage: View {
                     .id(SettingsAnchor.musicResponse)
                     .revealRow()
             }
-            LyricBackingSection()
-            if s.backgroundMode != .desktop {
-                adjustments
-                    .revealRow()
-            }
         }
         // Rows and sections that come and go with the type glide in; the
         // sections below slide rather than jump.
@@ -66,7 +62,8 @@ struct WallpaperPage: View {
         .scrollsToSettingsAnchor(scrollRequest)
     }
 
-    /// The chosen type's own options, in a section named for it.
+    /// The chosen type's own options, in a section named for it, with the
+    /// shared adjustments at its foot.
     @ViewBuilder private var typeSection: some View {
         switch s.backgroundMode {
         case .auto:
@@ -74,13 +71,30 @@ struct WallpaperPage: View {
                 shaderPicker
                 patternPicker
                 InspectorCaption("Custom Mix picks one of each per song; choose one to pin it.")
+                everydayAdjustments
+                MoreOptions { moreAdjustments }
             }
         case .shader:
-            InspectorSection("GPU effects") { shaderPicker }
+            InspectorSection("GPU effects") {
+                shaderPicker
+                everydayAdjustments
+                MoreOptions { moreAdjustments }
+            }
         case .pattern:
-            InspectorSection("Line patterns") { patternPicker }
+            InspectorSection("Line patterns") {
+                patternPicker
+                everydayAdjustments
+                MoreOptions { moreAdjustments }
+            }
         case .visualizer:
-            InspectorSection("Visualiser") { VisualiserSceneSection() }
+            InspectorSection("Visualiser") {
+                VisualiserSceneSection()
+                everydayAdjustments
+                MoreOptions {
+                    VisualiserSceneMoreOptions()
+                    moreAdjustments
+                }
+            }
         case .desktop:
             InspectorSection("Your wallpaper") {
                 Text("Only lyrics are drawn over your desktop. Keep using your current macOS wallpaper or wallpaper app; Lunalyr leaves it in place.")
@@ -88,13 +102,26 @@ struct WallpaperPage: View {
                 InspectorCaption("Shows your macOS desktop picture behind the lyrics.", more: "The preview puts your macOS desktop picture behind the lyrics. A wallpaper app’s own artwork can’t be shown there, but stays visible on each monitor.")
             }
         case .custom:
-            InspectorSection("Image or video") { importedOptions }
+            InspectorSection("Image or video") {
+                importedOptions
+                everydayAdjustments
+                MoreOptions { moreAdjustments }
+            }
         case .musicVideo:
-            InspectorSection("Music video") { MusicVideoSection() }
+            InspectorSection("Music video") {
+                MusicVideoSection()
+                everydayAdjustments
+                MoreOptions {
+                    MusicVideoMoreOptions()
+                    moreAdjustments
+                }
+            }
         case .colourOnly:
             InspectorSection("Colour only") {
                 Toggle("Album gradient", isOn: $s.albumGradientWallpaper)
                 InspectorCaption("Blends the cover’s colours into a moving gradient.", more: "Blend the colours from across the cover into a slowly moving gradient.")
+                everydayAdjustments
+                MoreOptions { moreAdjustments }
             }
         }
     }
@@ -155,32 +182,41 @@ struct WallpaperPage: View {
                                             redo: { settings.restoreAdvanced(after) })
     }
 
-    private var adjustments: some View {
-        InspectorSection("Adjustments") {
-            if s.backgroundMode != .custom && s.backgroundMode != .musicVideo {
-                ValueSlider("Motion speed", value: $s.effectSpeed, in: 0.2...2, step: 0.05,
-                            format: SettingsFormat.multiplier)
-                    .revealRow()
-                if s.backgroundMode != .visualizer || s.audioVisualizerStyle != .light3D || s.light3DColours == .album {
-                    ValueSlider("Colour richness", value: $s.vividness, in: 0.4...1.8, step: 0.01,
-                                format: SettingsFormat.percent)
-                        .revealRow()
-                }
-            }
-            ValueSlider("Darkening", value: $s.scrimStrength, in: s.scrimRange, step: 0.01, format: SettingsFormat.percent)
-            if let note = WorkspaceCopy.increasedContrastDarkening(preferred: s.preferredScrimStrength,
-                                                                   increaseContrast: s.increaseContrast) {
-                InspectorCaption(note)
-            }
-            if s.backgroundMode == .pattern {
-                ValueSlider("Pattern visibility", value: $s.patternOpacity, in: 0...1, step: 0.01,
-                            format: SettingsFormat.percent)
-                    .revealRow()
-            }
-            Button("Reset Adjustments", action: resetAdjustments)
-                .disabled(s.advancedIsDefault)
-                .help("Motion speed, Colour richness, Darkening, Pattern visibility and the covers’ Softening go back to how Lunalyr comes")
+    /// Whether Motion speed applies: everything Lunalyr draws itself.
+    private var movesWithSpeed: Bool { s.backgroundMode != .custom && s.backgroundMode != .musicVideo }
+
+    /// The adjustments shown in every drawn type's section: Motion speed
+    /// (where Lunalyr draws the picture) and Darkening.
+    @ViewBuilder private var everydayAdjustments: some View {
+        if movesWithSpeed {
+            ValueSlider("Motion speed", value: $s.effectSpeed, in: 0.2...2, step: 0.05,
+                        format: SettingsFormat.multiplier)
+                .revealRow()
         }
+        ValueSlider("Darkening", value: $s.scrimStrength, in: s.scrimRange, step: 0.01, format: SettingsFormat.percent)
+        if let note = WorkspaceCopy.increasedContrastDarkening(preferred: s.preferredScrimStrength,
+                                                               increaseContrast: s.increaseContrast) {
+            InspectorCaption(note)
+        }
+    }
+
+    /// The rarer adjustments, under More options: Colour richness, Pattern
+    /// visibility (Line patterns only) and Reset Adjustments.
+    @ViewBuilder private var moreAdjustments: some View {
+        if movesWithSpeed
+            && (s.backgroundMode != .visualizer || s.audioVisualizerStyle != .light3D || s.light3DColours == .album) {
+            ValueSlider("Colour richness", value: $s.vividness, in: 0.4...1.8, step: 0.01,
+                        format: SettingsFormat.percent)
+                .revealRow()
+        }
+        if s.backgroundMode == .pattern {
+            ValueSlider("Pattern visibility", value: $s.patternOpacity, in: 0...1, step: 0.01,
+                        format: SettingsFormat.percent)
+                .revealRow()
+        }
+        Button("Reset Adjustments", action: resetAdjustments)
+            .disabled(s.advancedIsDefault)
+            .help("Motion speed, Colour richness, Darkening, Pattern visibility and the covers’ Softening go back to how Lunalyr comes")
     }
 }
 
@@ -234,7 +270,8 @@ private struct ImportFailure: View {
     }
 }
 
-/// The visualiser's scene and its own options.
+/// The visualiser's scene and its everyday options: its colours and how
+/// hard it punches on the beat.
 @MainActor
 private struct VisualiserSceneSection: View {
     @Model(\.settings) private var s
@@ -245,13 +282,6 @@ private struct VisualiserSceneSection: View {
         }
         InspectorCaption(s.audioVisualizerStyle.detail)
         if s.audioVisualizerStyle == .wavefieldOriginal {
-            ChoiceMenu("Wavefield preset", selection: $s.wavefieldPreset, selectedTitle: { id in
-                WavefieldWebPreset.catalogue.first { $0.id == id }?.name ?? id
-            }) {
-                ForEach(WavefieldWebPreset.catalogue) { Text($0.name).tag($0.id) }
-            }
-            ChoiceSegments("Projection", selection: $s.wavefieldProjection,
-                           cases: Array(WavefieldProjection.allCases), label: \.title)
             VisualizerColoursPicker(engine: .wavefield)
         }
         if s.audioVisualizerStyle == .wavecore {
@@ -266,13 +296,33 @@ private struct VisualiserSceneSection: View {
     }
 }
 
+/// The visualiser's rarer options, under More options: Wavefield's preset
+/// and projection, and running heavy scenes on the main display only.
+@MainActor
+private struct VisualiserSceneMoreOptions: View {
+    @Model(\.settings) private var s
+
+    var body: some View {
+        if s.audioVisualizerStyle == .wavefieldOriginal {
+            ChoiceMenu("Wavefield preset", selection: $s.wavefieldPreset, selectedTitle: { id in
+                WavefieldWebPreset.catalogue.first { $0.id == id }?.name ?? id
+            }) {
+                ForEach(WavefieldWebPreset.catalogue) { Text($0.name).tag($0.id) }
+            }
+            ChoiceSegments("Projection", selection: $s.wavefieldProjection,
+                           cases: Array(WavefieldProjection.allCases), label: \.title)
+        }
+        VisualizerSceneMoreControls(style: s.audioVisualizerStyle)
+    }
+}
+
 /// System audio for the visualisers: on or off, how strongly scenes answer,
-/// what capture is doing, the fixes when it needs them, and diagnostics.
+/// what capture is doing and the fixes when it needs them; the capture
+/// method under More options. Levels and diagnostics are on Performance.
 @MainActor
 private struct MusicResponseSection: View {
     @Model(\.settings) private var s
     @Environment(\.lunalyrModels) private var models
-    @State private var showsAudioSetup = false
     /// Not observed: the meters publish many times a second.
     private var audio: AudioReactiveController { models.resolved.audio }
 
@@ -303,19 +353,12 @@ private struct MusicResponseSection: View {
             if s.audioReactiveEnabled {
                 AudioCaptureStatus()
             }
-            DisclosureGroup("Audio setup & diagnostics", isExpanded: $showsAudioSetup) {
+            MoreOptions {
                 ChoiceMenu("Capture method", selection: $s.audioCaptureMethod, selectedTitle: \.title) {
                     ForEach(AudioCaptureMethod.allCases) { Text($0.title).tag($0) }
                 }
                 .onChange(of: s.audioCaptureMethod) { _, _ in if s.audioReactiveEnabled { audio.reconnect() } }
-                AudioMeters()
-                // The same action, and name, as beside a failing status.
-                HStack {
-                    Button("Open Privacy Settings…") { audio.openPrivacySettings() }
-                    Button("Copy Audio Diagnostics") { audio.copyDiagnostics() }
-                        .help("Copies a report of how audio capture is set up, to paste into a bug report")
-                }
-                .controlSize(.small)
+                InspectorCaption("Levels and diagnostics are in Performance › Troubleshooting.")
             }
         }
     }
@@ -325,7 +368,7 @@ private struct MusicResponseSection: View {
 /// fixes once it needs attention. Reads only the status and state, so the
 /// meters don't redraw the page.
 @MainActor
-private struct AudioCaptureStatus: View {
+struct AudioCaptureStatus: View {
     @Environment(\.lunalyrModels) private var models
     // Filled from the controller as the view appears (a published value
     // arrives on subscription).
@@ -368,10 +411,10 @@ private struct AudioCaptureStatus: View {
     }
 }
 
-/// Live levels and the packet count, only while diagnostics are open: the
-/// one view on the page that redraws with the meters.
+/// Live levels and the packet count, only while Troubleshooting is open:
+/// the one view on the page that redraws with the meters.
 @MainActor
-private struct AudioMeters: View {
+struct AudioMeters: View {
     @Model(\.audio) private var audio
 
     var body: some View {

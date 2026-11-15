@@ -39,7 +39,7 @@ final class SettingsFollowupTests: XCTestCase {
         XCTAssertTrue(ExtrasInspector.shortcutsCaption.contains(GlobalHotkeys.Action.copyCard.title))
         XCTAssertFalse(ExtrasInspector.shortcutsCaption.localizedCaseInsensitiveContains("copy a lyric card"))
         XCTAssertTrue(ExtrasInspector.shortcutsCaption.contains(SettingsPage.share.title))
-        XCTAssertTrue(SettingsPage.extras.matches("lyric card"), "searching for the card finds its shortcut too")
+        XCTAssertTrue(SettingsPage.general.matches("lyric card"), "searching for the card finds its shortcut too")
     }
 
     // MARK: Entrances a layout leaves out

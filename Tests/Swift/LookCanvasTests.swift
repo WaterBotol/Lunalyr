@@ -8,16 +8,18 @@ import XCTest
 final class LookCanvasTests: XCTestCase {
     // MARK: Sidebar
 
-    func testTheThreeLookPagesAreOneLookRow() {
+    func testTheFourLookPagesAreOneLookRow() {
         XCTAssertEqual(SettingsSidebarRow(.wallpaper), .look)
         XCTAssertEqual(SettingsSidebarRow(.typography), .look)
+        XCTAssertEqual(SettingsSidebarRow(.animation), .look)
         XCTAssertEqual(SettingsSidebarRow(.covers), .look)
         XCTAssertEqual(SettingsSidebarRow(.lyrics), .page(.lyrics))
-        XCTAssertEqual(SettingsSidebarRow(.about), .page(.about))
+        XCTAssertEqual(SettingsSidebarRow(.general), .page(.general))
         // Every page has a row, and the rows read as the spec lists them.
         let titles = SettingsSidebarRow.all.map(\.title)
-        XCTAssertEqual(titles, ["Look", "Timing & sources", "Romanisation", "Music players", "General",
-                                "Menu bar & shortcuts", "Discord & lyric card", "Performance", "About"])
+        XCTAssertEqual(titles, ["Look", "Timing & sources", "Romanisation & translation", "General",
+                                "Discord & sharing", "Performance"])
+        XCTAssertEqual(SettingsSidebarRow.look.pages.map(\.title), ["Wallpaper", "Text", "Animation", "Animated covers"])
         XCTAssertEqual(Set(SettingsSidebarRow.all.flatMap(\.pages)), Set(SettingsPage.allCases))
         XCTAssertEqual(SettingsSidebarRow.groups.map(\.title), ["Words", "App"])
     }
@@ -25,11 +27,15 @@ final class LookCanvasTests: XCTestCase {
     func testTheLookRowOpensTheLastObjectOrWhatTheSearchFound() {
         XCTAssertEqual(SettingsSidebarRow.look.destination(lastLook: .typography), .typography)
         XCTAssertEqual(SettingsSidebarRow.look.destination(lastLook: .covers), .covers)
+        XCTAssertEqual(SettingsSidebarRow.look.destination(lastLook: .animation), .animation)
         // A page without a picture is never "the last Look".
         XCTAssertEqual(SettingsSidebarRow.look.destination(lastLook: .general), .wallpaper)
         // A search lands on the object it found.
         XCTAssertEqual(SettingsSidebarRow.look.destination(lastLook: .wallpaper, query: "typeface"), .typography)
         XCTAssertEqual(SettingsSidebarRow.look.destination(lastLook: .wallpaper, query: "softening"), .covers)
+        XCTAssertEqual(SettingsSidebarRow.look.destination(lastLook: .wallpaper, query: "entrance"), .animation)
+        XCTAssertEqual(SettingsSidebarRow.look.destination(lastLook: .wallpaper, query: "orb"), .animation)
+        XCTAssertEqual(SettingsSidebarRow.look.destination(lastLook: .wallpaper, query: "text backing"), .typography)
         XCTAssertEqual(SettingsSidebarRow.look.destination(lastLook: .typography, query: "darkening"), .wallpaper)
         // …unless the object shown already matches.
         XCTAssertEqual(SettingsSidebarRow.look.destination(lastLook: .typography, query: "colour"), .typography)
@@ -51,7 +57,9 @@ final class LookCanvasTests: XCTestCase {
             XCTAssertEqual(LookObject(page: object.page), object)
         }
         XCTAssertNil(LookObject(page: .performance))
-        XCTAssertEqual(LookObject.allCases.map(\.title), ["Wallpaper", "Lyric style", "Animated covers"])
+        XCTAssertEqual(LookObject.allCases.map(\.title), ["Wallpaper", "Text", "Animation", "Animated covers"])
+        XCTAssertTrue(LookObject.animation.isLyrics, "Animation boxes the line and offers Desktop and Floating")
+        XCTAssertFalse(LookObject.covers.isLyrics)
         // Destinations from other surfaces land on the right object.
         XCTAssertEqual(LookObject(page: SettingsPage(.wallpaper)), .wallpaper)
         XCTAssertEqual(LookObject(page: SettingsPage(.musicResponse)), .wallpaper)

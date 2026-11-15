@@ -152,6 +152,8 @@ struct SettingsSidebar: View {
                 .font(.system(size: 13, weight: on ? .semibold : .regular))
                 .foregroundStyle(Color.studio(.ink).opacity(on ? 1 : (scheme == .dark ? 0.82 : 0.78)))
                 .lineLimit(1)
+                // "Romanisation & translation" fits the 186-point sidebar.
+                .minimumScaleFactor(0.8)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 10)
                 .frame(height: LunalyrDesign.Studio.Layout.sidebarRowHeight)

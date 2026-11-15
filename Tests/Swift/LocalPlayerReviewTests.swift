@@ -128,6 +128,6 @@ final class LocalPlayersOptInTests: XCTestCase {
         XCTAssertFalse(withVox.contains("VLC"))
         XCTAssertFalse(OnboardingCopy.permissionNote(installed: []).isEmpty)
         XCTAssertEqual(OnboardingCopy.list(["A", "B", "C"]), "A, B and C")
-        XCTAssertEqual(MusicPlayersPage.localTitle([.vlc, .vox]), "Follow VLC and VOX")
+        XCTAssertEqual(MusicPlayersSection.localTitle([.vlc, .vox]), "Follow VLC and VOX")
     }
 }

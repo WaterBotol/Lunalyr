@@ -3,7 +3,8 @@ import SwiftUI
 
 /// About: what Lunalyr is, its version and project page, what it is built
 /// on, and what stays on this Mac. Centred; the two sections are plain
-/// sections (no cards) in a 440 pt column.
+/// sections (no cards) in a 440 pt column. Shown in a sheet from General ›
+/// App (`AboutSheet`).
 @MainActor
 struct AboutPage: View {
     static let projectURL = URL(string: "https://github.com/WaterBotol/Lunalyr")!
@@ -68,6 +69,27 @@ struct AboutPage: View {
         .padding(.vertical, 40)
         .padding(.horizontal, 16)
         .frame(maxWidth: .infinity)
+    }
+}
+
+/// About Lunalyr, over General: the About content with Done.
+@MainActor
+struct AboutSheet: View {
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(spacing: 0) {
+            AboutPage()
+            HStack {
+                Spacer()
+                Button("Done") { dismiss() }
+                    .keyboardShortcut(.defaultAction)
+            }
+            .padding(16)
+        }
+        .frame(width: 520, height: 600)
+        .background(Color.studio(.window))
+        .lunalyrTint()
     }
 }
 

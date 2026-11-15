@@ -113,12 +113,13 @@ enum SettingsDestination: String, CaseIterable, Identifiable {
     case readings
     /// Frame rate, power saving, desktop interaction.
     case performance
-    /// Hide and pause, the menu-bar line, shortcuts, lyric card.
+    /// Hide and pause, the menu-bar line, shortcuts (General › On screen).
     case menuBarAndShortcuts
     /// Launch at login, updates, showing the welcome again.
     case general
     /// Which player Lunalyr follows, and Automation access to it.
     case players
+    /// General › App, where About Lunalyr opens.
     case about
 
     var id: String { rawValue }
@@ -131,9 +132,8 @@ enum SettingsDestination: String, CaseIterable, Identifiable {
         case .animatedCovers: return "covers"
         case .timing: return "lyrics"
         case .readings: return "readings"
-        case .performance, .general, .players: return "performance"
-        case .menuBarAndShortcuts: return "extras"
-        case .about: return "about"
+        case .performance: return "performance"
+        case .general, .players, .menuBarAndShortcuts, .about: return "general"
         }
     }
 }

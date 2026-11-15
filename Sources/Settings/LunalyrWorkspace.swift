@@ -78,7 +78,7 @@ struct SettingsWindowView: View {
 /// The detail beside the sidebar: for a Look page, the picture and its
 /// inspector (`LookWorkspace`); for any other page, its title in a 56-point
 /// band and the page in one column, 40 points from the sidebar and at most
-/// 600 wide (spec §8); About on its own.
+/// 600 wide (spec §8).
 @MainActor
 struct SettingsDetail: View {
     let page: SettingsPage
@@ -105,11 +105,6 @@ struct SettingsDetail: View {
         Group {
             if let object = LookObject(page: page) {
                 LookWorkspace(object: object, previewDisplay: previewDisplay, scrollRequest: scrollRequest, select: select)
-                    .transition(.opacity)
-            } else if page == .about {
-                AboutPage()
-                    .padding(.top, 28)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .transition(.opacity)
             } else {
                 pageWithTitle
@@ -157,12 +152,10 @@ struct SettingsDetail: View {
             switch page {
             case .lyrics: TimingPage()
             case .readings: ReadingsPage()
-            case .players: MusicPlayersPage(scrollRequest: scrollRequest)
-            case .general: GeneralPage()
-            case .extras: ExtrasInspector()
+            case .general: GeneralPage(scrollRequest: scrollRequest)
             case .share: ShareInspector()
             case .performance: PerformancePage()
-            case .wallpaper, .typography, .covers, .about: EmptyView()
+            case .wallpaper, .typography, .animation, .covers: EmptyView()
             }
         }
         .id(page)

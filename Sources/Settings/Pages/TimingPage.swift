@@ -4,9 +4,10 @@ import UniformTypeIdentifiers
 
 /// Timing & sources, split by scope (SPEC §8): on the left, on the canvas
 /// grey, what applies to this song (its timing, where its lyrics came from,
-/// finding others); on the right, on white, what applies to every song
-/// (without synced lyrics, the sources and their order, local exports,
-/// advanced timing).
+/// finding others; importing a file and returning to automatic under More
+/// options); on the right, on white, what applies to every song (the
+/// sources and their order; other names, without synced lyrics and local
+/// exports under More options; advanced timing, all under More options).
 ///
 /// "Is a song playing, which one" comes from the models (`currentQuery`):
 /// the lyric view model and the source options are the app's own.
@@ -42,24 +43,20 @@ struct TimingPage: View {
             findLyrics
         } trailing: {
             ThemedPageTitle("Every song").padding(.bottom, -12)
-            ThemedSection("Without synced lyrics") {
-                ChoiceMenu("When none are found", selection: $settings.noLyrics, selectedTitle: \.title) {
-                    ForEach(Settings.NoLyricsBehaviour.allCases) { Text($0.title).tag($0) }
-                }
-            }
             sources
-            localExports
             ThemedSection("Advanced timing") {
-                ValueSlider("Global offset", value: $settings.lyricOffset, in: -3...3, step: 0.05,
-                            minimumLabel: "Later", maximumLabel: "Earlier",
-                            format: TimingNudge.format, spoken: TimingNudge.spoken)
-                InspectorCaption("Moves every song’s lyrics; the song offset adds to it.")
-                CheckboxList {
-                    Toggle(isOn: $options.repairQQGaps) {
-                        CheckboxLabel("Treat long pauses as instrumental",
-                                      caption: "A long gap after a line shows as a break, not a held line.", more: pauseCaption)
+                MoreOptions {
+                    ValueSlider("Global offset", value: $settings.lyricOffset, in: -3...3, step: 0.05,
+                                minimumLabel: "Later", maximumLabel: "Earlier",
+                                format: TimingNudge.format, spoken: TimingNudge.spoken)
+                    InspectorCaption("Moves every song’s lyrics; the song offset adds to it.")
+                    CheckboxList {
+                        Toggle(isOn: $options.repairQQGaps) {
+                            CheckboxLabel("Treat long pauses as instrumental",
+                                          caption: "A long gap after a line shows as a break, not a held line.", more: pauseCaption)
+                        }
+                        .accessibilityLabel("Treat long pauses as instrumental")
                     }
-                    .accessibilityLabel("Treat long pauses as instrumental")
                 }
             }
         }
@@ -168,13 +165,12 @@ struct TimingPage: View {
                     .environment(\.captionFollowsControl, model.provenance != nil)
             }
             if model.pinnedMatch {
-                LabeledContent {
+                Label("Using your saved choice", systemImage: "pin.fill")
+                MoreOptions {
                     Button("Return to Automatic") { model.forgetSelection() }
                         .controlSize(.small)
                         .accessibilityLabel("Return to automatic selection")
                         .help("Let Lunalyr choose this song’s lyrics again")
-                } label: {
-                    Label("Using your saved choice", systemImage: "pin.fill")
                 }
             }
         }
@@ -200,10 +196,6 @@ struct TimingPage: View {
                 }
             }
             .controlSize(.small)
-            Button("Import LRC or TTML…") { importLyrics() }
-                .controlSize(.small)
-                .disabled(query == nil)
-                .help("Use a lyrics file of your own for the playing song (up to 1 MB)")
             if query == nil {
                 DisabledReason("Searching and importing work on the song playing.")
             }
@@ -234,6 +226,12 @@ struct TimingPage: View {
                     .environment(\.captionFollowsControl, false)
                     .id(status)
                     .transition(.opacity)
+            }
+            MoreOptions {
+                Button("Import LRC or TTML…") { importLyrics() }
+                    .controlSize(.small)
+                    .disabled(query == nil)
+                    .help("Use a lyrics file of your own for the playing song (up to 1 MB)")
             }
         }
     }
@@ -268,16 +266,23 @@ struct TimingPage: View {
                 .controlSize(.small)
                 .accessibilityLabel("Restore recommended source order")
                 .help("Put the sources back in the order Lunalyr recommends")
-            CheckboxList {
-                Toggle(isOn: $artistAliases) {
-                    CheckboxLabel("Search under other names",
-                                  caption: "Asks again as “米津玄師” when “Kenshi Yonezu” finds nothing.",
-                                  more: Self.aliasesDetail)
-                }
-                .accessibilityLabel("Search under other names")
-            }
             InspectorCaption("Online sources receive song metadata.", more: "Online services receive song metadata. Apple Music’s local cache stays on this Mac. New sources are available to enable here; existing choices are preserved.")
                 .environment(\.captionFollowsControl, false)
+            MoreOptions {
+                CheckboxList {
+                    Toggle(isOn: $artistAliases) {
+                        CheckboxLabel("Search under other names",
+                                      caption: "Asks again as “米津玄師” when “Kenshi Yonezu” finds nothing.",
+                                      more: Self.aliasesDetail)
+                    }
+                    .accessibilityLabel("Search under other names")
+                }
+                ChoiceMenu("When none are found", selection: $settings.noLyrics, selectedTitle: \.title) {
+                    ForEach(Settings.NoLyricsBehaviour.allCases) { Text($0.title).tag($0) }
+                }
+                InspectorCaption("What shows for a song without synced lyrics.")
+                localExports
+            }
         }
     }
 
@@ -315,8 +320,8 @@ struct TimingPage: View {
         })
     }
 
-    private var localExports: some View {
-        ThemedSection("Local exports") {
+    @ViewBuilder private var localExports: some View {
+        Group {
             LabeledContent("Lyrimuse lyrics folder") {
                 Text(local.folder.isEmpty ? "None chosen" : local.folder)
                     .textSelection(.enabled)
@@ -384,7 +389,7 @@ struct TimingPage: View {
     /// cut short; for other sources a break is shown only by the orb,
     /// so without it the setting changes nothing there.
     private var pauseCaption: String {
-        let caption = "Lyrics timed only by line don’t say when singing stops. With Show a glowing orb during instrumental breaks on (Lyric style), a long gap after a line is shown as an instrumental break instead of one held line. Turn this off for songs with long held notes."
+        let caption = "Lyrics timed only by line don’t say when singing stops. With Show a glowing orb during instrumental breaks on (Animation), a long gap after a line is shown as an instrumental break instead of one held line. Turn this off for songs with long held notes."
         return settings.showInterludes
             ? caption
             : caption + " The orb is off, so this changes only QQ Music’s lyrics, whose held lines end early, and how long the words of a line before a long gap take to light up."

@@ -1,6 +1,6 @@
 import Foundation
 
-/// Which word entrances a layout actually shows, for the Lyric style page.
+/// Which word entrances a layout actually shows, for the Animation page.
 ///
 /// The stage layouts move word-timed lyrics their own way
 /// (`StageLyricView`): Hinge, Portal and Mosaic never read the

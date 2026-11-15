@@ -217,7 +217,7 @@ extension UISnapshotCatalogue {
             UISnapshotCase("settings/general-pilot", note: "General in the chosen look, with the sidebar",
                            chrome: .settingsWindow, size: .settingsWindow, player: .playing,
                            prepare: { $0.showSettingsPage("general") }, view: settingsWindow),
-            UISnapshotCase("settings/general-denied", note: "Music players with Music refused: the access row's fix",
+            UISnapshotCase("settings/general-denied", note: "General › Music players with Music refused (a page stored as players)",
                            chrome: .settingsWindow, size: .settingsWindow, player: .denied,
                            prepare: { $0.showSettingsPage("players") }, view: settingsWindow),
             UISnapshotCase("settings/general-needs-consent", note: "General before macOS has asked about Music",
@@ -226,16 +226,16 @@ extension UISnapshotCatalogue {
             UISnapshotCase("settings/general-contrast", note: "General under Increase Contrast",
                            chrome: .settingsWindow, size: .settingsWindow, looks: [.lightContrast, .darkContrast],
                            player: .denied, prepare: { $0.showSettingsPage("general") }, view: settingsWindow),
-            UISnapshotCase("settings/extras-mirroring", note: "Menu bar & shortcuts while mirroring hides the lyrics",
+            UISnapshotCase("settings/extras-mirroring", note: "General › On screen while mirroring hides the lyrics",
                            chrome: .settingsWindow, size: .settingsWindow, player: .playing,
                            prepare: { scene in
-                               scene.showSettingsPage("extras")
+                               scene.navigation.openSettings(.menuBarAndShortcuts)
                                scene.hideLyricsForMirroring(asked: true)
                            }, view: settingsWindow),
             UISnapshotCase("settings/extras-shortcuts-full", note: "global shortcuts on, the menu-bar line shown",
                            chrome: .settingsWindow, size: .settingsPage, player: .playing,
                            prepare: { scene in
-                               scene.showSettingsPage("extras", preview: false)
+                               scene.showSettingsPage("general", preview: false)
                                scene.extras.shortcutsEnabled = true
                                scene.extras.showsMenuBarLine = true
                            }, view: settingsWindow),
@@ -247,9 +247,9 @@ extension UISnapshotCatalogue {
                                scene.settings.animationRate = .smooth
                                scene.settings.pauseWhenCovered = true
                            }, view: settingsWindow),
-            UISnapshotCase("settings/about-large", note: "About at 1200 x 780",
-                           chrome: .settingsWindow, size: .settingsWindowLarge,
-                           prepare: { $0.showSettingsPage("about") }, view: settingsWindow),
+            UISnapshotCase("settings/about-sheet", note: "About Lunalyr, the sheet General › App opens",
+                           chrome: .plain, size: .frame(CGSize(width: 520, height: 600)),
+                           view: { _ in AboutSheet() }),
         ]
     }
 
@@ -260,16 +260,19 @@ extension UISnapshotCatalogue {
             UISnapshotCase("settings/look-wallpaper-playing", note: "Look, Wallpaper selected, a song playing",
                            chrome: .settingsWindow, size: .frame(CGSize(width: 1100, height: 720)), player: .playing,
                            prepare: { $0.showSettingsPage("wallpaper") }, view: settingsWindow),
-            UISnapshotCase("settings/look-lyrics-playing", note: "Look, Lyric style selected: the line's handles",
+            UISnapshotCase("settings/look-lyrics-playing", note: "Look, Text selected: the line's handles",
                            chrome: .settingsWindow, size: .frame(CGSize(width: 1100, height: 720)), player: .playing,
                            prepare: { $0.showSettingsPage("typography") }, view: settingsWindow),
+            UISnapshotCase("settings/look-animation-playing", note: "Look, Animation selected",
+                           chrome: .settingsWindow, size: .frame(CGSize(width: 1100, height: 720)), player: .playing,
+                           prepare: { $0.showSettingsPage("animation") }, view: settingsWindow),
             UISnapshotCase("settings/look-covers-playing", note: "Look, Animated covers selected",
                            chrome: .settingsWindow, size: .frame(CGSize(width: 1100, height: 720)), player: .playing,
                            prepare: { $0.showSettingsPage("covers") }, view: settingsWindow),
             UISnapshotCase("settings/look-nothing-playing", note: "Look with nothing playing: the sample line",
                            chrome: .settingsWindow, size: .frame(CGSize(width: 1100, height: 720)),
                            prepare: { $0.showSettingsPage("typography") }, view: settingsWindow),
-            UISnapshotCase("settings/look-floating", note: "Look, Floating over apps, Lyric style selected",
+            UISnapshotCase("settings/look-floating", note: "Look, Floating over apps, Text selected",
                            chrome: .settingsWindow, size: .frame(CGSize(width: 1100, height: 720)), player: .playing,
                            prepare: { $0.showSettingsPage("typography") }, view: floatingSettingsWindow),
             UISnapshotCase("settings/look-smallest", note: "Look at the smallest window, 860 x 420",
@@ -309,15 +312,13 @@ struct SettingsInspectorProbe: View {
             switch page {
             case .wallpaper: WallpaperPage()
             case .typography: LyricStylePage()
+            case .animation: AnimationPage()
             case .covers: CoversPage()
             case .lyrics: TimingPage()
             case .readings: ReadingsPage()
-            case .players: MusicPlayersPage()
             case .general: GeneralPage()
-            case .extras: ExtrasInspector()
             case .share: ShareInspector()
             case .performance: PerformancePage()
-            case .about: AboutPage()
             }
         }
         .fixedSize(horizontal: false, vertical: true)

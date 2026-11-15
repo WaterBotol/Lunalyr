@@ -263,7 +263,7 @@ final class WordAccentsTests: XCTestCase {
 
     func testCatalogueFindsBothByTheirKeywords() {
         for keyword in ["emoji", "symbol", "icon", "action", "animation", "spin"] {
-            XCTAssertTrue(SettingsCatalogue.search(keyword).contains { $0.section == "Word symbols" || $0.section == "Action words" },
+            XCTAssertTrue(SettingsCatalogue.search(keyword).contains { $0.section == WordAccentsSection.title && $0.page == .animation },
                           keyword)
         }
         XCTAssertEqual(WordAccentsSection.symbolsToggle, "Show symbols beside listed words")

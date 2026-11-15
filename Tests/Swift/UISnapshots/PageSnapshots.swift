@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 @testable import VersoCustom
 
-/// The eight pages without a picture (SPEC.md §8), each beside a plain
+/// The five pages without a picture (SPEC.md §8), each beside a plain
 /// sidebar-coloured strip at the redesign's 1100 x 720 window, and each whole
 /// page. They draw the page views themselves, so they show the form language
 /// whatever the window around them does. Owned by the pages builder.
@@ -33,8 +33,8 @@ extension UISnapshotCatalogue {
 }
 
 enum PageSnapshotPage: String, CaseIterable {
-    case timing = "timing-sources", romanisation, players = "music-players", general
-    case menuBar = "menu-bar-shortcuts", share = "discord-lyric-card", performance, about
+    case timing = "timing-sources", romanisation = "romanisation-translation", general
+    case share = "discord-sharing", performance
 
     @MainActor var prepare: (UISnapshotScene) -> Void {
         switch self {
@@ -63,12 +63,9 @@ struct PageSnapshotFrame: View {
         switch page {
         case .timing: TimingPage()
         case .romanisation: ReadingsPage()
-        case .players: MusicPlayersPage()
         case .general: GeneralPage()
-        case .menuBar: ExtrasInspector()
         case .share: ShareInspector()
         case .performance: PerformancePage()
-        case .about: AboutPage()
         }
     }
 }

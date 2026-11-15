@@ -106,7 +106,8 @@ final class UISnapshotScene {
 
     /// The `@AppStorage` the Settings window keeps its page and preview in.
     /// `name` is a page's stored value (today's: wallpaper, typography,
-    /// covers, lyrics, readings, performance, extras, about).
+    /// animation, covers, lyrics, readings, general, share, performance; an
+    /// earlier version's players, extras or about open General).
     func showSettingsPage(_ name: String, preview: Bool = true, largePreview: Bool = false) {
         defaults.set(name, forKey: "custom.settingsPage")
         defaults.set(preview, forKey: "custom.settingsShowsPreview")

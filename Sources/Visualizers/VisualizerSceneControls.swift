@@ -8,7 +8,6 @@ struct VisualizerSceneControls: View {
     let style: AudioVisualizerStyle
     @Model(\.visualizer) private var preferences
     @ObservedObject private var safety = VisualizerSafety.shared
-    @ObservedObject private var diagnostics = WebVisualizerDiagnostics.shared
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var calm: Bool { reduceMotion || safety.dimFlashingLights }
@@ -30,6 +29,19 @@ struct VisualizerSceneControls: View {
             ? "Reduce Motion or Dim Flashing Lights is on, so beat flashes are off and brightness changes are limited."
             : "Visualisers can flash with the beat. Reduce Motion or Dim Flashing Lights in System Settings › Accessibility › Display removes beat flashes and limits brightness changes.")
             .font(.caption).foregroundStyle(.secondary)
+    }
+}
+
+/// The visualiser's rarer rows, under the Wallpaper inspector's More
+/// options: running a heavy web scene on the main display only, and how
+/// that scene is doing.
+@MainActor
+struct VisualizerSceneMoreControls: View {
+    let style: AudioVisualizerStyle
+    @Model(\.visualizer) private var preferences
+    @ObservedObject private var diagnostics = WebVisualizerDiagnostics.shared
+
+    var body: some View {
         if let engine = style.webEngine {
             Toggle("Heavy scenes on main display only", isOn: $preferences.heavyScenesOnMainDisplayOnly)
             Text("Each display otherwise runs its own copy of this scene. With this on, other displays show \(engine.nativeStandIn(projection: .preset).title) instead.")

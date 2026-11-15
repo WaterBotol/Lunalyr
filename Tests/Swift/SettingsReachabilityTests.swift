@@ -58,6 +58,26 @@ final class SettingsReachabilityTests: XCTestCase {
         XCTAssertGreaterThan(SettingsCatalogue.all.count, 150)
     }
 
+    /// The approved layout: a few settings, each where it now lives.
+    func testSettingsSitOnTheirNewPages() {
+        func page(_ label: String) -> Set<SettingsPage> {
+            Set(SettingsCatalogue.all.filter { $0.label == label }.map(\.page))
+        }
+        XCTAssertEqual(page("Automatic text backing"), [.typography])
+        XCTAssertEqual(page("Shade behind lyrics"), [.typography])
+        XCTAssertEqual(page("Entrance"), [.animation])
+        XCTAssertEqual(page("Orb style"), [.animation])
+        XCTAssertEqual(page("Hide lyrics"), [.general])
+        XCTAssertEqual(page("Player"), [.general])
+        XCTAssertEqual(page("Show player on hover"), [.general])
+        XCTAssertEqual(page("View Bundled Licences"), [.general])
+        XCTAssertEqual(page("Copy Audio Diagnostics"), [.performance])
+        XCTAssertEqual(page("Capture method"), [.wallpaper])
+        XCTAssertEqual(page("Let friends listen along"), [.share])
+        XCTAssertEqual(SettingsCatalogue.all.first { $0.label == "Let friends listen along" }?.section, "Listen along")
+        XCTAssertEqual(SettingsCatalogue.all.first { $0.label == "Darkening" }?.section, "Visualiser")
+    }
+
     // MARK: Search
 
     func testSearchingAnEntrysLabelFindsItsPageAndTheEntry() {
@@ -85,7 +105,7 @@ final class SettingsReachabilityTests: XCTestCase {
             XCTAssertTrue(page.matches(page.title))
             for term in page.searchTerms { XCTAssertTrue(page.matches(term), "\(page.title): \(term)") }
         }
-        XCTAssertTrue(SettingsPage.extras.matches("lyric card"))
+        XCTAssertTrue(SettingsPage.general.matches("lyric card"))
         XCTAssertFalse(SettingsPage.allCases.contains { $0.matches("zzqx") })
         XCTAssertEqual(SettingsCatalogue.search(""), [])
         XCTAssertEqual(SettingsCatalogue.search("zzqx"), [])
@@ -95,9 +115,13 @@ final class SettingsReachabilityTests: XCTestCase {
         // Words only a setting's label carries now find its page.
         XCTAssertTrue(SettingsPage.typography.matches("backing vocals"))
         XCTAssertTrue(SettingsPage.lyrics.matches("global offset"))
-        XCTAssertTrue(SettingsPage.performance.matches("show player on hover"))
+        XCTAssertTrue(SettingsPage.general.matches("show player on hover"))
         XCTAssertTrue(SettingsPage.share.matches("listen along"))
-        XCTAssertTrue(SettingsPage.wallpaper.matches("text backing"))
+        XCTAssertTrue(SettingsPage.typography.matches("text backing"))
+        XCTAssertTrue(SettingsPage.animation.matches("preview lead"))
+        XCTAssertTrue(SettingsPage.performance.matches("copy audio diagnostics"))
+        XCTAssertTrue(SettingsPage.general.matches("view bundled licences"))
+        XCTAssertTrue(SettingsPage.general.matches("allow access"))
         // Case, accents and curly quotes don't matter.
         XCTAssertTrue(SettingsPage.share.matches("WHAT I’M LISTENING"))
         XCTAssertEqual(SettingsCatalogue.search("darkening").first?.label, "Darkening")
@@ -161,11 +185,11 @@ final class SettingsReachabilityTests: XCTestCase {
 
     @MainActor
     func testGeneratedRowsAgreeWithTheirSources() {
-        let shortcutTitles = SettingsCatalogue.entries(on: .extras)
+        let shortcutTitles = SettingsCatalogue.entries(on: .general)
             .filter { $0.keys.contains("custom.globalShortcutsOff") }.map(\.label)
         XCTAssertEqual(shortcutTitles, GlobalHotkeys.shortcuts.map(\.action.title))
         XCTAssertTrue(SettingsCatalogue.entries(on: .lyrics).contains { $0.label == LyricTapSyncController.menuTitle })
-        XCTAssertTrue(SettingsCatalogue.entries(on: .extras).contains { $0.label == LunalyrExtras.Titles.showLyricsAnyway })
+        XCTAssertTrue(SettingsCatalogue.entries(on: .general).contains { $0.label == LunalyrExtras.Titles.showLyricsAnyway })
     }
 }
 

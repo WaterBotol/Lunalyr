@@ -57,7 +57,7 @@ struct LookPicture: View {
             let scale = draggedScale ?? settings.lyricScale
             let box = LyricSizeDrag.box(in: size, scale: scale)
             ZStack(alignment: .topLeading) {
-                // Clicks: the line selects Lyric style, anywhere else the wallpaper.
+                // Clicks: the line selects Text (or keeps Animation), anywhere else the wallpaper.
                 Color.clear
                     .contentShape(Rectangle())
                     .onTapGesture(coordinateSpace: .local) { point in
@@ -70,7 +70,7 @@ struct LookPicture: View {
                         .strokeBorder(Color.studio(.accent), lineWidth: 3)
                         .allowsHitTesting(false)
                         .accessibilityHidden(true)
-                case .lyrics:
+                case .lyrics, .animation:
                     if showsFloating {
                         FloatingHandles(desktop: desktop, picture: size, options: floating)
                     } else {
@@ -95,7 +95,8 @@ struct LookPicture: View {
 
     private func tapped(at point: CGPoint, box: CGRect) {
         if box.insetBy(dx: -6, dy: -6).contains(point) {
-            select(.lyrics)
+            // Text or Animation, whichever is showing; Text from elsewhere.
+            select(object.isLyrics ? object : .lyrics)
         } else if object != .covers {
             select(.wallpaper)
         }

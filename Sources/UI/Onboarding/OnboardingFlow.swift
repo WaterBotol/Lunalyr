@@ -210,7 +210,7 @@ enum OnboardingCopy {
     static let playerTitle = "Desktop player"
     static let player = "Rest the pointer on an uncovered desktop to see what’s playing and next, and search."
     static let floatingTitle = "Floating lyrics"
-    static let floating = "Lyrics over your apps instead of on the desktop. Turn them on in Settings › Lyric style."
+    static let floating = "Lyrics over your apps instead of on the desktop. Turn them on in Settings › Text."
     static let discordTitle = "Discord status"
     static let discord = "Your status shows the line being sung, as it changes."
     /// What the switch sends, and to whom (DiscordPresence: a local socket to

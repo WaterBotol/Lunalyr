@@ -1,10 +1,10 @@
 import SwiftUI
 
-/// Music players: which player Lunalyr follows, whether it follows web
-/// players in browsers, and whether macOS lets it read each one.
+/// General › Music players: which player Lunalyr follows and whether it
+/// follows web and local-file players; whether macOS lets it read each one
+/// under More options. A section in General's form.
 @MainActor
-struct MusicPlayersPage: View {
-    var scrollRequest: SettingsScrollRequest?
+struct MusicPlayersSection: View {
     @Model(\.players) private var players
     @Environment(\.lunalyrModels) private var models
 
@@ -15,31 +15,28 @@ struct MusicPlayersPage: View {
                                                    localPlayers: players.followsLocalPlayers)
         let browsers = PlayerKind.browsers.filter(installed.contains)
         let localPlayers = PlayerKind.localPlayers.filter(installed.contains)
-        ThemedForm {
-            ThemedSection("Follow") {
-                if offered.count <= 4 {
-                    ChoiceSegments("Player", selection: $players.choice, cases: offered, label: \.title)
-                } else {
-                    ChoiceMenu("Player", selection: $players.choice, selectedTitle: \.title) {
-                        ForEach(offered) { Text($0.title).tag($0) }
-                    }
+        ThemedSection("Music players") {
+            if offered.count <= 4 {
+                ChoiceSegments("Player", selection: $players.choice, cases: offered, label: \.title)
+            } else {
+                ChoiceMenu("Player", selection: $players.choice, selectedTitle: \.title) {
+                    ForEach(offered) { Text($0.title).tag($0) }
                 }
-                InspectorCaption("Automatic follows whichever player is playing.", more: "Automatic follows whichever player is playing. Choosing one means Lunalyr never sends the others anything.")
-                if !localPlayers.isEmpty || players.followsLocalPlayers {
-                    Toggle(Self.localTitle(localPlayers), isOn: $players.followsLocalPlayers)
-                    InspectorCaption(Self.localCaption, more: Self.localDetail)
-                }
-                Toggle("Follow web players in browsers", isOn: $players.followsWebPlayers)
-                InspectorCaption(Self.webCaption, more: Self.webDetail(browsers))
             }
-            .id(SettingsAnchor.players)
-            ThemedSection("Access") {
+            InspectorCaption("Automatic follows whichever player is playing.", more: "Automatic follows whichever player is playing. Choosing one means Lunalyr never sends the others anything.")
+            Toggle("Follow web players in browsers", isOn: $players.followsWebPlayers)
+            InspectorCaption(Self.webCaption, more: Self.webDetail(browsers))
+            if !localPlayers.isEmpty || players.followsLocalPlayers {
+                Toggle(Self.localTitle(localPlayers), isOn: $players.followsLocalPlayers)
+                InspectorCaption(Self.localCaption, more: Self.localDetail)
+            }
+            MoreOptions {
                 PlayerAccessList()
                 InspectorCaption("Lunalyr only reads the song and its position.", more: "Lunalyr reads the song and its position, and controls playback only when you use its buttons. Allow Access asks macOS; once refused, access is turned back on in Privacy & Security › Automation.")
                     .environment(\.captionFollowsControl, false)
             }
         }
-        .scrollsToSettingsAnchor(scrollRequest)
+        .id(SettingsAnchor.players)
     }
 
     /// "Follow VLC and VOX": the local-file players on this Mac.

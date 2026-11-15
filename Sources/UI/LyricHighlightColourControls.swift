@@ -16,6 +16,16 @@ struct LyricHighlightColourControls: View {
             ForEach(LyricHighlightMode.allCases) { Text($0.title).tag($0) }
         }
         InspectorCaption(options.mode.detail)
+    }
+}
+
+/// The highlight colour's rarer rows, under Text › Colour › More options:
+/// the colour well for Custom, and what highlights are.
+@MainActor
+struct LyricHighlightColourMoreControls: View {
+    @Model(\.highlightColours) private var options
+
+    var body: some View {
         if options.mode == .custom {
             ColorPicker("Your highlight colour", selection: Binding(get: { options.customSwatch },
                                                                    set: { options.setCustom($0) }),

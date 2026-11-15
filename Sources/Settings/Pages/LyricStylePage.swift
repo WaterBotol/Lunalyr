@@ -1,14 +1,14 @@
 import SwiftUI
 
-/// The Lyric style inspector: the Looks, what shows with the lyrics, the
-/// typeface, Lyric size, the colours, how words enter, the layouts' own
-/// controls, instrumental breaks and remembered styles. The layout itself is
-/// chosen on the canvas (`LayoutTileChoices`). In the Floating view the floating
-/// window's own settings come first and the Looks (desktop styles) don't show.
+/// The Text inspector: the Looks (or, in the Floating view, what the
+/// Floating style is), then the style (layout notes and remembered styles),
+/// size and place, the typeface, the colours, how the lyrics stay readable
+/// and what shows with them. Each section's rarer options are under More
+/// options. The layout itself is chosen on the canvas (`LayoutTileChoices`).
+/// How the words move is on Animation (`AnimationPage`).
 @MainActor
 struct LyricStylePage: View {
     @Model(\.settings) private var s
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var familyDraft = ""
     @ObservedObject private var floating: FloatingLyricsOptions
 
@@ -16,54 +16,29 @@ struct LyricStylePage: View {
         self.floating = floating ?? .shared
     }
 
-    /// The layout the word controls read from. Custom Mix saves them
-    /// for every layout it picks; Scattered, its general-purpose pick, stands
-    /// in when reading them back.
+    /// The layout the controls read from. Custom Mix saves them for every
+    /// layout it picks; Scattered, its general-purpose pick, stands in when
+    /// reading them back.
     private var style: LyricComposition { s.lyricComposition ?? .scattered }
     private var automatic: Bool { s.lyricComposition == nil }
 
     var body: some View {
         LookInspectorForm {
             if floating.isFloating {
-                FloatingLyricsSection(options: floating)
+                InspectorTitle(title: "Floating lyrics",
+                               subtitle: "The Floating style. The desktop keeps its own and shows no lyrics while they float.")
                     .revealRow()
             } else {
                 LooksSection()
                     .revealRow()
-                InspectorTitle(title: "Lyric style")
+                InspectorTitle(title: "Text")
             }
-            shownWithLyrics
+            styleSection
+            sizeAndPlace
             typeface
-            // Floating has its own size (Size, above).
-            if !floating.isFloating {
-                ValueSlider("Lyric size", value: $s.lyricScale, in: LyricSizeDrag.range, step: 0.01,
-                            format: SettingsFormat.percent)
-                    .fontWeight(.semibold)
-                    .help("Drag a corner of the line on the picture to change it there too")
-            }
             LyricColourSection()
-            wordEntrances
-            layoutNotes
-            InspectorSection("Instrumental breaks") {
-                Toggle("Show a glowing orb during instrumental breaks", isOn: $s.showInterludes)
-                    .toggleStyle(StudioCheckboxStyle())
-                HStack(spacing: 12) {
-                    ChoiceMenu("Orb style", selection: $s.thinkingOrbStyle,
-                               selectedTitle: { ThinkingOrb.title(of: $0) }) {
-                        ForEach(ThinkingOrb.styles, id: \.self) { Text(ThinkingOrb.title(of: $0)).tag($0) }
-                    }
-                    OrbStylePreview(style: s.thinkingOrbStyle)
-                }
-            }
-            WordAccentsSection()
-            // Custom Mix can pick either, so both stay reachable there.
-            if style.hasConnections || automatic {
-                constellation
-            }
-            if style == .echo || automatic {
-                echo
-            }
-            LyricStyleMemorySection()
+            ReadabilitySection(floating: floating.isFloating ? floating : nil)
+            shownWithLyrics
         }
         // Sub-options glide in and out with the choice that shows them.
         .lunalyrReveal(s.lyricComposition)
@@ -71,40 +46,11 @@ struct LyricStylePage: View {
         .lunalyrReveal(rotateLayouts)
         .lunalyrReveal(backingLayer)
         .lunalyrReveal(s.editorialTypography)
-        .lunalyrReveal(s.wordSymbols)
-        .lunalyrReveal(s.actionWords)
         .lunalyrReveal(s.randomizeLyricFonts)
         .lunalyrReveal(s.fontChoice)
         .lunalyrReveal(s.googleFontState)
-        .lunalyrReveal(EntranceSupport.note(selected: s.arrival(in: style), layout: s.lyricComposition, mix: chosenMix))
         .onAppear { familyDraft = s.googleFontFamily }
         .onChange(of: s.googleFontFamily) { _, family in familyDraft = family }
-    }
-
-    private var constellation: some View {
-        InspectorSection("Constellation") {
-            ValueSlider("Spread", value: $s.constellationSpread, in: 0.4...1.8, step: 0.01,
-                        format: SettingsFormat.percent)
-            ValueSlider("Links", value: $s.constellationLinkOpacity, in: 0...0.6, step: 0.01,
-                        format: SettingsFormat.percent)
-            if automatic {
-                InspectorCaption("Used when Custom Mix picks Constellation.")
-                    .revealRow()
-            }
-        }
-        .revealRow()
-    }
-
-    private var echo: some View {
-        InspectorSection("Echo") {
-            ValueSlider("Repeats", value: $s.echoStrength, in: 0...1.8, step: 0.01,
-                        format: SettingsFormat.percent)
-            if automatic {
-                InspectorCaption("Used when Custom Mix picks Echo.")
-                    .revealRow()
-            }
-        }
-        .revealRow()
     }
 
     @AppStorage(LyricLayoutRotation.enabledKey) private var rotateLayouts = true
@@ -115,13 +61,20 @@ struct LyricStylePage: View {
     @AppStorage(OpeningTitle.coverKey) private var showOpeningCover = true
     @ObservedObject private var rotation = LyricLayoutRotation.shared
 
-    /// What the chosen layout does, the rotation's counts (the switch for
-    /// it sits by the layout tiles) and a style remembered for this song.
-    private var layoutNotes: some View {
-        InspectorSection("Layout") {
+    /// What the chosen layout does, a style remembered for this song, the
+    /// remembered-styles menu, and the rotation's counts (the switch for it
+    /// sits by the layout tiles) under More options.
+    private var styleSection: some View {
+        InspectorSection("Style") {
             InspectorCaption(automatic ? WorkspaceCopy.automaticLayoutDetail : style.detail)
+            RememberedStyleNote(aspect: .layout)
+            LyricStyleMemorySection()
             if automatic && rotateLayouts {
-                DisclosureGroup("Layouts in the rotation") {
+                MoreOptions {
+                    Text("Layouts in the rotation")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(Color.studio(.ink2))
+                        .accessibilityAddTraits(.isHeader)
                     ForEach(LyricLayoutRotation.order) { layout in
                         Stepper(value: Binding(get: { rotation.count(for: layout) },
                                                set: { rotation.setCount($0, for: layout) }),
@@ -138,7 +91,6 @@ struct LyricStylePage: View {
                 }
                 .revealRow()
             }
-            RememberedStyleNote(aspect: .layout)
         }
     }
 
@@ -147,7 +99,22 @@ struct LyricStylePage: View {
         return count == 1 ? "1 song" : "\(count) songs in a row"
     }
 
-    /// The layers shown with the lyrics: checkboxes, as related options.
+    /// Lyric size on the desktop; in the Floating view, the window's size
+    /// and place.
+    private var sizeAndPlace: some View {
+        InspectorSection("Size and place", value: floating.isFloating ? floating.placement.title : nil) {
+            if floating.isFloating {
+                FloatingSizeAndPlace(options: floating)
+            } else {
+                ValueSlider("Lyric size", value: $s.lyricScale, in: LyricSizeDrag.range, step: 0.01,
+                            format: SettingsFormat.percent)
+                    .help("Drag a corner of the line on the picture to change it there too")
+            }
+        }
+    }
+
+    /// The layers shown with the lyrics: checkboxes, as related options;
+    /// how backing vocals move and Editorial typography under More options.
     private var shownWithLyrics: some View {
         InspectorSection("Shown with the lyrics") {
             VStack(alignment: .leading, spacing: 7) {
@@ -160,16 +127,19 @@ struct LyricStylePage: View {
                     .help("Lines like “Produced by: …” appear one at a time behind the lyrics.")
                 Toggle("Backing vocals in the background", isOn: $backingLayer)
                     .help("Bracketed backing words like (oh oh) sit small and soft behind the lead.")
+            }
+            .toggleStyle(StudioCheckboxStyle())
+            MoreOptions {
                 if backingLayer {
                     ChoiceMenu("Backing vocals animate like", selection: $backingStyle,
                                selectedTitle: { $0.isEmpty ? "The lead’s layout" : (LyricComposition.saved($0)?.title ?? "The lead’s layout") }) {
                         Text("The lead’s layout").tag("")
                         ForEach(BackingVocals.choices) { Text($0.title).tag($0.rawValue) }
                     }
-                    .padding(.leading, 23)
                     .revealRow()
                 }
                 Toggle("Add Editorial typography", isOn: $s.editorialTypography)
+                    .toggleStyle(StudioCheckboxStyle())
                 if s.editorialTypography {
                     ValueSlider("Editorial amount", value: $s.editorialAmount, in: 0...1, step: 0.01,
                                 format: SettingsFormat.percent)
@@ -177,7 +147,6 @@ struct LyricStylePage: View {
                         .revealRow()
                 }
             }
-            .toggleStyle(StudioCheckboxStyle())
         }
     }
 
@@ -236,58 +205,6 @@ struct LyricStylePage: View {
         }
     }
 
-    private var wordEntrances: some View {
-        InspectorSection("Word entrances") {
-            Toggle("Reveal sung words", isOn: Binding(get: { s.revealsWords(in: style) },
-                                                       set: { s.wordRevealByStyle[s.wordControlsKey] = $0 }))
-                .disabled(s.requiresWordEntrances(in: style))
-            if let reason = WorkspaceCopy.revealLockReason(s.wordRevealLock(in: style)) {
-                DisabledReason(reason)
-            }
-            ChoiceMenu("Entrance", selection: Binding(get: { s.arrival(in: style) },
-                                                      set: { s.wordArrivalByStyle[s.wordControlsKey] = $0.rawValue }),
-                       selectedTitle: \.title) {
-                // An entrance this layout leaves out for word-timed lyrics is
-                // marked: lines without word timing still enter with it.
-                ForEach(WordArrival.allCases) { Text(EntranceSupport.menuTitle($0, in: s.lyricComposition)).tag($0) }
-            }
-            if let note = EntranceSupport.note(selected: s.arrival(in: style), layout: s.lyricComposition,
-                                               mix: chosenMix) {
-                InspectorCaption(note)
-                    .revealRow()
-            }
-            if reduceMotion {
-                InspectorCaption(WorkspaceCopy.reduceMotionEntrances)
-            }
-            if s.arrival(in: style) == .mix {
-                ForEach(WordArrival.mixChoices) { option in
-                    Toggle(option.title, isOn: Binding(
-                        get: { s.wordEntranceMix.contains(option.rawValue) },
-                        set: { enabled in
-                            if enabled { s.wordEntranceMix.append(option.rawValue) }
-                            else { s.wordEntranceMix.removeAll { $0 == option.rawValue } }
-                        }
-                    ))
-                }
-            }
-            Toggle("Faint next-word preview", isOn: Binding(get: { s.previewsNextWord(in: style) },
-                                                             set: { s.nextWordPreviewByStyle[s.wordControlsKey] = $0 }))
-            if s.previewsNextWord(in: style) {
-                ValueSlider("Preview lead", value: $s.nextWordPreviewLead, in: 0.15...1.25, step: 0.05,
-                            format: SettingsFormat.seconds,
-                            spoken: { SettingsFormat.spokenSeconds($0) + " before the next word" })
-                    .help("How long before each word its faint preview appears")
-            }
-            InspectorCaption(automatic ? "These controls apply to layouts picked by Custom Mix."
-                                       : "These controls apply to the selected layout.")
-        }
-    }
-
-    /// The custom mix's entrances, in the order the page lists them.
-    private var chosenMix: [WordArrival] {
-        WordArrival.mixChoices.filter { s.wordEntranceMix.contains($0.rawValue) }
-    }
-
     private func applyFamilyDraft() {
         guard let typed = Settings.normalizedFontFamily(familyDraft) else { return }
         let family = GoogleFontsCatalog.canonicalName(typed) ?? typed
@@ -328,66 +245,3 @@ private struct GoogleFontStatus: View {
 }
 
 
-/// A small live thinking orb beside the "Orb style" picker. It animates only
-/// while its window is on screen, and holds upstream's still frame with
-/// Reduce Motion (the orb's own rule).
-private struct OrbStylePreview: View {
-    let style: String
-    @State private var visible = false
-    @State private var started = Date()
-    @Environment(\.colorScheme) private var scheme
-
-    var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 30, paused: !visible)) { timeline in
-            let elapsed = timeline.date.timeIntervalSince(started)
-            // A Mix shows a new style every four seconds, as it would break by break.
-            let index = UInt64(max(0, elapsed / 4))
-            let previous = index > 0 ? ThinkingOrb.state(style: style, seed: index - 1) : nil
-            let state = ThinkingOrb.state(style: style, seed: index, avoiding: ThinkingOrb.normalised(style) == ThinkingOrb.mixStyle ? previous : nil)
-            ThinkingOrbView(cue: InstrumentalCue(elapsed: elapsed, opacity: 1, progress: nil, seed: index),
-                            accent: scheme == .dark ? .white : .black, baseSize: 40, state: state)
-        }
-        .frame(width: 64, height: 64)
-        .background(WindowVisibility(visible: $visible))
-        .accessibilityHidden(true)
-    }
-}
-
-/// Reports whether the hosting window is on screen (not closed, minimised or covered).
-private struct WindowVisibility: NSViewRepresentable {
-    @Binding var visible: Bool
-
-    func makeNSView(context: Context) -> NSView {
-        let view = TrackingView()
-        view.onChange = { visible = $0 }
-        return view
-    }
-
-    func updateNSView(_ view: NSView, context: Context) {}
-
-    final class TrackingView: NSView {
-        var onChange: (Bool) -> Void = { _ in }
-        private var tokens: [NSObjectProtocol] = []
-
-        override func viewDidMoveToWindow() {
-            tokens.forEach(NotificationCenter.default.removeObserver)
-            tokens = []
-            guard let window else { return onChange(false) }
-            let center = NotificationCenter.default
-            for name in [NSWindow.didChangeOcclusionStateNotification, NSWindow.didMiniaturizeNotification,
-                         NSWindow.didDeminiaturizeNotification, NSWindow.willCloseNotification] {
-                tokens.append(center.addObserver(forName: name, object: window, queue: .main) { [weak self] _ in
-                    self?.report()
-                })
-            }
-            report()
-        }
-
-        private func report() {
-            guard let window else { return onChange(false) }
-            onChange(window.isVisible && !window.isMiniaturized && window.occlusionState.contains(.visible))
-        }
-
-        deinit { tokens.forEach(NotificationCenter.default.removeObserver) }
-    }
-}

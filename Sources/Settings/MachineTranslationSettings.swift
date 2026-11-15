@@ -37,7 +37,7 @@ enum MachineTranslationCopy {
 }
 
 #if canImport(Translation)
-/// The opt-in on the Romanisation page. macOS 15 and later only.
+/// The opt-in on the Romanisation & translation page. macOS 15 and later only.
 @available(macOS 15.0, *)
 @MainActor
 struct MachineTranslationControls: View {

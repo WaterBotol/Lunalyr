@@ -161,7 +161,7 @@ struct MenuBarMusicVideoRows: View {
     /// Why Align… can't start, nil when it can: it needs the desktop player.
     private var alignReason: String? {
         guard DesktopOptions.shared.showsControlsOnHover else {
-            return "Turn on Settings > Performance > Show player on hover to drag the video on the desktop"
+            return "Turn on Settings > General > Show player on hover to drag the video on the desktop"
         }
         return musicVideo.alignAvailability.reason
     }

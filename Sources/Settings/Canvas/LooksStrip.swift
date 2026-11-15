@@ -1,6 +1,6 @@
 import SwiftUI
 
-// MARK: - Looks, at the top of the Wallpaper and Lyric style inspectors
+// MARK: - Looks, at the top of the Wallpaper and Text inspectors
 //
 // The six built-in Looks and the person's own, as pictures (spec §6).
 // Choosing one applies it through `LookStore` as one undoable change; the

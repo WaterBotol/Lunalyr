@@ -4,26 +4,63 @@ import SwiftUI
 /// title while it shows) and where other surfaces' destinations land.
 ///
 /// Raw values are what `custom.settingsPage` stores. They are the names the
-/// pages had before the rework, so a page remembered by an earlier version
-/// still opens; General is the only new one.
-enum SettingsPage: String, CaseIterable, Identifiable {
-    case wallpaper, typography, covers, lyrics, readings, players, general, extras, share, performance, about
+/// pages had before the reworks, so a page remembered by an earlier version
+/// still opens: Text keeps Lyric style's `typography`, Timing & sources
+/// `lyrics`, Discord & sharing `share`. Pages folded into others open where
+/// they went (`init?(rawValue:)`: Music players, Menu bar & shortcuts and
+/// About open General).
+enum SettingsPage: CaseIterable, Identifiable, RawRepresentable {
+    case wallpaper, typography, animation, covers, lyrics, readings, general, share, performance
+
+    init?(rawValue: String) {
+        switch rawValue {
+        case "wallpaper": self = .wallpaper
+        case "typography": self = .typography
+        case "animation": self = .animation
+        case "covers": self = .covers
+        case "lyrics": self = .lyrics
+        case "readings": self = .readings
+        case "general": self = .general
+        case "share": self = .share
+        case "performance": self = .performance
+        // Pages folded into General.
+        case "players", "extras", "about": self = .general
+        default: return nil
+        }
+    }
+
+    var rawValue: String {
+        switch self {
+        case .wallpaper: return "wallpaper"
+        case .typography: return "typography"
+        case .animation: return "animation"
+        case .covers: return "covers"
+        case .lyrics: return "lyrics"
+        case .readings: return "readings"
+        case .general: return "general"
+        case .share: return "share"
+        case .performance: return "performance"
+        }
+    }
+
+    /// Every value `custom.settingsPage` has held, today's and earlier
+    /// versions'.
+    static let storedNames = ["wallpaper", "typography", "animation", "covers", "lyrics", "readings", "general",
+                              "share", "performance", "players", "extras", "about"]
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
         case .wallpaper: return "Wallpaper"
-        case .typography: return "Lyric style"
+        case .typography: return "Text"
+        case .animation: return "Animation"
         case .covers: return "Animated covers"
         case .lyrics: return "Timing & sources"
-        case .readings: return "Romanisation"
-        case .players: return "Music players"
+        case .readings: return "Romanisation & translation"
         case .general: return "General"
-        case .extras: return "Menu bar & shortcuts"
-        case .share: return "Discord & lyric card"
+        case .share: return "Discord & sharing"
         case .performance: return "Performance"
-        case .about: return "About"
         }
     }
 
@@ -32,15 +69,13 @@ enum SettingsPage: String, CaseIterable, Identifiable {
         switch self {
         case .wallpaper: return "photo.artframe"
         case .typography: return "textformat"
+        case .animation: return "sparkles"
         case .covers: return "square.stack.fill"
         case .lyrics: return "clock.fill"
         case .readings: return "character.book.closed.fill"
         case .general: return "gearshape.fill"
-        case .players: return "music.note"
-        case .extras: return "command"
         case .share: return "square.and.arrow.up.fill"
         case .performance: return "leaf.fill"
-        case .about: return "info.circle.fill"
         }
     }
 
@@ -49,19 +84,19 @@ enum SettingsPage: String, CaseIterable, Identifiable {
         switch self {
         case .wallpaper: return .indigo
         case .typography: return .pink
+        case .animation: return .purple
         case .covers: return .orange
         case .lyrics: return .blue
         case .readings: return .teal
-        case .general, .extras, .about: return .gray
+        case .general: return .gray
         case .share: return .purple
-        case .players: return .red
         case .performance: return .green
         }
     }
 
-    /// Every page but About changes or explains what the desktop shows, so
-    /// it keeps the live preview in view beside its controls.
-    var showsStage: Bool { self != .about }
+    /// Every page changes or explains what the desktop shows, so it keeps
+    /// the live preview in view beside its controls.
+    var showsStage: Bool { true }
 
     /// The sidebar's three sections.
     enum Group: String, CaseIterable, Identifiable {
@@ -79,9 +114,9 @@ enum SettingsPage: String, CaseIterable, Identifiable {
 
         var pages: [SettingsPage] {
             switch self {
-            case .look: return [.wallpaper, .typography, .covers]
+            case .look: return [.wallpaper, .typography, .animation, .covers]
             case .words: return [.lyrics, .readings]
-            case .app: return [.players, .general, .extras, .share, .performance, .about]
+            case .app: return [.general, .share, .performance]
             }
         }
     }
@@ -90,17 +125,18 @@ enum SettingsPage: String, CaseIterable, Identifiable {
     /// words they use for them.
     var searchTerms: [String] {
         switch self {
-        case .wallpaper: return ["background", "visualiser", "visualizer", "music response", "desktop picture", "image", "video", "gradient", "darkening", "effects", "audio", "sensitivity"]
-        case .typography: return ["layout", "font", "typeface", "size", "colour", "color", "highlight", "text", "style", "echo", "cascade", "editorial", "animation", "entrance", "align"]
+        case .wallpaper: return ["background", "visualiser", "visualizer", "music response", "desktop picture", "image", "video", "gradient", "darkening", "effects", "audio", "sensitivity", "adjustments"]
+        case .typography: return ["layout", "font", "typeface", "size", "colour", "color", "highlight", "text", "style", "editorial", "align", "lyric style", "readability", "legibility", "floating", "place"]
+        case .animation: return ["animation", "entrance", "reveal", "word by word", "preview", "orb", "instrumental", "interlude", "echo", "constellation", "symbols", "action words", "motion"]
         case .covers: return ["animated cover", "album art", "motion artwork", "apple music"]
         case .lyrics: return ["timing", "offset", "late", "early", "sync", "sources", "lyrics", "search", "lrclib", "musixmatch", "word by word"]
-        case .readings: return ["romanisation", "romanization", "pinyin", "translation", "japanese", "korean", "readings"]
-        case .players: return ["player", "spotify", "music app", "automation", "permission", "access", "apple music", "tidal"]
-        case .general: return ["appearance", "look", "theme", "calm", "bold", "launch at login", "startup", "updates", "welcome", "version"]
-        case .extras: return ["menu bar", "shortcut", "hotkey", "keyboard", "hide lyrics", "pause wallpaper", "mirroring", "line", "lyric card"]
-        case .share: return ["discord", "rich presence", "lyric card", "gif", "mp4", "png", "share", "copy", "save", "status"]
-        case .performance: return ["performance", "battery", "power", "frame rate", "gpu", "low power", "energy", "fps"]
-        case .about: return ["about", "credits", "licence", "license", "version", "website"]
+        case .readings: return ["romanisation", "romanization", "pinyin", "translation", "translate", "japanese", "korean", "readings"]
+        case .general: return ["appearance", "look", "theme", "calm", "bold", "launch at login", "startup", "updates", "welcome", "version",
+                               "player", "spotify", "music app", "automation", "permission", "access", "tidal",
+                               "menu bar", "shortcut", "hotkey", "keyboard", "hide lyrics", "pause wallpaper", "mirroring", "line",
+                               "about", "credits", "licence", "license", "website", "on screen"]
+        case .share: return ["discord", "rich presence", "lyric card", "gif", "mp4", "png", "share", "copy", "save", "status", "listen along", "sharing"]
+        case .performance: return ["performance", "battery", "power", "frame rate", "gpu", "low power", "energy", "fps", "troubleshooting", "diagnostics"]
         }
     }
 
@@ -126,10 +162,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
         case .timing: self = .lyrics
         case .readings: self = .readings
         case .performance: self = .performance
-        case .menuBarAndShortcuts: self = .extras
-        case .players: self = .players
-        case .general: self = .general
-        case .about: self = .about
+        case .menuBarAndShortcuts, .players, .general, .about: self = .general
         }
     }
 }
@@ -140,11 +173,17 @@ enum SettingsAnchor: String, CaseIterable {
     case musicResponse
     /// General › Music players.
     case players
+    /// General › On screen (hiding, pausing, the menu-bar line).
+    case onScreen
+    /// General › App (startup, updates, About).
+    case app
 
     init?(_ destination: SettingsDestination) {
         switch destination {
         case .musicResponse: self = .musicResponse
         case .players: self = .players
+        case .menuBarAndShortcuts: self = .onScreen
+        case .about: self = .app
         default: return nil
         }
     }

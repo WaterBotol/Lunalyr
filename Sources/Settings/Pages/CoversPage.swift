@@ -1,7 +1,8 @@
 import SwiftUI
 
 /// The Animated covers inspector: whether Apple Music's motion artwork plays
-/// behind the lyrics, how it is softened, and the albums left out. Placement
+/// behind the lyrics and whether this album is left out; how it is softened
+/// and the albums left out under More options. Placement
 /// is chosen on the canvas (`PlacementChoices`).
 @MainActor
 struct CoversPage: View {
@@ -73,8 +74,6 @@ struct CoversPage: View {
                 }
             }
             InspectorSection("Framing") {
-                ValueSlider("Softening", value: $s.motionBlur, in: 0...25, step: 0.5,
-                            format: { $0 == 0 ? "None" : SettingsFormat.percent($0 / 25) })
                 if let track = lookedUpTrack {
                     VStack(alignment: .leading, spacing: 2) {
                         Toggle("Exclude this album", isOn: Binding(
@@ -89,28 +88,41 @@ struct CoversPage: View {
                             .padding(.leading, 23)
                     }
                 }
-            }
-            if !s.motionExclusions.isEmpty {
-                InspectorSection("Excluded albums") {
-                    ForEach(s.motionExclusions, id: \.self) { name in
-                        let album = name.replacingOccurrences(of: "|", with: " · ")
-                        LabeledContent {
-                            Button("Allow") { allow(name, album: album) }
-                                .controlSize(.small)
-                                .help("Allow animated covers for \(album) again")
-                                .accessibilityLabel("Allow \(album)")
-                                .accessibilityHint("Lets this album’s animated cover play again.")
-                        } label: {
-                            Text(album).lineLimit(2)
-                        }
+                MoreOptions {
+                    ValueSlider("Softening", value: $s.motionBlur, in: 0...25, step: 0.5,
+                                format: { $0 == 0 ? "None" : SettingsFormat.percent($0 / 25) })
+                    if !s.motionExclusions.isEmpty {
+                        excludedAlbums
+                            .revealRow()
                     }
                 }
-                .revealRow()
             }
         }
         // The note about Custom Mix and the excluded albums come and go smoothly.
         .lunalyrReveal(s.backgroundMode)
         .lunalyrReveal(s.useMotionArtwork)
         .lunalyrReveal(s.motionExclusions.isEmpty)
+    }
+
+    /// The albums left out, each with Allow.
+    private var excludedAlbums: some View {
+        VStack(alignment: .leading, spacing: LunalyrDesign.Studio.Layout.inspectorRowSpacing) {
+            Text("Excluded albums")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Color.studio(.ink2))
+                .accessibilityAddTraits(.isHeader)
+            ForEach(s.motionExclusions, id: \.self) { name in
+                let album = name.replacingOccurrences(of: "|", with: " · ")
+                LabeledContent {
+                    Button("Allow") { allow(name, album: album) }
+                        .controlSize(.small)
+                        .help("Allow animated covers for \(album) again")
+                        .accessibilityLabel("Allow \(album)")
+                        .accessibilityHint("Lets this album’s animated cover play again.")
+                } label: {
+                    Text(album).lineLimit(2)
+                }
+            }
+        }
     }
 }

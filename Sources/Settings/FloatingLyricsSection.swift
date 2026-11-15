@@ -13,58 +13,64 @@ struct LyricStyleEditingNote: View {
     }
 }
 
-/// The floating window's own settings, at the top of the Lyric style
-/// inspector in the Floating view: size, how they sit over apps, and where.
+/// The floating window's size and place, in Text › Size and place while
+/// the Floating view shows: the size preset, the place on screen and the
+/// display; the exact text size, Edit position and Reset size under More
+/// options.
 @MainActor
-struct FloatingLyricsSection: View {
+struct FloatingSizeAndPlace: View {
     @ObservedObject var options: FloatingLyricsOptions = .shared
     @ObservedObject private var editing = FloatingLyricsController.shared.state
     @State private var screens = FloatingDisplayChoice.connected()
 
     var body: some View {
-        InspectorTitle(title: "Floating lyrics",
-                       subtitle: "The Floating style. The desktop keeps its own and shows no lyrics while they float.")
-        InspectorSection("Size") {
-            ThemedSegments("Size", selection: Binding(
-                get: { FloatingLyricsOptions.SizePreset(rawValue: options.textSize) },
-                set: { if let preset = $0 { options.textSize = preset.rawValue } }),
-                           options: FloatingLyricsOptions.SizePreset.allCases.map { (Optional($0), $0.title) })
+        ThemedSegments("Size", selection: Binding(
+            get: { FloatingLyricsOptions.SizePreset(rawValue: options.textSize) },
+            set: { if let preset = $0 { options.textSize = preset.rawValue } }),
+                       options: FloatingLyricsOptions.SizePreset.allCases.map { (Optional($0), $0.title) })
+        LabeledContent("Place") {
+            FloatingPlaceGrid(placement: $options.placement)
+        }
+        if screens.count > 1 {
+            ChoiceMenu("Display", selection: $options.display,
+                       selectedTitle: { key in screens.first { $0.key == key }?.name ?? "Main display" }) {
+                Text("Main display").tag("")
+                ForEach(screens, id: \.key) { Text($0.name).tag($0.key) }
+            }
+        }
+        InspectorCaption("Clicks pass through the lyrics. Edit position lets you drag them; Done locks them again.")
+        MoreOptions {
             ValueSlider("Text size", value: $options.textSize, in: FloatingLyricsOptions.textSizeRange, step: 1,
                         format: { "\(Int($0.rounded())) pt" })
-        }
-        InspectorSection("Over apps") {
-            ValueSlider("Shade behind lyrics", value: $options.backdrop, in: 0...1, step: 0.01,
-                        format: SettingsFormat.percent)
-                .help("A soft shade and shadow keep the words readable over any app.")
-            Toggle("Fade when the pointer is over them", isOn: $options.fadesUnderPointer)
-                .toggleStyle(StudioCheckboxStyle())
-        }
-        InspectorSection("Place", value: options.placement.title) {
-            HStack(alignment: .top, spacing: 14) {
-                FloatingPlaceGrid(placement: $options.placement)
-                VStack(alignment: .leading, spacing: 8) {
-                    Button(editing.editing ? "Done" : "Edit position…") {
-                        FloatingLyricsController.shared.toggleEditing()
-                    }
-                    .help(editing.editing ? "Locks the floating lyrics in place"
-                          : "Shows the floating lyrics with handles: drag to move, drag the corner to resize")
-                    Button("Reset size") { options.resetFrames() }
-                        .help("Forgets sizes and places set by hand; the window follows the text size again")
+            HStack(spacing: 8) {
+                Button(editing.editing ? "Done" : "Edit position…") {
+                    FloatingLyricsController.shared.toggleEditing()
                 }
-                .controlSize(.small)
+                .help(editing.editing ? "Locks the floating lyrics in place"
+                      : "Shows the floating lyrics with handles: drag to move, drag the corner to resize")
+                Button("Reset size") { options.resetFrames() }
+                    .help("Forgets sizes and places set by hand; the window follows the text size again")
             }
-            if screens.count > 1 {
-                ChoiceMenu("Display", selection: $options.display,
-                           selectedTitle: { key in screens.first { $0.key == key }?.name ?? "Main display" }) {
-                    Text("Main display").tag("")
-                    ForEach(screens, id: \.key) { Text($0.name).tag($0.key) }
-                }
-            }
-            InspectorCaption("Clicks pass through the lyrics. Edit position lets you drag them; Done locks them again.")
+            .controlSize(.small)
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didChangeScreenParametersNotification)) { _ in
             screens = FloatingDisplayChoice.connected()
         }
+    }
+}
+
+/// How the floating lyrics stay readable over apps, under Text ›
+/// Readability's More options while the Floating view shows.
+@MainActor
+struct FloatingReadabilityRows: View {
+    @ObservedObject var options: FloatingLyricsOptions = .shared
+
+    var body: some View {
+        ValueSlider("Shade behind lyrics", value: $options.backdrop, in: 0...1, step: 0.01,
+                    format: SettingsFormat.percent)
+            .help("A soft shade and shadow keep the words readable over any app.")
+        Toggle("Fade when the pointer is over them", isOn: $options.fadesUnderPointer)
+            .toggleStyle(StudioCheckboxStyle())
     }
 }
 
