@@ -303,6 +303,7 @@ final class AudioReactiveController: ObservableObject {
             enabled: preferences.enabled,
             visualiserChosen: preferences.visualiserChosen,
             powerPause: preferences.powerPause,
+            musicVideoShowing: preferences.musicVideoShowing,
             displaysAwake: !displaysAsleep && !systemSleeping && sessionActive,
             surfacesHiddenFor: surfacesHiddenSince.map { now - $0 },
             surfacesFrozen: surfacesFrozen,
@@ -315,7 +316,7 @@ final class AudioReactiveController: ObservableObject {
         recheck = nil
         let preferences = environment.preferences()
         let now = uptime
-        observeSystem(preferences.enabled && preferences.visualiserChosen)
+        observeSystem(preferences.enabled && preferences.visualiserChosen && !preferences.musicVideoShowing)
         refreshSurfaces(at: now, preferences)
         var decision = AudioCaptureGate.decide(demand(at: now, preferences))
         if observePlayback(decision.followsPlayback) {

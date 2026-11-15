@@ -456,6 +456,27 @@ final class AudioCaptureControllerTests: XCTestCase {
     }
 
     @MainActor
+    func testCaptureStopsWhileAMusicVideoPlaysAndResumesForItsFallback() async throws {
+        let world = CaptureWorld()
+        let controller = try makeController(world)
+        defer { controller.stop() }
+        controller.resumeIfEnabled()
+        await controller.pendingStart?.value
+        XCTAssertTrue(controller.running, "The fallback visualiser is showing.")
+
+        world.preferences.musicVideoShowing = true
+        controller.handle(.settingsChanged)
+        XCTAssertEqual(controller.state, .paused)
+        XCTAssertFalse(controller.running, "No capture while the video plays.")
+        XCTAssertEqual(controller.status, AudioCaptureGate.PauseReason.musicVideo.message)
+
+        world.preferences.musicVideoShowing = false
+        controller.handle(.settingsChanged)
+        await controller.pendingStart?.value
+        XCTAssertTrue(controller.running, "The next song has no video.")
+    }
+
+    @MainActor
     func testSuspendAndResumeDoNotWaitForTheDevice() async throws {
         let world = CaptureWorld()
         let controller = try makeController(world)

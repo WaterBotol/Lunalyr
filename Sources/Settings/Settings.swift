@@ -829,6 +829,14 @@ final class Settings: ObservableObject {
         Self.effectiveMode(backgroundMode, under: powerConstraint)
     }
 
+    /// Whether power rules leave a visualiser to draw: Visualisers, or
+    /// Music video falling back to Visualisers for songs without a video.
+    var drawsVisualiser: Bool {
+        let constraint = powerConstraint
+        return AudioCaptureGate.visualiserChosen(Self.effectiveMode(backgroundMode, under: constraint),
+                                                 fallback: Self.effectiveMode(musicVideoFallback, under: constraint))
+    }
+
     static func effectiveMode(_ chosen: BackgroundMode, under constraint: PowerConstraint?) -> BackgroundMode {
         // A transparent lyrics overlay needs no generated wallpaper, even
         // under power constraints. Never cover the user's desktop as a fallback.

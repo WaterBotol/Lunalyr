@@ -72,7 +72,7 @@ struct MenuBarStatusBanners: View {
                        audioNeedsAttention: Bool) -> [MenuBarStatus] {
         MenuBarStatus.shown(
             automation: AutomationStatusBanner.content(for: playing) != nil,
-            audio: MenuBarAudioStatus.shows(visualizer: settings.effectiveBackgroundMode == .visualizer,
+            audio: MenuBarAudioStatus.shows(visualizer: settings.drawsVisualiser,
                                             audioOn: settings.audioReactiveEnabled, needsAttention: audioNeedsAttention),
             mirroring: extras.hiddenByMirroring,
             powerSaving: MenuBarPowerSavingBanner.shows(chosen: settings.backgroundMode,

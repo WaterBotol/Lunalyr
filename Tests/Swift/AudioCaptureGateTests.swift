@@ -1,3 +1,4 @@
+import CoreGraphics
 import XCTest
 @testable import VersoCustom
 
@@ -68,6 +69,46 @@ final class AudioCaptureGateTests: XCTestCase {
         XCTAssertEqual(decide { $0.sinceUserStart = 61; $0.outputIdleFor = .infinity }, .standby)
         XCTAssertEqual(decide { $0.sinceUserStart = 5; $0.displaysAwake = false }, .paused(.displaysAsleep))
         XCTAssertEqual(decide { $0.sinceUserStart = 5; $0.powerPause = "Paused." }, .paused(.power("Paused.")))
+    }
+
+    /// Music video shows "Without a video" for songs without one; when that is
+    /// Visualisers, capture runs for it, and stops while a video plays.
+    @MainActor func testMusicVideoFallbackVisualiserNeedsCapture() {
+        XCTAssertTrue(AudioCaptureGate.visualiserChosen(.visualizer, fallback: .auto))
+        XCTAssertTrue(AudioCaptureGate.visualiserChosen(.musicVideo, fallback: .visualizer))
+        XCTAssertFalse(AudioCaptureGate.visualiserChosen(.musicVideo, fallback: .pattern))
+        XCTAssertFalse(AudioCaptureGate.visualiserChosen(.pattern, fallback: .visualizer))
+        // Under power saving both Music video and its fallback become patterns.
+        XCTAssertFalse(AudioCaptureGate.visualiserChosen(
+            VersoCustom.Settings.effectiveMode(.musicVideo, under: .lowPowerVisuals),
+            fallback: VersoCustom.Settings.effectiveMode(.visualizer, under: .lowPowerVisuals)))
+
+        let main: CGDirectDisplayID = 1
+        let both = [MusicVideoDisplay(id: 1, uuid: "a", name: "Main"), MusicVideoDisplay(id: 2, uuid: "b", name: "Side")]
+        let video = MusicVideoController.Status.showing(.youTube("x"), title: "Song")
+        func covers(_ status: MusicVideoController.Status, _ choice: MusicVideoDisplayChoice = .all,
+                    heavy: Bool = false, displays: [MusicVideoDisplay] = both) -> Bool {
+            AudioCaptureGate.videoCoversEveryWallpaper(status: status, choice: choice, heavyScenesOnMainDisplayOnly: heavy,
+                                                       displays: displays, main: main)
+        }
+        XCTAssertTrue(covers(video))
+        XCTAssertTrue(covers(video, .followHeavyScenes, heavy: false))
+        // The fallback still shows on displays the video is kept off.
+        XCTAssertFalse(covers(video, .followHeavyScenes, heavy: true))
+        XCTAssertFalse(covers(video, .mainOnly))
+        XCTAssertTrue(covers(video, .mainOnly, displays: [both[0]]))
+        // No video, or one still being looked for: the fallback may show.
+        XCTAssertFalse(covers(.missing(.notFound, title: "Song")))
+        XCTAssertFalse(covers(.searching(title: "Song")))
+        XCTAssertFalse(covers(.idle))
+        XCTAssertFalse(covers(.off))
+
+        // The decision for each state.
+        XCTAssertEqual(decide(), .capture(recheckAfter: nil), "Music video's fallback visualiser showing")
+        XCTAssertEqual(decide { $0.musicVideoShowing = true }, .paused(.musicVideo), "A video plays everywhere")
+        XCTAssertFalse(AudioCaptureGate.Decision.paused(.musicVideo).followsPlayback, "The session is released")
+        XCTAssertEqual(decide { $0.visualiserChosen = false }, .paused(.wallpaper), "Another fallback")
+        XCTAssertEqual(decide { $0.musicVideoShowing = true; $0.enabled = false }, .off)
     }
 
     func testPowerLimitsExplainWhatReplacedTheVisualiser() {

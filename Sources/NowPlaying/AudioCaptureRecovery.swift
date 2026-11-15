@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 
 /// What System audio is doing, for the inspector and the menu bar. The
@@ -189,6 +190,9 @@ struct AudioCaptureGate {
         /// Pause wallpaper froze every wallpaper, and no Settings preview is
         /// showing the visualiser instead.
         case wallpaperPaused
+        /// Music video's video plays on every wallpaper; its fallback
+        /// visualiser returns when a song has none.
+        case musicVideo
 
         var message: String {
             switch self {
@@ -197,6 +201,7 @@ struct AudioCaptureGate {
             case .displaysAsleep: return "Paused while the displays sleep."
             case .hidden: return "Paused while no visualiser is on screen."
             case .wallpaperPaused: return "Paused while the wallpaper is paused. It resumes with the wallpaper."
+            case .musicVideo: return "Paused while the music video plays. It resumes with the visualiser."
             }
         }
     }
@@ -225,6 +230,9 @@ struct AudioCaptureGate {
         var enabled = false
         var visualiserChosen = false
         var powerPause: String?
+        /// Music video's video covers every wallpaper, so the fallback
+        /// visualiser is not shown anywhere.
+        var musicVideoShowing = false
         var displaysAwake = true
         /// Seconds since every visualiser surface stopped drawing; nil while
         /// one draws. Zero means "just covered", which starts the hang time.
@@ -243,6 +251,7 @@ struct AudioCaptureGate {
         guard inputs.enabled else { return .off }
         guard inputs.visualiserChosen else { return .paused(.wallpaper) }
         if let reason = inputs.powerPause { return .paused(.power(reason)) }
+        if inputs.musicVideoShowing { return .paused(.musicVideo) }
         guard inputs.displaysAwake else { return .paused(.displaysAsleep) }
         // The user's own pause, with nothing left to show what capture hears
         // until the wallpaper resumes: no hang time, and a user start waits
@@ -261,6 +270,28 @@ struct AudioCaptureGate {
         // re-evaluation when it runs out: nothing else may happen until then.
         let pending = [hidden.map { hiddenHangTime - $0 }, idle.map { outputHangTime - $0 }].compactMap { $0 }
         return .capture(recheckAfter: pending.min())
+    }
+
+    /// Whether the chosen type can show a visualiser: Visualisers, or Music
+    /// video with Visualisers as "Without a video" (shown for songs without
+    /// a video, and on displays the video is kept off).
+    static func visualiserChosen(_ chosen: Settings.BackgroundMode, fallback: Settings.BackgroundMode) -> Bool {
+        chosen == .visualizer || (chosen == .musicVideo && fallback == .visualizer)
+    }
+
+    /// Whether Music video's video plays on every wallpaper, leaving its
+    /// fallback nowhere: a video was found for the playing song, and "Show
+    /// the video on" (or "Heavy scenes on main display only") puts it on
+    /// every connected display. While it is still looked for, a display
+    /// may already show the fallback (see `NowPlayingView.musicVideoWait`).
+    static func videoCoversEveryWallpaper(status: MusicVideoController.Status, choice: MusicVideoDisplayChoice,
+                                          heavyScenesOnMainDisplayOnly: Bool,
+                                          displays: [MusicVideoDisplay], main: CGDirectDisplayID) -> Bool {
+        guard case .showing = status else { return false }
+        return displays.allSatisfy {
+            MusicVideoDisplays.shows(choice, heavyScenesOnMainDisplayOnly: heavyScenesOnMainDisplayOnly,
+                                     display: $0.id, main: main, connected: displays)
+        }
     }
 
     /// Why power settings replaced the chosen visualiser, or nil if they did not.

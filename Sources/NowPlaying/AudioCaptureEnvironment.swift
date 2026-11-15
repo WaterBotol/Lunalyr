@@ -7,7 +7,9 @@ import ScreenCaptureKit
 /// The settings System audio follows, read in one place.
 struct AudioCapturePreferences: Equatable {
     var enabled = false
-    /// The chosen wallpaper type is Visualisers.
+    /// A visualiser is the wallpaper: Visualisers is chosen, or Music video
+    /// is, with Visualisers as "Without a video" (see
+    /// `AudioCaptureGate.visualiserChosen`).
     var visualiserChosen = false
     /// Why power settings replaced the visualiser, if they did.
     var powerPause: String?
@@ -17,19 +19,32 @@ struct AudioCapturePreferences: Equatable {
     /// Pause wallpaper (Extras) is on. It freezes the desktop wallpapers; the
     /// Settings preview keeps moving and stops only with its own window.
     var wallpaperPaused = false
+    /// Music video's video plays on every wallpaper, so its fallback
+    /// visualiser is shown nowhere (see `AudioCaptureGate.videoCoversEveryWallpaper`).
+    var musicVideoShowing = false
 
     @MainActor static func current(_ settings: Settings, extras: LunalyrExtras? = nil) -> AudioCapturePreferences {
         let extras = extras ?? .shared
         let lowPowerMode = settings.respectLowPower && ProcessInfo.processInfo.isLowPowerModeEnabled
+        let chosen = settings.backgroundMode
+        let fallback = settings.musicVideoFallback
+        // Music video shows its fallback where it has no video, so power
+        // rules are judged on that fallback.
+        let shown = chosen == .musicVideo ? fallback : chosen
+        let displays = MainDisplayMonitor.shared
         return AudioCapturePreferences(
             enabled: settings.audioReactiveEnabled,
-            visualiserChosen: settings.backgroundMode == .visualizer,
-            powerPause: AudioCaptureGate.powerPause(chosen: settings.backgroundMode,
-                effective: settings.effectiveBackgroundMode, lowPowerVisuals: settings.lowPowerVisuals,
+            visualiserChosen: AudioCaptureGate.visualiserChosen(chosen, fallback: fallback),
+            powerPause: AudioCaptureGate.powerPause(chosen: shown,
+                effective: Settings.effectiveMode(shown, under: settings.powerConstraint), lowPowerVisuals: settings.lowPowerVisuals,
                 lowPowerMode: lowPowerMode, onBattery: settings.onBattery != .full && PowerSource.isOnBattery),
             pauseWhenCovered: settings.pauseWhenCovered,
             method: settings.audioCaptureMethod,
-            wallpaperPaused: extras.wallpaperPaused)
+            wallpaperPaused: extras.wallpaperPaused,
+            musicVideoShowing: chosen == .musicVideo && AudioCaptureGate.videoCoversEveryWallpaper(
+                status: MusicVideoController.shared.status, choice: settings.musicVideoDisplays,
+                heavyScenesOnMainDisplayOnly: VisualizerPreferences.shared.heavyScenesOnMainDisplayOnly,
+                displays: displays.displays, main: displays.id))
     }
 }
 
@@ -124,8 +139,13 @@ extension AudioCaptureEnvironment {
             preferences: { .current(.shared) },
             setEnabled: { Settings.shared.audioReactiveEnabled = $0 },
             preferencesChanged: {
+                // Music video's video starting or ending, and where it
+                // plays, decide whether its fallback visualiser shows.
                 Settings.shared.objectWillChange
-                    .merge(with: LunalyrExtras.shared.$wallpaperPaused.removeDuplicates().map { _ in () })
+                    .merge(with: LunalyrExtras.shared.$wallpaperPaused.removeDuplicates().map { _ in () },
+                           MusicVideoController.shared.$status.map { _ in () },
+                           VisualizerPreferences.shared.objectWillChange.map { _ in () },
+                           MainDisplayMonitor.shared.objectWillChange.map { _ in () })
                     .eraseToAnyPublisher()
             },
             surfaces: { RenderSurfaces.shared.states(pauseWhenCovered: $0, wallpaperPaused: $1) },

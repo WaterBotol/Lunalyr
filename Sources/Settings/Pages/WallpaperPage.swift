@@ -48,7 +48,8 @@ struct WallpaperPage: View {
             }
             typeSection
                 .revealRow()
-            if s.backgroundMode == .visualizer {
+            // Music video falls back to the visualiser for songs without one.
+            if AudioCaptureGate.visualiserChosen(s.backgroundMode, fallback: s.musicVideoFallback) {
                 MusicResponseSection()
                     .id(SettingsAnchor.musicResponse)
                     .revealRow()
@@ -330,7 +331,7 @@ private struct MusicResponseSection: View {
     /// has replaced it, switching on would do nothing, so it waits;
     /// switching off still works.
     private var waitsForVisualiser: Bool {
-        s.effectiveBackgroundMode != .visualizer && !s.audioReactiveEnabled
+        !s.drawsVisualiser && !s.audioReactiveEnabled
     }
 
     var body: some View {
@@ -340,7 +341,8 @@ private struct MusicResponseSection: View {
             }))
             .disabled(waitsForVisualiser)
             if waitsForVisualiser {
-                DisabledReason(WorkspaceCopy.systemAudioWaits(showing: s.effectiveBackgroundMode))
+                DisabledReason(WorkspaceCopy.systemAudioWaits(showing: s.effectiveBackgroundMode == .musicVideo
+                    ? Settings.effectiveMode(s.musicVideoFallback, under: s.powerConstraint) : s.effectiveBackgroundMode))
             }
             ValueSlider("Sensitivity", value: $s.audioSensitivity, in: 0.3...3, step: 0.05,
                         minimumLabel: "Low", maximumLabel: "High", format: SettingsFormat.multiplier)
