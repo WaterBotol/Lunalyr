@@ -162,6 +162,28 @@ enum OpeningTitle {
         return card
     }
 
+    /// A card that entered while the lyrics were being looked up, once the
+    /// lookup ended at song time `arrival` and `next` is the card the song
+    /// has now. The card on screen carries on instead of a second one
+    /// crossfading in over it: it is `next` when the two share their start
+    /// and size and `next` has not begun to leave. Otherwise it keeps its
+    /// own entrance and size and leaves to be gone when `next` would be,
+    /// never starting to leave before `arrival` (its exit quickened, down to
+    /// the compact one's, to fit); with no card due (the first line is
+    /// close) it leaves at once, as quickly as the loading scene used to
+    /// dissolve. A card already on its way out keeps its own exit.
+    static func carried(_ card: Schedule, into next: Schedule?, at arrival: Double) -> Schedule {
+        if let next, next.start == card.start, next.size == card.size, arrival <= next.leave { return next }
+        var carried = card
+        carried.stays = false
+        let exit = card.size == .full ? fullExit : compactExit
+        let leave = min(card.leave, next.map { max(arrival, $0.end - exit) } ?? arrival)
+        guard leave < card.leave else { return carried }
+        carried.leave = leave
+        carried.end = leave + (next.map { max(compactExit, min(exit, $0.end - leave)) } ?? compactExit)
+        return carried
+    }
+
     /// How far a staying card has eased to rest at `time`, 0...1.
     static func rest(_ schedule: Schedule, at time: Double) -> Double {
         guard schedule.stays else { return 0 }
@@ -288,6 +310,43 @@ final class OpeningTitleMemory: ObservableObject {
     private var stayTrackSeen = Date.distantPast
     private var foundNone: Double?
     private var lyricsAt: Double?
+    private var heldTrack: Int?
+    private var held: OpeningTitle.Schedule?
+    private var heldUntil: Double?
+
+    /// The card `track` showed while its lyrics were being looked up, once
+    /// the lookup has ended, and the song time it ended (`arrival`); nil
+    /// when no card was up yet. `card` is the loading stage's card while
+    /// `kind` is `.loading`. Kept past the scenes' cross-fade, so the card
+    /// stays one card to its end (`OpeningTitle.carried`). A new song, or
+    /// playback back before the card began (a replay), forgets it.
+    func hold(track: Int, kind: LyricSceneKey.Kind, card: OpeningTitle.Schedule?, at time: Double)
+        -> (card: OpeningTitle.Schedule, arrival: Double)? {
+        if track != heldTrack {
+            heldTrack = track
+            held = nil
+            heldUntil = nil
+        }
+        if let held, time < held.start {
+            self.held = nil
+            heldUntil = nil
+        }
+        switch kind {
+        case .loading:
+            if heldUntil == nil, let card, OpeningTitle.phase(card, at: time) != nil { held = card }
+        case .synced, .plain, .missing:
+            if held != nil, heldUntil == nil { heldUntil = time }
+        case .idle:
+            break
+        }
+        return currentHold(track: track)
+    }
+
+    /// What `hold` last worked out for `track`, without updating it.
+    func currentHold(track: Int) -> (card: OpeningTitle.Schedule, arrival: Double)? {
+        guard track == heldTrack, let held, let heldUntil else { return nil }
+        return (held, heldUntil)
+    }
 
     /// Whether `track`'s card stays because its lookup found no lyrics, and
     /// the song time lyrics arrived after that, if they did. `kind` is what

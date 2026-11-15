@@ -167,10 +167,17 @@ struct LyricLayer: View {
         let (key, loadingSince) = sceneKey(wall: wall)
         let content = sceneContent(key: key, loadingSince: loadingSince)
         // No lyrics found: the song's opening title stays, drawn once above
-        // the scenes so their cross-fades neither double nor dim it.
+        // the scenes so their cross-fades neither double nor dim it. So does
+        // a card that entered while the lyrics were being looked up, once
+        // the lookup ends: the loading scene and the lyrics drew a card each,
+        // often of different sizes, and two titles showed while one scene
+        // faded into the other.
         let stay = opening.stay(track: key.track, kind: key.kind, notFoundAt: lyricsVM.notFound ? lyricsVM.notFoundAt : nil,
                                 at: time)
-        let staying = stay.flatMap { _ in openingSchedule(content, key: key) }
+        let hold = opening.hold(track: key.track, kind: key.kind,
+                                card: key.kind == .loading ? openingSchedule(content, key: key, staying: false) : nil,
+                                at: time)
+        let staying = stay != nil || hold != nil ? openingSchedule(content, key: key) : nil
         let transition = scenes.observe(key: key, content: content, time: time, wall: wall,
                                         jump: LyricClock.shared.lastJump)
         let energy = cache.liveEnergy(wall: wall)
@@ -427,7 +434,8 @@ struct LyricLayer: View {
     /// The song's opening title for a scene, or nil when it has none: the
     /// setting is off or nothing is playing. For the song playing, once its
     /// lookup has found no lyrics, the card that stays (unless `staying` is
-    /// false), leaving when lyrics arrive.
+    /// false), leaving when lyrics arrive; once a lookup that a card entered
+    /// during has ended, that card carried on (`OpeningTitle.carried`).
     private func openingSchedule(_ content: LyricSceneContent, key: LyricSceneKey,
                                  staying: Bool = true) -> OpeningTitle.Schedule? {
         guard OpeningTitle.isOn, !content.title.isEmpty, key.kind != .idle else { return nil }
@@ -442,7 +450,11 @@ struct LyricLayer: View {
         case .plain: words = .showing
         case .synced: words = .timed(firstLine: OpeningTitle.firstSung(content.lines))
         }
-        return OpeningTitle.schedule(words: words, joined: content.joined, previewLead: settings.nextWordPreviewLead)
+        let card = OpeningTitle.schedule(words: words, joined: content.joined, previewLead: settings.nextWordPreviewLead)
+        if staying, let hold = opening.currentHold(track: key.track) {
+            return OpeningTitle.carried(hold.card, into: card, at: hold.arrival)
+        }
+        return card
     }
 
     /// Whether a leaving scene leaves its card to the staying one: the same
