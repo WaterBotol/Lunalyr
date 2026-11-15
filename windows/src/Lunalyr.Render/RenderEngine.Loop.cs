@@ -127,7 +127,16 @@ public sealed partial class RenderEngine
             bool anyIdle = false;
             foreach (var s in _surfaces)
             {
-                if (!WantsFrame(s, now, out double at)) { anyIdle |= s.Idle; continue; }
+                if (!WantsFrame(s, now, out double at))
+                {
+                    anyIdle |= s.Idle;
+                    if (FloatTrace && s.IsFloating && now - _traceIdleAt > 0.5)
+                    {
+                        _traceIdleAt = now;
+                        _log.Info($"FLOATTRACE not wanted: state {s.State}, idle {s.Idle}, needs {s.NeedsFrame}, lyric animating {s.Lyric?.Layer.IsAnimating}");
+                    }
+                    continue;
+                }
                 if (at <= now + 0.0005) _due[dueCount++] = s;
                 else earliest = Math.Min(earliest, at);
             }
@@ -146,6 +155,9 @@ public sealed partial class RenderEngine
             for (int i = 0; i < dueCount; i++) _waitHandles[i + 1] = _due[i].Waitable;
             uint r;
             fixed (nint* handles = _waitHandles) r = WaitForMultipleObjects((uint)(dueCount + 1), handles, false, 100);
+            if (r == WAIT_TIMEOUT && FloatTrace)
+                for (int i = 0; i < dueCount; i++)
+                    if (_due[i].IsFloating) _log.Info($"FLOATTRACE due but its swap chain wasn't ready within 100 ms (of {dueCount} due)");
             if (r == WAIT_OBJECT_0 || r == WAIT_TIMEOUT || r > WAIT_OBJECT_0 + (uint)dueCount) continue;
             int first = (int)(r - WAIT_OBJECT_0 - 1);
 
@@ -159,7 +171,10 @@ public sealed partial class RenderEngine
                 var s = _due[i];
                 // The first one's waitable was consumed by the wait; the others only if they are ready too.
                 if (i != first && WaitForSingleObject(s.Waitable, 0) != WAIT_OBJECT_0) continue;
+                var drawStart = Stopwatch.GetTimestamp();
                 DrawSurface(s, now, song, playing);
+                if (FloatTrace && Stopwatch.GetElapsedTime(drawStart).TotalMilliseconds > 150)
+                    _log.Info($"FLOATTRACE surface {(s.IsFloating ? "floating" : s.Index.ToString())} took {Stopwatch.GetElapsedTime(drawStart).TotalMilliseconds:0} ms to draw and present");
                 drawn++;
                 if (expected == 0) expected = s.ExpectedIntervalMs;
             }
@@ -175,6 +190,8 @@ public sealed partial class RenderEngine
             RecoverLostDevices();
         }
     }
+
+    private double _traceIdleAt;
 
     private unsafe void WaitQuietly(nint wake, double seconds)
     {
@@ -364,7 +381,10 @@ public sealed partial class RenderEngine
         if (s.Captures is { Count: > 0 }) CaptureBackBuffer(s);
         dc.Target = null;
 
+        var presentStart = Stopwatch.GetTimestamp();
         var present = s.Swap!.Present(s.Plan.SyncInterval, PresentFlags.None);
+        if (FloatTrace && Stopwatch.GetElapsedTime(presentStart).TotalMilliseconds > 150)
+            _log.Info($"FLOATTRACE surface {(s.IsFloating ? "floating" : s.Index.ToString())} Present blocked {Stopwatch.GetElapsedTime(presentStart).TotalMilliseconds:0} ms");
         if (present == Vortice.DXGI.ResultCode.DeviceRemoved || present == Vortice.DXGI.ResultCode.DeviceReset)
         {
             MarkLost(gpu, $"Present: 0x{present.Code:X8}, reason 0x{gpu.D3D.DeviceRemovedReason.Code:X8}");

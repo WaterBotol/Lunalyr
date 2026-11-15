@@ -295,6 +295,7 @@ public sealed partial class RenderEngine
     private static readonly bool FloatTrace = Environment.GetEnvironmentVariable("LUNALYR_FLOAT_TRACE") == "1";
     private double _traceLast, _traceSong = double.NaN, _songStill, _lastStallWarning = double.NegativeInfinity;
     private bool _traceOver;
+    private int _floatFramesShown;
 
     /// <summary>
     /// Diagnostics for a tester's "floating lyrics freeze after a hover" (Apple Music): always on, as warnings (so Copy
@@ -307,18 +308,21 @@ public sealed partial class RenderEngine
         var at = System.Diagnostics.Stopwatch.GetTimestamp() / (double)System.Diagnostics.Stopwatch.Frequency;
         var song = frame.SongSeconds;
         var gap = _traceLast > 0 ? at - _traceLast : 0;
+        // The first frames after the window shows (or comes back after a long gap) set up its lines: not a stall.
+        _floatFramesShown = gap > 1 ? 0 : _floatFramesShown + 1;
+        var settled = _floatFramesShown > 60;
         if (frame.IsPlaying && double.IsFinite(song) && double.IsFinite(_traceSong) && gap > 0 && gap < 1)
         {
             // The song clock holding still (or stepping back) while the wall clock moves on.
             _songStill = song - _traceSong < gap * 0.25 ? _songStill + gap : 0;
-            if (_songStill > 0.3 && at - _lastStallWarning > 10)
+            if (settled && _songStill > 0.3 && at - _lastStallWarning > 10)
             {
                 _lastStallWarning = at;
                 _log.Warn($"Floating lyrics: the song clock stood still for {_songStill * 1000:0} ms while playing (pointer {(_pointerOver ? "over" : "away")}, opacity {_floatOpacity:0.00}, song {song:0.00} s)");
             }
         }
         else _songStill = 0;
-        if (gap > 0.25 && _floatOpacity > 0.002 && at - _lastStallWarning > 10)
+        if (settled && gap > 0.25 && gap <= 1 && _floatOpacity > 0.002 && at - _lastStallWarning > 10)
         {
             _lastStallWarning = at;
             _log.Warn($"Floating lyrics: no frame for {gap * 1000:0} ms (pointer {(_pointerOver ? "over" : "away")}, opacity {_floatOpacity:0.00}, song {song:0.00} s)");

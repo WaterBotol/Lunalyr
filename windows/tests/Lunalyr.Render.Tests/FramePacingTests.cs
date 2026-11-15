@@ -83,4 +83,19 @@ public sealed class FramePacingTests
         for (int i = 1; i < shown.Count; i++)
             Assert.InRange(Math.Round((shown[i] - shown[i - 1]) / vblank), 2, 3);
     }
+
+    [Fact]
+    public void Frames_drawn_early_never_push_the_grid_more_than_a_period_ahead()
+    {
+        // A hover fade forces frames at the display's rate (280 Hz) on a 60 fps gate: the grid stays one period ahead
+        // at most, so the next ordinary frame is never seconds away (the floating lyrics' freeze after a hover).
+        const double period = 1 / 60.0;
+        double due = 0, now = 0;
+        for (var i = 0; i < 280; i++)
+        {
+            now += 1 / 280.0;
+            due = FramePacing.NextDue(due, now, period);
+            Assert.True(due <= now + period + 1e-9, $"frame {i}: due {due - now:0.000} s ahead");
+        }
+    }
 }

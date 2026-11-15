@@ -46,11 +46,15 @@ public static class FramePacing
     /// <summary>
     /// The next grid time after a frame due at <paramref name="due"/> was started at <paramref name="now"/>. The
     /// grid carries on from the previous due time so the average rate is exact; a frame that was late by more than
-    /// one period (paused, stalled) restarts the grid from now rather than rushing to catch up.
+    /// one period (paused, stalled) restarts the grid from now rather than rushing to catch up, and a frame drawn early
+    /// (something changed: a fade, a hover) never pushes it more than one period ahead. Without that, every forced
+    /// frame of the floating lyrics' hover fade on a gated display (280 Hz) moved the grid a period further on, and once
+    /// the pointer left the lyrics stopped for seconds, until the grid came round again (tester report, 15 Nov 2026).
     /// </summary>
     public static double NextDue(double due, double now, double period)
     {
         double next = due + period;
-        return next < now ? now + period : next;
+        if (next < now) return now + period;
+        return next > now + period ? now + period : next;
     }
 }
