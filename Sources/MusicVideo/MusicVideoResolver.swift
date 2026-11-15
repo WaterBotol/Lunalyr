@@ -126,10 +126,13 @@ enum MusicVideoOffsetOrigin: Equatable, Sendable {
 
 /// How far into each song's video the song starts, per recording.
 ///
-/// Three layers, the first present wins: the user's nudge, tap or drag
-/// (`values`, kept even at 0 once set, for the video it was set on), then
-/// the offset measured from the video's captions, then a guess from the
-/// video's length (both kept in memory only, per song and video).
+/// The offset measured from the video's captions wins whenever there is
+/// one (kept in memory, per song and video), over everything saved: only
+/// a tap, nudge or Align made while it is in force adjusts it, and that
+/// adjustment is kept in memory for the current playback only
+/// (`adjustments`), never saved. Without captions: the user's saved nudge,
+/// tap or drag (`values`, kept even at 0 once set, for the video it was
+/// set on), then a guess from the video's length (in memory).
 ///
 /// Offsets the earlier automatic timing stored (`retiredAutomaticKey`) are
 /// not used: they are dropped from the store when it loads.
@@ -149,6 +152,9 @@ final class MusicVideoOffsets: ObservableObject {
     @Published private(set) var estimates: [String: Double] = [:]
     /// Measured from captions, per song and video (`estimateKey`).
     @Published private(set) var captioned: [String: Double] = [:]
+    /// The user's changes on top of the offset from captions, this
+    /// playback only (`estimateKey`).
+    @Published private(set) var adjustments: [String: Double] = [:]
     private let defaults: UserDefaults
 
     init(defaults: UserDefaults) {
@@ -186,13 +192,16 @@ final class MusicVideoOffsets: ObservableObject {
 
     private func resolved(_ songKey: String?, video: String?) -> (offset: Double, origin: MusicVideoOffsetOrigin) {
         guard let songKey else { return (0, .none) }
+        if let video, let measured = captioned[Self.estimateKey(songKey, video)] {
+            if let adjusted = adjustments[Self.estimateKey(songKey, video)] {
+                return (MusicVideoTiming.clampedOffset(adjusted), .manual)
+            }
+            return (MusicVideoTiming.clampedOffset(measured), .captions)
+        }
         if let manual = values[songKey], manualApplies(songKey, video: video) {
             return (MusicVideoTiming.clampedOffset(manual), .manual)
         }
         guard let video else { return (0, .none) }
-        if let measured = captioned[Self.estimateKey(songKey, video)] {
-            return (MusicVideoTiming.clampedOffset(measured), .captions)
-        }
         if let estimate = estimates[Self.estimateKey(songKey, video)] { return (estimate, .estimated) }
         return (0, .none)
     }
@@ -215,8 +224,14 @@ final class MusicVideoOffsets: ObservableObject {
     /// The user's offset for the song, kept even at 0, for `video` (the
     /// one on screen) when given. To a hundredth of a second, so quarter-
     /// second nudges add up exactly.
+    /// While captions set the offset for `video`, it is an adjustment on
+    /// top of them for this playback instead, not saved.
     func set(_ value: Double, for songKey: String, video: String? = nil) {
         guard value.isFinite else { return }
+        if let video, hasCaptioned(songKey, video: video) {
+            adjustments[Self.estimateKey(songKey, video)] = (MusicVideoTiming.clampedOffset(value) * 100).rounded() / 100
+            return
+        }
         values[songKey] = (MusicVideoTiming.clampedOffset(value) * 100).rounded() / 100
         if let video { manualVideos[songKey] = video } else { manualVideos.removeValue(forKey: songKey) }
         defaults.set(values, forKey: Self.key)
@@ -236,17 +251,28 @@ final class MusicVideoOffsets: ObservableObject {
         var video: String?
     }
 
-    func manualEntry(_ songKey: String) -> ManualEntry? {
-        values[songKey].map { ManualEntry(value: $0, video: manualVideos[songKey]) }
+    /// While captions set the offset for `video`: the adjustment on top of
+    /// them, if any.
+    func manualEntry(_ songKey: String, video: String? = nil) -> ManualEntry? {
+        if let video, hasCaptioned(songKey, video: video) {
+            return adjustments[Self.estimateKey(songKey, video)].map { ManualEntry(value: $0, video: video) }
+        }
+        return values[songKey].map { ManualEntry(value: $0, video: manualVideos[songKey]) }
     }
 
     /// Puts back what `manualEntry` read (nil: there was none).
-    func restoreManual(_ entry: ManualEntry?, for songKey: String) {
-        if let entry { set(entry.value, for: songKey, video: entry.video) } else { clearManual(songKey) }
+    func restoreManual(_ entry: ManualEntry?, for songKey: String, video: String? = nil) {
+        if let entry { set(entry.value, for: songKey, video: entry.video) } else { clearManual(songKey, video: video) }
     }
 
-    /// Back to the timing from captions, else the estimate (or none).
-    func clearManual(_ songKey: String) {
+    /// Back to the timing from captions (dropping only this playback's
+    /// adjustment; what is saved stays for when captions give nothing),
+    /// else the estimate (or none).
+    func clearManual(_ songKey: String, video: String? = nil) {
+        if let video, hasCaptioned(songKey, video: video) {
+            adjustments.removeValue(forKey: Self.estimateKey(songKey, video))
+            return
+        }
         guard values.removeValue(forKey: songKey) != nil else { return }
         manualVideos.removeValue(forKey: songKey)
         defaults.set(values, forKey: Self.key)
@@ -270,13 +296,14 @@ final class MusicVideoOffsets: ObservableObject {
         let value = value.flatMap { $0.isFinite ? $0 : nil }
         if captioned[key] == value { return }
         captioned[key] = value
+        adjustments.removeValue(forKey: key)
     }
 
     func hasCaptioned(_ songKey: String, video: String) -> Bool { captioned[Self.estimateKey(songKey, video)] != nil }
 
-    /// Every offset from captions dropped (the setting turned off).
-    func clearCaptioned() {
-        if !captioned.isEmpty { captioned = [:] }
+    /// A new playback: changes made over captions are forgotten.
+    func clearAdjustments() {
+        if !adjustments.isEmpty { adjustments = [:] }
     }
 
     private static func estimateKey(_ songKey: String, _ video: String) -> String { songKey + "\u{1}" + video }

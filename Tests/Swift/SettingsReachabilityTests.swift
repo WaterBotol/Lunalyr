@@ -274,7 +274,6 @@ private enum SourceKeys {
         "custom.musicVideoAutoOffsets",
         "custom.musicVideoBlur",
         "custom.musicVideoCache",
-        "custom.musicVideoCaptionSync",
         "custom.musicVideoDim",
         "custom.musicVideoDisplays",
         "custom.musicVideoFallback",

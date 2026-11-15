@@ -336,7 +336,7 @@ final class MusicVideoCaptionSyncTests: XCTestCase {
         XCTAssertEqual(controller.offsetOrigin, .captions)
         XCTAssertEqual(controller.currentOffset, 20.6, accuracy: 0.03)
         XCTAssertEqual(MusicVideoController.timingLabel(origin: .captions), "From captions")
-        XCTAssertFalse(controller.wantsCaptions(for: .youTube(videoID)), "measured once")
+        XCTAssertTrue(controller.wantsCaptions(for: .youTube(videoID)), "always loaded")
     }
 
     func testCaptionsBeforeTheLyricsAreMeasuredWhenTheLyricsArrive() async {
@@ -358,27 +358,65 @@ final class MusicVideoCaptionSyncTests: XCTestCase {
         XCTAssertEqual(controller.currentOffset, 7, accuracy: 0.03)
     }
 
-    func testTheUsersTapOrNudgeWinsOverCaptions() async {
+    func testCaptionsWinOverSavedTimingAndANudgeAdjustsThisPlaybackOnly() async {
         let controller = await showing(lyrics: lyrics)
+        controller.offsets.set(3, for: song.key, video: "yt:\(videoID)")
+        XCTAssertEqual(controller.offsetOrigin, .manual)
+        XCTAssertTrue(controller.wantsCaptions(for: .youTube(videoID)), "loaded even for a video the user timed")
         controller.noteCaptions(json3(asrCues(lyrics, offset: 20.6)), of: .youTube(videoID))
-        XCTAssertEqual(controller.offsetOrigin, .captions)
+        XCTAssertEqual(controller.offsetOrigin, .captions, "captions win over the saved tap")
+        XCTAssertEqual(controller.currentOffset, 20.6, accuracy: 0.03)
+
         controller.videoEarlier()
         XCTAssertEqual(controller.offsetOrigin, .manual)
-        XCTAssertEqual(controller.currentOffset, 20.85, accuracy: 0.03, "a nudge moves from the offset in force")
-        controller.offsets.set(3, for: song.key, video: "yt:\(videoID)")
-        XCTAssertEqual(controller.currentOffset, 3)
+        XCTAssertEqual(controller.currentOffset, 20.85, accuracy: 0.03, "a nudge moves from the captions' offset")
+        XCTAssertEqual(MusicVideoOffsets(defaults: defaults).offset(for: song.key, video: "yt:\(videoID)"), 3,
+                       "not saved over captions: the old timing stays for when captions give nothing")
         controller.resetOffset()
         XCTAssertEqual(controller.offsetOrigin, .captions, "Reset goes back to the timing from captions")
         XCTAssertEqual(controller.currentOffset, 20.6, accuracy: 0.03)
+        XCTAssertEqual(MusicVideoOffsets(defaults: defaults).offset(for: song.key, video: "yt:\(videoID)"), 3,
+                       "Reset over captions leaves the saved timing")
+
+        controller.videoLater()
+        XCTAssertEqual(controller.currentOffset, 20.35, accuracy: 0.03)
+        // Another song, then this one again: a new playback.
+        controller.update(track: NowPlayingMonitor.Track(title: "Other", artist: "Someone", duration: 100, album: "X"),
+                          enabled: true, online: false)
+        controller.update(track: NowPlayingMonitor.Track(title: song.title, artist: song.artist, duration: song.duration,
+                                                         album: song.album), enabled: true, online: false)
+        await controller.settle()
+        XCTAssertEqual(controller.offsetOrigin, .captions, "this playback's adjustment is gone")
+        XCTAssertEqual(controller.currentOffset, 20.6, accuracy: 0.03)
     }
 
-    func testCaptionsAreNotLoadedForAVideoTheUserTimed() async {
+    func testAlignCancelOverCaptionsPutsBackTheAdjustment() {
+        let offsets = MusicVideoOffsets(defaults: defaults)
+        let video = "yt:\(videoID)"
+        offsets.set(3, for: song.key, video: video)
+        offsets.setCaptioned(20.6, for: song.key, video: video)
+        XCTAssertNil(offsets.manualEntry(song.key, video: video), "no adjustment yet")
+        offsets.set(21, for: song.key, video: video)
+        let entry = offsets.manualEntry(song.key, video: video)
+        XCTAssertEqual(entry, .init(value: 21, video: video))
+        offsets.set(25, for: song.key, video: video)
+        offsets.restoreManual(entry, for: song.key, video: video)
+        XCTAssertEqual(offsets.offset(for: song.key, video: video), 21)
+        offsets.restoreManual(nil, for: song.key, video: video)
+        XCTAssertEqual(offsets.origin(for: song.key, video: video), .captions)
+        XCTAssertEqual(offsets.values[song.key], 3, "the saved timing is untouched")
+    }
+
+    func testWithoutTrustedCaptionsTheSavedTimingStillApplies() async {
         let controller = await showing(lyrics: lyrics)
-        controller.offsets.set(2, for: song.key, video: "yt:\(videoID)")
-        XCTAssertFalse(controller.wantsCaptions(for: .youTube(videoID)))
-        controller.noteCaptions(json3(asrCues(lyrics, offset: 20.6)), of: .youTube(videoID))
+        controller.noteVideoDuration(204.7, of: .youTube(videoID))
+        controller.offsets.set(3, for: song.key, video: "yt:\(videoID)")
+        controller.noteCaptions(json3(asrCues(Array(lyrics.prefix(3)), offset: 20.6)), of: .youTube(videoID))
         XCTAssertEqual(controller.offsetOrigin, .manual)
-        XCTAssertEqual(controller.currentOffset, 2)
+        XCTAssertEqual(controller.currentOffset, 3)
+        controller.videoEarlier()
+        XCTAssertEqual(MusicVideoOffsets(defaults: defaults).offset(for: song.key, video: "yt:\(videoID)"), 3.25,
+                       "without captions a nudge is saved as before")
     }
 
     func testUntrustworthyCaptionsLeaveTheEstimate() async {
@@ -387,23 +425,5 @@ final class MusicVideoCaptionSyncTests: XCTestCase {
         controller.noteCaptions(json3(asrCues(Array(lyrics.prefix(3)), offset: 20.6)), of: .youTube(videoID))
         XCTAssertEqual(controller.offsetOrigin, .estimated)
         XCTAssertNil(controller.lastCaptionResult?.offset)
-    }
-
-    func testTurningTheSettingOffDropsTheTimingFromCaptions() async {
-        let controller = await showing(lyrics: lyrics)
-        controller.noteCaptions(json3(asrCues(lyrics, offset: 20.6)), of: .youTube(videoID))
-        XCTAssertEqual(controller.offsetOrigin, .captions)
-        controller.setCaptionSync(false)
-        XCTAssertEqual(controller.offsetOrigin, .none)
-        XCTAssertFalse(controller.wantsCaptions(for: .youTube(videoID)))
-        controller.noteCaptions(json3(asrCues(lyrics, offset: 20.6)), of: .youTube(videoID))
-        XCTAssertEqual(controller.offsetOrigin, .none, "ignored while off")
-    }
-
-    func testTheSettingIsOnByDefault() {
-        let name = "LunalyrTests.MusicVideoCaptionSync.default.\(UUID().uuidString)"
-        let fresh = UserDefaults(suiteName: name)!
-        defer { fresh.removePersistentDomain(forName: name) }
-        XCTAssertTrue(VersoCustom.Settings(defaults: fresh, notifications: NotificationCenter()).musicVideoCaptionSync)
     }
 }
