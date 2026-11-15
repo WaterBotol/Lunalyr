@@ -291,7 +291,11 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger, Composit
             var labelWorld = Matrix3x2.CreateTranslation(unit.LabelOffset) * world;
             if (unit.Tile is not null)
             {
-                DrawLabelled(dc, token, unit, state, world, scale, (float)opacity, blur, reveal, clip, readingBoundaries, readingShares);
+                // The label lifts away no faster than the exit, from the next word's onset (the Mac's 436adda).
+                var member = _members[m];
+                double? nextOnset = member + 1 < prepared.Length ? prepared[member + 1].Source.Start : null;
+                DrawLabelled(dc, token, unit, state, world, scale, (float)opacity, blur, reveal, clip, readingBoundaries, readingShares,
+                             time, nextOnset);
             }
             else
             {
@@ -340,7 +344,8 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger, Composit
     /// </summary>
     private void DrawLabelled(ID2D1DeviceContext dc, RollingWord token, SpokenUnit unit, in RollingTokenState state,
                               in Matrix3x2 world, float scale, float opacity, float blur, ReadOnlySpan<double> reveal,
-                              InkClip clip, ReadOnlySpan<double> readingBoundaries, ReadOnlySpan<double> readingShares)
+                              InkClip clip, ReadOnlySpan<double> readingBoundaries, ReadOnlySpan<double> readingShares,
+                              double time = double.NaN, double? nextOnset = null)
     {
         var boundaries = reveal.IsEmpty ? default : AsSpan(token.Boundaries);
         var rightToLeft = token.RightToLeft;
@@ -350,6 +355,8 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger, Composit
         // Used with restraint: only the word in focus wears its label; as it steps back the label lifts away and it is
         // plain type again (the Mac's RollingUnit.labelHold).
         var hold = RollingLabel.Hold(state.Slot.Rank);
+        if (nextOnset is { } after && double.IsFinite(time))
+            hold = Math.Max(hold, 1 - LyricHighlightTiming.ExitProgress(time - after));
         // The label fades as one piece (its word stays dark on a fading tile, as on the Mac), so a label that is not
         // fully there is drawn in a layer at its opacity; a cutout's label is drawn in a layer cut to its unmasked part.
         if (clip.IsSet && !(clip.Right > clip.Left)) return;
@@ -407,7 +414,7 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger, Composit
         float onFrom = rightToLeft ? seam : float.NegativeInfinity, onTo = rightToLeft ? float.PositiveInfinity : seam;
         float offFrom = rightToLeft ? float.NegativeInfinity : seam, offTo = rightToLeft ? seam : float.PositiveInfinity;
         // As the label lifts away, the word on it changes back to its own colour (the Mac's tile-text switch, at 0.4).
-        var on = (float)LyricHighlightTiming.TextOpacity(hold, 0.4);
+        var on = (float)LyricHighlightTiming.TextOpacity(hold, 0.4, hold < 0.999 ? LyricHighlightTiming.ExitTextBand : LyricHighlightTiming.SwitchWidth);
         unit.Label.DrawBetween(dc, labelWorld, scale, opacity, blur, offFrom, offTo, boundaries, reveal, rightToLeft);
         // Mid-switch the word is whole in its own colour under the tile's text colour, as the Mac draws it.
         if (on < 0.999f) unit.Label.DrawBetween(dc, labelWorld, scale, opacity, blur, onFrom, onTo, boundaries, reveal, rightToLeft);

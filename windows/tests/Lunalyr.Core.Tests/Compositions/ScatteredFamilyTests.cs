@@ -342,12 +342,12 @@ public class ScatteredFamilyTests
         for (var step = 1; step <= 30; step++)
         {
             var current = Pose(release + LyricHighlightTiming.Fade * step / 30);
-            Assert.True(current.Opacity < opacity);
+            Assert.True(current.Opacity < opacity || current.Opacity == 0); // the curve's tail is hidden a frame early
             if (current.IsVisible) Assert.Equal(1, current.Width);
             opacity = current.Opacity;
         }
         Assert.False(Pose(release + LyricHighlightTiming.Fade).IsVisible);
-        Assert.Equal(0.3, LyricHighlightTiming.Fade, 0.05);
+        Assert.Equal(0.42, LyricHighlightTiming.Fade, 0.01); // the Mac's 436adda (was 0.30)
         Assert.Equal(0.12, LyricHighlightTiming.Press, 0.03);
     }
 

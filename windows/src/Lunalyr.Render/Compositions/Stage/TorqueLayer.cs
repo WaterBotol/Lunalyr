@@ -121,7 +121,9 @@ internal sealed class TorqueLayer(IWordBreaker breaker, Logger? logger) : StageL
         var rho = TorqueGeometry.Rotation(plan, time, shown, reduce);
         var swing = TorqueGeometry.Swing(plan, time, exitStart, reduce);
         var leaving = TorqueGeometry.Leaving(time, exitStart);
-        var whole = (1 - leaving) * alpha;
+        // Its turn stays ease-in cubic; its opacity eases out over 0.27 s instead, so the last frame isn't a sharp drop
+        // (the Mac's 436adda).
+        var whole = (1 - TorqueGeometry.Fading(time, exitStart)) * alpha;
         if (!(whole > 0.002)) return;
         // Inside the 5 % title-safe margins.
         var available = new SizeD(Stage.Width * 0.9, Stage.Height * 0.9);

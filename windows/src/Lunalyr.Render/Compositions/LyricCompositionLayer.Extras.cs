@@ -75,9 +75,9 @@ internal abstract partial class LyricCompositionLayer
     /// (with <paramref name="overlay"/>) the label's ink in the tile's text colour where the tiles have pressed in.
     /// </summary>
     private void DrawRunTiles(ID2D1DeviceContext dc, ReadOnlySpan<HighlightSegment> segments, Ink label, in Matrix3x2 labelWorld,
-                              double pointSize, bool rightToLeft, double time, double visibility, bool overlay)
+                              double pointSize, bool rightToLeft, double time, double visibility, bool overlay, bool carried = false)
     {
-        var count = HighlightSegment.Marks(segments, time, ReduceMotion, _marks);
+        var count = HighlightSegment.Marks(segments, time, ReduceMotion, _marks, carried);
         for (var k = 0; k < count; k++) DrawTile(dc, label, labelWorld, pointSize, rightToLeft, _marks[k], visibility, overlay);
     }
 
@@ -100,6 +100,7 @@ internal abstract partial class LyricCompositionLayer
             _paint.Color = new Color4((float)tile.R, (float)tile.G, (float)tile.B, (float)(tile.A * mark.Pose.Opacity * visibility));
             float w = (float)rect.Width, h = (float)rect.Height;
             dc.Transform = Matrix3x2.CreateScale((float)mark.Pose.Width, 1, new Vector2(rightToLeft ? w : 0, 0))
+                * Matrix3x2.CreateScale((float)mark.Pose.Scale, new Vector2(w / 2, h / 2))
                 * Matrix3x2.CreateRotation(Radians(TileTilt), new Vector2(w / 2, h / 2))
                 * Matrix3x2.CreateTranslation((float)(rect.X - width / 2), (float)(rect.Y - height / 2))
                 * labelWorld;
@@ -107,7 +108,7 @@ internal abstract partial class LyricCompositionLayer
             dc.FillRoundedRectangle(new RoundedRectangle(new RawRectF(0, 0, w, h), radius, radius), _paint);
             return;
         }
-        var shown = LyricHighlightTiming.TextOpacity(mark.Pose.Opacity, SettledInk.TileTextSwitch) * visibility;
+        var shown = LyricHighlightTiming.TextOpacity(mark.Pose, SettledInk.TileTextSwitch) * visibility;
         if (!(shown > 0.002)) return;
         var pressed = mark.Pressed(width, height, pointSize, rightToLeft);
         var colour = SettledInk.TileText;
@@ -129,6 +130,7 @@ internal abstract partial class LyricCompositionLayer
         _paint.Color = new Color4((float)tile.R, (float)tile.G, (float)tile.B, (float)(tile.A * pose.Opacity * visibility));
         float w = (float)rect.Width, h = (float)rect.Height;
         dc.Transform = Matrix3x2.CreateScale((float)pose.Width, 1, new Vector2(rightToLeft ? w : 0, 0))
+            * Matrix3x2.CreateScale((float)pose.Scale, new Vector2(w / 2, h / 2))
             * Matrix3x2.CreateRotation(Radians(TileTilt), new Vector2(w / 2, h / 2))
             * Matrix3x2.CreateTranslation((float)rect.X, (float)rect.Y)
             * world;
@@ -143,7 +145,7 @@ internal abstract partial class LyricCompositionLayer
     /// </summary>
     protected Vector4 TileTextColour(HighlightPose pose, double visibility, double share = 1)
     {
-        var shown = LyricHighlightTiming.TextOpacity(pose.Opacity, SettledInk.TileTextSwitch) * visibility * share;
+        var shown = LyricHighlightTiming.TextOpacity(pose, SettledInk.TileTextSwitch) * visibility * share;
         var colour = SettledInk.TileText;
         return new Vector4((float)colour.R, (float)colour.G, (float)colour.B, (float)(colour.A * shown));
     }

@@ -217,6 +217,10 @@ public static class TorqueGeometry
     public static double Leaving(double time, double exitStart) =>
         double.IsFinite(exitStart) ? In((time - exitStart) / ExitTime) : 0;
 
+    /// <summary>How far the leaving line has faded: smoothstep over 0.27 s (the Mac's 436adda); its turn keeps <see cref="Leaving"/>.</summary>
+    public static double Fading(double time, double exitStart) =>
+        double.IsFinite(exitStart) ? Easing.Smoothstep((time - exitStart) / 0.27) : 0;
+
     // ---- The plan (per line) ------------------------------------------------------------------------------
 
     /// <summary>The line's plan: faces, rows, roles and clocks, from its (cached) phrasing. A layer makes it once per line.</summary>

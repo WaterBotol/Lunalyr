@@ -34,7 +34,7 @@ public static class LineFlow
     public const double PreviewRamp = 0.16;
 
     /// <summary>The fade at the end of a line (<c>LyricHighlightTiming.fade</c>).</summary>
-    public const double HighlightFade = 0.30;
+    public const double HighlightFade = 0.42;
 
     /// <summary>Whether two neighbouring lines switch between word timing and line timing (instrumental breaks aside).</summary>
     public static bool ChangesTiming(LyricLine from, LyricLine to) =>

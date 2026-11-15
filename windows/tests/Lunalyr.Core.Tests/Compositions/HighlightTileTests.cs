@@ -33,17 +33,17 @@ public class HighlightTileTests
         Assert.Equal(1, Pose(onset + LyricHighlightTiming.Press).Opacity, 9);
         // Held for the rest of the line.
         for (var time = onset + 0.13; time < release; time += 0.05) Assert.Equal(new HighlightPose(1, 1), Pose(time));
-        // Fades over about 300 ms after the line ends.
+        // Leaves over 420 ms after the line ends (the Mac's 436adda: smootherstep, was a 300 ms fade).
         var opacity = 1.0;
         for (var step = 1; step <= 30; step++)
         {
             var current = Pose(release + LyricHighlightTiming.Fade * step / 30);
-            Assert.True(current.Opacity < opacity);
+            Assert.True(current.Opacity < opacity || current.Opacity == 0); // the curve's tail is hidden a frame early
             if (current.IsVisible) Assert.Equal(1, current.Width); // it fades; it does not shrink
             opacity = current.Opacity;
         }
         Assert.False(Pose(release + LyricHighlightTiming.Fade).IsVisible);
-        Assert.Equal(0.3, LyricHighlightTiming.Fade, 0.05);
+        Assert.Equal(0.42, LyricHighlightTiming.Fade, 0.01); // the Mac's 436adda (was 0.30)
         Assert.Equal(0.12, LyricHighlightTiming.Press, 0.03);
     }
 
@@ -94,7 +94,7 @@ public class HighlightTileTests
         Span<HighlightMark> marks = stackalloc HighlightMark[4];
         Assert.Equal(0, HighlightSegment.Marks(segments, 4.9, false, marks));
         Assert.Equal(1, HighlightSegment.Marks(segments, 5.5, false, marks));
-        Assert.Equal(0, HighlightSegment.Marks(segments, 6.4, false, marks));
+        Assert.Equal(0, HighlightSegment.Marks(segments, 6.45, false, marks));
     }
 
     [Fact]

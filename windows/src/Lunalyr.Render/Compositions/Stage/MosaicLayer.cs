@@ -142,7 +142,8 @@ internal sealed class MosaicLayer(IWordBreaker breaker, Logger? logger) : StageL
         var runs = line.Runs;
         var n = shown;
         if (n == 0) return;
-        var whole = (1 - StageMotion.Leave(time, exitStart)) * alpha;
+        // The line leaves on the highlight exit (the Mac's 436adda): smootherstep over 0.42 s, no first-frame drop.
+        var whole = (1 - LyricHighlightTiming.ExitProgress(time - exitStart)) * alpha;
         if (!(whole > 0.002)) return;
         var speed = line.Speed;
         var reduce = ReduceMotion;

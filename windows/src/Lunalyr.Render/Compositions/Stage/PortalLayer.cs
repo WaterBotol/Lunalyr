@@ -131,7 +131,9 @@ internal sealed class PortalLayer(IWordBreaker breaker, Logger? logger) : StageL
         var runs = line.Runs;
         var n = shown;
         if (n == 0) return;
-        var leaving = StageMotion.Leave(time, exitStart);
+        // The line leaves on the highlight exit (the Mac's 436adda): smootherstep over 0.42 s, no first-frame drop.
+        var leaving = LyricHighlightTiming.ExitProgress(time - exitStart);
+        _leaving = leaving;
         var whole = (1 - leaving) * alpha;
         if (!(whole > 0.002)) return;
         var speed = line.Speed;
@@ -243,8 +245,41 @@ internal sealed class PortalLayer(IWordBreaker breaker, Logger? logger) : StageL
     }
 
     /// <summary>One word: its pill while it is sung, pale type once it is not.</summary>
+    /// <summary>How far the line being drawn has left (0 while it stays).</summary>
+    private double _leaving;
+
+    /// <summary>
+    /// A pill as one piece (the Mac's 436adda): pill, outline, symbol and word composited, then faded together, and
+    /// shrunk 6% about its centre as the line leaves (not under Reduce Motion), so it never turns into a grey slab.
+    /// </summary>
     private void DrawPill(ID2D1DeviceContext dc, PortalLine line, int id, double time, PointD centre, double scale, double live,
                           PortalMotion motion, in Matrix3x2 group, Vector4 tile, Vector4 calm, double boil, double opacity, float blur)
+    {
+        var shrink = ReduceMotion ? 1 : 1 - LyricHighlightTiming.ExitScale * _leaving;
+        var layered = opacity < 0.999 && live > 0.001;
+        if (!layered)
+        {
+            DrawPillContent(dc, line, id, time, centre, scale * shrink, live, motion, group, tile, calm, boil, opacity, blur);
+            return;
+        }
+        dc.PushLayer(new LayerParameters1
+        {
+            ContentBounds = new Vortice.RawRectF(float.NegativeInfinity, float.NegativeInfinity, float.PositiveInfinity, float.PositiveInfinity),
+            MaskTransform = Matrix3x2.Identity, MaskAntialiasMode = AntialiasMode.PerPrimitive,
+            Opacity = (float)opacity, LayerOptions = LayerOptions1.None,
+        }, null!);
+        try
+        {
+            DrawPillContent(dc, line, id, time, centre, scale * shrink, live, motion, group, tile, calm, boil, 1, blur);
+        }
+        finally
+        {
+            dc.PopLayer();
+        }
+    }
+
+    private void DrawPillContent(ID2D1DeviceContext dc, PortalLine line, int id, double time, PointD centre, double scale, double live,
+                                 PortalMotion motion, in Matrix3x2 group, Vector4 tile, Vector4 calm, double boil, double opacity, float blur)
     {
         var reduce = ReduceMotion;
         var run = line.Runs[id];

@@ -973,9 +973,8 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
         for (var i = 0; i < tokens.Count; i++)
         {
             var eligible = i > 0 ? tokens[i - 1].Source.Start : previewSince;
-            // A word with a highlight tile stays until its tile is released at the line's end.
-            var leaves = highlighted && plan.Chosen[tokens[i].Run].HighlightsSungWords() ? Math.Max(exitStart, plan.Release) : exitStart;
-            plan.TokenFrames[i] = EditorialTokenFrame.Make(tokens[i], next, time, energy, leaves, reduce, eligible, Options);
+            // A highlighted word leaves with its line, carrying its tile (the Mac's 436adda): no hold past the exit.
+            plan.TokenFrames[i] = EditorialTokenFrame.Make(tokens[i], next, time, energy, exitStart, reduce, eligible, Options);
         }
         var runs = typography.Runs;
         for (var r = 0; r < runs.Count; r++)
@@ -1069,9 +1068,12 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
             // "Cutout · Highlight": the tiles behind this run's sung words, and how strong the strongest is.
             var tiled = 0.0;
             var segments = highlighted && plan.Chosen[r].HighlightsSungWords() ? plan.Segments![r] : null;
+            // A line that leaves carries its tiles out whole with its words; one that never leaves (a preview) lets them
+            // go from its end on the exit curve.
+            var carried = double.IsFinite(exitStart);
             if (segments is not null)
                 foreach (var segment in segments)
-                    tiled = Math.Max(tiled, LyricHighlightTiming.Pose(time, segment.Onset, segment.Release, reduce).Opacity);
+                    tiled = Math.Max(tiled, LyricHighlightTiming.Pose(time, segment.Onset, carried ? double.PositiveInfinity : segment.Release, reduce).Opacity);
             var glowStrength = frame.Glow * (1 - tiled);
             var glow = glowStrength > 0.002
                 ? new GlowSpec(new Vector4(ink.Glow.X, ink.Glow.Y, ink.Glow.Z, (float)Math.Min(1, 0.6 * glowStrength * frame.Fill * presence.Glow)),
@@ -1092,7 +1094,21 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
             // A cutout is unmasked from its leading edge while it arrives.
             var clip = InkClip.Leading(motion.PaperShown(transform.Eased), ink.Unit.Width, direction < 0);
             var tiles = segments is not null && tiled > 0.001;
-            if (tiles) DrawRunTiles(dc, segments!, ink.Label, labelWorld, size, run.RightToLeft, time, visibility, overlay: false);
+            // A tiled word fading out is one piece: tile, word and the text on it composited, then faded together, so
+            // the word never shows through its own tile.
+            var composited = tiles && visibility < 0.999;
+            var drawnVisibility = visibility;
+            if (composited)
+            {
+                dc.PushLayer(new LayerParameters1
+                {
+                    ContentBounds = new Vortice.RawRectF(float.NegativeInfinity, float.NegativeInfinity, float.PositiveInfinity, float.PositiveInfinity),
+                    MaskTransform = Matrix3x2.Identity, MaskAntialiasMode = AntialiasMode.PerPrimitive,
+                    Opacity = (float)visibility, LayerOptions = LayerOptions1.None,
+                }, null!);
+                visibility = 1;
+            }
+            if (tiles) DrawRunTiles(dc, segments!, ink.Label, labelWorld, size, run.RightToLeft, time, visibility, overlay: false, carried);
             ink.Label.Draw(dc, labelWorld, (float)scale, (float)visibility, blur, glow, shadow,
                            run.Boundaries, tokenOpacities, run.RightToLeft, clip);
             // "Sung sweep": the sung colour fills the word from its leading edge as it is sung (the Mac's SungText).
@@ -1106,7 +1122,12 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
                                      run.Boundaries, tokenOpacities, run.RightToLeft);
                 }
             }
-            if (tiles) DrawRunTiles(dc, segments!, ink.Label, labelWorld, size, run.RightToLeft, time, visibility, overlay: true);
+            if (tiles) DrawRunTiles(dc, segments!, ink.Label, labelWorld, size, run.RightToLeft, time, visibility, overlay: true, carried);
+            if (composited)
+            {
+                dc.PopLayer();
+                visibility = drawnVisibility;
+            }
             if (ink.HasAccent)
                 DrawAccent(dc, run, tokens, ink, labelWorld, local, scale, visibility, blur, glow, shadow, action, time, clip);
             if (ink.Reading is { } reading)
