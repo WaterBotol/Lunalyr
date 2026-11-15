@@ -44,7 +44,7 @@ final class LyricPastelTests: XCTestCase {
                     let colour = Perceptual.readable(ink.gradient(slot: Double(step) / 12), background: backdrop,
                                                      ratio: ink.contrast, keepingColour: true)
                     let ratio = (Perceptual.luminance(colour) + 0.05) / (backdrop + 0.05)
-                    XCTAssertGreaterThanOrEqual(ratio, 2.45, "backdrop \(backdrop), slot \(step)")
+                    XCTAssertGreaterThanOrEqual(ratio, LyricInk.ownColourContrast - 0.05, "backdrop \(backdrop), slot \(step)")
                 }
             }
         }
@@ -67,5 +67,18 @@ final class LyricPastelTests: XCTestCase {
         options.pastel = false
         XCTAssertFalse(LyricColourOptions(defaults: defaults).pastel)
         XCTAssertTrue(LyricStyleProfiles.keys.contains(LyricColourOptions.Keys.pastel), "kept per surface")
+    }
+
+    /// Pure red with pastel off stays red over a dimmed video: lifted only
+    /// to the gentler floor, its hue kept and its colour clearly red, not pink.
+    func testAPickedRedStaysRedWithPastelOff() throws {
+        let red = try XCTUnwrap(LyricColourOptions.oklab(hex: "#FF0000"))
+        let ink = settled(inputs(.customGradient, custom: [red, red], backdrop: 0.2, pastel: false))
+        XCTAssertEqual(ink.contrast, LyricInk.ownColourContrast)
+        let drawn = Perceptual.readable(ink.gradient(slot: 0.5), background: 0.2, ratio: ink.contrast, keepingColour: true)
+        XCTAssertEqual(drawn.hue, red.hue, accuracy: 0.15)
+        XCTAssertGreaterThan(drawn.chroma, 0.6 * red.chroma, "still red, not pink")
+        let eased = settled(inputs(.customGradient, custom: [red, red], backdrop: 0.2, pastel: true))
+        XCTAssertEqual(eased.contrast, LyricInk.minimumContrast, "pastel on keeps the usual floor")
     }
 }

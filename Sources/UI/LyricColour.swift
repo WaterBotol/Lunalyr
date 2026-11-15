@@ -252,6 +252,10 @@ struct LyricInk {
     /// is still well above 18 pt) and keep a dark shadow under every glyph,
     /// so 3:1 against the wallpaper is the floor; colours only get lighter.
     static let minimumContrast = 3.0
+    /// The floor for the user's own colours with pastel off: enough to read,
+    /// low enough that a saturated red or orange keeps its hue instead of
+    /// turning pink or peach. The shadow and text backing carry the rest.
+    static let ownColourContrast = 1.5
     /// With Increase Contrast: WCAG AA for normal text.
     static let increasedContrast = 4.5
     static let unsungDim = 0.28
@@ -684,7 +688,11 @@ final class LyricInkDirector {
         if first { _ = vc_follow(&lightBehind, lightTarget, 0, 0.5, 0.6) }
         refreshAlbum(inputs.album)
         let calm = inputs.reduceMotion
-        let ratio = inputs.increaseContrast ? LyricInk.increasedContrast : LyricInk.minimumContrast
+        // Your own colours with pastel off are kept nearer what you picked:
+        // a gentler floor, with the text's shadow and backing carrying the rest.
+        let ownColours = !inputs.pastel && !inputs.custom.isEmpty
+        let ratio = inputs.increaseContrast ? LyricInk.increasedContrast
+            : ownColours ? LyricInk.ownColourContrast : LyricInk.minimumContrast
         let textRatio = inputs.increaseContrast ? LyricHighlight.increasedTextContrast : LyricHighlight.textContrast
         if inputs.mode == .standard, atWhite, darkAmount == 0 {
             // The type is white, but the highlights have colour: white has
