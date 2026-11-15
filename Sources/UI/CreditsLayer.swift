@@ -40,10 +40,14 @@ enum LyricCreditCues {
         // file's headings, bare names and repeated credits are dropped.
         let names = LyricCredits.TrackNames(title: title, artist: artist)
         var seenText = Set<String>()
+        // A song not sung in Chinese shows its Chinese-labelled credits in
+        // English, and none of a Chinese catalogue's notices.
+        let translate = LyricCredits.sungInAnotherLanguage(lines)
         for line in lines where line.credit == true {
             guard !names.isHeading(line.text), !names.isLoneName(line.text) else { continue }
-            guard seenText.insert(LyricQuery.normalize(line.text)).inserted else { continue }
-            let text = line.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard let shown = translate ? LyricCredits.englishCredit(line.text) : line.text else { continue }
+            guard seenText.insert(LyricQuery.normalize(shown)).inserted else { continue }
+            let text = shown.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !text.isEmpty, line.start.isFinite else { continue }
             let start = max(line.start, cursor)
             cursor = start + stagger

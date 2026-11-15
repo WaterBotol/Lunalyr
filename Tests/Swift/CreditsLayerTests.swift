@@ -180,4 +180,29 @@ final class CreditsLayerTests: XCTestCase {
         XCTAssertFalse(LyricLineView.liftsBacking(wordTimed: true, firstRunOnly: 0.5, allowed: true, settingOn: true))
         XCTAssertFalse(LyricLineView.liftsBacking(wordTimed: true, firstRunOnly: nil, allowed: true, settingOn: false))
     }
+
+    // MARK: Chinese catalogues' credits on songs sung in another language
+
+    func testChineseCreditLabelsShowInEnglishOnAnEnglishSong() {
+        XCTAssertEqual(LyricCredits.englishCredit("作词 : Dylan Minnette"), "Lyrics by: Dylan Minnette")
+        XCTAssertEqual(LyricCredits.englishCredit("编曲：John Congleton"), "Arranged by: John Congleton")
+        XCTAssertEqual(LyricCredits.englishCredit("制作人 : Ian Kirkpatrick"), "Produced by: Ian Kirkpatrick")
+        XCTAssertNil(LyricCredits.englishCredit("未经许可，不得翻唱或使用"))
+        XCTAssertNil(LyricCredits.englishCredit("TME享有本翻译作品的著作权"))
+        XCTAssertNil(LyricCredits.englishCredit("词版权管理方：某某音乐"), "no common English name: dropped")
+        XCTAssertEqual(LyricCredits.englishCredit("Producer: Max Martin"), "Producer: Max Martin")
+    }
+
+    func testCuesTranslateOnlyWhenTheSongIsNotSungInChinese() {
+        func line(_ text: String, _ start: Double, credit: Bool) -> LyricsFetcher.Line {
+            var line = LyricsFetcher.makeLine(text: text, start: start, end: start + 2)
+            line.credit = credit
+            return line
+        }
+        let english = [line("作词 : Dylan Minnette", 0, credit: true), line("未经许可，不得翻唱", 1, credit: true),
+                       line("Tell me why you're bored", 10, credit: false), line("Are you bored yet", 14, credit: false)]
+        XCTAssertEqual(LyricCreditCues.cues(in: english).map(\.text), ["Lyrics by: Dylan Minnette"])
+        let chinese = [line("作词 : 方文山", 0, credit: true), line("刮风这天我试过握着你手", 10, credit: false)]
+        XCTAssertEqual(LyricCreditCues.cues(in: chinese).map(\.text), ["作词 : 方文山"])
+    }
 }

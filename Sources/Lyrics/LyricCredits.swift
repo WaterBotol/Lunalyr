@@ -428,3 +428,78 @@ enum LyricCredits {
         }
     }
 }
+
+// MARK: - Chinese credit labels in songs sung in another language
+
+extension LyricCredits {
+    /// Whether the song is sung in something other than Chinese: its sung
+    /// lines are under 30% Han. No sung lines: unknown, so false (credits
+    /// are kept as they are).
+    static func sungInAnotherLanguage(_ lines: [LyricsFetcher.Line]) -> Bool {
+        var han = 0, letters = 0
+        for line in lines where line.credit != true {
+            for scalar in line.text.unicodeScalars where CharacterSet.letters.contains(scalar) {
+                letters += 1
+                if (0x4E00...0x9FFF).contains(scalar.value) || (0x3400...0x4DBF).contains(scalar.value) { han += 1 }
+            }
+        }
+        return letters > 0 && Double(han) / Double(letters) < 0.3
+    }
+
+    /// Chinese catalogues (QQ Music, Kuwo, Kugou) head an English song's
+    /// lyrics with credits labelled in Chinese ("作词 : Dylan Minnette") and
+    /// notices ("未经许可，不得翻唱"). The label in English, the value kept;
+    /// nil drops the line: a notice, or a label with no common English name.
+    static func englishCredit(_ text: String) -> String? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if notices.contains(where: { trimmed.contains($0) }) { return nil }
+        guard let colon = trimmed.firstIndex(where: { $0 == ":" || $0 == "：" }) else {
+            return containsHan(trimmed) ? nil : trimmed
+        }
+        let label = trimmed[..<colon].trimmingCharacters(in: .whitespaces)
+        let value = trimmed[trimmed.index(after: colon)...].trimmingCharacters(in: .whitespaces)
+        guard containsHan(label) else { return trimmed }
+        guard !value.isEmpty, let english = englishLabels[label] else { return nil }
+        return "\(english): \(value)"
+    }
+
+    private static func containsHan(_ text: some StringProtocol) -> Bool {
+        text.unicodeScalars.contains { (0x4E00...0x9FFF).contains($0.value) || (0x3400...0x4DBF).contains($0.value) }
+    }
+
+    /// Copyright and licensing notices: never credits worth showing.
+    private static let notices = ["未经", "未經", "许可", "許可", "著作权", "著作權", "版权所有", "版權所有", "享有", "不得", "禁止", "授权", "授權"]
+
+    /// Common labels, Simplified and Traditional, in the English credits' wording.
+    static let englishLabels: [String: String] = {
+        var table: [String: String] = [:]
+        func add(_ english: String, _ labels: String...) { for label in labels { table[label] = english } }
+        add("Lyrics by", "作词", "作詞", "词", "詞", "填词", "填詞")
+        add("Composed by", "作曲", "曲", "谱曲", "譜曲")
+        add("Written by", "作词作曲", "作詞作曲", "词曲", "詞曲", "词/曲", "詞/曲", "作词/作曲", "作詞/作曲")
+        add("Arranged by", "编曲", "編曲", "编配", "編配")
+        add("Produced by", "制作人", "製作人", "制作", "製作", "音乐制作", "音樂製作", "制作人/编曲")
+        add("Executive producer", "监制", "監製", "总监制", "總監製", "音乐总监", "音樂總監")
+        add("Mixed by", "混音", "混缩", "混音师", "混音師", "混音工程师", "混音工程師")
+        add("Mastered by", "母带", "母帶", "母带处理", "母帶處理", "母带工程师", "母帶工程師")
+        add("Mixed & mastered by", "混音/母带", "混音/母帶", "混音&母带", "混音及母带")
+        add("Recorded by", "录音", "錄音", "录制", "錄製", "录音师", "錄音師", "录音工程师", "錄音工程師")
+        add("Vocals recorded by", "人声录音", "人聲錄音", "人声录音师", "人聲錄音師")
+        add("Vocal producer", "配唱制作人", "配唱製作人", "人声制作", "人聲製作", "配唱")
+        add("Backing vocals", "和声", "和聲", "合声", "合聲", "和音", "伴唱", "和声编写", "和聲編寫")
+        add("Guitar", "吉他", "吉他手")
+        add("Electric guitar", "电吉他", "電吉他")
+        add("Acoustic guitar", "木吉他", "原声吉他", "原聲吉他")
+        add("Bass", "贝斯", "貝斯")
+        add("Drums", "鼓", "架子鼓", "鼓手")
+        add("Keyboards", "键盘", "鍵盤")
+        add("Piano", "钢琴", "鋼琴")
+        add("Strings", "弦乐", "弦樂")
+        add("Programming", "编程", "編程")
+        add("Presented by", "出品", "出品人", "出品方")
+        add("Released by", "发行", "發行", "发行方", "發行方")
+        add("Recording studio", "录音室", "錄音室", "录音棚", "錄音棚")
+        add("Mixing studio", "混音室")
+        return table
+    }()
+}
