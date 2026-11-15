@@ -303,6 +303,49 @@ final class LyricRankingQualityTests: XCTestCase {
         XCTAssertEqual(LyricsFetcher.rankedTiming(ranked[0].result), 2)
     }
 
+    /// Readings are laid onto a merged line's words, and a credit row is
+    /// still set apart once it has word timing.
+    func testReadingsAndCreditsWorkOnMergedLines() throws {
+        let texts = ["作詞：山田", "今日も君と歩く", "夜の街を抜けて", "明日を探して走る", "空に星が光る",
+                     "風の音を聞いて", "遠い夢を見てる", "二人で笑う日まで", "この道を進む"]
+        let donorLines: [Line] = texts.enumerated().map { index, text in
+            let start = 5 + Double(index) * 4, characters = Array(text)
+            var line = LyricsFetcher.makeLine(text: text, start: start, end: start + 3.6)
+            // Sung unevenly, as a singer does.
+            var cursor = start
+            line.words = characters.enumerated().map { k, character in
+                let length = [0.2, 0.45, 0.3, 0.6, 0.25][(k + index) % 5]
+                defer { cursor += length }
+                return Word(text: String(character), start: cursor, end: cursor + length)
+            }
+            line.end = max(line.end, cursor)
+            line.wordTimed = true
+            return line
+        }
+        let recipientLines = donorLines.enumerated().map { index, line -> Line in
+            let end = index + 1 < donorLines.count ? donorLines[index + 1].start : line.end
+            return LyricsFetcher.makeLine(text: line.text, start: line.start, end: end)
+        }
+        let ranked = LyricsFetcher.screen([candidate(.qqMusic, donorLines, provenance: "QQ Music"),
+                                           candidate(.musixmatch, recipientLines, provenance: "Musixmatch")],
+                                          query: query, options: options([.musixmatch, .qqMusic])).accepted
+        XCTAssertEqual(LyricsFetcher.timingDonor(ranked[0]), "QQ Music")
+        guard case .synced(let merged, _) = ranked[0].result else { return XCTFail("not synced") }
+        XCTAssertTrue(merged.allSatisfy(\.wordTimed))
+        // The credit row is set apart all the same.
+        let flagged = LyricCredits.flagging(merged)
+        XCTAssertEqual(flagged[0].credit, true)
+        XCTAssertTrue(flagged[0].words.isEmpty)
+        // Readings are timed by the merged words.
+        let options = RomanizationOptions.Snapshot(display: .below, language: .automatic, toneMarks: true, preferSaved: true)
+        let readings = LyricRomanizer.readings(merged, options: options)
+        let line = try XCTUnwrap(readings[1])
+        XCTAssertFalse(line.isEmpty)
+        let starts = Set(merged[1].words.map(\.start))
+        XCTAssertTrue(line.allSatisfy { starts.contains($0.start) }, "\(line)")
+        XCTAssertEqual(line.first?.start, merged[1].words.first?.start)
+    }
+
     func testNoMergeAcrossScriptsTranslationsOrTimelines() {
         let pair = mergePair()
         let order = options([.musixmatch, .qqMusic, .kugou])
@@ -439,9 +482,9 @@ final class LyricRankingQualityTests: XCTestCase {
 
     /// An automatic choice is saved for two weeks; a search asks again. A
     /// source that could have beaten the choice but gave no answer (timed
-    /// out, failed, paused) leaves it unsaved, so automatic lookups do not
-    /// keep showing less than a search finds.
-    func testAChoiceASilentBetterSourceMightHaveBeatenIsNotSaved() async throws {
+    /// out, failed, paused) has it kept for an hour only, so automatic
+    /// lookups do not keep showing less than a search finds.
+    func testAChoiceASilentBetterSourceMightHaveBeatenIsKeptForAnHourOnly() async throws {
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent("unsaved-\(UUID().uuidString)", isDirectory: true)
         defer { try? FileManager.default.removeItem(at: folder) }
         let qq = candidate(.qqMusic, Self.lines(LyricRankingFixtures.qrcLatin), provenance: "QQ Music")
@@ -455,7 +498,17 @@ final class LyricRankingQualityTests: XCTestCase {
             throw Down()
         }.lookup(query, options: order)
         XCTAssertEqual(first.candidates.first?.source, .qqMusic)
-        // The next automatic lookup asks again and finds Musixmatch's.
+        // Kept for an hour only: a replay meanwhile asks nothing.
+        let replay = await LyricsFetcher(cacheFolder: folder, timing: timing, isOnline: { true }) { _, _, _ in nil }.lookup(query, options: order)
+        XCTAssertTrue(replay.cached)
+        XCTAssertTrue(LyricsFetcher.sameResult(replay.result, first.result))
+        // An hour on, the next automatic lookup asks again and finds Musixmatch's.
+        let files = try FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil).filter { $0.lastPathComponent.hasPrefix("cache-") }
+        XCTAssertEqual(files.count, 1)
+        var entry = try JSONDecoder().decode(SavedLyrics.Entry.self, from: Data(contentsOf: files[0]))
+        XCTAssertEqual(Date().timeIntervalSince(entry.storedAt), SavedLyrics.keptFor - SavedLyrics.provisionalFor, accuracy: 60)
+        entry.storedAt -= SavedLyrics.provisionalFor + 1
+        try JSONEncoder().encode(entry).write(to: files[0])
         let second = await LyricsFetcher(cacheFolder: folder, timing: timing, isOnline: { true }) { id, _, _ in
             id == .qqMusic ? qq : id == .musixmatch ? musixmatch : nil
         }.lookup(query, options: order)

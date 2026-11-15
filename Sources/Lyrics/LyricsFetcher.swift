@@ -175,10 +175,11 @@ final class LyricsFetcher {
                                                 message: "online choice not saved: the artist's language is not known yet"))
             } else if let missing = Self.unansweredRival(best, collected: collected, query: query, options: options,
                                                          among: report.candidates.filter { !$0.source.isLocal }) {
-                // Saved, it would stand for two weeks without asking again,
-                // while a search would find the better match.
+                // Saved for two weeks, it would stand without asking again while
+                // a search would find the better match: kept for an hour only.
+                SavedLyrics.save(best, key: key, in: cacheFolder, provisional: true)
                 LyricTrace.emit(LyricTraceEvent(kind: .cache, source: best.source.rawValue,
-                                                message: "online choice not saved: \(missing.rawValue), which could have beaten it, did not answer"))
+                                                message: "online choice saved for an hour only: \(missing.rawValue), which could have beaten it, did not answer"))
             } else if Self.isSettled(best, pending: collected.stopped.filter { !$0.isLocal }, query: query, options: options,
                                      among: report.candidates.filter { !$0.source.isLocal }) {
                 SavedLyrics.save(best, key: key, in: cacheFolder)
