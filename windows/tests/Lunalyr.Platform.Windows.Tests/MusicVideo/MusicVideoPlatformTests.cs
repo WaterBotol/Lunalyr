@@ -159,8 +159,9 @@ public sealed class MusicVideoPlatformTests
     {
         using var folder = new TempFolder();
         var path = folder.File("youtube-key.bin");
-        // Invented, the shape of a Google API key only.
-        const string key = "AIzaSyTESTONLY0000000000000000000000000";
+        // Invented, the shape of a Google API key only. Built at run time so no key-shaped literal sits in the source
+        // (GitHub's secret scanning flagged the old literal, though it was never a real key).
+        var key = "AIza" + new string('0', 35);
         Assert.True(YouTubeApiKeyStore.LooksLikeKey(key));
         Assert.False(YouTubeApiKeyStore.LooksLikeKey("not a key"));
         Assert.False(YouTubeApiKeyStore.LooksLikeKey(key + "x"));
@@ -170,8 +171,8 @@ public sealed class MusicVideoPlatformTests
         Assert.True(store.Set(" " + key + " "));
         Assert.Equal(key, new YouTubeApiKeyStore(path).Key);
         var onDisk = File.ReadAllBytes(path);
-        Assert.DoesNotContain("AIzaSy", System.Text.Encoding.UTF8.GetString(onDisk), StringComparison.Ordinal);
-        Assert.DoesNotContain("AIzaSy", System.Text.Encoding.Unicode.GetString(onDisk), StringComparison.Ordinal);
+        Assert.DoesNotContain(key, System.Text.Encoding.UTF8.GetString(onDisk), StringComparison.Ordinal);
+        Assert.DoesNotContain(key, System.Text.Encoding.Unicode.GetString(onDisk), StringComparison.Ordinal);
         store.Clear();
         Assert.False(File.Exists(path));
         Assert.Null(new YouTubeApiKeyStore(path).Key);
