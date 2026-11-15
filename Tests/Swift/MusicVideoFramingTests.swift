@@ -1,5 +1,6 @@
 import AppKit
 import AVFoundation
+import SwiftUI
 import XCTest
 @testable import VersoCustom
 
@@ -160,6 +161,23 @@ final class MusicVideoFramingTests: XCTestCase {
         XCTAssertEqual(ambient.revealHold, whole.revealHold)
         XCTAssertEqual(ambient.youTubeOverscan, 1)
         XCTAssertEqual(ambient.videoGravity(contentAspect: hd, in: laptop), whole.videoGravity(contentAspect: hd, in: laptop))
+    }
+
+    /// A filled glow wider than the screen must not widen the wallpaper:
+    /// that pushed the centred video down and right (Test Build 112).
+    @MainActor
+    func testAmbientGlowNeverGrowsTheWallpaper() throws {
+        let context = try XCTUnwrap(CGContext(data: nil, width: 320, height: 90, bitsPerComponent: 8, bytesPerRow: 0,
+                                              space: CGColorSpaceCreateDeviceRGB(),
+                                              bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+        let ambience = MusicVideoAmbience()
+        ambience.present(try XCTUnwrap(context.makeImage()))
+        for screen in [CGSize(width: 1512, height: 982), CGSize(width: 800, height: 1400)] {
+            let host = NSHostingController(rootView: ZStack { MusicVideoAmbientGlow(ambience: ambience); Color.red.frame(width: 10, height: 10) })
+            let size = host.sizeThatFits(in: screen)
+            XCTAssertEqual(size.width, screen.width, accuracy: 0.5)
+            XCTAssertEqual(size.height, screen.height, accuracy: 0.5)
+        }
     }
 
     func testAmbientGlowIsSmallAndBlurred() throws {

@@ -66,6 +66,12 @@ final class MusicVideoAmbience {
         capture = nil
     }
 
+    /// Cross-fades to `glow`, an image already blurred.
+    func present(_ glow: CGImage) {
+        frame = glow
+        generation += 1
+    }
+
     private func sample() {
         guard !busy, let capture else { return }
         busy = true
@@ -77,8 +83,7 @@ final class MusicVideoAmbience {
                 guard let self else { return }
                 self.busy = false
                 guard let blurred, self.timer != nil else { return }
-                self.frame = blurred
-                self.generation += 1
+                self.present(blurred)
             }
         }
     }
@@ -111,17 +116,22 @@ struct MusicVideoAmbientGlow: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        ZStack {
-            if let frame = ambience.frame {
-                Image(decorative: frame, scale: 1).resizable().interpolation(.medium)
-                    .aspectRatio(contentMode: .fill)
-                    .id(ambience.generation)
-                    .transition(.opacity)
-                Color.black.opacity(MusicVideoAmbience.darkening)
+        // Clear takes exactly the space offered; the filled picture is an
+        // overlay, so it can never make the wallpaper wider or taller than
+        // the screen (which would push the centred video off-centre).
+        Color.clear
+            .overlay {
+                if let frame = ambience.frame {
+                    Image(decorative: frame, scale: 1).resizable().interpolation(.medium)
+                        .aspectRatio(contentMode: .fill)
+                        .id(ambience.generation)
+                        .transition(.opacity)
+                }
             }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .clipped()
+            .overlay {
+                if ambience.frame != nil { Color.black.opacity(MusicVideoAmbience.darkening) }
+            }
+            .clipped()
         .ignoresSafeArea()
         .animation(.easeInOut(duration: reduceMotion ? MusicVideoAmbience.reducedFade : MusicVideoAmbience.fade),
                    value: ambience.generation)
