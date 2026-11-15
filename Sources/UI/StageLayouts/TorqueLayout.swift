@@ -142,6 +142,8 @@ extension StageLyricView {
                 .background { tileBackground(tile, size: size) }
             }
             .wordAction(accent(run), start: run.start, time: time, size: size, glow: sample.glow)
+            // Word presence, about the word and its thick edge, with its action.
+            .modifier(presence(run, size: size, speed: 1, live: !plan.lineTimed))
             .font(font(size, hero: true, id: run.id))
             .lineLimit(1).minimumScaleFactor(0.35)
             .frame(maxWidth: stage.width * 0.8)

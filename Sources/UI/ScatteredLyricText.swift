@@ -96,13 +96,20 @@ struct WordEntrance: ViewModifier {
     /// phrases turn less: 12 degrees at the ends of a wide label is a swing
     /// of several lines.
     let maxTurn: Double
+    /// Word presence (`WordPresence`): 1 draws the entrance as it always
+    /// was. Only the word-timed flow and rolling layouts pass more.
+    let presence: Double
+    /// A soft entrance (Soft focus) also rises and grows into place at a
+    /// presence above 1; a rolling stage's faint preview does not.
+    let softRise: Bool
     @Environment(\.lyricReduceMotion) private var reduceMotion
     @Environment(\.lyricSwipePalette) private var swipePalette
     init(progress: Double, style: WordArrival, size: CGFloat, direction: Double,
-         visibility: Double? = nil, arrival: Double? = nil, maxTurn: Double = 12) {
+         visibility: Double? = nil, arrival: Double? = nil, maxTurn: Double = 12,
+         presence: Double = 1, softRise: Bool = true) {
         self.progress = progress; self.style = style; self.size = size
         self.direction = direction; self.visibility = visibility; self.arrival = arrival
-        self.maxTurn = maxTurn
+        self.maxTurn = maxTurn; self.presence = presence; self.softRise = softRise
     }
     /// Where an entrance has the word on this frame. Shared with layouts
     /// that must leave room for it (`RollingStack`), so the room reserved and
@@ -119,28 +126,44 @@ struct WordEntrance: ViewModifier {
         var eased: Double = 1
     }
 
+    /// `presence` is the word presence strength (`WordPresence`): travel,
+    /// turn and the pop's shrink grow by its entrance factor, and Soft
+    /// focus, which has no travel of its own, rises and grows into place
+    /// (unless `softRise` is false). At 1 this is the entrance as it was.
     static func transform(progress: Double, arrival: Double?, style: WordArrival, size: CGFloat,
-                          direction: Double, reduceMotion: Bool, maxTurn: Double = 12) -> Transform {
+                          direction: Double, reduceMotion: Bool, maxTurn: Double = 12,
+                          presence: Double = 1, softRise: Bool = true) -> Transform {
         guard !reduceMotion else { return Transform() }
         let paper = style.isCutout
         let eased = paper || style.isSwipe ? progress : (arrival ?? vc_motion_ease(progress))
         let remaining = 1 - eased
-        return Transform(
+        let strength = WordPresence.clamped(presence)
+        let k = CGFloat(WordPresence.entrance(strength))
+        var transform = Transform(
             offset: CGSize(width: style == .orbit || style == .glide || style == .cutoutSlide
-                               ? CGFloat(remaining * direction) * size * (style == .orbit ? 0.32 : 0.72) : 0,
+                               ? CGFloat(remaining * direction) * size * (style == .orbit ? 0.32 : 0.72) * k : 0,
                            height: style == .lift || style == .glide || style == .orbit
-                               ? CGFloat(remaining) * size * (style == .lift ? 0.48 : 0.20) : 0),
-            turn: style == .orbit || style == .cutoutSlide ? remaining * direction * min(12, max(0, maxTurn)) : 0,
-            scale: style == .pop || paper ? 0.76 + 0.24 * CGFloat(eased) : 1,
+                               ? CGFloat(remaining) * size * (style == .lift ? 0.48 : 0.20) * k : 0),
+            turn: style == .orbit || style == .cutoutSlide
+                ? remaining * direction * min(12, max(0, maxTurn)) * Double(k) : 0,
+            // The pop's shrink, 0.24 of the word, grows by the entrance factor.
+            scale: style == .pop || paper ? 0.76 + 0.24 * CGFloat(eased) - 0.24 * CGFloat(remaining) * (k - 1) : 1,
             fold: style == .unfold || style == .cutoutFold ? (paper ? -30 : -48) * remaining : 0,
             eased: eased)
+        if style == .fade && softRise && strength > 1 {
+            transform.offset.height += CGFloat(WordPresence.softRise(strength, eased: eased)) * size
+            transform.scale *= CGFloat(WordPresence.softScale(strength, eased: eased))
+        }
+        return transform
     }
 
     func body(content: Content) -> some View {
         let paper = style.isCutout
         let motion = Self.transform(progress: progress, arrival: arrival, style: style, size: size,
-                                    direction: direction, reduceMotion: reduceMotion, maxTurn: maxTurn)
-        let blur = reduceMotion ? 0 : max(0, 1 - progress) * (style == .fade ? 3.5 : 2.5)
+                                    direction: direction, reduceMotion: reduceMotion, maxTurn: maxTurn,
+                                    presence: presence, softRise: softRise)
+        let blur = reduceMotion ? 0
+            : max(0, 1 - progress) * (style == .fade ? 3.5 : 2.5) * WordPresence.entrance(presence)
         Group {
             if paper && motion.eased < 1 {
                 content.mask {
@@ -621,6 +644,7 @@ struct ScatteredLyricText: View {
     @Environment(\.lyricReduceMotion) private var reduceMotion
     @Environment(\.lyricInk) private var ink
     @Environment(\.lyricWordAccents) private var accents
+    @Environment(\.lyricWordPresence) private var wordPresence
 
     var body: some View {
         let key = ScatteredTypography.Key(words: words, baseSize: baseSize, style: style, mood: mood,
@@ -731,18 +755,21 @@ struct ScatteredLyricText: View {
     private func runView(_ run: ScatteredTypography.Run, frame: ScatteredRunFrame, arrival: WordArrival, leave: Double,
                          idle: Double, floatTime: Double, accent: WordAccent? = nil, onset: Double = 0) -> some View {
         let index = run.index
+        // Word presence: Reduce Motion keeps every word as it was.
+        let presence = WordPresence.effective(wordPresence, reduceMotion: reduceMotion)
         // A word symbol fades in from the onset; a preview shows none.
         let symbolOpacity = frame.presentation.preview ? 0 : WordSymbolMark.opacity(elapsed: time - onset)
         // The float and the exit sit outside the equatable ink, so a settled
         // word's glyph tree is reused and only its layer moves. They also sit
         // inside the slot, so the constellation's anchors never drift.
         return ScatteredRunInk(run: run, frame: frame, arrival: arrival, settles: composition != .echo,
-                               symbol: accent?.symbol, symbolOpacity: symbolOpacity)
+                               symbol: accent?.symbol, symbolOpacity: symbolOpacity, presence: presence)
             .equatable()
             // An action word's motion, over its entrance and inside its slot.
             .wordAction(accent, start: onset, time: time, size: run.metrics.size, glow: frame.ink.glow)
             .modifier(WordFloat(drift: vc_idle_drift(run.seed, floatTime, idle), leave: leave,
-                                size: run.metrics.size, seed: run.seed, reduceMotion: reduceMotion))
+                                size: run.metrics.size, seed: run.seed, reduceMotion: reduceMotion,
+                                presence: presence))
             .background {
                 Color.clear.anchorPreference(key: WordAnchorKey.self, value: .bounds) { anchor in
                     composition.hasConnections ? [index: anchor] : [:]
@@ -893,8 +920,13 @@ struct ScatteredRunFrame: Equatable {
 
     /// How much the word in focus grows. With Reduce Motion nothing zooms:
     /// emphasis is carried by brightness and glow alone.
-    static func swell(heat: Double, glow: Double, gesture: Double, reduceMotion: Bool) -> CGFloat {
-        reduceMotion ? 1 : (1 + 0.07 * CGFloat(heat) + 0.03 * CGFloat(glow)) * CGFloat(gesture)
+    /// At a word presence above 1 (`WordPresence.hold`) the swell's growth
+    /// is stronger; `CappedGrowth` still caps it to the word's inset.
+    static func swell(heat: Double, glow: Double, gesture: Double, reduceMotion: Bool,
+                      presence: Double = 1) -> CGFloat {
+        guard !reduceMotion else { return 1 }
+        let swell = (1 + 0.07 * CGFloat(heat) + 0.03 * CGFloat(glow)) * CGFloat(gesture)
+        return CGFloat(WordPresence.about1(Double(swell), WordPresence.hold(presence)))
     }
 
     @MainActor
@@ -968,10 +1000,12 @@ private struct ScatteredRunInk: View, Equatable {
     /// frame so the slot measures it, and shown at `symbolOpacity`.
     var symbol: String? = nil
     var symbolOpacity = 0.0
+    /// Word presence (`WordPresence`), already 1 under Reduce Motion.
+    var presence = 1.0
     @Environment(\.lyricReduceMotion) private var reduceMotion
     static func == (lhs: Self, rhs: Self) -> Bool {
         lhs.run == rhs.run && lhs.frame == rhs.frame && lhs.arrival == rhs.arrival && lhs.settles == rhs.settles
-            && lhs.symbol == rhs.symbol && lhs.symbolOpacity == rhs.symbolOpacity
+            && lhs.symbol == rhs.symbol && lhs.symbolOpacity == rhs.symbolOpacity && lhs.presence == rhs.presence
     }
     var body: some View {
         let size = run.metrics.size
@@ -990,7 +1024,8 @@ private struct ScatteredRunInk: View, Equatable {
                 .fixedSize(horizontal: symbol != nil, vertical: false)
                 run.reading?.revealing(frame.readingReveal).tinted(frame.ink.reading).opacity(frame.readingOpacity)
             }
-            .modifier(Self.Motion(run: run, frame: frame, arrival: arrival, settles: settles, reduceMotion: reduceMotion))
+            .modifier(Self.Motion(run: run, frame: frame, arrival: arrival, settles: settles, reduceMotion: reduceMotion,
+                                  presence: presence))
         }
     }
 
@@ -1027,26 +1062,32 @@ private struct ScatteredRunInk: View, Equatable {
         let arrival: WordArrival
         let settles: Bool
         let reduceMotion: Bool
+        /// Word presence (`WordPresence`): a stronger entrance, hold and glow.
+        var presence = 1.0
 
         func body(content: Content) -> some View {
             let size = run.metrics.size
             let heat = CGFloat(min(1, frame.heat))
             let tiled = frame.highlight?.strength ?? 0
+            let hold = WordPresence.hold(presence), glow = WordPresence.glow(presence)
             content
                 .rotationEffect(.degrees(run.metrics.rotation))
                 .modifier(CappedGrowth(scale: ScatteredRunFrame.swell(heat: frame.heat, glow: frame.glow,
-                                       gesture: frame.driftScale, reduceMotion: reduceMotion), inset: run.inset.width))
-                .rotationEffect(.degrees(reduceMotion ? 0 : frame.driftAngle))
-                .offset(x: reduceMotion ? 0 : CGFloat(frame.driftX) * size,
-                        y: reduceMotion ? 0 : CGFloat(frame.driftY) * size)
+                                       gesture: frame.driftScale, reduceMotion: reduceMotion, presence: presence),
+                                       inset: run.inset.width))
+                .rotationEffect(.degrees(reduceMotion ? 0 : frame.driftAngle * hold))
+                .offset(x: reduceMotion ? 0 : CGFloat(frame.driftX * hold) * size,
+                        y: reduceMotion ? 0 : CGFloat(frame.driftY * hold) * size)
                 .modifier(WordEntrance(progress: frame.presentation.progress, style: arrival,
                     // Words come in along the reading direction: from the
                     // right, or from the left in a right-to-left line.
                     size: size, direction: run.rightToLeft ? -1 : 1,
                     visibility: frame.presentation.opacity,
-                    arrival: settles ? min(1, frame.presentation.arrival) : frame.presentation.arrival))
-                .modifier(OptionalGlow(colour: frame.ink.glow, strength: 0.45 * frame.glow * frame.fill * (1 - tiled),
-                                       radius: 10 + 22 * frame.glow))
+                    arrival: settles ? min(1, frame.presentation.arrival) : frame.presentation.arrival,
+                    presence: presence))
+                .modifier(OptionalGlow(colour: frame.ink.glow,
+                                       strength: 0.45 * frame.glow * frame.fill * (1 - tiled) * glow,
+                                       radius: 10 + 22 * frame.glow * glow))
                 .lyricShadow(0.28 + 0.24 * heat, radius: 7 + 12 * heat, y: 2)
         }
     }

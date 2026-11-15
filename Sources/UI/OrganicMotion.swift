@@ -429,23 +429,27 @@ struct WordFloat: ViewModifier, Equatable {
     var seed: UInt64
     /// Reduce Motion: the exit is a plain fade, with no drift or blur.
     var reduceMotion = false
+    /// Word presence (`WordPresence.exit`): the exit's rise, shrink, tilt
+    /// and blur grow by its factor. 1 is the exit as it was.
+    var presence = 1.0
 
     static func == (lhs: Self, rhs: Self) -> Bool {
         lhs.drift.x == rhs.drift.x && lhs.drift.y == rhs.drift.y && lhs.drift.angle == rhs.drift.angle
             && lhs.drift.scale == rhs.drift.scale && lhs.leave == rhs.leave && lhs.size == rhs.size
-            && lhs.reduceMotion == rhs.reduceMotion
+            && lhs.reduceMotion == rhs.reduceMotion && lhs.presence == rhs.presence
     }
 
     func body(content: Content) -> some View {
         // Each word leaves along its own slight diagonal, not as a block.
         let lateral = vc_jitter(seed, 12) * 0.10
         let travel = reduceMotion ? 0 : leave
+        let k = reduceMotion ? 1 : WordPresence.exit(presence)
         content
-            .scaleEffect(drift.scale * (1 - 0.04 * travel))
-            .rotationEffect(.degrees(drift.angle + vc_jitter(seed, 13) * 3 * travel))
+            .scaleEffect(drift.scale * (1 - 0.04 * k * travel))
+            .rotationEffect(.degrees(drift.angle + vc_jitter(seed, 13) * 3 * k * travel))
             .offset(x: (CGFloat(drift.x) + CGFloat(lateral * travel)) * size,
-                    y: (CGFloat(drift.y) - 0.26 * CGFloat(travel)) * size)
-            .blur(radius: 2.4 * travel)
+                    y: (CGFloat(drift.y) - 0.26 * CGFloat(k) * CGFloat(travel)) * size)
+            .blur(radius: 2.4 * k * travel)
             .opacity(1 - leave)
     }
 }

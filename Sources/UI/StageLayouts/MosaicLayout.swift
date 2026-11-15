@@ -218,6 +218,10 @@ extension StageLyricView {
                             .lyricShadow(0.28, radius: 8, y: 3)
                         }
                     }
+                    // Word presence on the big words; the letter-by-letter
+                    // kind keeps its own motion.
+                    .modifier(presence(run, size: unit * (kinds[run.id] == 0 ? 3.0 : 2.3), speed: speed,
+                                       live: kinds[run.id] != 2))
                     .scaleEffect(morph.bigScale)
                     .opacity(min(1, a * 1.6) * morph.bigOpacity)
                     // The small version it becomes, taking over once the big one has
