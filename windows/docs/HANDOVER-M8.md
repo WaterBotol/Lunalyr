@@ -4,7 +4,7 @@ Written at the end of milestone 7 (`next/windows` e6193e5, Test Build 7). For a 
 
 ## Where things are
 
-- **Brief:** `%USERPROFILE%\Downloads\WINDOWS-PORT-PROMPT.md`. Read it whole; its hard rules come first.
+- **Brief:** `%USERPROFILE%\Downloads\WINDOWS-PORT-PROMPT.md` (on the owner's PC). Read it whole; its hard rules come first.
 - **Repo:** `C:\dev\Lunalyr-Windows-2`, integration branch `next/windows`. Work on branches (worktrees for parallel
   agents), merge into `next/windows`. Never push, publish, or create a GitHub repo or release without the owner's OK
   in chat. Small commits ending `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.

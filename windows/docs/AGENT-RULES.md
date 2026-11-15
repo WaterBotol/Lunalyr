@@ -50,7 +50,7 @@ Read this whole file before doing anything. These rules come from the owner and 
   more, add them in your own file (`LyricLine` and `LyricQuery` are partial) and say so in your report.
 - Logging: `Lunalyr.Core.Logging.Logger` (categories include `Lyrics`, `Sync`). Use `Logger.Null` in tests.
 - Each PowerShell call starts with a fresh PATH: begin with
-  `. <scratchpad>\env.ps1;`
+  the PATH setup in `docs/HANDOVER-M8.md` ("Shell setup").
 - Build/test from your worktree root: `dotnet build Lunalyr.slnx` then `dotnet test --solution Lunalyr.slnx`.
   `TreatWarningsAsErrors` is on. Output goes to your worktree's own `artifacts/`.
 - No new NuGet packages unless essential. If you add one, add its version to `Directory.Packages.props`, make sure it
