@@ -157,6 +157,8 @@ struct WordEntrance: ViewModifier {
         return transform
     }
 
+    @Environment(\.lyricLivelyGlyphs) private var lively
+
     func body(content: Content) -> some View {
         let paper = style.isCutout
         let motion = Self.transform(progress: progress, arrival: arrival, style: style, size: size,
@@ -167,8 +169,13 @@ struct WordEntrance: ViewModifier {
         Group {
             if paper && motion.eased < 1 {
                 content.mask {
+                    // PREVIEW: a lively action word's letters may leave the
+                    // word's box (hops, drips, dust) while the label still folds in.
+                    let pad = (lively?.size ?? 0) * 2.5
                     Rectangle().scaleEffect(x: 0.88 + 0.12 * motion.eased, y: 1,
                         anchor: direction >= 0 ? .leading : .trailing)
+                        .padding(.vertical, -pad)
+                        .padding(direction >= 0 ? .leading : .trailing, -pad)
                 }
             } else {
                 content

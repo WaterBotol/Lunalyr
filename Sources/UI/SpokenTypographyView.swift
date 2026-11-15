@@ -288,7 +288,7 @@ struct SpokenTypographyView: View {
             .rotationEffect(.degrees(state.drawAngle))
             // An action word's motion: outside the stage fit, which measures
             // where the stack placed the word, never where it moves to.
-            .wordAction(wordAccent, start: token.source.start, time: time, size: token.pointSize, glow: colours.glow)
+            .wordAction(wordAccent, start: token.source.start, end: token.source.end, time: time, size: token.pointSize, glow: colours.glow)
             .blur(radius: state.pose.blur)
             .lyricShadow(0.25, radius: 7, y: 2)
             .layoutValue(key: RollingSlotKey.self, value: state.slot)
@@ -533,6 +533,7 @@ struct RollingUnit: View {
                 .overlay {
                     content(colour: tileText, sung: tileText, tint: 0,
                             reading: tileText.opacity(LyricHighlight.readingOpacity))
+                        .environment(\.lyricLivelyParticles, false)
                         .mask { TileMask(tile: tile, rightToLeft: token.rightToLeft) }
                 }
         } else {
@@ -765,17 +766,22 @@ private struct RollingWordText: View {
     let sung: Color
     let tint: Double
     let rightToLeft: Bool
+    /// PREVIEW: a lively action word's letters (`LivelyGlyphHook`).
+    @Environment(\.lyricLivelyGlyphs) private var lively
 
     var body: some View {
         ZStack {
             if tint < 1 {
                 Text(text).font(font).foregroundStyle(colour)
                     .lineLimit(1).fixedSize(horizontal: true, vertical: true)
+                    .modifier(LivelyGlyphHook(particles: true))
             }
             if tint > 0 {
                 Text(text).font(font).foregroundStyle(sung)
                     .lineLimit(1).fixedSize(horizontal: true, vertical: true)
-                    .mask(LyricSweepMask(progress: tint, rightToLeft: rightToLeft, feather: LyricSweepMask.colourFeather))
+                    .modifier(LivelyGlyphHook(particles: tint >= 1))
+                    .livelySweepMask(progress: tint, rightToLeft: rightToLeft, feather: LyricSweepMask.colourFeather,
+                                     active: lively != nil, pad: (lively?.size ?? 0) * 2.5)
             }
         }
     }

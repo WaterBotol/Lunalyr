@@ -142,8 +142,34 @@ enum WordAction: String, CaseIterable, Identifiable {
     case flicker
     /// A cool, paler frost tint.
     case frost
+    // PREVIEW (next/action-words-preview): new actions. Today's motion
+    // (`WordActionPose.make`) leaves them still; only the lively style
+    // (`LivelyAction`) moves them.
+    /// Ink runs down from the letters in thin drips.
+    case bleed
+    /// A shadow swallows the word from one edge, then light returns.
+    case dark
+    /// Letters crack into shards and snap back.
+    case shatter
+    /// Letters droop and drip, then firm up.
+    case melt
+    /// Fading copies trail behind the word.
+    case echo
+    /// A double thump like a heartbeat.
+    case pulse
+    /// A sine wave rolls through the letters.
+    case wave
+    /// Sinks below the line with a few bubbles.
+    case sink
+    // Brainstorm candidates rendered for the preview but not listed by default.
+    case explode, scream, whisper, ghost, glow, electric
 
     var id: String { rawValue }
+
+    /// The actions today's app has (the rest are preview-only).
+    static let today: [WordAction] = [.spin, .float, .dip, .shake, .hop, .grow, .shrink, .dissolve, .flicker, .frost]
+    /// Brainstorm actions previewed but dropped from the default list.
+    static let dropped: [WordAction] = [.explode, .scream, .whisper, .ghost, .glow, .electric]
 
     var title: String {
         switch self {
@@ -156,7 +182,21 @@ enum WordAction: String, CaseIterable, Identifiable {
         case .shrink: return "Shrink"
         case .dissolve: return "Dissolve"
         case .flicker: return "Warm flicker"
-        case .frost: return "Frost"
+        case .frost: return "Freeze"
+        case .bleed: return "Bleed"
+        case .dark: return "Dark"
+        case .shatter: return "Shatter"
+        case .melt: return "Melt"
+        case .echo: return "Echo"
+        case .pulse: return "Heartbeat"
+        case .wave: return "Wave"
+        case .sink: return "Sink"
+        case .explode: return "Explode"
+        case .scream: return "Scream"
+        case .whisper: return "Whisper"
+        case .ghost: return "Ghost"
+        case .glow: return "Glow"
+        case .electric: return "Electric"
         }
     }
 
@@ -166,7 +206,7 @@ enum WordAction: String, CaseIterable, Identifiable {
         case .shake: return 0.6
         case .dip, .hop: return 0.7
         case .spin, .grow, .shrink: return 0.8
-        case .float, .dissolve, .flicker, .frost: return 0.9
+        default: return 0.9
         }
     }
 
@@ -181,7 +221,28 @@ enum WordAction: String, CaseIterable, Identifiable {
         ("shrink", .shrink),
         ("fade", .dissolve), ("disappear", .dissolve), ("vanish", .dissolve),
         ("burn", .flicker), ("fire", .flicker),
-        ("freeze", .frost), ("frozen", .frost), ("cold", .frost),
+        ("freeze", .frost), ("frozen", .frost), ("froze", .frost), ("cold", .frost), ("ice", .frost), ("icy", .frost),
+        // PREVIEW: the new actions. Plurals, -ing and -ed fold through
+        // `englishForms` (bleeds, melting, echoes, shattered, drowning);
+        // irregular forms are listed.
+        ("bleed", .bleed), ("bled", .bleed), ("blood", .bleed),
+        ("dark", .dark), ("darker", .dark), ("darkness", .dark), ("shadow", .dark),
+        ("break", .shatter), ("broken", .shatter), ("shatter", .shatter), ("crack", .shatter),
+        ("melt", .melt),
+        ("echo", .echo),
+        ("heartbeat", .pulse), ("pulse", .pulse), ("beat", .pulse),
+        ("wave", .wave), ("ocean", .wave), ("sea", .wave), ("tide", .wave),
+        ("sink", .sink), ("drown", .sink),
+    ]
+
+    /// PREVIEW: the dropped brainstorm actions' words, for the renders only.
+    static let droppedList: [(word: String, action: WordAction)] = [
+        ("explode", .explode), ("explosion", .explode), ("boom", .explode), ("bang", .explode),
+        ("scream", .scream), ("shout", .scream), ("yell", .scream), ("loud", .scream),
+        ("whisper", .whisper), ("quiet", .whisper), ("softly", .whisper),
+        ("ghost", .ghost), ("haunt", .ghost),
+        ("glow", .glow), ("shine", .glow), ("bright", .glow), ("light", .glow),
+        ("electric", .electric), ("shock", .electric), ("spark", .electric),
     ]
 
     static let defaults: [String: String] =
@@ -342,7 +403,8 @@ struct WordActionPose: Equatable {
     /// own ink (warmer or cooler for the colour actions) and settles back.
     static func make(_ action: WordAction, elapsed: Double, reduceMotion: Bool) -> WordActionPose {
         let duration = action.duration
-        guard elapsed > 0, elapsed < duration else { return .identity }
+        // PREVIEW: the new actions have no motion today.
+        guard elapsed > 0, elapsed < duration, WordAction.today.contains(action) else { return .identity }
         let p = elapsed / duration
         var pose = WordActionPose()
         if reduceMotion {
@@ -380,6 +442,8 @@ struct WordActionPose: Equatable {
             pose.opacity = 1 - 0.12 * heat * abs(sin(2 * .pi * 7.3 * p))
         case .frost:
             pose.cool = 0.7 * bump(p, rise: 0.25, fall: 0.4)
+        default:
+            break
         }
         return pose
     }
@@ -403,9 +467,24 @@ struct WordActionEffect: ViewModifier {
     var glow: Color = .white
     @Environment(\.lyricReduceMotion) private var reduceMotion
 
+    /// PREVIEW: seconds the word is held (end − onset), so the lively style
+    /// can scale with it.
+    var hold: Double? = nil
+    @Environment(\.lyricWordActionStyle) private var style
+
     func body(content: Content) -> some View {
+        if case .lively(let amount) = style {
+            content.modifier(LivelyActionEffect(action: action, elapsed: elapsed,
+                                                hold: hold ?? 0.6,
+                                                amount: amount, size: size, glow: glow, reduceMotion: reduceMotion))
+        } else {
+            today(content)
+        }
+    }
+
+    private func today(_ content: Content) -> some View {
         let pose = WordActionPose.make(action, elapsed: elapsed, reduceMotion: reduceMotion)
-        content
+        return content
             .colorMultiply(pose.multiply)
             .shadow(color: glow.opacity(0.75 * pose.glow), radius: max(1, size * 0.22 * CGFloat(pose.glow)))
             // The turn about the upright axis as a flat 2D squeeze (cos of
@@ -419,9 +498,11 @@ struct WordActionEffect: ViewModifier {
 extension View {
     /// `accent`'s action, if any, from the word's onset `start`.
     @ViewBuilder
-    func wordAction(_ accent: WordAccent?, start: Double, time: Double, size: CGFloat, glow: Color = .white) -> some View {
+    func wordAction(_ accent: WordAccent?, start: Double, end: Double? = nil, time: Double, size: CGFloat,
+                    glow: Color = .white) -> some View {
         if let action = accent?.action {
-            modifier(WordActionEffect(action: action, elapsed: time - start, size: size, glow: glow))
+            modifier(WordActionEffect(action: action, elapsed: time - start, size: size, glow: glow,
+                                      hold: end.map { $0 - start }))
         } else {
             self
         }

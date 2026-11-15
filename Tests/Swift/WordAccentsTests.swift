@@ -92,7 +92,7 @@ final class WordAccentsTests: XCTestCase {
         XCTAssertEqual(WordAction.defaults.count, WordAction.defaultList.count, "no word twice")
         XCTAssertEqual(WordAction.defaults["spin"], "spin")
         XCTAssertEqual(WordAction.defaults["cold"], "frost")
-        XCTAssertEqual(Set(WordAction.defaultList.map(\.action)), Set(WordAction.allCases), "every action is used")
+        XCTAssertEqual(Set(WordAction.defaultList.map(\.action)), Set(WordAction.allCases).subtracting(WordAction.dropped), "every action is used")
     }
 
     // MARK: Caps
@@ -163,7 +163,7 @@ final class WordAccentsTests: XCTestCase {
     // MARK: Motion
 
     func testEveryActionReturnsExactlyToRest() {
-        for action in WordAction.allCases {
+        for action in WordAction.today {
             XCTAssertTrue((0.6...0.9).contains(action.duration), "\(action)")
             for reduce in [false, true] {
                 for elapsed in [-1, -0.001, 0, action.duration, action.duration + 0.001, 5] {
@@ -185,7 +185,7 @@ final class WordAccentsTests: XCTestCase {
     }
 
     func testReduceMotionIsAColourCueOnly() {
-        for action in WordAction.allCases {
+        for action in WordAction.today {
             for step in 0...90 {
                 let pose = WordActionPose.make(action, elapsed: Double(step) / 100, reduceMotion: true)
                 XCTAssertEqual(pose.dx, 0); XCTAssertEqual(pose.dy, 0); XCTAssertEqual(pose.turn, 0)
@@ -204,7 +204,7 @@ final class WordAccentsTests: XCTestCase {
     }
 
     func testTintsNeverLighten() {
-        for action in WordAction.allCases {
+        for action in WordAction.today {
             for step in 0...90 {
                 let pose = WordActionPose.make(action, elapsed: Double(step) / 100, reduceMotion: step.isMultiple(of: 2))
                 let rgb = NSColor(pose.multiply).usingColorSpace(.sRGB)!
