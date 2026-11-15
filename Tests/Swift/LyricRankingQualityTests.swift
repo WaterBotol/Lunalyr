@@ -415,4 +415,54 @@ final class LyricRankingQualityTests: XCTestCase {
         XCTAssertTrue(LyricsFetcher.isAppleRelay(ranked[0]))
         XCTAssertEqual(LyricsFetcher.traceLead(ranked[0]), 1)
     }
+
+    // MARK: - Automatic lookups and searches
+
+    /// An automatic choice is saved for two weeks; a search asks again. A
+    /// source that could have beaten the choice but gave no answer (timed
+    /// out, failed, paused) leaves it unsaved, so automatic lookups do not
+    /// keep showing less than a search finds.
+    func testAChoiceASilentBetterSourceMightHaveBeatenIsNotSaved() async throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("unsaved-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let qq = candidate(.qqMusic, Self.lines(LyricRankingFixtures.qrcLatin), provenance: "QQ Music")
+        let musixmatch = candidate(.musixmatch, Self.lines(LyricRankingFixtures.qrcLatin), provenance: "Musixmatch")
+        let timing = LyricsFetcher.Timing(grace: 0.2, upgradeSettle: 0.1, appleRetry: 0.3, lrclibLimit: 3, sourceLimit: 3)
+        let order = options([.musixmatch, .qqMusic, .sodaMusic])
+        struct Down: Error {}
+        // Musixmatch fails and Soda Music fails: QQ shows, but is not saved (Musixmatch leads it).
+        let first = await LyricsFetcher(cacheFolder: folder, timing: timing, isOnline: { true }) { id, _, _ in
+            if id == .qqMusic { return qq }
+            throw Down()
+        }.lookup(query, options: order)
+        XCTAssertEqual(first.candidates.first?.source, .qqMusic)
+        // The next automatic lookup asks again and finds Musixmatch's.
+        let second = await LyricsFetcher(cacheFolder: folder, timing: timing, isOnline: { true }) { id, _, _ in
+            id == .qqMusic ? qq : id == .musixmatch ? musixmatch : nil
+        }.lookup(query, options: order)
+        XCTAssertFalse(second.cached)
+        guard case .synced(_, let provenance)? = second.result else { return XCTFail("nothing shown") }
+        XCTAssertEqual(provenance.source, "Musixmatch")
+        // Musixmatch answered this time, so its choice is saved and replayed without asking.
+        let third = await LyricsFetcher(cacheFolder: folder, timing: timing, isOnline: { true }) { _, _, _ in nil }.lookup(query, options: order)
+        XCTAssertTrue(third.cached)
+        XCTAssertTrue(LyricsFetcher.sameResult(third.result, second.result))
+    }
+
+    func testASourceThatCouldOnlyTieDoesNotHoldBackSaving() async {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("tie-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let qq = candidate(.qqMusic, Self.lines(LyricRankingFixtures.qrcLatin), provenance: "QQ Music")
+        let timing = LyricsFetcher.Timing(grace: 0.2, upgradeSettle: 0.1, appleRetry: 0.3, lrclibLimit: 3, sourceLimit: 3)
+        let order = options([.qqMusic, .sodaMusic], .priority)
+        struct Down: Error {}
+        _ = await LyricsFetcher(cacheFolder: folder, timing: timing, isOnline: { true }) { id, _, _ in
+            if id == .qqMusic { return qq }
+            throw Down()
+        }.lookup(query, options: order)
+        let again = await LyricsFetcher(cacheFolder: folder, timing: timing, isOnline: { true }) { _, _, _ in nil }.lookup(query, options: order)
+        XCTAssertTrue(again.cached, "Soda Music leads no better than QQ: the choice stands")
+        XCTAssertTrue(LyricsFetcher.couldOutlead(qq, from: .musixmatch, query: query))
+        XCTAssertFalse(LyricsFetcher.couldOutlead(qq, from: .sodaMusic, query: query))
+    }
 }

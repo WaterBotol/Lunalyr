@@ -173,6 +173,12 @@ final class LyricsFetcher {
                 // Its artist's language is being learnt in the background; the next lookup decides.
                 LyricTrace.emit(LyricTraceEvent(kind: .cache, source: best.source.rawValue,
                                                 message: "online choice not saved: the artist's language is not known yet"))
+            } else if let missing = Self.unansweredRival(best, collected: collected, query: query, options: options,
+                                                         among: report.candidates.filter { !$0.source.isLocal }) {
+                // Saved, it would stand for two weeks without asking again,
+                // while a search would find the better match.
+                LyricTrace.emit(LyricTraceEvent(kind: .cache, source: best.source.rawValue,
+                                                message: "online choice not saved: \(missing.rawValue), which could have beaten it, did not answer"))
             } else if Self.isSettled(best, pending: collected.stopped.filter { !$0.isLocal }, query: query, options: options,
                                      among: report.candidates.filter { !$0.source.isLocal }) {
                 SavedLyrics.save(best, key: key, in: cacheFolder)
@@ -191,6 +197,31 @@ final class LyricsFetcher {
             misses.insert(key, sources: replied, rejected: report.rejected.map(\.candidate).filter { replied.contains($0.source) })
         }
         return report
+    }
+    /// An online source that was asked but gave no answer (it timed out,
+    /// failed or was paused) whose answer could have led `best`: a higher
+    /// timing, or a better lead at its timing (`couldOutlead`), or word
+    /// timing for a leading text in hand (`couldLendTiming`). The choice is
+    /// then not saved, so the next automatic lookup asks again. Sources
+    /// that could only win a tie-break do not count, so one that keeps
+    /// failing does not stop every choice being saved.
+    private static func unansweredRival(_ best: LyricCandidate, collected: Collected, query: LyricQuery,
+                                        options: LyricSourceOptions.Snapshot, among found: [LyricCandidate]) -> LyricSourceID? {
+        let failed = collected.asked.subtracting(collected.answered).subtracting(collected.stopped).filter { !$0.isLocal }
+        return failed.sorted { $0.rawValue < $1.rawValue }.first {
+            couldOutlead(best, from: $0, query: query)
+                || couldLendTiming(best, from: $0, among: found, query: query, options: options)
+        }
+    }
+    /// Whether the best answer `source` could give would rank above `best`
+    /// on timing, version or lead alone, before any tie-break (`couldBeat`).
+    static func couldOutlead(_ best: LyricCandidate, from source: LyricSourceID, query: LyricQuery) -> Bool {
+        guard source != best.source else { return false }
+        let timing = rankedTiming(best.result), ceiling = min(source.timingCeiling, 2)
+        if (ceiling > 0) != (timing > 0) { return ceiling > 0 }
+        if timing > 0, !fitsVersion(best, query) { return true }
+        if ceiling != timing { return ceiling > timing }
+        return lead(source, timing: timing) < lead(best, timing: timing)
     }
     /// Re-reads only the local lyric files after they change, keeping the
     /// online candidates already found. Nil when nothing relevant changed.
@@ -863,7 +894,14 @@ final class LyricsFetcher {
         case .lyrimuse: return try LocalLyricBridge.candidate(query, folder: localFolder)
         case .amll: return try await original { try await AMLLLyricsProvider.lookup($0) }
         // One lookup per song, under the names the player gave: no other-name or alias retries.
-        case .musixmatch: return try await MusixmatchLyricsProvider.lookup(query)
+        case .musixmatch:
+            let found = try await MusixmatchLyricsProvider.lookup(query)
+            // Paused after being turned away is no answer: not remembered as a
+            // miss, and no choice it might have beaten is saved.
+            if found == nil, let left = MusixmatchState.shared.blockedFor() {
+                throw LyricHTTP.Failure(message: "Musixmatch is paused for \(Int(left / 60) + 1) min after turning this Mac away")
+            }
+            return found
         // East Asian catalogues, which often index only an artist's native name.
         case .sodaMusic: return try await original { q in try await alias(q) { try await MoreLyricsProviders.sodaMusic($0) } }
         case .petitLyrics: return try await original { q in try await alias(q) { try await MoreLyricsProviders.petitLyrics($0) } }

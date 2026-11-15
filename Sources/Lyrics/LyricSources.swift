@@ -113,7 +113,10 @@ final class LyricSourceOptions: ObservableObject {
         /// is searched under its original title even when Latin-script
         /// lyrics (an English version) were found, and NetEase search works
         /// again (no cookies).
-        static let cachePolicy = "v16"
+        /// v17: word stamps spread evenly rank as line timing, a timeline
+        /// shifted to another recording ranks lower, and the leading text
+        /// timed by the line takes another match's word timing.
+        static let cachePolicy = "v17"
         /// Keys the cached online choice. Only settings that change which
         /// online result wins take part: local sources are always evaluated
         /// afresh.
