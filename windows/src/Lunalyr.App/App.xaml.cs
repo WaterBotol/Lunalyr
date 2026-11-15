@@ -60,10 +60,20 @@ public partial class App : Application
     /// <summary>Opens the settings window (at <paramref name="page"/> when given), or brings it to the front.</summary>
     internal void ShowSettingsWindow(string? page)
     {
+        // Left open on another virtual desktop, the window would stay there, cloaked, and nothing would appear: open a
+        // new one here, on the page it showed.
+        if (_window is not null && !Interop.VirtualDesktops.IsOnCurrentDesktop(Microsoft.UI.Win32Interop.GetWindowFromWindowId(_window.AppWindow.Id)))
+        {
+            var old = _window;
+            page ??= old.CurrentPage;
+            _window = null;
+            old.Close();
+        }
         if (_window is null)
         {
-            _window = new SettingsWindow(_host, page);
-            _window.Closed += (_, _) => _window = null;
+            var window = new SettingsWindow(_host, page);
+            window.Closed += (_, _) => { if (ReferenceEquals(_window, window)) _window = null; };
+            _window = window;
         }
         else if (page is not null)
         {

@@ -136,6 +136,9 @@ public sealed partial class SettingsWindow : Window
         _ctx.QueueRefresh();
     }
 
+    /// <summary>The page showing (its nav tag), or null before one is chosen.</summary>
+    internal string? CurrentPage => (Nav.SelectedItem as NavigationViewItem)?.Tag as string;
+
     private void Nav_SelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
     {
         if (args.SelectedItem is not NavigationViewItem item || PageTitle is null) return;
