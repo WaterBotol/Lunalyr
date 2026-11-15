@@ -40,6 +40,22 @@ enum OpeningTitle {
         return artwork
     }
 
+    /// The animated cover the card plays for `track`: the album's own,
+    /// whatever the Animated covers switch says (testers asked for it, Nov
+    /// 2026), unless the album is one the user left out of animated covers.
+    @MainActor
+    static func motionCover(_ motion: MotionArtworkProvider.Motion?, track: NowPlayingMonitor.Track?,
+                            settings: Settings) -> URL? {
+        guard let motion, isOn, showsCover, !settings.excludesMotion(artist: track?.artist, album: track?.album) else {
+            return nil
+        }
+        return motion.square
+    }
+
+    /// Whether the card wants the album's animated cover looked up, apart
+    /// from the wallpaper's own Animated covers.
+    static var wantsMotionCover: Bool { isOn && showsCover }
+
     // Type sizes, as shares of the title's own size (before a long title is
     // set smaller), so the hierarchy holds at every size.
     static let artistShare: CGFloat = 0.32
@@ -492,6 +508,12 @@ struct OpeningTitleCard: View {
     let reading: String?
     /// The album cover, or nil for none.
     var cover: NSImage? = nil
+    /// The album's animated cover (`NowPlayingMonitor.motionArtwork`), played
+    /// in the cover's place whatever the Animated covers switch says; the
+    /// still shows while it loads. Nil for none.
+    var motionCover: URL? = nil
+    /// The stage is paused: so is the animated cover.
+    var paused = false
     /// The lyric's base size on this screen.
     let baseSize: CGFloat
     let accent: Color
@@ -630,13 +652,7 @@ struct OpeningTitleCard: View {
             // The cover spans the words exactly: its top on the title's
             // cap height, its bottom on the last line's baseline.
             CoverBesideWords(gap: step.group, capHeight: titleSize * OpeningTitle.capHeightShare, maximum: width) {
-                Color.clear
-                    .overlay {
-                        Image(nsImage: cover)
-                            .resizable()
-                            .interpolation(.high)
-                            .aspectRatio(contentMode: .fill)
-                    }
+                TitleCover(still: cover, motion: animatedCover)
                     .clipShape(RoundedRectangle(cornerRadius: nominal * 0.1, style: .continuous))
                     .shadow(color: .black.opacity(0.45), radius: nominal * 0.12, y: nominal * 0.04)
                     .shadow(color: accent.opacity(0.55 * glow), radius: nominal * 0.32)
@@ -659,10 +675,7 @@ struct OpeningTitleCard: View {
         let arrival = reduceMotion ? reveal.title : Easing.smoothstep(reveal.title)
         return HStack(spacing: baseSize * 0.2) {
             if let cover {
-                Image(nsImage: cover)
-                    .resizable()
-                    .interpolation(.high)
-                    .aspectRatio(contentMode: .fill)
+                TitleCover(still: cover, motion: animatedCover)
                     .frame(width: side, height: side)
                     .clipShape(RoundedRectangle(cornerRadius: side * 0.14, style: .continuous))
                     .shadow(color: .black.opacity(0.4), radius: side * 0.08, y: side * 0.03)
@@ -692,6 +705,13 @@ struct OpeningTitleCard: View {
         .padding(.top, baseSize * OpeningTitle.rowMargin)
     }
 
+    /// The animated cover to play: none under Reduce Motion, where the
+    /// still stays (a looping picture is motion like any other).
+    private var animatedCover: (url: URL, paused: Bool)? {
+        guard let motionCover, !reduceMotion else { return nil }
+        return (motionCover, paused)
+    }
+
     /// A soft left-to-right wipe: `progress` 0 hides everything, 1 shows it all.
     private func wipe(_ progress: Double) -> some View {
         if reduceMotion { return LinearGradient(colors: [.black], startPoint: .leading, endPoint: .trailing) }
@@ -700,6 +720,31 @@ struct OpeningTitleCard: View {
         return LinearGradient(stops: [.init(color: .black, location: max(0, edge)),
                                       .init(color: .clear, location: min(1, max(0.0001, edge + soft)))],
                               startPoint: .leading, endPoint: .trailing)
+    }
+}
+
+/// The card's cover: the still, filling its square, and over it the
+/// animated cover when there is one, looping silently on the shared player
+/// the wallpaper uses (`MotionArtworkView`), which fades in once it has a
+/// frame, so the still shows until then.
+struct TitleCover: View {
+    let still: NSImage
+    var motion: (url: URL, paused: Bool)?
+
+    var body: some View {
+        Color.clear
+            .overlay {
+                Image(nsImage: still)
+                    .resizable()
+                    .interpolation(.high)
+                    .aspectRatio(contentMode: .fill)
+            }
+            .overlay {
+                if let motion {
+                    MotionArtworkView(url: motion.url, placement: .fill, isPaused: motion.paused)
+                }
+            }
+            .clipped()
     }
 }
 

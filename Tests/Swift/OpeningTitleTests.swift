@@ -482,4 +482,33 @@ final class OpeningTitleTests: XCTestCase {
         XCTAssertEqual(LyricViewportMetrics(size: CGSize(width: 1512, height: 982), titleRow: true).titleBand, 0,
                        "the desktop card sits beside the lyrics")
     }
+
+    // MARK: The animated cover
+
+    @MainActor
+    func testTheCardPlaysTheAnimatedCoverWhateverTheSwitch() throws {
+        let name = "OpeningTitleTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: name))
+        defer { defaults.removePersistentDomain(forName: name) }
+        let settings = VersoCustom.Settings(defaults: defaults, notifications: NotificationCenter())
+        settings.useMotionArtwork = false
+        let saved = (UserDefaults.standard.object(forKey: OpeningTitle.settingKey),
+                     UserDefaults.standard.object(forKey: OpeningTitle.coverKey))
+        defer {
+            if let on = saved.0 { UserDefaults.standard.set(on, forKey: OpeningTitle.settingKey) }
+            else { UserDefaults.standard.removeObject(forKey: OpeningTitle.settingKey) }
+            if let cover = saved.1 { UserDefaults.standard.set(cover, forKey: OpeningTitle.coverKey) }
+            else { UserDefaults.standard.removeObject(forKey: OpeningTitle.coverKey) }
+        }
+        UserDefaults.standard.set(true, forKey: OpeningTitle.settingKey)
+        UserDefaults.standard.set(true, forKey: OpeningTitle.coverKey)
+        let motion = MotionArtworkProvider.Motion(square: URL(string: "https://example.invalid/square.m3u8")!, tall: nil)
+        XCTAssertEqual(OpeningTitle.motionCover(motion, track: nil, settings: settings), motion.square,
+                       "Animated covers off: the card still plays it")
+        XCTAssertTrue(OpeningTitle.wantsMotionCover)
+        XCTAssertNil(OpeningTitle.motionCover(nil, track: nil, settings: settings))
+        UserDefaults.standard.set(false, forKey: OpeningTitle.coverKey)
+        XCTAssertNil(OpeningTitle.motionCover(motion, track: nil, settings: settings), "no cover, no animated cover")
+        XCTAssertFalse(OpeningTitle.wantsMotionCover)
+    }
 }
