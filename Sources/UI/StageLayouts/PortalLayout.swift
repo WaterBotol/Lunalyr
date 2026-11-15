@@ -336,7 +336,10 @@ extension StageLyricView {
             // starts to as it hands over (by its liveness, so nothing pops).
             return aged * (1 - crowded * (1 - lives[i]))
         }
-        let leaving = leave
+        // The line leaves as its live pill does: a highlight's exit
+        // (`LyricHighlightTiming`), eased in and out, each pill and its word
+        // fading, shrinking and softening as one.
+        let leaving = Self.portalLeave(at: time, exitStart: exitStart)
         // Quick songs get less float, so the eye can follow.
         let float: CGFloat = reduceMotion ? 0 : CGFloat(1 / speed)
         return StageLayout(place: { measured, bounds in
@@ -371,7 +374,8 @@ extension StageLyricView {
         }) {
             ForEach(runs) { run in
                 portalPill(run, total: total, motion: motion, rank: ranks[run.id], live: lives[run.id],
-                           visible: visible[run.id], icon: icons[run.id], shape: shapes[run.id], tilt: tilts[run.id])
+                           visible: visible[run.id], icon: icons[run.id], shape: shapes[run.id], tilt: tilts[run.id],
+                           leaving: leaving)
             }
         }
         .offset(y: reduceMotion ? 0 : -stageSize.height * 0.1 * leaving)
@@ -381,7 +385,8 @@ extension StageLyricView {
     /// One word: its pill while it is sung, pale type once it is not.
     @ViewBuilder
     private func portalPill(_ run: StageRun, total: Int, motion: PortalMotion, rank: Double, live: Double,
-                            visible: Double, icon: String?, shape kind: PortalShape, tilt: Double) -> some View {
+                            visible: Double, icon: String?, shape kind: PortalShape, tilt: Double,
+                            leaving: Double = 0) -> some View {
         let index = run.id
         let a = arrive(run, speed: lineSpeed)
         let eased = motion.settle[index]
@@ -424,7 +429,18 @@ extension StageLyricView {
         .scaleEffect(x: reduceMotion ? 1 : 1 + 0.07 * (1 - min(a, 1)), y: reduceMotion ? 1 : 1 - 0.07 * (1 - min(a, 1)))
         .scaleEffect(reduceMotion ? 1 : 0.9 + 0.1 * min(a, 1.05))
         .rotationEffect(.degrees(tilt))
+        // Pill, outline, symbol and word as one layer, so they fade as one
+        // object: no grey slab with the word showing through it, no
+        // outline left ringing a faded pill.
+        .compositingGroup()
+        .scaleEffect(reduceMotion ? 1 : 1 - CGFloat(LyricHighlightTiming.exitScale * leaving))
+        .blur(radius: reduceMotion ? 0 : size * scale * CGFloat(LyricHighlightTiming.exitBlur * leaving))
         .opacity(motion.appear[index] * visible * (0.85 + 0.15 * live))
+    }
+
+    /// Portal's line leaving, 0...1: a highlight's exit from `exitStart`.
+    static func portalLeave(at time: Double, exitStart: Double) -> Double {
+        StageMotion.highlightLeave(at: time, exitStart: exitStart)
     }
 
     /// The symbol in a pill: it spins in with the pill's entrance and goes

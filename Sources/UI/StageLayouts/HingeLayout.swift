@@ -410,6 +410,7 @@ extension StageLyricView {
                     .font(font(size, hero: true, id: run.id))
                     .lineLimit(1).minimumScaleFactor(shrink)
                     .background { tileBackground(tile, size: size) }
+                    .highlightLayer(tile)
             }
         }
         .lyricShadow(tile ? 0 : 0.3, radius: max(2, size * 0.06), y: 2)

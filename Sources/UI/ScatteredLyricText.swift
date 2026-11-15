@@ -661,17 +661,21 @@ struct ScatteredLyricText: View {
         // held notes apart, and any live energy supplied only adds to it.
         let intensity = wordTimed ? max(energy, OrganicMotion.vocalIntensity(words, at: time)) : 0
         let arrivals = layout.runs.map { settings.arrival(in: composition, for: $0.source) }
+        // A highlighted word leaves with the rest of its line, and its tile
+        // goes with it (`LyricHighlightTiming`, carried). Held back to the
+        // line end instead, it still stood at full strength as the next
+        // line arrived over it, and was cut off part-way out when the
+        // line's end was the next line's start.
         let states: [ScatteredWordState] = wordTimed ? prepared.map {
-            let release = layout.runs[$0.run].segments.first?.release ?? exitStart
-            let leaves = arrivals[$0.run].highlightsSungWords ? max(exitStart, release) : exitStart
-            return ScatteredWordFrame.state($0, nextIndex: nextIndex, time: time, composition: composition,
-                energy: intensity, exitStart: leaves, reduceMotion: reduceMotion, ink: ink,
+            ScatteredWordFrame.state($0, nextIndex: nextIndex, time: time, composition: composition,
+                energy: intensity, exitStart: exitStart, reduceMotion: reduceMotion, ink: ink,
                 eligibleSince: $0.index > 0 ? prepared[$0.index - 1].source.start : previewSince)
         } : []
         let reveals = settings.revealsWords(in: composition)
         let frames = wordTimed ? layout.runs.map {
             ScatteredRunFrame.make($0, states: states, reveals: reveals, ink: ink,
-                                   highlights: arrivals[$0.index].highlightsSungWords, time: time, reduceMotion: reduceMotion)
+                                   highlights: arrivals[$0.index].highlightsSungWords, time: time, reduceMotion: reduceMotion,
+                                   carried: exitStart.isFinite)
         } : []
         // Settled words hold still while they are being read: the flow
         // layouts no longer float idle words about.
@@ -704,6 +708,7 @@ struct ScatteredLyricText: View {
             ForEach(layout.runs, id: \.index) { run in
                 if wordTimed {
                     runView(run, frame: frames[run.index], arrival: arrivals[run.index].motion(in: composition),
+                            tiles: arrivals[run.index].highlightsSungWords,
                             leave: states[run.tokens.lowerBound].leave, idle: idle, floatTime: floatTime,
                             accent: accents[prepared[run.tokens.lowerBound].source.presentationID],
                             onset: prepared[run.tokens.lowerBound].source.start)
@@ -752,7 +757,8 @@ struct ScatteredLyricText: View {
     /// Kept as its own builder rather than inline in the layout: with the
     /// composition branches folded in, the single expression exceeded what
     /// the type-checker will solve in reasonable time.
-    private func runView(_ run: ScatteredTypography.Run, frame: ScatteredRunFrame, arrival: WordArrival, leave: Double,
+    private func runView(_ run: ScatteredTypography.Run, frame: ScatteredRunFrame, arrival: WordArrival,
+                         tiles: Bool = false, leave: Double,
                          idle: Double, floatTime: Double, accent: WordAccent? = nil, onset: Double = 0) -> some View {
         let index = run.index
         // Word presence: Reduce Motion keeps every word as it was.
@@ -762,7 +768,7 @@ struct ScatteredLyricText: View {
         // The float and the exit sit outside the equatable ink, so a settled
         // word's glyph tree is reused and only its layer moves. They also sit
         // inside the slot, so the constellation's anchors never drift.
-        return ScatteredRunInk(run: run, frame: frame, arrival: arrival, settles: composition != .echo,
+        return ScatteredRunInk(run: run, frame: frame, arrival: arrival, tiles: tiles, settles: composition != .echo,
                                symbol: accent?.symbol, symbolOpacity: symbolOpacity, presence: presence)
             .equatable()
             // An action word's motion, over its entrance and inside its slot.
@@ -932,10 +938,11 @@ struct ScatteredRunFrame: Equatable {
     @MainActor
     static func make(_ run: ScatteredTypography.Run, states: [ScatteredWordState], reveals: Bool,
                      ink: LyricInk, highlights: Bool = false, time: Double = 0,
-                     reduceMotion: Bool = false) -> ScatteredRunFrame {
+                     reduceMotion: Bool = false, carried: Bool = false) -> ScatteredRunFrame {
         let first = states[run.tokens.lowerBound].frame
         let colours = ink.sample(slot: run.order, seed: run.seed)
-        let highlight = highlights ? Self.highlight(run, ink: ink, time: time, reduceMotion: reduceMotion) : nil
+        let highlight = highlights
+            ? Self.highlight(run, ink: ink, time: time, reduceMotion: reduceMotion, carried: carried) : nil
         guard run.isGlued else {
             return ScatteredRunFrame(presentation: first.presentation, heat: first.heat, fill: first.fill,
                 tint: first.tint, glow: first.glow, driftX: first.driftX, driftY: first.driftY,
@@ -973,13 +980,17 @@ struct ScatteredRunFrame: Equatable {
         return run.tokens.map { min(1, states[$0].frame.presentation.opacity / first) }
     }
 
-    /// The run's tiles on this frame, or nil while none shows.
+    /// The run's tiles on this frame, or nil while none shows. `carried`:
+    /// the line leaves (a finite `exitStart`), so each word's own exit
+    /// takes its tile with it, tile and text as one, and the tile never
+    /// fades on a clock of its own. A line that never leaves (a preview,
+    /// a still) lets its tiles leave from the line end instead.
     static func highlight(_ run: ScatteredTypography.Run, ink: LyricInk, time: Double,
-                          reduceMotion: Bool) -> Highlight? {
+                          reduceMotion: Bool, carried: Bool = false) -> Highlight? {
         var marks: [LyricHighlightMark] = []
         for segment in run.segments {
             let pose = LyricHighlightTiming.pose(time: time, onset: segment.onset, release: segment.release,
-                                                 reduceMotion: reduceMotion)
+                                                 reduceMotion: reduceMotion, carried: carried)
             if pose.isVisible { marks.append(LyricHighlightMark(from: segment.from, to: segment.to, pose: pose)) }
         }
         guard !marks.isEmpty else { return nil }
@@ -993,6 +1004,10 @@ private struct ScatteredRunInk: View, Equatable {
     let run: ScatteredTypography.Run
     let frame: ScatteredRunFrame
     let arrival: WordArrival
+    /// "Cutout · Highlight": the word and its tile are drawn as one layer,
+    /// so they fade as one object (the tile never shows through the word,
+    /// nor the word through a half-faded tile).
+    var tiles = false
     /// The calm layouts land without overshoot: the word's spring is held
     /// at its rest instead of passing it. Echo keeps its small overshoot.
     var settles = true
@@ -1004,7 +1019,8 @@ private struct ScatteredRunInk: View, Equatable {
     var presence = 1.0
     @Environment(\.lyricReduceMotion) private var reduceMotion
     static func == (lhs: Self, rhs: Self) -> Bool {
-        lhs.run == rhs.run && lhs.frame == rhs.frame && lhs.arrival == rhs.arrival && lhs.settles == rhs.settles
+        lhs.run == rhs.run && lhs.frame == rhs.frame && lhs.arrival == rhs.arrival && lhs.tiles == rhs.tiles
+            && lhs.settles == rhs.settles
             && lhs.symbol == rhs.symbol && lhs.symbolOpacity == rhs.symbolOpacity && lhs.presence == rhs.presence
     }
     var body: some View {
@@ -1013,7 +1029,7 @@ private struct ScatteredRunInk: View, Equatable {
         WordSlotLayout(degrees: run.metrics.rotation, inset: run.inset) {
             VStack(spacing: size * 0.04) {
                 HStack(spacing: size * WordSymbolMark.gap) {
-                    word(tiled: tiled)
+                    word(tiled: tiled).highlightLayer(tiles)
                     if let symbol {
                         WordSymbolView(symbol: symbol, size: size, rest: frame.ink.rest, sung: frame.ink.sung,
                                        tint: frame.ink.sweeps ? frame.tint : 0, opacity: symbolOpacity)

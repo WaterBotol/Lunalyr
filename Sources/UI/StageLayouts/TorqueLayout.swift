@@ -65,7 +65,6 @@ extension StageLyricView {
         let plan = Self.torquePlan(runs)
         let rho = Self.torqueRotation(plan, at: time, shownCount: shown.count, reduceMotion: reduceMotion)
         let swing = Self.torqueSwing(plan, at: time, exitStart: exitStart, reduceMotion: reduceMotion)
-        let leaving = Self.torqueLeaving(at: time, exitStart: exitStart)
         let stage = stageSize
         // Inside the 5 % title-safe margins.
         let available = CGSize(width: stage.width * 0.9, height: stage.height * 0.9)
@@ -84,7 +83,10 @@ extension StageLyricView {
                     .opacity(pow(max(0, cos(min(abs(angle), 90) * .pi / 180)), 1.5))
             }
         }
-        .opacity(1 - leaving)
+        // The turn accelerates away (`torqueLeaving`); the fade eases out to
+        // nothing, so a face -- a highlight tile above all -- never drops
+        // its last third in one frame.
+        .opacity(1 - Self.torqueFade(at: time, exitStart: exitStart))
         .frame(width: stage.width, height: stage.height)
     }
 
@@ -140,6 +142,7 @@ extension StageLyricView {
                     if live > 0.001 { word(run, liveColour, size: size).opacity(live) }
                 }
                 .background { tileBackground(tile, size: size) }
+                .highlightLayer(tile)
             }
             .wordAction(accent(run), start: run.start, time: time, size: size, glow: sample.glow)
             // Word presence, about the word and its thick edge, with its action.
@@ -251,6 +254,13 @@ extension StageLyricView {
     static func torqueLeaving(at time: Double, exitStart: Double) -> Double {
         guard exitStart.isFinite else { return 0 }
         return StageMotion.torqueIn((time - exitStart) / StageMotion.torqueExit)
+    }
+
+    /// How far the leaving line has faded, 0...1: over the same time as
+    /// the turn, eased in and out.
+    static func torqueFade(at time: Double, exitStart: Double) -> Double {
+        guard exitStart.isFinite else { return 0 }
+        return Easing.smoothstep((time - exitStart) / StageMotion.torqueExit)
     }
 
     // MARK: The plan (per line, cached)

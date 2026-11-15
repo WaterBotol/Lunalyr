@@ -102,7 +102,9 @@ extension StageLyricView {
         let arrivals = runs.map { arrive($0, speed: speed) }
         let ranks = ranks(runs, speed: speed)
         let swaps = Self.mosaicSwaps(runs, at: time, speed: speed, seed: seed, reduceMotion: reduceMotion)
-        let leaving = leave
+        // Mosaic's words are big solid tiles: they leave on a highlight's
+        // eased exit, not the settle, which dropped them a seventh at once.
+        let leaving = StageMotion.highlightLeave(at: time, exitStart: exitStart)
         // A word on a tile (Cutout · Highlight) is always the huge kind, which can carry one.
         let kinds = runs.map { tiled($0) ? 0 : Int(chance($0.id, 20) * 3) % 3 }
         let stage = stageSize
@@ -143,6 +145,7 @@ extension StageLyricView {
                                         .font(font(size, hero: true, id: run.id))
                                         .lineLimit(1).minimumScaleFactor(0.5).frame(maxWidth: stage.width * 1.1)
                                         .background { tileBackground(tile, size: size) }
+                                        .highlightLayer(tile)
                                         .lyricShadow(0.28, radius: 8, y: 3)
                                 }
                                 Star4().fill(ink.tileColour).frame(width: size * 0.32, height: size * 0.32)

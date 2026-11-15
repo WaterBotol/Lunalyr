@@ -366,16 +366,16 @@ final class LyricHighlightTests: XCTestCase {
         for time in stride(from: onset + 0.13, to: release, by: 0.05) {
             XCTAssertEqual(pose(time), Timing.Pose(opacity: 1, width: 1))
         }
-        // Fades over about 300 ms after the line ends.
+        // Leaves over about 420 ms after the line ends (`HighlightExitTests`).
         var opacity = 1.0
         for step in 1...30 {
             let current = pose(release + Timing.fade * Double(step) / 30)
-            XCTAssertLessThan(current.opacity, opacity)
-            if current.isVisible { XCTAssertEqual(current.width, 1, "it fades; it does not shrink") }
+            if opacity > 0 { XCTAssertLessThan(current.opacity, opacity) } else { XCTAssertFalse(current.isVisible) }
+            if current.isVisible { XCTAssertEqual(current.width, 1, "it fades; it does not fold back") }
             opacity = current.opacity
         }
         XCTAssertFalse(pose(release + Timing.fade).isVisible)
-        XCTAssertEqual(Timing.fade, 0.3, accuracy: 0.05)
+        XCTAssertEqual(Timing.fade, 0.42, accuracy: 0.05)
         XCTAssertEqual(Timing.press, 0.12, accuracy: 0.03)
     }
 
@@ -638,8 +638,14 @@ final class LyricHighlightTests: XCTestCase {
         let highlight = ScatteredRunFrame.highlight(layout.runs[0], ink: greenHighlightInk(), time: 33.9,
                                                     reduceMotion: false)
         XCTAssertEqual(highlight?.marks.count, segments.count)
-        XCTAssertNil(ScatteredRunFrame.highlight(layout.runs[0], ink: greenHighlightInk(), time: 34.4,
+        // A line that never leaves (a preview, a still) lets its tiles go
+        // from the line end; one that leaves takes its tiles with its words
+        // (`LyricHighlightTiming`, carried), so they hold until then.
+        XCTAssertNil(ScatteredRunFrame.highlight(layout.runs[0], ink: greenHighlightInk(), time: 34.5,
                                                  reduceMotion: false))
+        XCTAssertEqual(ScatteredRunFrame.highlight(layout.runs[0], ink: greenHighlightInk(), time: 34.5,
+                                                   reduceMotion: false, carried: true)?.marks.map(\.pose.opacity),
+                       Array(repeating: 1, count: segments.count))
         // Syllables of one Latin word stay one word.
         let syllables = ["beau", "ti", "ful"].enumerated().map {
             LyricsFetcher.Word(text: $0.element, start: 5 + Double($0.offset) * 0.2, end: 5.2 + Double($0.offset) * 0.2)

@@ -164,7 +164,8 @@ struct SpokenTypographyView: View {
                                          time: time, reduceMotion: reduceMotion)
                         : .hidden
                     token(word, next: next, rank: rank, size: stage, arrival: arrival,
-                          intensity: intensity, eligibleSince: eligible, highlight: highlight)
+                          intensity: intensity, eligibleSince: eligible, highlight: highlight,
+                          handover: word.index + 1 < prepared.count ? prepared[word.index + 1].source.start : nil)
                 }
             }
         }
@@ -203,7 +204,7 @@ struct SpokenTypographyView: View {
 
     private func token(_ token: SpokenTypography.Word, next: Int?, rank: Double, size: CGSize, arrival: WordArrival,
                        intensity: Double, eligibleSince: Double,
-                       highlight: LyricHighlightTiming.Pose = .hidden) -> some View {
+                       highlight: LyricHighlightTiming.Pose = .hidden, handover: Double? = nil) -> some View {
         let presence = WordPresence.effective(wordPresence, reduceMotion: reduceMotion)
         let state = RollingTokenState.make(token, next: next, rank: rank, time: time, composition: composition,
             baseSize: baseSize, stageWidth: size.width, intensity: intensity, reduceMotion: reduceMotion,
@@ -228,12 +229,17 @@ struct SpokenTypographyView: View {
         // or resizing it.
         // Used with restraint: only the word in focus wears its label; as
         // it steps back the label lifts away and it is plain type again.
+        // A label lifting away as its word steps back leaves as a
+        // highlight does (`LyricHighlightTiming`): softening with its word,
+        // which eases back to its own colour.
         let tile: RollingUnit.Tile? = token.tile
             ? .init(width: RollingUnit.tileWidth(arrival: presentation.arrival, reduceMotion: reduceMotion),
-                    opacity: RollingUnit.labelHold(rank: rank))
+                    pose: .leaving(RollingUnit.labelLeaving(rank: rank, time: time, handover: handover),
+                                   reduceMotion: reduceMotion),
+                    pointSize: token.pointSize, textSwitch: ink.tileTextSwitch)
             : highlight.isVisible
-            ? .init(width: CGFloat(highlight.width), opacity: highlight.opacity, reach: RollingUnit.labelReach,
-                    textSwitch: ink.tileTextSwitch) : nil
+            ? .init(width: CGFloat(highlight.width), pose: highlight, pointSize: token.pointSize,
+                    reach: RollingUnit.labelReach, textSwitch: ink.tileTextSwitch) : nil
         // Word symbols and action words: the plan is keyed by the run.
         let wordAccent = accents[token.source.presentationID]
         return RollingUnit(token: token,
@@ -256,6 +262,8 @@ struct SpokenTypographyView: View {
                                rightToLeft: token.rightToLeft)
                         .padding(.horizontal, -tile.reach.width)
                         .padding(.vertical, -tile.reach.height)
+                        .scaleEffect(tile.scale)
+                        .blur(radius: tile.blur)
                         .opacity(tile.opacity)
                 }
             }
@@ -440,6 +448,17 @@ struct RollingUnit: View {
         1 - Easing.smoothstep((rank - 0.35) / 0.65)
     }
 
+    /// How far a Cutout label has lifted away, 0...1: as its word steps
+    /// back (`labelHold`), but never quicker than a highlight leaves
+    /// (`LyricHighlightTiming.exitDuration`) from `handover`, the next
+    /// word's onset. The stack can step back in a few frames; the label
+    /// then took only those frames to go.
+    static func labelLeaving(rank: Double, time: Double, handover: Double?) -> Double {
+        let stepped = 1 - labelHold(rank: rank)
+        guard let handover else { return stepped }
+        return min(stepped, LyricHighlightTiming.exitProgress(time - handover))
+    }
+
     /// A label's padding past an unlabelled word's, so a highlight tile
     /// behind any word is the size of a label.
     static let labelReach = CGSize(width: 9, height: 3)
@@ -477,6 +496,32 @@ struct RollingUnit: View {
         var reach: CGSize = .zero
         /// The opacity at which the word on it changes colour (`LyricHighlight.textSwitch`).
         var textSwitch = 0.4
+        /// While it leaves (`LyricHighlightTiming.Pose`): how much of the
+        /// colour set on it the word still shows comes from `leaving`, and
+        /// the tile shrinks to `scale` and softens by `blur` points.
+        var leaving = 0.0
+        var scale: CGFloat = 1
+        var blur: CGFloat = 0
+
+        init(width: CGFloat, opacity: Double, reach: CGSize = .zero, textSwitch: Double = 0.4) {
+            self.width = width; self.opacity = opacity; self.reach = reach; self.textSwitch = textSwitch
+        }
+
+        /// A tile at `pose`'s strength, shrink and softness; a label's
+        /// strength is its hold and its own press `width`.
+        init(width: CGFloat, pose: LyricHighlightTiming.Pose, pointSize: CGFloat, reach: CGSize = .zero,
+             textSwitch: Double) {
+            self.init(width: width, opacity: pose.opacity, reach: reach, textSwitch: textSwitch)
+            leaving = pose.leaving
+            scale = CGFloat(pose.scale)
+            blur = CGFloat(pose.blur) * pointSize
+        }
+
+        /// How much of the colour set on the tile the word shows.
+        var textOpacity: Double {
+            LyricHighlightTiming.Pose(opacity: opacity, width: Double(width), leaving: leaving)
+                .textOpacity(switchAt: textSwitch)
+        }
     }
 
     var body: some View {
@@ -537,7 +582,7 @@ struct RollingUnit: View {
                 Rectangle()
                     .frame(width: pressed, height: full.height)
                     .position(x: (rightToLeft ? full.maxX - pressed : full.minX) + pressed / 2, y: full.midY)
-                    .opacity(LyricHighlightTiming.textOpacity(tile.opacity, switchAt: tile.textSwitch))
+                    .opacity(tile.textOpacity)
             }
         }
     }

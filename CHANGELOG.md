@@ -35,6 +35,15 @@ When merging, keep every entry and combine duplicate headings.
 - **The Broadside layout.** Wherever it was chosen (the layout, a remembered style, a saved Look, Custom Mix's rotation, a lyric card), it becomes Hinge, the other bold layout of big, heavy type built word by word. The built-in Poster Look now uses Hinge.
 
 ### Fixed
+- **Highlights now leave as one smooth object.** Cutout · Highlight tiles, Cutout's labels and Portal's pills used to fade out in two pieces. The tile dropped fast from its first frame, and for a moment you saw dark text on a grey, half-faded box. Then the word snapped to its own colour in a single frame. In Scattered, Constellation and Echo the tile was gone before the word started to leave. Lines whose end is the next line's start held their highlighted words back until the next line was drawing over them, then cut them off part-way out.
+  - Now the tile and its word leave together over 0.42 s, eased in and out. The tile fades, shrinks 6% about its centre and softens a little. Where the word stays (Spoken and Cascade), its colour eases back to its own over several frames instead of switching in one.
+  - In Scattered, Constellation and Echo, a highlighted word leaves with the rest of its line and takes its tile with it.
+  - Cutout's label never lifts away faster than 0.42 s after the next word starts.
+  - Portal's pills, their outlines and their words fade, shrink and soften as one over the same eased 0.42 s as the line leaves.
+  - Mosaic's big tiles leave on the same eased 0.42 s curve. Before, they dropped about a seventh of their strength in the first frame.
+  - In every layout, a highlighted word and its tile fade as one layer, so the word never shows through a half-faded tile.
+  - Torque's fade now eases out to nothing, so a face no longer drops its last third in one frame. Its turn still accelerates away.
+  - With Reduce Motion, highlights only fade, on the same curve.
 - **The song's title no longer shows twice at the start of a song.** When the lyrics took longer to arrive than the title card took to start (often the case with Music, which reports where a new song really is a couple of seconds in), the card shown while the lyrics loaded and the lyrics' own card cross-faded for about half a second, two titles stacked, often of different sizes. The card already on screen now carries on as the only one and leaves in time for the first line.
 - **Album drift, Custom gradient and Music reactive** now lift each word's colour for readability the way the line colour and Sung sweep already did: to 3:1, or where that would turn the colour white, to the most colourful tint that still reaches 2.5:1. On light wallpapers where even 2.5:1 needs near-white, words stay near-white.
 - **Sung sweep in Torque, Fable and Portal** keeps a word's colour once it has been sung, as every other layout does; those three turned sung words back to white as the next word began.
