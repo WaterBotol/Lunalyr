@@ -117,18 +117,22 @@ enum MusicVideoOffsetOrigin: Equatable, Sendable {
     case none
     /// The user's own nudge, tap or drag; always wins.
     case manual
+    /// Measured from the video's captions against the song's timed lyrics
+    /// (`MusicVideoCaptionSync`).
+    case captions
     /// Guessed from how much longer the video is than the song.
     case estimated
 }
 
 /// How far into each song's video the song starts, per recording.
 ///
-/// Two layers, the first present wins: the user's nudge, tap or drag
-/// (`values`, kept even at 0 once set, for the video it was set on), then a
-/// guess from the video's length (kept in memory only).
+/// Three layers, the first present wins: the user's nudge, tap or drag
+/// (`values`, kept even at 0 once set, for the video it was set on), then
+/// the offset measured from the video's captions, then a guess from the
+/// video's length (both kept in memory only, per song and video).
 ///
-/// Offsets Lunalyr once found by itself (captions, soundtrack, cuts) are no
-/// longer used: they are dropped from the store when it loads.
+/// Offsets the earlier automatic timing stored (`retiredAutomaticKey`) are
+/// not used: they are dropped from the store when it loads.
 @MainActor
 final class MusicVideoOffsets: ObservableObject {
     static let key = "custom.musicVideoOffsets"
@@ -143,6 +147,8 @@ final class MusicVideoOffsets: ObservableObject {
     /// one was set before videos were told apart: it applies to any video.
     @Published private(set) var manualVideos: [String: String]
     @Published private(set) var estimates: [String: Double] = [:]
+    /// Measured from captions, per song and video (`estimateKey`).
+    @Published private(set) var captioned: [String: Double] = [:]
     private let defaults: UserDefaults
 
     init(defaults: UserDefaults) {
@@ -184,6 +190,9 @@ final class MusicVideoOffsets: ObservableObject {
             return (MusicVideoTiming.clampedOffset(manual), .manual)
         }
         guard let video else { return (0, .none) }
+        if let measured = captioned[Self.estimateKey(songKey, video)] {
+            return (MusicVideoTiming.clampedOffset(measured), .captions)
+        }
         if let estimate = estimates[Self.estimateKey(songKey, video)] { return (estimate, .estimated) }
         return (0, .none)
     }
@@ -236,7 +245,7 @@ final class MusicVideoOffsets: ObservableObject {
         if let entry { set(entry.value, for: songKey, video: entry.video) } else { clearManual(songKey) }
     }
 
-    /// Back to the estimate (or none).
+    /// Back to the timing from captions, else the estimate (or none).
     func clearManual(_ songKey: String) {
         guard values.removeValue(forKey: songKey) != nil else { return }
         manualVideos.removeValue(forKey: songKey)
@@ -251,6 +260,23 @@ final class MusicVideoOffsets: ObservableObject {
         let key = Self.estimateKey(songKey, video)
         if estimates[key] == value { return }
         estimates[key] = value
+    }
+
+    // MARK: From captions
+
+    /// The offset the video's captions gave, for this session; nil drops it.
+    func setCaptioned(_ value: Double?, for songKey: String, video: String) {
+        let key = Self.estimateKey(songKey, video)
+        let value = value.flatMap { $0.isFinite ? $0 : nil }
+        if captioned[key] == value { return }
+        captioned[key] = value
+    }
+
+    func hasCaptioned(_ songKey: String, video: String) -> Bool { captioned[Self.estimateKey(songKey, video)] != nil }
+
+    /// Every offset from captions dropped (the setting turned off).
+    func clearCaptioned() {
+        if !captioned.isEmpty { captioned = [:] }
     }
 
     private static func estimateKey(_ songKey: String, _ video: String) -> String { songKey + "\u{1}" + video }

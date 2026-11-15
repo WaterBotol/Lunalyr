@@ -4,12 +4,6 @@ import Foundation
 // Tap to sync: the user taps when the singing starts in the (muted)
 // video, and the offset is worked out from the song's timed lyrics.
 
-/// A timed lyric line in the song's own time.
-struct MusicVideoLyricLine: Equatable, Sendable {
-    var start: Double
-    var text: String
-}
-
 // MARK: - Tap to sync
 
 /// Where the tap-to-sync flow is.
