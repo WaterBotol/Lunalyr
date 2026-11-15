@@ -21,7 +21,7 @@
 // Watch mode keeps running: it asks again when MediaRemote says the queue
 // or the playing item changed, when a line arrives on stdin (Lunalyr
 // writes "refresh" on each song change), and every `pollSeconds`; it
-// prints a snapshot only when it differs from the last. It exits when
+// prints a snapshot (or an error) only when it differs from the last. It exits when
 // stdin closes, so it never outlives Lunalyr, even after a crash.
 
 #import <Foundation/Foundation.h>
@@ -199,7 +199,12 @@ static void LQRefresh(void) {
                 LQEmit(line);
             }
         } else {
-            LQError(failure ?: @"answer");
+            // Said once until something changes, not on every look.
+            NSString *text = [@"error:" stringByAppendingString:failure ?: @"answer"];
+            if (![text isEqualToString:LQLast]) {
+                LQLast = text;
+                LQError(failure ?: @"answer");
+            }
         }
         LQAsking = NO;
         if (LQAskAgain) {

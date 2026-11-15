@@ -324,9 +324,15 @@ final class MusicQueueReader: ObservableObject {
                 snapshot = tracks
                 publish()
             case .error(let code):
-                // Music not playing answers this way too: not a failure of the helper.
+                // Music not playing answers this way too: the helper works, the queue is just empty.
                 LookAheadLog.note("queue helper: \(code)")
-                if code == "symbols" { heard = false }
+                if code == "symbols" {
+                    heard = false
+                } else {
+                    heard = true
+                    snapshot = []
+                    publish()
+                }
             }
         }
     }
