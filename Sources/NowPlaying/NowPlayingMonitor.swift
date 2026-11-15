@@ -93,6 +93,24 @@ final class NowPlayingMonitor: ObservableObject {
         return artwork
     }
 
+    /// The playing song's cover is not known yet: no answer (a cover, or
+    /// that there is none) has come for it since it started.
+    var awaitsArtwork: Bool {
+        guard let current else { return false }
+        return !(artworkTrack?.isSameTrack(as: current) ?? false)
+    }
+
+    /// `motionArtwork` when it is the playing song's album's. Across a
+    /// song change it keeps the last album's until the new lookup answers
+    /// (so the wallpaper does not cut away and back within an album);
+    /// anything that names the song (the title card) must use this.
+    var currentMotionArtwork: MotionArtworkProvider.Motion? {
+        guard let current, let motionArtworkKey,
+              motionArtworkKey == MotionArtworkProvider.cacheKey(album: current.album, artist: current.artist,
+                                                                 title: current.title) else { return nil }
+        return motionArtwork
+    }
+
     /// Followed browsers with a music tab open that cannot be read until the
     /// user allows JavaScript from Apple Events (`WebScriptingNotice`).
     var webScriptingBlocked: [PlayerKind] {
@@ -236,7 +254,11 @@ final class NowPlayingMonitor: ObservableObject {
     private var artworkTarget: Track?
     private var motionLookup: Task<Void, Never>?
     /// The album whose lookup `motionArtwork` reflects.
-    private var motionKey: String?
+    private var motionKey: String? {
+        didSet { if motionArtworkKey != motionKey { motionArtworkKey = motionKey } }
+    }
+    /// `motionKey`, published, for `currentMotionArtwork`.
+    @Published private(set) var motionArtworkKey: String?
     private var motionLookupKey: String?
     private var cancellables: Set<AnyCancellable> = []
 

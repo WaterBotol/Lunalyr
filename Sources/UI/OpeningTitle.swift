@@ -140,6 +140,23 @@ enum OpeningTitle {
     static func glowStrength(dark: Bool) -> Double { dark ? 0.35 : 1 }
     static let readingShare: CGFloat = 0.32
     static let albumShare: CGFloat = 0.26
+    /// The cover's side, as a share of the title's nominal size: the same
+    /// for every title, so the card keeps its size whether the title takes
+    /// one line or two.
+    static func coverShare(compact: Bool) -> CGFloat { compact ? 1.65 : 2.4 }
+
+    /// The title's sizes beside a cover, largest first: it takes the
+    /// largest whose two lines fit beside the cover.
+    static let titleSteps: [CGFloat] = [1, 0.84, 0.7, 0.58]
+    /// The title face's ascent (its first baseline below the line's top),
+    /// as a share of its size: with `capHeightShare`, where its capitals start.
+    static let ascentShare: CGFloat = 0.95
+
+    /// How long a card keeps an empty place for a cover still being
+    /// fetched; after that, the words take the room.
+    static let coverWait = 8.0
+    static func reservesCover(age: Double) -> Bool { age < coverWait }
+
     /// The title face's cap height, as a share of its size, for lining the
     /// cover up with the title's capitals.
     static let capHeightShare: CGFloat = 0.7
@@ -551,6 +568,28 @@ final class OpeningTitleMemory: ObservableObject {
         return joinedAt
     }
 
+    private var coverTrack: Int?
+    private var coverArrived: Double?
+
+    /// 0...1: how far `track`'s cover has faded in at wall time `wall`,
+    /// given whether it is here (`has`). A cover already here when the
+    /// song was first seen needs no fade of its own (the card's entrance
+    /// brings it); one that arrives later fades in over `coverFadeIn`.
+    func coverFade(track: Int, has: Bool, wall: Double) -> Double {
+        if track != coverTrack {
+            coverTrack = track
+            coverArrived = has ? -.infinity : nil
+        }
+        guard has else {
+            coverArrived = nil
+            return 0
+        }
+        if coverArrived == nil { coverArrived = wall }
+        return Easing.smoothstep((wall - (coverArrived ?? wall)) / Self.coverFadeIn)
+    }
+
+    static let coverFadeIn = 0.45
+
     /// The title's romanisation when readings are shown and it needs one.
     func reading(of title: String, options: RomanizationOptions.Snapshot) -> String? {
         guard options.display != .off, LyricRomanizer.containsNonLatin(title) else { return nil }
@@ -589,6 +628,11 @@ struct OpeningTitleCard: View {
     var motionCover: URL? = nil
     /// The stage is paused: so is the animated cover.
     var paused = false
+    /// This song's cover is still being fetched: its place is kept, empty,
+    /// so the words do not move when it arrives.
+    var coverPending = false
+    /// 0...1: how far a cover that arrived after the card has faded in.
+    var coverFade = 1.0
     /// The lyric's base size on this screen.
     let baseSize: CGFloat
     let accent: Color
@@ -680,70 +724,107 @@ struct OpeningTitleCard: View {
         // words line up against it.
         let centred = floating && cover == nil
         let rise = reduceMotion ? 0 : unit * 0.32
-        let words = VStack(alignment: centred ? .center : .leading, spacing: 0) {
-            Group {
-                Text(title)
-                    .font(settings.lyricFont(size: titleSize, hero: true, mood: mood))
-                    .foregroundStyle(type)
-                    .multilineTextAlignment(centred ? .center : .leading)
-                    .lineLimit(2)
-                    .minimumScaleFactor(0.55)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .mask { wipe(reveal.wipe) }
-                    .opacity(min(1, reveal.title * 1.6))
-                    .offset(y: (1 - reveal.title) * rise)
-                if let reading, showsReading {
-                    Text(reading)
-                        .font(settings.uiFont(size: readingSize, mood: mood))
-                        .foregroundStyle(type.opacity(0.78))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.6)
-                        .padding(.top, step.reading)
-                        .opacity(reveal.reading)
-                        .offset(y: (1 - reveal.reading) * rise * 0.5)
-                }
-                if !artist.isEmpty {
-                    // In the artist's own case, as the menu bar and player show it.
-                    Text(artist)
-                        .font(settings.uiFont(size: artistSize, mood: mood))
-                        .foregroundStyle(type.opacity(0.92))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.6)
-                        .padding(.top, step.group)
-                        .opacity(reveal.artist)
-                }
-                if let album, !compact {
-                    Text(album)
-                        .font(settings.uiFont(size: albumSize, mood: mood))
-                        .kerning(albumSize * 0.02)
-                        .foregroundStyle(type.opacity(0.7))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.6)
-                        .padding(.top, step.line)
-                        .opacity(reveal.album)
-                }
-            }
-            .compositingGroup()
-            // A soft shadow under the type, as the lyrics have, then the glow.
-            .shadow(color: (dark ? Color.white : .black).opacity(0.45), radius: unit * 0.12, y: unit * 0.015)
-            .shadow(color: accent.opacity(0.7 * glow), radius: unit * 0.18)
-            .shadow(color: accent.opacity(0.45 * glow), radius: unit * 0.6)
+        // The cover's place: its picture once it is here, kept empty while
+        // it is fetched (`coverPending`), none when the song has none.
+        let slot = cover != nil || (coverPending && OpeningTitle.reservesCover(age: phase.age))
+        let readingText = reading.flatMap { reading in showsReading ? reading : nil }.map { reading in
+            Text(reading)
+                .font(settings.uiFont(size: readingSize, mood: mood))
+                .foregroundStyle(type.opacity(0.78))
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+                .padding(.top, step.reading)
+                .opacity(reveal.reading)
+                .offset(y: (1 - reveal.reading) * rise * 0.5)
         }
-        if let cover {
-            // The cover spans the words exactly: its top on the title's
-            // cap height, its bottom on the last line's baseline.
-            CoverBesideWords(gap: step.group, capHeight: titleSize * OpeningTitle.capHeightShare, maximum: width) {
-                TitleCover(still: cover, motion: animatedCover)
-                    .clipShape(RoundedRectangle(cornerRadius: nominal * 0.1, style: .continuous))
-                    .shadow(color: .black.opacity(0.45), radius: nominal * 0.12, y: nominal * 0.04)
-                    .shadow(color: accent.opacity(0.55 * glow), radius: nominal * 0.32)
-                    .scaleEffect(reduceMotion ? 1 : 0.9 + 0.1 * reveal.cover, anchor: .bottomLeading)
-                    .opacity(reveal.cover)
-                words
+        // In the artist's own case, as the menu bar and player show it.
+        let artistText = artist.isEmpty ? nil : Text(artist)
+            .font(settings.uiFont(size: artistSize, mood: mood))
+            .foregroundStyle(type.opacity(0.92))
+            .lineLimit(1)
+            .minimumScaleFactor(0.6)
+            .opacity(reveal.artist)
+        let albumText = compact ? nil : album.map { album in
+            Text(album)
+                .font(settings.uiFont(size: albumSize, mood: mood))
+                .kerning(albumSize * 0.02)
+                .foregroundStyle(type.opacity(0.7))
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+                .padding(.top, step.line)
+                .opacity(reveal.album)
+        }
+        let typeShadow = OpeningTitleTypeShadow(dark: dark, accent: accent, glow: glow, unit: unit)
+        if slot {
+            // A cover of one size for every title (`coverShare`): the
+            // title and its reading from the cover's top, stepping down a
+            // size where two lines would not fit; the artist and album with
+            // the last baseline on the cover's foot. A long title never
+            // makes the card larger.
+            CoverBesideWords(side: nominal * OpeningTitle.coverShare(compact: compact), gap: step.group,
+                             capShare: OpeningTitle.capHeightShare / OpeningTitle.ascentShare, maximum: width) {
+                ZStack {
+                    if let cover {
+                        TitleCover(still: cover, motion: animatedCover)
+                            .clipShape(RoundedRectangle(cornerRadius: nominal * 0.1, style: .continuous))
+                            .shadow(color: .black.opacity(0.45), radius: nominal * 0.12, y: nominal * 0.04)
+                            .shadow(color: accent.opacity(0.55 * glow), radius: nominal * 0.32)
+                            .scaleEffect(reduceMotion ? 1 : 0.9 + 0.1 * reveal.cover, anchor: .bottomLeading)
+                            .opacity(reveal.cover * coverFade)
+                    }
+                }
+                FirstThatFits {
+                    ForEach(OpeningTitle.titleSteps, id: \.self) { share in
+                        VStack(alignment: .leading, spacing: 0) {
+                            titleText(titleSize * share, type: type, centred: centred, reveal: reveal, rise: rise)
+                            readingText
+                        }
+                        .frame(minWidth: 0, minHeight: 0, alignment: .topLeading)
+                        .clipped()
+                    }
+                    // Last: the smallest on one line, narrowed to fit.
+                    VStack(alignment: .leading, spacing: 0) {
+                        titleText(titleSize * (OpeningTitle.titleSteps.last ?? 0.58), type: type, centred: centred,
+                                  reveal: reveal, rise: rise, lines: 1)
+                        readingText
+                    }
+                    .frame(minWidth: 0, minHeight: 0, alignment: .topLeading)
+                    .clipped()
+                }
+                .modifier(typeShadow)
+                VStack(alignment: .leading, spacing: 0) {
+                    artistText
+                    albumText
+                }
+                .fixedSize(horizontal: false, vertical: true)
+                .modifier(typeShadow)
             }
         } else {
-            CappedWidth(maximum: width) { words }
+            CappedWidth(maximum: width) {
+                VStack(alignment: centred ? .center : .leading, spacing: 0) {
+                    titleText(titleSize, type: type, centred: centred, reveal: reveal, rise: rise)
+                    readingText
+                    if let artistText { artistText.padding(.top, step.group) }
+                    albumText
+                }
+                .modifier(typeShadow)
+            }
         }
+    }
+
+    /// The title at `size`, on up to two lines, wiped on as it enters.
+    private func titleText(_ size: CGFloat, type: Color, centred: Bool, reveal: OpeningTitle.Reveal,
+                           rise: CGFloat, lines: Int = 2) -> some View {
+        Text(title)
+            .font(settings.lyricFont(size: size, hero: true, mood: mood))
+            .foregroundStyle(type)
+            .multilineTextAlignment(centred ? .center : .leading)
+            .lineLimit(lines)
+            .minimumScaleFactor(lines == 1 ? 0.6 : 0.85)
+            .fixedSize(horizontal: false, vertical: true)
+            .mask { wipe(reveal.wipe) }
+            .opacity(min(1, reveal.title * 1.6))
+            .offset(y: (1 - reveal.title) * rise)
     }
 
     /// The floating window's kept title: the cover, the title and the
@@ -760,7 +841,10 @@ struct OpeningTitleCard: View {
                     .frame(width: side, height: side)
                     .clipShape(RoundedRectangle(cornerRadius: side * 0.14, style: .continuous))
                     .shadow(color: .black.opacity(0.4), radius: side * 0.08, y: side * 0.03)
-                    .opacity(reveal.cover)
+                    .opacity(reveal.cover * coverFade)
+            } else if coverPending && OpeningTitle.reservesCover(age: phase.age) {
+                // Its place kept while it is fetched.
+                Color.clear.frame(width: side, height: side)
             }
             HStack(alignment: .firstTextBaseline, spacing: baseSize * 0.16) {
                 Text(title)
@@ -829,53 +913,121 @@ struct TitleCover: View {
     }
 }
 
-/// The title card's grid: a square cover in the first column and the
-/// words in the second, a `gap` apart, together at most `maximum` wide. The
-/// cover is as tall as the words' type, from the first line's cap height
-/// (`capHeight` above its baseline) to the last line's baseline, and set
-/// level with it, so its edges line up with the text block rather than
-/// with the lines' leading.
+/// The first of its subviews (largest first) whose height at the offered
+/// width fits the offered height, or the last when none does. The others
+/// are given no room (each is clipped, so they draw nothing). Its first
+/// text baseline is the chosen one's.
+struct FirstThatFits: Layout {
+    private func chosen(_ proposal: ProposedViewSize, subviews: Subviews) -> (index: Int, size: CGSize)? {
+        guard !subviews.isEmpty else { return nil }
+        let width = proposal.width
+        for (index, subview) in subviews.enumerated() {
+            let size = subview.sizeThatFits(ProposedViewSize(width: width, height: nil))
+            if index == subviews.count - 1 || proposal.height.map({ size.height <= $0 + 0.5 }) ?? true {
+                return (index, CGSize(width: min(size.width, width ?? size.width), height: size.height))
+            }
+        }
+        return nil
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        chosen(proposal, subviews: subviews)?.size ?? .zero
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let pick = chosen(proposal, subviews: subviews)
+        for (index, subview) in subviews.enumerated() {
+            if index == pick?.index, let size = pick?.size {
+                subview.place(at: bounds.origin, proposal: ProposedViewSize(width: size.width, height: size.height))
+            } else {
+                subview.place(at: bounds.origin, proposal: .zero)
+            }
+        }
+    }
+
+    func explicitAlignment(of guide: VerticalAlignment, in bounds: CGRect, proposal: ProposedViewSize,
+                           subviews: Subviews, cache: inout ()) -> CGFloat? {
+        guard let pick = chosen(proposal, subviews: subviews) else { return nil }
+        let dimensions = subviews[pick.index].dimensions(in: ProposedViewSize(width: pick.size.width,
+                                                                              height: pick.size.height))
+        return bounds.minY + dimensions[guide]
+    }
+}
+
+/// The card's type, as one: a soft shadow under it, as the lyrics have,
+/// then a glow in the album's colour.
+struct OpeningTitleTypeShadow: ViewModifier {
+    let dark: Bool
+    let accent: Color
+    let glow: Double
+    let unit: CGFloat
+
+    func body(content: Content) -> some View {
+        content
+            .compositingGroup()
+            .shadow(color: (dark ? Color.white : .black).opacity(0.45), radius: unit * 0.12, y: unit * 0.015)
+            .shadow(color: accent.opacity(0.7 * glow), radius: unit * 0.18)
+            .shadow(color: accent.opacity(0.45 * glow), radius: unit * 0.6)
+    }
+}
+
+/// The title card's grid: a square cover of a fixed `side`, then a column
+/// `gap` to its right, together at most `maximum` wide. Subviews: the
+/// cover, the title (with its reading), the details (artist and album).
+/// The cover's top is on the title's cap height (`capShare` of its first
+/// baseline); the details sit with their last baseline on the cover's foot;
+/// the title is offered the room between, `gap` clear of the details, and
+/// steps down to fit it. Nothing in it depends on the title's length.
 struct CoverBesideWords: Layout {
+    let side: CGFloat
     let gap: CGFloat
-    let capHeight: CGFloat
+    let capShare: CGFloat
     let maximum: CGFloat
 
     private struct Fit {
-        var side: CGFloat
+        var column: CGFloat
         var coverTop: CGFloat
-        var words: CGSize
+        var titleRoom: CGFloat
+        var title: CGSize
+        var details: ViewDimensions?
     }
 
     private func fit(_ proposal: ProposedViewSize, subviews: Subviews) -> Fit {
-        guard subviews.count == 2 else { return Fit(side: 0, coverTop: 0, words: .zero) }
+        guard subviews.count == 3 else { return Fit(column: 0, coverTop: 0, titleRoom: 0, title: .zero, details: nil) }
         let width = min(proposal.width ?? maximum, maximum)
-        // The cover's side depends on how the words wrap beside it, and
-        // they on its side: a few rounds settle it.
-        var side = width * 0.18
+        let column = max(width * 0.4, width - side - gap)
+        let details = subviews[2].dimensions(in: ProposedViewSize(width: column, height: nil))
+        let detailsAbove = details[.lastTextBaseline]
         var top: CGFloat = 0
-        var size = CGSize.zero
-        for _ in 0..<4 {
-            let column = max(width * 0.4, width - side - gap)
-            let words = subviews[1].dimensions(in: ProposedViewSize(width: column, height: nil))
-            top = max(0, words[.firstTextBaseline] - capHeight)
-            size = CGSize(width: words.width, height: words.height)
-            side = max(capHeight, words[.lastTextBaseline] - top)
+        var room = max(1, side - detailsAbove - gap)
+        var title = CGSize.zero
+        for _ in 0..<3 {
+            room = max(1, top + side - detailsAbove - gap)
+            let dimensions = subviews[1].dimensions(in: ProposedViewSize(width: column, height: room))
+            title = CGSize(width: dimensions.width, height: dimensions.height)
+            top = max(0, dimensions[.firstTextBaseline] * (1 - capShare))
         }
-        return Fit(side: side, coverTop: top, words: size)
+        return Fit(column: column, coverTop: top, titleRoom: room, title: title, details: details)
     }
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
         let fit = fit(proposal, subviews: subviews)
-        return CGSize(width: fit.side + gap + fit.words.width, height: max(fit.words.height, fit.coverTop + fit.side))
+        guard let details = fit.details else { return .zero }
+        let bottom = fit.coverTop + side + (details.height - details[.lastTextBaseline])
+        let wordsWidth = max(fit.title.width, details.width)
+        return CGSize(width: side + gap + min(fit.column, wordsWidth), height: max(bottom, fit.title.height))
     }
 
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        guard subviews.count == 2 else { return }
         let fit = fit(proposal, subviews: subviews)
+        guard let details = fit.details else { return }
+        let x = bounds.minX + side + gap
         subviews[0].place(at: CGPoint(x: bounds.minX, y: bounds.minY + fit.coverTop),
-                          proposal: ProposedViewSize(width: fit.side, height: fit.side))
-        subviews[1].place(at: CGPoint(x: bounds.minX + fit.side + gap, y: bounds.minY),
-                          proposal: ProposedViewSize(width: fit.words.width, height: nil))
+                          proposal: ProposedViewSize(width: side, height: side))
+        subviews[1].place(at: CGPoint(x: x, y: bounds.minY),
+                          proposal: ProposedViewSize(width: fit.column, height: fit.titleRoom))
+        subviews[2].place(at: CGPoint(x: x, y: bounds.minY + fit.coverTop + side - details[.lastTextBaseline]),
+                          proposal: ProposedViewSize(width: fit.column, height: nil))
     }
 }
 

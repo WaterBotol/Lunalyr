@@ -1062,20 +1062,37 @@ class NowPlayingMonitorTests: XCTestCase {
         settingsChanged.send()
         await h.settle { h.monitor.motionArtwork != nil }
         XCTAssertEqual(h.monitor.motionArtwork, dawn)
+        XCTAssertEqual(h.monitor.currentMotionArtwork, dawn)
 
         h.music.index = 1
         h.postMusic(Songs.second, "Playing")
         h.scheduler.drain()
         XCTAssertEqual(h.monitor.motionArtwork, dawn, "Same album: the cover keeps playing")
+        XCTAssertEqual(h.monitor.currentMotionArtwork, dawn, "and it is this song's album's")
         XCTAssertFalse(h.monitor.isLookingUpMotion)
 
         h.music.index = 2
         h.postMusic(Songs.other, "Playing")
         XCTAssertEqual(h.monitor.motionArtwork, dawn, "Kept until a different answer arrives")
+        XCTAssertNil(h.monitor.currentMotionArtwork, "but never shown as the new song's (the title card)")
         await h.settle { !h.monitor.isLookingUpMotion }
         XCTAssertNil(h.monitor.motionArtwork)
         XCTAssertEqual(lookups.values, ["Dawn", "Far"])
         XCTAssertEqual(shown, [nil, dawn.square, nil], "No cut away and back within an album")
+    }
+
+    @MainActor
+    func testTheNewSongAwaitsItsOwnCover() async {
+        let h = harness([Songs.first, Songs.other])
+        h.start()
+        await h.settle { !h.monitor.awaitsArtwork }
+        XCTAssertFalse(h.monitor.awaitsArtwork, "the first song's cover (or that it has none) is in")
+        h.music.index = 1
+        h.postMusic(Songs.other, "Playing")
+        XCTAssertNil(h.monitor.currentTrackArtwork, "never the last song's")
+        XCTAssertTrue(h.monitor.awaitsArtwork || h.monitor.currentTrackArtwork != nil)
+        await h.settle { !h.monitor.awaitsArtwork }
+        XCTAssertFalse(h.monitor.awaitsArtwork)
     }
 
     func testThePlayerShownIsThePlayingOneElseTheMostRecent() {

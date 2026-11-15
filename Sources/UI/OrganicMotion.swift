@@ -69,6 +69,8 @@ struct LyricSceneContent {
     var artwork: NSImage?
     /// Its animated cover, for the opening title (`OpeningTitleCard.motionCover`).
     var motionCover: URL?
+    /// The song's own cover is still being fetched (`NowPlayingMonitor.awaitsArtwork`).
+    var coverPending = false
     /// The song time Lunalyr first saw this song at (0 from its start), for
     /// the opening title (`OpeningTitle`): an outgoing scene keeps its own.
     var joined = 0.0

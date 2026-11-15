@@ -588,4 +588,22 @@ final class OpeningTitleTests: XCTestCase {
                                               resizing: true, desktop: desktop, baseSize: base)
         XCTAssertEqual(shrunk.scale, OpeningTitle.Placement.scales.lowerBound)
     }
+
+    // MARK: The cover is the song's own
+
+    @MainActor
+    func testACoverThatArrivesLateFadesIn() {
+        let memory = OpeningTitleMemory()
+        XCTAssertEqual(memory.coverFade(track: 1, has: true, wall: 100), 1, "here from the start: the entrance brings it")
+        XCTAssertEqual(memory.coverFade(track: 2, has: false, wall: 200), 0, "a new song: no cover until its own")
+        XCTAssertEqual(memory.coverFade(track: 2, has: true, wall: 201), 0, accuracy: 1e-9)
+        XCTAssertGreaterThan(memory.coverFade(track: 2, has: true, wall: 201.2), 0)
+        XCTAssertEqual(memory.coverFade(track: 2, has: true, wall: 201 + OpeningTitleMemory.coverFadeIn), 1, accuracy: 1e-9)
+    }
+
+    func testTheCoversPlaceIsKeptWhileItIsFetched() {
+        XCTAssertTrue(OpeningTitle.reservesCover(age: 0))
+        XCTAssertTrue(OpeningTitle.reservesCover(age: OpeningTitle.coverWait - 0.1))
+        XCTAssertFalse(OpeningTitle.reservesCover(age: OpeningTitle.coverWait + 0.1))
+    }
 }

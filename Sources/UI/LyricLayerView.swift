@@ -91,7 +91,9 @@ struct LyricLayer: View {
             machineTranslations: lyricsVM.machineTranslations, plainLines: lyricsVM.plainLines,
             title: nowPlaying.current?.title ?? "", artist: nowPlaying.current?.artist ?? "",
             album: nowPlaying.current?.album ?? "", artwork: nowPlaying.currentTrackArtwork,
-            motionCover: OpeningTitle.motionCover(nowPlaying.motionArtwork, track: nowPlaying.current, settings: settings),
+            motionCover: OpeningTitle.motionCover(nowPlaying.currentMotionArtwork, track: nowPlaying.current,
+                                                  settings: settings),
+            coverPending: nowPlaying.awaitsArtwork,
             joined: opening.joined(track: key.track, at: time),
             notFoundAt: lyricsVM.notFoundAt, idleSince: nowPlaying.idleSince,
             duration: nowPlaying.current?.duration ?? 0, seed: trackSeed, vocalWindows: lyricsVM.vocalWindows,
@@ -180,6 +182,9 @@ struct LyricLayer: View {
         // the lookup ends: the loading scene and the lyrics drew a card each,
         // often of different sizes, and two titles showed while one scene
         // faded into the other.
+        // A cover that arrives after the card fades in; until then its place is kept.
+        let coverFade = (track: key.track,
+                         value: opening.coverFade(track: key.track, has: content.artwork != nil, wall: wall))
         let stay = opening.stay(track: key.track, kind: key.kind, notFoundAt: lyricsVM.notFound ? lyricsVM.notFoundAt : nil,
                                 at: time)
         let hold = opening.hold(track: key.track, kind: key.kind,
@@ -192,7 +197,9 @@ struct LyricLayer: View {
         let energy = cache.liveEnergy(wall: wall)
         let ink = ink(energy: energy, wall: wall)
         let shown = animating ? extras.visibility.presence(at: wall) : (extras.lyricsVisible ? 1 : 0)
-        let _ = pace?.report(OpeningTitle.pace(level(key: key, transition: transition, shown: shown,
+        // A cover fading in needs every frame for its short fade.
+        let coverFading = content.artwork != nil && coverFade.value < 1
+        let _ = pace?.report(coverFading ? .active : OpeningTitle.pace(level(key: key, transition: transition, shown: shown,
                                    target: animating ? extras.visibility.target : shown, ink: ink, wall: wall),
                                    phase: shown > 0.001 ? OpeningTitle.upcoming(openingSchedule(content, key: key), at: time) : nil,
                                    playing: nowPlaying.isPlaying))
@@ -228,10 +235,10 @@ struct LyricLayer: View {
                     ZStack {
                         scene(content, key: key, time: time, wall: wall, live: true, energy: energy, ink: ink)
                             .padding(.top, titleBand)
-                        if staying == nil { openingTitle(content, key: key, time: time) }
+                        if staying == nil { openingTitle(content, key: key, time: time, coverFade: coverFade) }
                     }
                         .opacity(transition.incomingPresence)
-                    if staying != nil { openingTitle(content, key: key, time: time) }
+                    if staying != nil { openingTitle(content, key: key, time: time, coverFade: coverFade) }
                 }
                 // Hiding the lyrics dissolves them softly rather than cutting.
                 .opacity(shown)
@@ -485,13 +492,15 @@ struct LyricLayer: View {
 
     @ViewBuilder
     private func openingTitle(_ content: LyricSceneContent, key: LyricSceneKey, time: Double,
-                              staying: Bool = true) -> some View {
+                              staying: Bool = true, coverFade: (track: Int, value: Double)? = nil) -> some View {
         if let phase = OpeningTitle.phase(openingSchedule(content, key: key, staying: staying), at: time) {
             OpeningTitleCard(phase: phase, title: content.title, artist: content.artist,
                              album: OpeningTitle.albumLine(album: content.album, title: content.title),
                              reading: opening.reading(of: content.title, options: readingOptions.snapshot),
                              cover: OpeningTitle.cover(content.artwork, enabled: OpeningTitle.showsCover),
                              motionCover: content.motionCover, paused: !animating,
+                             coverPending: content.coverPending && OpeningTitle.showsCover,
+                             coverFade: coverFade.map { key.track == $0.track ? $0.value : 1 } ?? 1,
                              baseSize: baseSize, accent: accent, mood: mood, floating: backdropOverride != nil,
                              row: backdropOverride != nil && phase.kept)
         }
