@@ -87,6 +87,16 @@ public class WordAccentsTests
     }
 
     [Fact]
+    public void Symbols_sharing_a_glyph_show_once_a_line()
+    {
+        // moon and night (moon.stars) are one Segoe glyph: the line shows it once, and the next picture still fits.
+        var plan = WordAccents.Plan(["moon", "night", "home"], true, false, WordAccentLists.Defaults);
+        Assert.Equal("moon", plan[0].Symbol);
+        Assert.Null(plan[1].Symbol);
+        Assert.Equal("house", plan[2].Symbol);
+    }
+
+    [Fact]
     public void A_word_can_take_a_symbol_and_an_action()
     {
         var plan = WordAccents.Plan(["burning"], true, true, WordAccentLists.Defaults);

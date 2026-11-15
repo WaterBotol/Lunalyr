@@ -189,7 +189,7 @@ public static class WordAccents
     }
 
     /// <summary>
-    /// One line's accents, planned once in reading order: at most two symbols (a symbol already in the line is not
+    /// One line's accents, planned once in reading order: at most two symbols (a picture already in the line is not
     /// repeated) and one action (the first listed action word). A run may take both. <paramref name="runs"/> are the
     /// runs' texts, a glued run's tokens joined.
     /// </summary>
@@ -203,10 +203,13 @@ public static class WordAccents
         {
             string? symbol = null;
             WordAction? action = null;
-            if (symbols && shown.Count < MaxSymbolsPerLine && SymbolFor(runs[i], lists) is { } found && !shown.Contains(found))
+            // A picture already in the line is not shown again: on Windows by its glyph, since some symbol names share
+            // one (moon and night, cloud and rain), so a line never shows the same picture twice.
+            if (symbols && shown.Count < MaxSymbolsPerLine && SymbolFor(runs[i], lists) is { } found
+                && !shown.Contains(WordSymbolGlyphs.Glyph(found) ?? found))
             {
                 symbol = found;
-                shown.Add(found);
+                shown.Add(WordSymbolGlyphs.Glyph(found) ?? found);
             }
             if (actions && actionsLeft > 0 && ActionFor(runs[i], lists) is { } act)
             {
