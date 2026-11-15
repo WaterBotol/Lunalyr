@@ -332,44 +332,69 @@ enum LyricCard {
     /// Full card resolution (1080 × 1350). Tests render at half size to stay fast.
     static let gifScale: CGFloat = 1
 
-    private struct GIFFrame {
-        let image: CGImage
-        let delay: Double
-    }
+    /// Seconds between GIF frames: 25 fps, so the lyrics move as smoothly as
+    /// a GIF allows (4 cs; browsers slow anything under 2 cs to 10).
+    static let gifCadence = 0.04
+    /// A moving background changes every pixel of every frame, so it is drawn
+    /// at 10 fps to stay in budget.
+    static let gifMovingBackgroundCadence = 0.1
+    /// The most a GIF should weigh: under Discord's 10 MB upload limit with
+    /// room to spare. Over it, the GIF is made again with fewer frames per
+    /// second, then smaller (see `GIFWriter`).
+    static let gifByteBudget = 8_000_000
+    /// The share of a GIF's progress its frames take (they are encoded as they
+    /// are drawn); finishing the file, and any smaller pass, takes the rest.
+    static let gifDrawingShare = 0.85
 
-    /// The most frames a GIF of `pages` lines is drawn with.
-    static func gifFrameBudget(pages: Int) -> Int { pages == 1 ? 90 : 120 }
-    /// The share of a GIF's progress its frames take; encoding them takes the rest.
-    static let gifDrawingShare = 0.8
-
-    /// The card as a looping GIF. `progress` runs 0 to `gifDrawingShare`
-    /// while the frames are drawn, then `encoding` is called and the bar
-    /// holds there until the file is written.
-    static func gif(_ content: Content, scale: CGFloat = gifScale, progress: ((Double) -> Void)? = nil,
-                    encoding: (() -> Void)? = nil) async -> Data? {
-        var collected: [GIFFrame] = []
-        let ok = await renderFrames(content, scale: scale, minimumCadence: 0.08, budget: gifFrameBudget(pages: content.pages.count),
-                                    progress: { progress?($0 * gifDrawingShare) }) { image, delay in
-            collected.append(GIFFrame(image: image, delay: delay))
-            return true
+    /// The card as a looping GIF, encoded by `GIFEncoder` off the main thread
+    /// while the frames are drawn. `progress` runs 0 to `gifDrawingShare`
+    /// while the frames are drawn, then `encoding` is called and the rest of
+    /// the bar follows the file being finished.
+    static func gif(_ content: Content, scale: CGFloat = gifScale, byteBudget: Int? = gifByteBudget,
+                    progress: ((Double) -> Void)? = nil, encoding: (() -> Void)? = nil) async -> Data? {
+        let writer = GIFWriter(byteBudget: byteBudget)
+        let cadence = content.background?.isAnimated == true ? gifMovingBackgroundCadence : gifCadence
+        // Each frame is encoded while the next is drawn; the sink waits for
+        // the one before, so at most two frames are held.
+        var pending: Task<Bool, Never>?
+        let drawn = await withTaskCancellationHandler {
+            await renderFrames(content, scale: scale, minimumCadence: cadence, budget: nil,
+                               progress: { progress?($0 * gifDrawingShare) }) { image, delay in
+                if let pending, !(await pending.value) { return false }
+                pending = Task.detached(priority: .userInitiated) { writer.add(image, delay: delay) }
+                return true
+            }
+        } onCancel: {
+            writer.cancel()
         }
-        guard ok, !Task.isCancelled else { return nil }
+        let encoded = await pending?.value ?? false
+        guard drawn, encoded, !Task.isCancelled else {
+            writer.cancel()
+            return nil
+        }
         encoding?()
-        let frames = collected
-        let encoder = Task.detached(priority: .userInitiated) {
-            encodeGIF(frames)
+        // Finishing is quick unless the GIF is over budget and is made again
+        // smaller; those passes move the rest of the bar.
+        let (fractions, reporter) = AsyncStream<Double>.makeStream(bufferingPolicy: .bufferingNewest(1))
+        let finisher = Task.detached(priority: .userInitiated) {
+            let data = writer.finish(progress: { reporter.yield($0) })
+            reporter.finish()
+            return data
         }
         return await withTaskCancellationHandler {
-            await encoder.value
+            for await fraction in fractions {
+                progress?(gifDrawingShare + (1 - gifDrawingShare) * fraction)
+            }
+            return await finisher.value
         } onCancel: {
-            encoder.cancel()
+            writer.cancel()
         }
     }
 
     /// Renders the card's animation one frame at a time, handing each to `sink`
     /// (which says whether to go on), so a long clip never holds every frame
-    /// at once. `budget` caps the frame count by stretching the cadence (the
-    /// GIF's way); nil takes a frame every `minimumCadence`, whatever the length.
+    /// at once. `budget` caps the frame count by stretching the cadence;
+    /// nil takes a frame every `minimumCadence`, whatever the length.
     /// With a `plan` (the MP4's way) the frames last exactly `plan.duration`:
     /// the last line is held (and faded) or the lines are cut, and a looping
     /// background video is crossfaded at its seams.
@@ -496,21 +521,6 @@ enum LyricCard {
             elapsed += shown
         }
         return true
-    }
-
-    private nonisolated static func encodeGIF(_ frames: [GIFFrame]) -> Data? {
-        let data = NSMutableData()
-        guard let destination = CGImageDestinationCreateWithData(data, UTType.gif.identifier as CFString,
-                                                                 frames.count, nil) else { return nil }
-        CGImageDestinationSetProperties(destination, [kCGImagePropertyGIFDictionary: [
-            kCGImagePropertyGIFLoopCount: 0,
-        ]] as CFDictionary)
-        for frame in frames {
-            guard !Task.isCancelled else { return nil }
-            let properties = [kCGImagePropertyGIFDictionary: [kCGImagePropertyGIFDelayTime: min(655.35, frame.delay)]] as CFDictionary
-            CGImageDestinationAddImage(destination, frame.image, properties)
-        }
-        return CGImageDestinationFinalize(destination) ? data as Data : nil
     }
 
     /// Publish a file attachment. A receiver that reads a generic image can

@@ -421,7 +421,8 @@ extension LyricCard {
                 let drawing = frames * Double(videoScale * videoScale)
                 return hasSound ? drawing / (1 - mixShare) : drawing
             case .gif:
-                let frames = min(Double(gifFrameBudget(pages: pages)), seconds / 0.08 + Double(pages))
+                // Drawn and encoded together, at most `gifByteBudget` deep.
+                let frames = seconds / gifCadence + Double(pages)
                 return frames * Double(gifScale * gifScale) / gifDrawingShare
             case .png:
                 // One frame at twice the card's size.
