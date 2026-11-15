@@ -261,10 +261,11 @@ final class QueueLookAhead {
         let settings = Settings.shared
         let followsMusic = monitor.activePlayer == .appleMusic
         let enabled = PlayerOptions.shared.looksAhead
-        reader.setActive(enabled && followsMusic)
+        let lowPowerMode = ProcessInfo.processInfo.isLowPowerModeEnabled
+        reader.setActive(enabled && followsMusic && !lowPowerMode)
         let conditions = LookAheadConditions(
             enabled: enabled, followsMusic: followsMusic, online: LyricConnectivity.shared.isOnline,
-            lowPowerMode: ProcessInfo.processInfo.isLowPowerModeEnabled, onBattery: PowerSource.isOnBattery,
+            lowPowerMode: lowPowerMode, onBattery: PowerSource.isOnBattery,
             videos: settings.backgroundMode == .musicVideo && settings.musicVideoOnline)
         update(upcoming: reader.upcoming, current: monitor.current, conditions: conditions)
     }

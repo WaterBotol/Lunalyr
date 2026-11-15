@@ -158,10 +158,13 @@ final class MusicVideoController: ObservableObject {
     /// the wallpaper with online search on (`QueueLookAhead`): the YouTube
     /// ID, remembered as the song's own lookup would, then its shape
     /// (remembered for the run), so the player is sized right at once. No
-    /// player is made. False when nothing could be looked up yet (the rate
-    /// limit had no room, or it was cancelled): try again later.
+    /// player is made. False when there is no answer yet (the rate limit
+    /// had no room or answered "later", or it was cancelled): try again
+    /// later.
     func lookAhead(_ song: MusicVideoSong) async -> Bool {
         guard enabled, online, let found = await resolver.lookAhead(song) else { return false }
+        LookAheadLog.note("video looked up ahead: \(Self.traceName(found))")
+        if found == .missing(.rateLimited) { return false }
         if case .found(.youTube(let id)) = found, !Task.isCancelled { _ = await YouTubeVideoShape.aspect(of: id) }
         return true
     }

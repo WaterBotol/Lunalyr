@@ -474,6 +474,27 @@ final class LookAheadWarmTests: XCTestCase {
         XCTAssertEqual(count.calls, 1, "the song start asked no lyric source")
     }
 
+    func testAChoiceThatDoesNotFitThePlayingSongIsNotCarriedAcross() async {
+        final class Count: @unchecked Sendable { var calls = 0 }
+        let count = Count()
+        var longer = candidate()
+        longer.duration = 195
+        let found = longer
+        let fetcher = LyricsFetcher(cacheFolder: folder, timing: fast, isOnline: { true }) { _, _, _ in
+            count.calls += 1
+            return found
+        }
+        // 195 s fits 191.5 s but not 189.7 s (3.8 s is the most allowed).
+        let ahead = LyricQuery(title: "Our Song", artist: "Our Artist", album: "Album", duration: 191.5)
+        let playing = LyricQuery(title: "Our Song", artist: "Our Artist", album: "Album", duration: 189.7)
+        let first = await fetcher.lookup(ahead, options: options)
+        XCTAssertNotNil(first.result)
+        fetcher.adopt(from: ahead, to: playing, fingerprint: options.fingerprint, musixmatch: MusixmatchState(file: nil))
+        let report = await fetcher.lookup(playing, options: options)
+        XCTAssertFalse(report.cached, "the playing song's lookup asks the sources itself")
+        XCTAssertEqual(count.calls, 2)
+    }
+
     func testWithoutALookAheadTheSongIsLookedUpAsBefore() async {
         final class Count: @unchecked Sendable { var calls = 0 }
         let count = Count()

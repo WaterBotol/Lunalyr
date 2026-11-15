@@ -437,6 +437,8 @@ final class MusicVideoResolver {
         let key = song.key
         if let pasted = links.videoID(for: key) { return .found(.youTube(pasted)) }
         if let cached = cache.lookup(key, now: now()) { return cached }
+        // Without room, nothing is asked, not even the library: a later plan tries again.
+        guard hasLookAheadHeadroom else { return nil }
         if let local = await library.localVideo(for: song) { return .found(.local(local)) }
         guard !Task.isCancelled, hasLookAheadHeadroom else { return nil }
         let result = await searchYouTube(song)

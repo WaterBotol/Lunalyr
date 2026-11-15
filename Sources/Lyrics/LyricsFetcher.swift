@@ -203,8 +203,10 @@ final class LyricsFetcher {
         let from = prefetched.recordingKey, to = playing.recordingKey
         guard from != to else { return }
         let fromKey = from + "|" + fingerprint, toKey = to + "|" + fingerprint
+        // Only a choice that also fits the playing song's details: it is
+        // used without asking any service again.
         if SavedLyrics.readCandidate(toKey, in: cacheFolder) == nil,
-           let saved = SavedLyrics.readCandidate(fromKey, in: cacheFolder) {
+           let saved = SavedLyrics.readCandidate(fromKey, in: cacheFolder), Self.rejection(saved, query: playing) == nil {
             SavedLyrics.save(saved, key: toKey, in: cacheFolder)
         }
         misses.copy(from: fromKey, to: toKey)

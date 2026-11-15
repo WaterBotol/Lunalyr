@@ -151,10 +151,8 @@ final class LyricsViewModel: ObservableObject {
             var query=LyricQuery(title:track.title,artist:track.artist,album:track.album,duration:track.duration)
             query.genre=track.genre
             // Looked up ahead from Music's queue under slightly different details: use what it found.
-            if let ahead=QueueLookAhead.shared.lookedUp(track) {
-                LyricsFetcher.shared.adopt(from:ahead.query,to:query,fingerprint:LyricSourceOptions.shared.fingerprint)
-            }
-            startLookup(query,recording:query.recordingKey,force:false)
+            let adopt=QueueLookAhead.shared.lookedUp(track).map {($0.query,LyricSourceOptions.shared.fingerprint)}
+            startLookup(query,recording:query.recordingKey,force:false,adopting:adopt)
         }
     }
     func refresh(force:Bool=true,title:String?=nil,artist:String?=nil) {
@@ -164,7 +162,7 @@ final class LyricsViewModel: ObservableObject {
         if let artist,!artist.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty {query.artist=artist}
         startLookup(query,recording:current.recordingKey,force:force)
     }
-    private func startLookup(_ query:LyricQuery,recording:String,force:Bool) {
+    private func startLookup(_ query:LyricQuery,recording:String,force:Bool,adopting:(LyricQuery,String)?=nil) {
         lookupTask?.cancel();upgradeTask?.cancel();localTask?.cancel()
         let ticket=UUID();generation=ticket
         // `notFound` stays as it is until the result arrives, so a repeat
@@ -177,6 +175,12 @@ final class LyricsViewModel: ObservableObject {
             await self?.receive(update,ticket:ticket,recording:recording)
         }
         lookupTask=Task { [weak self] in
+            if let (ahead,fingerprint)=adopting {
+                // A small file read and written: off the main thread.
+                await Task.detached(priority:.userInitiated) {
+                    LyricsFetcher.shared.adopt(from:ahead,to:query,fingerprint:fingerprint)
+                }.value
+            }
             let report=await LyricsFetcher.shared.lookup(query,force:force,onUpdate:progress)
             guard !Task.isCancelled else {return}
             self?.receive(report,ticket:ticket,recording:recording)
