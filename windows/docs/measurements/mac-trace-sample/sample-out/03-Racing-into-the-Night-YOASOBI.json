@@ -1,0 +1,1604 @@
+{
+  "digest" : [
+    {
+      "elapsedMs" : 2001,
+      "requests" : [
+        "404 2 ms https://lyricsplus.binimum.org/v2/lyrics/get?title=Racing%20into%20the%20Night&artist=YOASOBI&duration=261&album=THE%20BOOK",
+        "404 1999 ms https://lyricsplus.prjktla.my.id/v2/lyrics/get?title=Racing%20into%20the%20Night&artist=YOASOBI&duration=261&album=THE%20BOOK"
+      ],
+      "source" : "lyricsPlus",
+      "state" : "No usable match / unavailable",
+      "variants" : [
+        "listed title"
+      ],
+      "verdict" : "none"
+    },
+    {
+      "elapsedMs" : 817,
+      "requests" : [
+        "200 807 ms https://music.163.com/api/search/get?s=Racing%20into%20the%20Night%20YOASOBI&type=1&limit=8",
+        "200 6 ms https://itunes.apple.com/search?country=au&entity=song&limit=15&term=YOASOBI%20Racing%20into%20the%20Night"
+      ],
+      "source" : "amll",
+      "state" : "No usable match / unavailable",
+      "variants" : [
+        "listed title"
+      ],
+      "verdict" : "none"
+    },
+    {
+      "elapsedMs" : 1655,
+      "requests" : [
+        "200 841 ms https://music.163.com/api/search/get?s=Racing%20into%20the%20Night%20YOASOBI&type=1&limit=8",
+        "200 205 ms https://music.163.com/api/search/get?s=Racing%20into%20the%20Night%20%EC%9A%94%EC%95%84%EC%86%8C%EB%B9%84&type=1&limit=8"
+      ],
+      "source" : "netEase",
+      "state" : "No usable match / unavailable",
+      "variants" : [
+        "listed title",
+        "artist alias “요아소비”"
+      ],
+      "verdict" : "none"
+    },
+    {
+      "candidate" : {
+        "agreement" : {
+          "peers" : 0,
+          "timedCompared" : 0,
+          "timingOutlier" : false
+        },
+        "appleRelay" : false,
+        "artist" : "YOASOBI",
+        "artistSimilarity" : 1,
+        "confidence" : 2.225,
+        "duration" : 260,
+        "durationDelta" : -1,
+        "firstLine" : "Seize a move, you're on me, falling and we were dissolving",
+        "languageMismatch" : false,
+        "lead" : 2,
+        "lines" : 62,
+        "metadataReported" : true,
+        "provenance" : "Mixed timing · LRCLIB",
+        "rank" : 1,
+        "rankedTiming" : 2,
+        "score" : 98,
+        "script" : "latin",
+        "source" : "lrclib",
+        "timing" : "mixed",
+        "title" : "Racing into the Night",
+        "titleSimilarity" : 1,
+        "verdict" : "accepted",
+        "versionMismatch" : [
+
+        ],
+        "versionTags" : [
+
+        ],
+        "viaOriginalTitle" : false
+      },
+      "elapsedMs" : 415,
+      "requests" : [
+        "200 356 ms https://lrclib.net/api/get?album_name=THE%20BOOK&artist_name=YOASOBI&duration=261&track_name=Racing%20into%20the%20Night"
+      ],
+      "source" : "lrclib",
+      "state" : "Match found · showing",
+      "variants" : [
+        "listed title"
+      ],
+      "verdict" : "picked"
+    },
+    {
+      "elapsedMs" : 2501,
+      "requests" : [
+        "200 1192 ms https://c.y.qq.com/soso/fcgi-bin/client_search_cp?format=json&n=8&p=1&w=Racing%20into%20the%20Night%20YOASOBI",
+        "200 1051 ms https://c.y.qq.com/soso/fcgi-bin/client_search_cp?format=json&n=8&p=1&w=Racing%20into%20the%20Night%20%EC%9A%94%EC%95%84%EC%86%8C%EB%B9%84"
+      ],
+      "source" : "qqMusic",
+      "state" : "No usable match / unavailable",
+      "variants" : [
+        "listed title",
+        "artist alias “요아소비”"
+      ],
+      "verdict" : "none"
+    },
+    {
+      "elapsedMs" : 1637,
+      "requests" : [
+        "200 525 ms https://mobileservice.kugou.com/api/v3/search/song?format=json&keyword=Racing%20into%20the%20Night%20YOASOBI&page=1&pagesize=8",
+        "200 921 ms https://musicbrainz.org/ws/2/artist?query=%22YOASOBI%22&limit=5&fmt=json",
+        "200 185 ms https://mobileservice.kugou.com/api/v3/search/song?format=json&keyword=Racing%20into%20the%20Night%20%EC%9A%94%EC%95%84%EC%86%8C%EB%B9%84&page=1&pagesize=8"
+      ],
+      "source" : "kugou",
+      "state" : "No usable match / unavailable",
+      "variants" : [
+        "listed title",
+        "artist alias “요아소비”"
+      ],
+      "verdict" : "none"
+    },
+    {
+      "elapsedMs" : 1533,
+      "requests" : [
+        "cancelled 1533 ms https://search.kuwo.cn/r.s?all=Racing%20into%20the%20Night%20YOASOBI&client=kt&encoding=utf8&ft=music&itemset=web_2013&pcjson=1&pn=0&rformat=json&rn=8&vipver=1"
+      ],
+      "source" : "kuwo",
+      "state" : "Not needed: it couldn’t beat the match showing",
+      "variants" : [
+        "listed title"
+      ],
+      "verdict" : "stopped"
+    },
+    {
+      "elapsedMs" : 1533,
+      "requests" : [
+        "cancelled 1533 ms https://api.lyrics.ovh/v1/YOASOBI/Racing%20into%20the%20Night?"
+      ],
+      "source" : "lyricsOVH",
+      "state" : "Not needed: it couldn’t beat the match showing",
+      "variants" : [
+
+      ],
+      "verdict" : "stopped"
+    }
+  ],
+  "elapsedMs" : 2526,
+  "events" : [
+    {
+      "at" : 0,
+      "kind" : "lookup",
+      "message" : "mode smart, automatic",
+      "query" : {
+        "album" : "THE BOOK",
+        "artist" : "YOASOBI",
+        "duration" : 261,
+        "title" : "Racing into the Night"
+      },
+      "sources" : [
+        "lyricsPlus",
+        "amll",
+        "netEase",
+        "lrclib",
+        "qqMusic",
+        "kugou",
+        "kuwo",
+        "lyricsOVH"
+      ]
+    },
+    {
+      "at" : 0,
+      "kind" : "sourceStart",
+      "source" : "lyricsPlus"
+    },
+    {
+      "at" : 0,
+      "kind" : "sourceStart",
+      "source" : "amll"
+    },
+    {
+      "at" : 0,
+      "kind" : "sourceStart",
+      "source" : "netEase"
+    },
+    {
+      "at" : 0,
+      "kind" : "sourceStart",
+      "source" : "lrclib"
+    },
+    {
+      "at" : 0,
+      "kind" : "sourceStart",
+      "source" : "qqMusic"
+    },
+    {
+      "at" : 0,
+      "kind" : "sourceStart",
+      "source" : "kugou"
+    },
+    {
+      "at" : 0,
+      "kind" : "sourceStart",
+      "source" : "kuwo"
+    },
+    {
+      "at" : 0,
+      "kind" : "sourceStart",
+      "source" : "lyricsOVH"
+    },
+    {
+      "at" : 0,
+      "kind" : "variant",
+      "message" : "listed title",
+      "query" : {
+        "album" : "THE BOOK",
+        "artist" : "YOASOBI",
+        "duration" : 261,
+        "title" : "Racing into the Night"
+      },
+      "source" : "lyricsPlus"
+    },
+    {
+      "at" : 0,
+      "kind" : "variant",
+      "message" : "listed title",
+      "query" : {
+        "album" : "THE BOOK",
+        "artist" : "YOASOBI",
+        "duration" : 261,
+        "title" : "Racing into the Night"
+      },
+      "source" : "netEase"
+    },
+    {
+      "at" : 0,
+      "kind" : "variant",
+      "message" : "listed title",
+      "query" : {
+        "album" : "THE BOOK",
+        "artist" : "YOASOBI",
+        "duration" : 261,
+        "title" : "Racing into the Night"
+      },
+      "source" : "amll"
+    },
+    {
+      "at" : 0,
+      "kind" : "variant",
+      "message" : "listed title",
+      "query" : {
+        "album" : "THE BOOK",
+        "artist" : "YOASOBI",
+        "duration" : 261,
+        "title" : "Racing into the Night"
+      },
+      "source" : "lrclib"
+    },
+    {
+      "at" : 0,
+      "kind" : "note",
+      "message" : "Lyrics+ mirrors in order (resting ones last or skipped): [\"https://lyricsplus.binimum.org\", \"https://lyricsplus.prjktla.my.id\", \"https://lyricsplus.prjktla.workers.dev\"]",
+      "source" : "lyricsPlus"
+    },
+    {
+      "at" : 0,
+      "kind" : "variant",
+      "message" : "listed title",
+      "query" : {
+        "album" : "THE BOOK",
+        "artist" : "YOASOBI",
+        "duration" : 261,
+        "title" : "Racing into the Night"
+      },
+      "source" : "qqMusic"
+    },
+    {
+      "at" : 0,
+      "kind" : "variant",
+      "message" : "listed title",
+      "query" : {
+        "album" : "THE BOOK",
+        "artist" : "YOASOBI",
+        "duration" : 261,
+        "title" : "Racing into the Night"
+      },
+      "source" : "kugou"
+    },
+    {
+      "at" : 0,
+      "kind" : "variant",
+      "message" : "listed title",
+      "query" : {
+        "album" : "THE BOOK",
+        "artist" : "YOASOBI",
+        "duration" : 261,
+        "title" : "Racing into the Night"
+      },
+      "source" : "kuwo"
+    },
+    {
+      "at" : 0.003,
+      "kind" : "request",
+      "request" : {
+        "bytes" : 449,
+        "ms" : 2,
+        "status" : 404,
+        "timeout" : 4,
+        "url" : "https://lyricsplus.binimum.org/v2/lyrics/get?title=Racing%20into%20the%20Night&artist=YOASOBI&duration=261&album=THE%20BOOK"
+      },
+      "source" : "lyricsPlus"
+    },
+    {
+      "at" : 0.003,
+      "kind" : "note",
+      "message" : "Lyrics+ https://lyricsplus.binimum.org: no lyrics",
+      "source" : "lyricsPlus"
+    },
+    {
+      "at" : 0.356,
+      "kind" : "request",
+      "request" : {
+        "bytes" : 41077,
+        "ms" : 356,
+        "status" : 200,
+        "timeout" : 4,
+        "url" : "https://lrclib.net/api/get?album_name=THE%20BOOK&artist_name=YOASOBI&duration=261&track_name=Racing%20into%20the%20Night"
+      },
+      "source" : "lrclib"
+    },
+    {
+      "at" : 0.356,
+      "kind" : "results",
+      "results" : {
+        "label" : "LRCLIB exact (get)",
+        "read" : 1,
+        "returned" : 1
+      },
+      "source" : "lrclib"
+    },
+    {
+      "at" : 0.386,
+      "kind" : "note",
+      "message" : "LRCLIB exact match has sound timing: search skipped",
+      "source" : "lrclib"
+    },
+    {
+      "at" : 0.402,
+      "hit" : {
+        "album" : "THE BOOK",
+        "artist" : "YOASOBI",
+        "artistSimilarity" : 1,
+        "duration" : 260,
+        "score" : 98,
+        "title" : "Racing into the Night",
+        "titleSimilarity" : 1,
+        "verdict" : "passes the recording check · mixed"
+      },
+      "kind" : "hit",
+      "source" : "lrclib"
+    },
+    {
+      "at" : 0.406,
+      "candidate" : {
+        "agreement" : {
+          "peers" : 0,
+          "timedCompared" : 0,
+          "timingOutlier" : false
+        },
+        "appleRelay" : false,
+        "artist" : "YOASOBI",
+        "artistSimilarity" : 1,
+        "confidence" : 2.225,
+        "duration" : 260,
+        "durationDelta" : -1,
+        "firstLine" : "Seize a move, you're on me, falling and we were dissolving",
+        "languageMismatch" : false,
+        "lead" : 2,
+        "lines" : 62,
+        "metadataReported" : true,
+        "provenance" : "Mixed timing · LRCLIB",
+        "rankedTiming" : 2,
+        "score" : 98,
+        "script" : "latin",
+        "source" : "lrclib",
+        "timing" : "mixed",
+        "title" : "Racing into the Night",
+        "titleSimilarity" : 1,
+        "verdict" : "accepted",
+        "versionMismatch" : [
+
+        ],
+        "versionTags" : [
+
+        ],
+        "viaOriginalTitle" : false
+      },
+      "kind" : "candidate",
+      "message" : "LRCLIB best offer of 1 with lyrics",
+      "source" : "lrclib"
+    },
+    {
+      "at" : 0.411,
+      "candidate" : {
+        "agreement" : {
+          "peers" : 0,
+          "timedCompared" : 0,
+          "timingOutlier" : false
+        },
+        "appleRelay" : false,
+        "artist" : "YOASOBI",
+        "artistSimilarity" : 1,
+        "confidence" : 2.225,
+        "duration" : 260,
+        "durationDelta" : -1,
+        "firstLine" : "Seize a move, you're on me, falling and we were dissolving",
+        "languageMismatch" : false,
+        "lead" : 2,
+        "lines" : 62,
+        "metadataReported" : true,
+        "provenance" : "Mixed timing · LRCLIB",
+        "rankedTiming" : 2,
+        "score" : 98,
+        "script" : "latin",
+        "source" : "lrclib",
+        "timing" : "mixed",
+        "title" : "Racing into the Night",
+        "titleSimilarity" : 1,
+        "verdict" : "accepted",
+        "versionMismatch" : [
+
+        ],
+        "versionTags" : [
+
+        ],
+        "viaOriginalTitle" : false
+      },
+      "kind" : "variantResult",
+      "message" : "kept; no original-title search: listed-title answer is usable",
+      "source" : "lrclib"
+    },
+    {
+      "at" : 0.415,
+      "candidate" : {
+        "agreement" : {
+          "peers" : 0,
+          "timedCompared" : 0,
+          "timingOutlier" : false
+        },
+        "appleRelay" : false,
+        "artist" : "YOASOBI",
+        "artistSimilarity" : 1,
+        "confidence" : 2.225,
+        "duration" : 260,
+        "durationDelta" : -1,
+        "firstLine" : "Seize a move, you're on me, falling and we were dissolving",
+        "languageMismatch" : false,
+        "lead" : 2,
+        "lines" : 62,
+        "metadataReported" : true,
+        "provenance" : "Mixed timing · LRCLIB",
+        "rankedTiming" : 2,
+        "score" : 98,
+        "script" : "latin",
+        "source" : "lrclib",
+        "timing" : "mixed",
+        "title" : "Racing into the Night",
+        "titleSimilarity" : 1,
+        "verdict" : "accepted",
+        "versionMismatch" : [
+
+        ],
+        "versionTags" : [
+
+        ],
+        "viaOriginalTitle" : false
+      },
+      "elapsedMs" : 415,
+      "kind" : "sourceEnd",
+      "message" : "Match found",
+      "source" : "lrclib"
+    },
+    {
+      "at" : 0.419,
+      "kind" : "publication",
+      "publication" : {
+        "best" : "lrclib",
+        "bestTiming" : "mixed",
+        "graceOver" : false,
+        "pending" : [
+          "amll",
+          "kugou",
+          "kuwo",
+          "lyricsOVH",
+          "lyricsPlus",
+          "netEase",
+          "qqMusic"
+        ],
+        "revision" : 0,
+        "settleOver" : false,
+        "settled" : false,
+        "step" : "wait"
+      }
+    },
+    {
+      "at" : 0.525,
+      "kind" : "request",
+      "request" : {
+        "bytes" : 24808,
+        "ms" : 525,
+        "status" : 200,
+        "timeout" : 6,
+        "url" : "https://mobileservice.kugou.com/api/v3/search/song?format=json&keyword=Racing%20into%20the%20Night%20YOASOBI&page=1&pagesize=8"
+      },
+      "source" : "kugou"
+    },
+    {
+      "at" : 0.526,
+      "kind" : "results",
+      "results" : {
+        "label" : "Kugou search",
+        "read" : 0,
+        "returned" : 8
+      },
+      "source" : "kugou"
+    },
+    {
+      "at" : 0.526,
+      "kind" : "note",
+      "message" : "8 result(s) scored 0 and were dropped",
+      "source" : "kugou"
+    },
+    {
+      "at" : 0.526,
+      "kind" : "variantResult",
+      "message" : "nothing under the library artist: trying aliases",
+      "source" : "kugou"
+    },
+    {
+      "at" : 0.808,
+      "kind" : "request",
+      "request" : {
+        "bytes" : 7823,
+        "ms" : 807,
+        "status" : 200,
+        "timeout" : 6,
+        "url" : "https://music.163.com/api/search/get?s=Racing%20into%20the%20Night%20YOASOBI&type=1&limit=8"
+      },
+      "source" : "amll"
+    },
+    {
+      "at" : 0.808,
+      "kind" : "results",
+      "results" : {
+        "label" : "NetEase search",
+        "read" : 8,
+        "returned" : 8
+      },
+      "source" : "amll"
+    },
+    {
+      "at" : 0.808,
+      "hit" : {
+        "artist" : "Anime Ringtones, Anytunz",
+        "artistSimilarity" : 0,
+        "duration" : 36.363,
+        "title" : "Racing Into the Night - YOASOBI (Marimba iPhone Ringtone) (Ringtone)",
+        "titleSimilarity" : 0.85,
+        "verdict" : "artist < 0.65"
+      },
+      "kind" : "hit",
+      "source" : "amll"
+    },
+    {
+      "at" : 0.808,
+      "hit" : {
+        "artist" : "Lilorx",
+        "artistSimilarity" : 0,
+        "duration" : 40.24,
+        "title" : "Racing into the night (Ringtone Remix)",
+        "titleSimilarity" : 0.85,
+        "verdict" : "artist < 0.65"
+      },
+      "kind" : "hit",
+      "source" : "amll"
+    },
+    {
+      "at" : 0.808,
+      "hit" : {
+        "artist" : "Errol Sneer Jr",
+        "artistSimilarity" : 0,
+        "duration" : 257.643,
+        "title" : "Racing Into The Night (Remix)",
+        "titleSimilarity" : 0.85,
+        "verdict" : "artist < 0.65"
+      },
+      "kind" : "hit",
+      "source" : "amll"
+    },
+    {
+      "at" : 0.809,
+      "hit" : {
+        "artist" : "Ringtone Mania",
+        "artistSimilarity" : 0,
+        "duration" : 188.793,
+        "title" : "Racing into the Night (Marimba Remix)",
+        "titleSimilarity" : 0.85,
+        "verdict" : "artist < 0.65"
+      },
+      "kind" : "hit",
+      "source" : "amll"
+    },
+    {
+      "at" : 0.809,
+      "hit" : {
+        "artist" : "8 Bit Universe",
+        "artistSimilarity" : 0,
+        "duration" : 91.088,
+        "title" : "Racing Into The Night (8 Bit Version)",
+        "titleSimilarity" : 0.95,
+        "verdict" : "artist < 0.65"
+      },
+      "kind" : "hit",
+      "source" : "amll"
+    },
+    {
+      "at" : 0.809,
+      "hit" : {
+        "artist" : "jian lofi",
+        "artistSimilarity" : 0,
+        "duration" : 184.411,
+        "title" : "Racing into the Night (Lo-fi Remix)",
+        "titleSimilarity" : 0.85,
+        "verdict" : "artist < 0.65"
+      },
+      "kind" : "hit",
+      "source" : "amll"
+    },
+    {
+      "at" : 0.809,
+      "hit" : {
+        "artist" : "Shayne Orok",
+        "artistSimilarity" : 0,
+        "duration" : 258.236,
+        "title" : "Racing Into the Night (Yoru ni Kakeru)",
+        "titleSimilarity" : 0.85,
+        "verdict" : "artist < 0.65"
+      },
+      "kind" : "hit",
+      "source" : "amll"
+    },
+    {
+      "at" : 0.809,
+      "hit" : {
+        "artist" : "郑晟河",
+        "artistSimilarity" : 0,
+        "duration" : 261.59,
+        "title" : "Racing into the Night",
+        "titleSimilarity" : 1,
+        "verdict" : "artist < 0.65"
+      },
+      "kind" : "hit",
+      "source" : "amll"
+    },
+    {
+      "at" : 0.809,
+      "kind" : "note",
+      "message" : "NetEase: no search result passed (title ≥ 0.75, artist ≥ 0.65, length within 8 s)",
+      "source" : "amll"
+    },
+    {
+      "at" : 0.809,
+      "kind" : "note",
+      "message" : "AMLL: NetEase found no song, so there is no file to read",
+      "source" : "amll"
+    },
+    {
+      "at" : 0.809,
+      "kind" : "variantResult",
+      "message" : "nothing under the listed title: looking up the original title",
+      "source" : "amll"
+    },
+    {
+      "at" : 0.816,
+      "kind" : "request",
+      "request" : {
+        "bytes" : 24951,
+        "ms" : 6,
+        "status" : 200,
+        "timeout" : 4,
+        "url" : "https://itunes.apple.com/search?country=au&entity=song&limit=15&term=YOASOBI%20Racing%20into%20the%20Night"
+      },
+      "source" : "amll"
+    },
+    {
+      "at" : 0.816,
+      "kind" : "results",
+      "results" : {
+        "label" : "iTunes au search",
+        "read" : 15,
+        "returned" : 15
+      },
+      "source" : "amll"
+    },
+    {
+      "at" : 0.817,
+      "kind" : "note",
+      "message" : "iTunes: no catalogue entry with this title, artist and length (±3 s)",
+      "source" : "amll"
+    },
+    {
+      "at" : 0.818,
+      "kind" : "note",
+      "message" : "no original title found (iTunes JP): listed-title answer kept",
+      "source" : "amll"
+    },
+    {
+      "at" : 0.818,
+      "elapsedMs" : 817,
+      "kind" : "sourceEnd",
+      "message" : "No usable match / unavailable",
+      "source" : "amll"
+    },
+    {
+      "at" : 0.823,
+      "kind" : "publication",
+      "publication" : {
+        "best" : "lrclib",
+        "bestTiming" : "mixed",
+        "graceOver" : false,
+        "pending" : [
+          "kugou",
+          "kuwo",
+          "lyricsOVH",
+          "lyricsPlus",
+          "netEase",
+          "qqMusic"
+        ],
+        "revision" : 0,
+        "settleOver" : false,
+        "settled" : false,
+        "step" : "wait"
+      }
+    },
+    {
+      "at" : 0.842,
+      "kind" : "request",
+      "request" : {
+        "bytes" : 7823,
+        "ms" : 841,
+        "status" : 200,
+        "timeout" : 6,
+        "url" : "https://music.163.com/api/search/get?s=Racing%20into%20the%20Night%20YOASOBI&type=1&limit=8"
+      },
+      "source" : "netEase"
+    },
+    {
+      "at" : 0.842,
+      "kind" : "results",
+      "results" : {
+        "label" : "NetEase search",
+        "read" : 8,
+        "returned" : 8
+      },
+      "source" : "netEase"
+    },
+    {
+      "at" : 0.842,
+      "hit" : {
+        "artist" : "Anime Ringtones, Anytunz",
+        "artistSimilarity" : 0,
+        "duration" : 36.363,
+        "title" : "Racing Into the Night - YOASOBI (Marimba iPhone Ringtone) (Ringtone)",
+        "titleSimilarity" : 0.85,
+        "verdict" : "artist < 0.65"
+      },
+      "kind" : "hit",
+      "source" : "netEase"
+    },
+    {
+      "at" : 0.842,
+      "hit" : {
+        "artist" : "Lilorx",
+        "artistSimilarity" : 0,
+        "duration" : 40.24,
+        "title" : "Racing into the night (Ringtone Remix)",
+        "titleSimilarity" : 0.85,
+        "verdict" : "artist < 0.65"
+      },
+      "kind" : "hit",
+      "source" : "netEase"
+    },
+    {
+      "at" : 0.842,
+      "hit" : {
+        "artist" : "Errol Sneer Jr",
+        "artistSimilarity" : 0,
+        "duration" : 257.643,
+        "title" : "Racing Into The Night (Remix)",
+        "titleSimilarity" : 0.85,
+        "verdict" : "artist < 0.65"
+      },
+      "kind" : "hit",
+      "source" : "netEase"
+    },
+    {
+      "at" : 0.842,
+      "hit" : {
+        "artist" : "Ringtone Mania",
+        "artistSimilarity" : 0,
+        "duration" : 188.793,
+        "title" : "Racing into the Night (Marimba Remix)",
+        "titleSimilarity" : 0.85,
+        "verdict" : "artist < 0.65"
+      },
+      "kind" : "hit",
+      "source" : "netEase"
+    },
+    {
+      "at" : 0.842,
+      "hit" : {
+        "artist" : "8 Bit Universe",
+        "artistSimilarity" : 0,
+        "duration" : 91.088,
+        "title" : "Racing Into The Night (8 Bit Version)",
+        "titleSimilarity" : 0.95,
+        "verdict" : "artist < 0.65"
+      },
+      "kind" : "hit",
+      "source" : "netEase"
+    },
+    {
+      "at" : 0.842,
+      "hit" : {
+        "artist" : "jian lofi",
+        "artistSimilarity" : 0,
+        "duration" : 184.411,
+        "title" : "Racing into the Night (Lo-fi Remix)",
+        "titleSimilarity" : 0.85,
+        "verdict" : "artist < 0.65"
+      },
+      "kind" : "hit",
+      "source" : "netEase"
+    },
+    {
+      "at" : 0.842,
+      "hit" : {
+        "artist" : "Shayne Orok",
+        "artistSimilarity" : 0,
+        "duration" : 258.236,
+        "title" : "Racing Into the Night (Yoru ni Kakeru)",
+        "titleSimilarity" : 0.85,
+        "verdict" : "artist < 0.65"
+      },
+      "kind" : "hit",
+      "source" : "netEase"
+    },
+    {
+      "at" : 0.842,
+      "hit" : {
+        "artist" : "郑晟河",
+        "artistSimilarity" : 0,
+        "duration" : 261.59,
+        "title" : "Racing into the Night",
+        "titleSimilarity" : 1,
+        "verdict" : "artist < 0.65"
+      },
+      "kind" : "hit",
+      "source" : "netEase"
+    },
+    {
+      "at" : 0.842,
+      "kind" : "note",
+      "message" : "NetEase: no search result passed (title ≥ 0.75, artist ≥ 0.65, length within 8 s)",
+      "source" : "netEase"
+    },
+    {
+      "at" : 0.842,
+      "kind" : "variantResult",
+      "message" : "nothing under the library artist: trying aliases",
+      "source" : "netEase"
+    },
+    {
+      "at" : 1.192,
+      "kind" : "request",
+      "request" : {
+        "bytes" : 8844,
+        "ms" : 1192,
+        "status" : 200,
+        "timeout" : 6,
+        "url" : "https://c.y.qq.com/soso/fcgi-bin/client_search_cp?format=json&n=8&p=1&w=Racing%20into%20the%20Night%20YOASOBI"
+      },
+      "source" : "qqMusic"
+    },
+    {
+      "at" : 1.194,
+      "kind" : "results",
+      "results" : {
+        "label" : "QQ search",
+        "read" : 0,
+        "returned" : 8
+      },
+      "source" : "qqMusic"
+    },
+    {
+      "at" : 1.194,
+      "kind" : "note",
+      "message" : "8 result(s) scored 0 and were dropped",
+      "source" : "qqMusic"
+    },
+    {
+      "at" : 1.194,
+      "kind" : "variantResult",
+      "message" : "nothing under the library artist: trying aliases",
+      "source" : "qqMusic"
+    },
+    {
+      "at" : 1.447,
+      "kind" : "request",
+      "request" : {
+        "bytes" : 3249,
+        "ms" : 921,
+        "status" : 200,
+        "timeout" : 4,
+        "url" : "https://musicbrainz.org/ws/2/artist?query=%22YOASOBI%22&limit=5&fmt=json"
+      },
+      "source" : "kugou"
+    },
+    {
+      "at" : 1.448,
+      "kind" : "results",
+      "results" : {
+        "label" : "MusicBrainz artists",
+        "read" : 5,
+        "returned" : 5
+      },
+      "source" : "kugou"
+    },
+    {
+      "at" : 1.448,
+      "kind" : "note",
+      "message" : "MusicBrainz aliases for “YOASOBI”: [\"요아소비\"]",
+      "source" : "kugou"
+    },
+    {
+      "at" : 1.448,
+      "kind" : "variant",
+      "message" : "artist alias",
+      "query" : {
+        "album" : "THE BOOK",
+        "artist" : "요아소비",
+        "duration" : 261,
+        "title" : "Racing into the Night"
+      },
+      "source" : "qqMusic",
+      "variant" : "artist alias “요아소비”"
+    },
+    {
+      "at" : 1.448,
+      "kind" : "variant",
+      "message" : "artist alias",
+      "query" : {
+        "album" : "THE BOOK",
+        "artist" : "요아소비",
+        "duration" : 261,
+        "title" : "Racing into the Night"
+      },
+      "source" : "netEase",
+      "variant" : "artist alias “요아소비”"
+    },
+    {
+      "at" : 1.449,
+      "kind" : "variant",
+      "message" : "artist alias",
+      "query" : {
+        "album" : "THE BOOK",
+        "artist" : "요아소비",
+        "duration" : 261,
+        "title" : "Racing into the Night"
+      },
+      "source" : "kugou",
+      "variant" : "artist alias “요아소비”"
+    },
+    {
+      "at" : 1.519,
+      "kind" : "publication",
+      "publication" : {
+        "best" : "lrclib",
+        "bestTiming" : "mixed",
+        "graceOver" : true,
+        "pending" : [
+          "kugou",
+          "kuwo",
+          "lyricsOVH",
+          "lyricsPlus",
+          "netEase",
+          "qqMusic"
+        ],
+        "revision" : 1,
+        "settleOver" : false,
+        "settled" : false,
+        "shownAfter" : "lrclib",
+        "step" : "publish"
+      }
+    },
+    {
+      "at" : 1.533,
+      "kind" : "stop",
+      "message" : "Not needed: it couldn’t beat the match showing",
+      "sources" : [
+        "kuwo",
+        "lyricsOVH"
+      ]
+    },
+    {
+      "at" : 1.533,
+      "elapsedMs" : 1533,
+      "kind" : "sourceEnd",
+      "message" : "Timed out (no answer)",
+      "source" : "kuwo"
+    },
+    {
+      "at" : 1.533,
+      "elapsedMs" : 1533,
+      "kind" : "sourceEnd",
+      "message" : "Timed out (no answer)",
+      "source" : "lyricsOVH"
+    },
+    {
+      "at" : 1.533,
+      "kind" : "request",
+      "request" : {
+        "error" : "cancelled",
+        "ms" : 1533,
+        "timeout" : 6,
+        "url" : "https://api.lyrics.ovh/v1/YOASOBI/Racing%20into%20the%20Night?"
+      },
+      "source" : "lyricsOVH"
+    },
+    {
+      "at" : 1.533,
+      "kind" : "request",
+      "request" : {
+        "error" : "cancelled",
+        "ms" : 1533,
+        "timeout" : 6,
+        "url" : "https://search.kuwo.cn/r.s?all=Racing%20into%20the%20Night%20YOASOBI&client=kt&encoding=utf8&ft=music&itemset=web_2013&pcjson=1&pn=0&rformat=json&rn=8&vipver=1"
+      },
+      "source" : "kuwo"
+    },
+    {
+      "at" : 1.634,
+      "kind" : "request",
+      "request" : {
+        "bytes" : 15527,
+        "ms" : 185,
+        "status" : 200,
+        "timeout" : 6,
+        "url" : "https://mobileservice.kugou.com/api/v3/search/song?format=json&keyword=Racing%20into%20the%20Night%20%EC%9A%94%EC%95%84%EC%86%8C%EB%B9%84&page=1&pagesize=8"
+      },
+      "source" : "kugou",
+      "variant" : "artist alias “요아소비”"
+    },
+    {
+      "at" : 1.637,
+      "kind" : "results",
+      "results" : {
+        "label" : "Kugou search",
+        "read" : 0,
+        "returned" : 8
+      },
+      "source" : "kugou",
+      "variant" : "artist alias “요아소비”"
+    },
+    {
+      "at" : 1.637,
+      "kind" : "note",
+      "message" : "8 result(s) scored 0 and were dropped",
+      "source" : "kugou",
+      "variant" : "artist alias “요아소비”"
+    },
+    {
+      "at" : 1.637,
+      "kind" : "variantResult",
+      "message" : "nothing under this alias",
+      "source" : "kugou",
+      "variant" : "artist alias “요아소비”"
+    },
+    {
+      "at" : 1.637,
+      "kind" : "variantResult",
+      "message" : "nothing under the listed title: looking up the original title",
+      "source" : "kugou"
+    },
+    {
+      "at" : 1.637,
+      "kind" : "note",
+      "message" : "original title from its cache: none",
+      "source" : "kugou"
+    },
+    {
+      "at" : 1.637,
+      "kind" : "note",
+      "message" : "no original title found (iTunes JP): listed-title answer kept",
+      "source" : "kugou"
+    },
+    {
+      "at" : 1.637,
+      "elapsedMs" : 1637,
+      "kind" : "sourceEnd",
+      "message" : "No usable match / unavailable",
+      "source" : "kugou"
+    },
+    {
+      "at" : 1.648,
+      "kind" : "publication",
+      "publication" : {
+        "best" : "lrclib",
+        "bestTiming" : "mixed",
+        "graceOver" : true,
+        "pending" : [
+          "lyricsPlus",
+          "netEase",
+          "qqMusic"
+        ],
+        "revision" : 1,
+        "settleOver" : false,
+        "settled" : false,
+        "shownAfter" : "lrclib",
+        "shownBefore" : "lrclib",
+        "step" : "wait"
+      }
+    },
+    {
+      "at" : 1.653,
+      "kind" : "request",
+      "request" : {
+        "bytes" : 7510,
+        "ms" : 205,
+        "status" : 200,
+        "timeout" : 6,
+        "url" : "https://music.163.com/api/search/get?s=Racing%20into%20the%20Night%20%EC%9A%94%EC%95%84%EC%86%8C%EB%B9%84&type=1&limit=8"
+      },
+      "source" : "netEase",
+      "variant" : "artist alias “요아소비”"
+    },
+    {
+      "at" : 1.653,
+      "kind" : "results",
+      "results" : {
+        "label" : "NetEase search",
+        "read" : 10,
+        "returned" : 10
+      },
+      "source" : "netEase",
+      "variant" : "artist alias “요아소비”"
+    },
+    {
+      "at" : 1.654,
+      "hit" : {
+        "artist" : "刘德华",
+        "artistSimilarity" : 0,
+        "duration" : 295,
+        "title" : "忘情水(Live)",
+        "titleSimilarity" : 0,
+        "verdict" : "title < 0.75"
+      },
+      "kind" : "hit",
+      "source" : "netEase",
+      "variant" : "artist alias “요아소비”"
+    },
+    {
+      "at" : 1.654,
+      "hit" : {
+        "artist" : "落日飞车",
+        "artistSimilarity" : 0,
+        "duration" : 265.386,
+        "title" : "忘情水",
+        "titleSimilarity" : 0,
+        "verdict" : "title < 0.75"
+      },
+      "kind" : "hit",
+      "source" : "netEase",
+      "variant" : "artist alias “요아소비”"
+    },
+    {
+      "at" : 1.654,
+      "hit" : {
+        "artist" : "刘德华",
+        "artistSimilarity" : 0,
+        "duration" : 265,
+        "title" : "忘情水(Live)",
+        "titleSimilarity" : 0,
+        "verdict" : "title < 0.75"
+      },
+      "kind" : "hit",
+      "source" : "netEase",
+      "variant" : "artist alias “요아소비”"
+    },
+    {
+      "at" : 1.654,
+      "hit" : {
+        "artist" : "歌者达达",
+        "artistSimilarity" : 0,
+        "duration" : 217.5,
+        "title" : "忘情水（DJ车载版）",
+        "titleSimilarity" : 0,
+        "verdict" : "title < 0.75"
+      },
+      "kind" : "hit",
+      "source" : "netEase",
+      "variant" : "artist alias “요아소비”"
+    },
+    {
+      "at" : 1.654,
+      "hit" : {
+        "artist" : "黎明",
+        "artistSimilarity" : 0,
+        "duration" : 214,
+        "title" : "忘情水",
+        "titleSimilarity" : 0,
+        "verdict" : "title < 0.75"
+      },
+      "kind" : "hit",
+      "source" : "netEase",
+      "variant" : "artist alias “요아소비”"
+    },
+    {
+      "at" : 1.655,
+      "hit" : {
+        "artist" : "黄凯芹",
+        "artistSimilarity" : 0,
+        "duration" : 250.6,
+        "title" : "忘情水",
+        "titleSimilarity" : 0,
+        "verdict" : "title < 0.75"
+      },
+      "kind" : "hit",
+      "source" : "netEase",
+      "variant" : "artist alias “요아소비”"
+    },
+    {
+      "at" : 1.655,
+      "hit" : {
+        "artist" : "Vice",
+        "artistSimilarity" : 0,
+        "duration" : 275.667,
+        "title" : "忘情水",
+        "titleSimilarity" : 0,
+        "verdict" : "title < 0.75"
+      },
+      "kind" : "hit",
+      "source" : "netEase",
+      "variant" : "artist alias “요아소비”"
+    },
+    {
+      "at" : 1.655,
+      "hit" : {
+        "artist" : "M-Li",
+        "artistSimilarity" : 0,
+        "duration" : 138.657,
+        "title" : "忘情水",
+        "titleSimilarity" : 0,
+        "verdict" : "title < 0.75"
+      },
+      "kind" : "hit",
+      "source" : "netEase",
+      "variant" : "artist alias “요아소비”"
+    },
+    {
+      "at" : 1.655,
+      "hit" : {
+        "artist" : "高胜美",
+        "artistSimilarity" : 0,
+        "duration" : 254.666,
+        "title" : "忘情水",
+        "titleSimilarity" : 0,
+        "verdict" : "title < 0.75"
+      },
+      "kind" : "hit",
+      "source" : "netEase",
+      "variant" : "artist alias “요아소비”"
+    },
+    {
+      "at" : 1.655,
+      "hit" : {
+        "artist" : "焦小飞",
+        "artistSimilarity" : 0,
+        "duration" : 202.416,
+        "title" : "当初你找过我（立体环绕DJ版）",
+        "titleSimilarity" : 0,
+        "verdict" : "title < 0.75"
+      },
+      "kind" : "hit",
+      "source" : "netEase",
+      "variant" : "artist alias “요아소비”"
+    },
+    {
+      "at" : 1.655,
+      "kind" : "note",
+      "message" : "NetEase: no search result passed (title ≥ 0.75, artist ≥ 0.65, length within 8 s)",
+      "source" : "netEase",
+      "variant" : "artist alias “요아소비”"
+    },
+    {
+      "at" : 1.655,
+      "kind" : "variantResult",
+      "message" : "nothing under this alias",
+      "source" : "netEase",
+      "variant" : "artist alias “요아소비”"
+    },
+    {
+      "at" : 1.655,
+      "kind" : "variantResult",
+      "message" : "nothing under the listed title: looking up the original title",
+      "source" : "netEase"
+    },
+    {
+      "at" : 1.655,
+      "kind" : "note",
+      "message" : "original title from its cache: none",
+      "source" : "netEase"
+    },
+    {
+      "at" : 1.655,
+      "kind" : "note",
+      "message" : "no original title found (iTunes JP): listed-title answer kept",
+      "source" : "netEase"
+    },
+    {
+      "at" : 1.655,
+      "elapsedMs" : 1655,
+      "kind" : "sourceEnd",
+      "message" : "No usable match / unavailable",
+      "source" : "netEase"
+    },
+    {
+      "at" : 1.663,
+      "kind" : "publication",
+      "publication" : {
+        "best" : "lrclib",
+        "bestTiming" : "mixed",
+        "graceOver" : true,
+        "pending" : [
+          "lyricsPlus",
+          "qqMusic"
+        ],
+        "revision" : 1,
+        "settleOver" : false,
+        "settled" : false,
+        "shownAfter" : "lrclib",
+        "shownBefore" : "lrclib",
+        "step" : "wait"
+      }
+    },
+    {
+      "at" : 2.001,
+      "kind" : "request",
+      "request" : {
+        "bytes" : 560,
+        "ms" : 1999,
+        "status" : 404,
+        "timeout" : 4,
+        "url" : "https://lyricsplus.prjktla.my.id/v2/lyrics/get?title=Racing%20into%20the%20Night&artist=YOASOBI&duration=261&album=THE%20BOOK"
+      },
+      "source" : "lyricsPlus"
+    },
+    {
+      "at" : 2.001,
+      "kind" : "note",
+      "message" : "Lyrics+ https://lyricsplus.prjktla.my.id: no lyrics",
+      "source" : "lyricsPlus"
+    },
+    {
+      "at" : 2.002,
+      "kind" : "variantResult",
+      "message" : "nothing under the listed title: looking up the original title",
+      "source" : "lyricsPlus"
+    },
+    {
+      "at" : 2.002,
+      "kind" : "note",
+      "message" : "original title from its cache: none",
+      "source" : "lyricsPlus"
+    },
+    {
+      "at" : 2.002,
+      "kind" : "note",
+      "message" : "no original title found (iTunes JP): listed-title answer kept",
+      "source" : "lyricsPlus"
+    },
+    {
+      "at" : 2.002,
+      "elapsedMs" : 2001,
+      "kind" : "sourceEnd",
+      "message" : "No usable match / unavailable",
+      "source" : "lyricsPlus"
+    },
+    {
+      "at" : 2.011,
+      "kind" : "publication",
+      "publication" : {
+        "best" : "lrclib",
+        "bestTiming" : "mixed",
+        "graceOver" : true,
+        "pending" : [
+          "qqMusic"
+        ],
+        "revision" : 1,
+        "settleOver" : false,
+        "settled" : true,
+        "shownAfter" : "lrclib",
+        "shownBefore" : "lrclib",
+        "step" : "wait"
+      }
+    },
+    {
+      "at" : 2.499,
+      "kind" : "request",
+      "request" : {
+        "bytes" : 8663,
+        "ms" : 1051,
+        "status" : 200,
+        "timeout" : 6,
+        "url" : "https://c.y.qq.com/soso/fcgi-bin/client_search_cp?format=json&n=8&p=1&w=Racing%20into%20the%20Night%20%EC%9A%94%EC%95%84%EC%86%8C%EB%B9%84"
+      },
+      "source" : "qqMusic",
+      "variant" : "artist alias “요아소비”"
+    },
+    {
+      "at" : 2.501,
+      "kind" : "results",
+      "results" : {
+        "label" : "QQ search",
+        "read" : 0,
+        "returned" : 8
+      },
+      "source" : "qqMusic",
+      "variant" : "artist alias “요아소비”"
+    },
+    {
+      "at" : 2.501,
+      "kind" : "note",
+      "message" : "8 result(s) scored 0 and were dropped",
+      "source" : "qqMusic",
+      "variant" : "artist alias “요아소비”"
+    },
+    {
+      "at" : 2.501,
+      "kind" : "variantResult",
+      "message" : "nothing under this alias",
+      "source" : "qqMusic",
+      "variant" : "artist alias “요아소비”"
+    },
+    {
+      "at" : 2.501,
+      "kind" : "variantResult",
+      "message" : "nothing under the listed title: looking up the original title",
+      "source" : "qqMusic"
+    },
+    {
+      "at" : 2.501,
+      "kind" : "note",
+      "message" : "original title from its cache: none",
+      "source" : "qqMusic"
+    },
+    {
+      "at" : 2.501,
+      "kind" : "note",
+      "message" : "no original title found (iTunes JP): listed-title answer kept",
+      "source" : "qqMusic"
+    },
+    {
+      "at" : 2.501,
+      "elapsedMs" : 2501,
+      "kind" : "sourceEnd",
+      "message" : "No usable match / unavailable",
+      "source" : "qqMusic"
+    },
+    {
+      "at" : 2.51,
+      "kind" : "publication",
+      "publication" : {
+        "best" : "lrclib",
+        "bestTiming" : "mixed",
+        "graceOver" : true,
+        "pending" : [
+
+        ],
+        "revision" : 1,
+        "settleOver" : false,
+        "settled" : true,
+        "shownAfter" : "lrclib",
+        "shownBefore" : "lrclib",
+        "step" : "wait"
+      }
+    },
+    {
+      "at" : 2.517,
+      "kind" : "publication",
+      "publication" : {
+        "best" : "lrclib",
+        "bestTiming" : "mixed",
+        "graceOver" : true,
+        "pending" : [
+
+        ],
+        "revision" : 1,
+        "settleOver" : true,
+        "settled" : true,
+        "shownAfter" : "lrclib",
+        "shownBefore" : "lrclib",
+        "step" : "wait"
+      }
+    },
+    {
+      "at" : 2.526,
+      "kind" : "cache",
+      "message" : "online choice saved to the cache",
+      "source" : "lrclib"
+    },
+    {
+      "at" : 2.532,
+      "elapsedMs" : 2526,
+      "kind" : "final",
+      "message" : "shown",
+      "ranked" : [
+        {
+          "agreement" : {
+            "peers" : 0,
+            "timedCompared" : 0,
+            "timingOutlier" : false
+          },
+          "appleRelay" : false,
+          "artist" : "YOASOBI",
+          "artistSimilarity" : 1,
+          "confidence" : 2.225,
+          "duration" : 260,
+          "durationDelta" : -1,
+          "firstLine" : "Seize a move, you're on me, falling and we were dissolving",
+          "languageMismatch" : false,
+          "lead" : 2,
+          "lines" : 62,
+          "metadataReported" : true,
+          "provenance" : "Mixed timing · LRCLIB",
+          "rank" : 1,
+          "rankedTiming" : 2,
+          "score" : 98,
+          "script" : "latin",
+          "source" : "lrclib",
+          "timing" : "mixed",
+          "title" : "Racing into the Night",
+          "titleSimilarity" : 1,
+          "verdict" : "accepted",
+          "versionMismatch" : [
+
+          ],
+          "versionTags" : [
+
+          ],
+          "viaOriginalTitle" : false
+        }
+      ],
+      "rejected" : [
+
+      ],
+      "source" : "lrclib",
+      "states" : {
+        "amll" : "No usable match / unavailable",
+        "kugou" : "No usable match / unavailable",
+        "kuwo" : "Not needed: it couldn’t beat the match showing",
+        "lrclib" : "Match found · showing",
+        "lyricsOVH" : "Not needed: it couldn’t beat the match showing",
+        "lyricsPlus" : "No usable match / unavailable",
+        "netEase" : "No usable match / unavailable",
+        "qqMusic" : "No usable match / unavailable"
+      }
+    }
+  ],
+  "mode" : "mode smart, automatic",
+  "pick" : {
+    "artist" : "YOASOBI",
+    "duration" : 260,
+    "provenance" : "Mixed timing · LRCLIB",
+    "source" : "lrclib",
+    "timing" : "mixed",
+    "title" : "Racing into the Night",
+    "viaOriginalTitle" : false
+  },
+  "song" : {
+    "album" : "THE BOOK",
+    "artist" : "YOASOBI",
+    "duration" : 261,
+    "title" : "Racing into the Night"
+  },
+  "sources" : [
+    "lyricsPlus",
+    "amll",
+    "netEase",
+    "lrclib",
+    "qqMusic",
+    "kugou",
+    "kuwo",
+    "lyricsOVH"
+  ],
+  "startedAt" : "2026-11-13T06:17:04Z",
+  "storefront" : "au"
+}

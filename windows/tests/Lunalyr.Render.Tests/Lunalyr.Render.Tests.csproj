@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Render engine decisions (pausing, power, pacing, crossfades) as pure logic, plus render layers drawn offscreen
+       with Direct2D on WARP (no window, no GPU needed) and the palette mapper. The live engine is checked with
+       tools/EngineHarness. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.19041.0</TargetPlatformMinVersion>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="xunit.v3" />
+    <Using Include="Xunit" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Lunalyr.Render\Lunalyr.Render.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Helpers shared by every test project (fake time). -->
+    <Compile Include="..\Shared\**\*.cs" Link="Shared\%(RecursiveDir)%(Filename)%(Extension)" />
+    <!-- The silent generated clip (no audio track) of the imported-video tests, for the animated cover's layer. -->
+    <None Include="..\Lunalyr.Platform.Windows.Tests\Fixtures\Wallpaper\clip.mp4" Link="Fixtures\clip.mp4" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- The music video sync checks read the frame number back from tools/WallpaperTestMedia's time-coded clip. -->
+    <None Include="..\Lunalyr.Platform.Windows.Tests\Fixtures\Wallpaper\timecode.mp4" Link="Fixtures\timecode.mp4" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

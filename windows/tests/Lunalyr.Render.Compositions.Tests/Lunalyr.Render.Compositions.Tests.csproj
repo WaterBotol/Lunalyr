@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The lyric compositions: rolling-stage tests that need the system's word breaker, measured-stack tests, and
+       offscreen rendering (Direct2D on the hardware device, WARP when there is none). No window, no sound. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.19041.0</TargetPlatformMinVersion>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <Platforms>x64</Platforms>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="xunit.v3" />
+    <Using Include="Xunit" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Lunalyr.Render\Lunalyr.Render.csproj" />
+    <ProjectReference Include="..\..\src\Lunalyr.Platform.Windows\Lunalyr.Platform.Windows.csproj" />
+    <!-- The invented-lyric builders (Lunalyr.Shell.Demo.LyricBuilder). -->
+    <ProjectReference Include="..\..\src\Lunalyr.Shell\Lunalyr.Shell.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- The preview tool's offscreen stage and invented fixture songs. -->
+    <Compile Include="..\..\tools\CompositionPreview\Offscreen.cs" Link="Preview\Offscreen.cs" />
+    <Compile Include="..\..\tools\CompositionPreview\Fixtures.cs" Link="Preview\Fixtures.cs" />
+    <Compile Include="..\..\tools\CompositionPreview\ExtrasFixtures.cs" Link="Preview\ExtrasFixtures.cs" />
+    <Compile Include="..\..\tools\CompositionPreview\OpeningFixtures.cs" Link="Preview\OpeningFixtures.cs" />
+    <Compile Include="..\Shared\**\*.cs" Link="Shared\%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
+</Project>

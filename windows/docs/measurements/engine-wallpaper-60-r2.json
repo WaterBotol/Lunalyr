@@ -1,0 +1,44 @@
+﻿{
+    "exe":  "EngineHarness.exe",
+    "args":  "",
+    "seconds":  30,
+    "samples":  12,
+    "onBattery":  false,
+    "cpuPercentAvg":  0.34,
+    "cpuPercentMax":  0.47,
+    "gpu3dPercentAvg":  0.5,
+    "gpuAllEnginesPercentAvg":  0.54,
+    "workingSetMBAvg":  56.86,
+    "privateMBAvg":  79.45,
+    "gpuDedicatedMBAvg":  55.9,
+    "fps":  59,
+    "frameIntervalMs":  {
+                            "avg":  16.939,
+                            "p50":  16.664,
+                            "p95":  17.161,
+                            "p99":  33.397
+                        },
+    "cpuMsPerFrame":  {
+                          "avg":  0.524,
+                          "p50":  0.512,
+                          "p95":  0.696,
+                          "p99":  0.782
+                      },
+    "slowFrames":  35,
+    "adapter":  "NVIDIA GeForce RTX 5060 Laptop GPU",
+    "monitors":  [
+                     {
+                         "w":  2560,
+                         "h":  1440,
+                         "dpi":  120,
+                         "hz":  60,
+                         "mode":  "Progman24H2",
+                         "state":  "Drawing",
+                         "reason":  "None",
+                         "syncInterval":  1,
+                         "hdr":  false,
+                         "adapterDrivesMonitor":  true
+                     }
+                 ],
+    "startupMs":  231
+}

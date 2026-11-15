@@ -1,0 +1,375 @@
+# Lyric matching notes (Windows-specific)
+
+Facts about what Windows media sources report that the lyric core has to cope with. The ranking rules themselves
+come from the Mac app; these are additions or checks on top of them.
+
+## Apple Music: English titles on Japanese songs
+
+Reported by the user on 2026-11-12. Apple Music usually lists a Japanese song that also has an English version
+under its **English title**, even when the track playing is sung in Japanese. The recording that is actually in
+English normally carries an "English version" (or similar) tag in its title.
+
+**Ported from the Mac** (`next/localized-titles`, merged as 335e41f: commits 7e84884, 3c32c3d, 8a22aaf) on branch
+`m4/localized-titles`. Automatic-cache policy **v15** (the Mac's v13; Windows' numbers were already past it).
+
+- **Language versions are version tags.** "English Version", "English ver.", "Eng Ver.", "(English)", "英語ver.",
+  "Japanese Ver.", "[Korean Version]", "(日本語ver.)"… give the tags `english`, `japanese`, `korean`, `chinese`
+  (`VersionTags.Languages`). Lyrics for "Song (English Version)" rank below the playing "Song"'s, as Live and Remix do,
+  and a title that says "English Version" prefers English lyrics.
+- **Lyrics in another language rank as another version** (`LyricLanguage`, run by `LyricRanking.Screen`). Only CJK
+  script is told apart from Latin (romaji is Latin; K-pop style mixes are never held against a song). The song's
+  script comes from, in order: a language tag on the title or album; Apple Music's own lyrics (the real cache only); a
+  native-script title or album; lyrics found under the original title; otherwise a majority of the other lyrics found
+  (lyrics whose title names a language version don't vote), with an East Asian genre ("J-Pop", "Anime", "K-Pop"…)
+  breaking a tie. A match in the other script gets `LanguageMismatch` and ranks with other versions; Apple Music's own
+  lyrics and local files are never marked. The mark is worked out afresh at every screening.
+- **Search under the original title** (`OriginalTitles`, `ItunesCatalogue`). When LRCLIB, NetEase, QQ, Kugou, Kuwo,
+  Lyrics+ or AMLL find nothing usable under an English title (no match, a language version the title doesn't name, or
+  Latin-only lyrics for an East Asian artist: see "Mac lookup fixes" below for who counts), the song is found in this
+  PC's storefront on the iTunes Search API by primary artist + title (same title, version tags and artist, length
+  within 3 s, nearest first), and the same entry is read from the `jp` storefront in Japanese. Since the Mac's 1cdde21
+  (below), when that storefront has no such entry, the artist's native-script entry there, or in Japan's storefront
+  searched by title, is used. A different, native-script name is searched under, around the artist-name search. A
+  Japanese-script match found that way is recorded under the listed title and marked `ViaOriginalTitle`. Only the
+  title, artist and storefront are sent; answers ("none" too) are kept 30 days in `OriginalTitles.json` beside
+  `ArtistAliases.json`; failures are asked again; requests are a second apart and shared between sources.
+- **Source list.** "Match found · lyrics in another language" (only when no version note applies) and
+  "· found under the original title", after the version note and before " · Apple Music’s lyrics", the timing fault,
+  agreement and " · showing" (the Mac's wording and order).
+- **Setting.** The Mac shares "Search under other names" (`custom.artistAliases`, on) between artists' native names and
+  songs' original titles. Windows: `AppSettings.ArtistAliases`, key `artistAliases`, default `true`; no settings window
+  until milestone 5.
+- **Genre.** The Mac reads the track's genre; Windows reads GSMTC's first `Genres` entry into `MediaTrackInfo.Genre`
+  and `LyricQuery.Genre`.
+
+**What the iTunes Search API actually says** (replies recorded 12 Nov 2026, in `Fixtures/LyricSources/itunes`):
+
+- The US storefront lists YOASOBI's 夜に駆ける under its Japanese title, so the Mac test's "Racing into the Night"
+  example is invented; the fallback is only needed in storefronts that romanise or translate.
+- The Australian storefront does: "Yoru ni kakeru", "Haruka", "Idol"… Its "Idol" search returns **two singles of the
+  same length (213.234 s)** both named "Idol": 1688334537 is the English recording (Japan also calls it "Idol") and
+  1679278167 is アイドル. Neither carries an "English Version" tag. The Mac's rule takes the first of equally near
+  entries, here the English one, so no original title is found and "none" is remembered. That is the safe outcome
+  (guessing アイドル would mark English lyrics as wrong while the English recording plays), but it means the fallback
+  can't help this song; the language vote (and the J-Pop genre) still can. **Open question for the owner**, and for
+  the Mac, which behaves the same.
+- Still needs a live check with real Apple Music for Windows playback: what GSMTC reports for title, album and genre.
+
+Where Windows may differ from the Mac:
+
+- **The Apple relay and the language.** Only Apple Music's own cache decides the song's language and is never marked.
+  A Lyrics+ relay of Apple's lyrics, which ranks as Apple Music (decision 1 below), is judged like any service: it
+  votes, and is marked when it is in the other script. (Apple Music's cache can't be read on Windows, so in practice no
+  lyrics decide the language on their own here.)
+- **Storefront.** The Mac uses the Mac's region; Windows uses the Windows region (`RegionInfo.CurrentRegion`), "us"
+  when it names none. In Japan (`jp`) only Japan's title search is asked (until the Mac's 1cdde21, nothing was).
+- **Primary artist.** The Mac's step comes from the Verso import, so Windows re-implements it from its behaviour: the
+  credit up to the first "&" or comma, trimmed, or the whole credit when that leaves nothing.
+- **Ported tests' word timing.** The Mac's fixture times each line as one token, which Windows' phrase-token rule
+  (decision 3 below) ranks as line timing; the ported helper spreads the same 3 s over the line's words (per character
+  in Japanese), so "word-timed" stays word-timed. Texts, names, times and expected results are the Mac's.
+
+Where it lives (Windows): `VersionTags.Languages`, `LyricLanguage`, `LyricRanking.Screen`/`FitsVersion`/`Annotate`,
+`OriginalTitles` (with `WithOriginalTitleAsync`), `ItunesCatalogue`, `LyricSourceSet`, `LyricQuery.Genre`,
+`LyricCandidate.LanguageMismatch`/`ViaOriginalTitle`. Tests: `LanguageVersionTests`, `OriginalTitleTests`,
+`LyricServiceEndToEndTests.AnEnglishTitledJapaneseSongIsFoundUnderItsOriginalTitle`,
+`AppControllerTests.TheLookupCarriesThePlayersGenre`.
+
+## Ranking decisions (12 Nov 2026)
+
+These are the owner's decisions, made the same day on both apps. Windows matches the Mac's implementation (branch
+`next/ranking-align`, as described by the Mac session). Both apps bump the automatic-cache policy to **v14**, so
+choices cached under the old rules are looked up again.
+
+### Leads within a timing tier
+
+Ranking order is unchanged up to the lead: timed lyrics first, then sound timing, then a match for the playing
+version, then the timing tier (word or mixed, then line, then plain). Within a tier, a lower lead ranks first:
+
+| Lead | Who |
+|---|---|
+| 0 | Apple Music's own lyrics (the music app's cache), at line, word or mixed timing |
+| 1 | Apple Music's lyrics relayed by Lyrics+ (provenance "Apple via Lyrics+"), at line, word or mixed timing |
+| 2 | LRCLIB, with word or mixed timing only |
+| 3 | Every other source (LRCLIB with line timing included) |
+| 4 | LRCLIB when it is a timing outlier |
+
+Within the same lead, Accuracy first then compares agreement (peers, capped at 2) and name and length closeness.
+After that comes the configured source order, by the match's own source.
+
+### 1. Apple Music's lyrics relayed by Lyrics+ rank as Apple Music
+
+A Lyrics+ match whose node names its upstream "Apple" (case-insensitive) is a *relay*. Its ranking source is Apple
+Music (`LyricCandidate.RankingSource`). It takes lead 1 at every timing tier, so:
+
+- It beats LRCLIB's word timing.
+- It ranks just after Apple Music's own lyrics.
+- LRCLIB's word timing still beats a relay with line timing, because the timing tier comes first.
+
+Other relays rank as Lyrics+, lead 3. "Musixmatch via Lyrics+" is one example.
+
+- **Label.** The relay keeps the provenance source "Apple via Lyrics+", because per-song offsets are keyed by source
+  name. Its line in the source list gains " · Apple Music’s lyrics", for example "Match found · Apple Music’s lyrics
+  · showing". It is still listed, enabled or disabled, and cached as Lyrics+.
+- **Early stopping.** A pending Lyrics+ might relay Apple Music's lyrics, so `CouldBeat` gives it its best case,
+  lead 1. LRCLIB's word timing, or another source's, therefore waits for Lyrics+. Only the real Apple Music cache
+  makes every service unnecessary ("Apple Music’s own lyrics are showing"). Once a relay of Apple Music's lyrics
+  shows, only the Apple Music cache could still beat it.
+
+### 2. A later agreement demotes LRCLIB showing
+
+**The outlier rule.** LRCLIB's timing is an *outlier* when it disagrees with every other timed match for the same
+words while two of those agree with each other. Matches count only for the playing version. "Same words" means at
+least 60% of lines are shared over at least four lines. "Agree" means the median start difference is at most 0.75 s
+over at least four paired lines. An outlier takes lead 4, after every other source at its timing tier, even when the
+source order puts LRCLIB first. Before this change it only dropped level with the others. It keeps its timing tier,
+so if the agreeing pair has only line timing, LRCLIB's word timing still wins.
+
+**Re-ranking at every arrival.** At every arrival, the publication step (`LyricPublication.Step`) re-weighs agreement
+over all the matches in hand. It judges the match showing as it ranks now, not as it ranked when it was shown. When
+later answers make LRCLIB an outlier, the best of the others replaces it through the usual upgrade:
+
+- The upgrade is held while a pending source could still beat it.
+- On screen, the swap happens at a line boundary, never mid-line. The app waits for the line being sung to end, for
+  at most 12 s.
+
+Pinned choices never swap.
+
+**couldDemote: which sources keep answering** (`LyricRanking.CouldDemote`). An automatic lookup normally stops a
+pending source once its answer could no longer change what shows. A pending source keeps running instead, up to its
+normal time limit, while all of these hold:
+
+1. LRCLIB's word or mixed timing is the best match, and it is not an outlier.
+2. LRCLIB agrees with no timed match for the same words that is already in hand.
+3. The pending source can give word timing. Failing that, it has some timing and a sound word-timed rival from
+   another source is already in hand.
+
+The time limit is 8 s for services, or 20 s for LRCLIB, which is never the pending source here. Line-only sources
+(Kuwo) are stopped as before unless such a rival is in hand. Plain-text sources (lyrics.ovh) are always stopped.
+
+### 3. Phrase tokens are not word timing
+
+`LyricTimingRules.IsPhraseTimed` checks whether a line's tokens are whole lines or phrases rather than words. In
+scripts without spaces, that is one token over more than two letters, or more than four letters per token. In spaced
+scripts, it is one token over several words, or fewer than half as many tokens as words.
+
+- Such lines are not valid word timing when ranking.
+- The LRCLIB Lyricsfile parser never marks such rows `WordTimed`. They keep the estimated words every line-timed line
+  gets.
+- Before display, `LyricPresentation.Prepare` re-estimates the words of any line still marked word-timed with phrase
+  tokens, for example lyrics saved before the rule.
+
+### Behaviour changes
+
+- If LRCLIB's word timing answers first while Lyrics+ is pending, LRCLIB shows when the grace period ends (1.5 s),
+  not at once.
+- While LRCLIB's word timing shows, services that can give word timing keep running to their limit (8 s) unless one
+  of them agrees with LRCLIB. Lyrics+, NetEase, QQ Music, Kugou and AMLL are among them. Before, they were stopped as
+  soon as LRCLIB showed.
+- An LRCLIB outlier now ranks below every other source at its tier.
+- New: better lyrics found during a lookup now swap in at a line boundary. Before, Windows applied every new revision
+  at once, with a short cross-fade.
+
+### Where Windows may differ from the Mac
+
+These points are not confirmed against the Mac's code:
+
+- **Agreement and the relay.** Apple Music's own lyrics and their relay count as one source: neither is the other's
+  peer, and their agreement with each other never makes LRCLIB an outlier.
+- **Version and rival checks in couldDemote.** "In hand" covers only matches for the playing version, and the
+  "sound word-timed rival" must be a match for the playing version too.
+- **Line-only sources with a rival (open question).** Following condition 3, a line-only source such as Kuwo keeps
+  answering when a sound word-timed rival is in hand. The Mac's summary says Kuwo is "still stopped", which
+  presumably means when there is no rival.
+- **Mixed timing.** couldDemote treats LRCLIB's mixed timing like its word timing, since both rank in the same tier.
+- **Waiting for Lyrics+.** A pending Lyrics+ is waited for as a possible Apple relay.
+- **Saved choices.** "Never swap" applies to pinned choices, which lock the lookup. A cached automatic choice can
+  still be upgraded by a local source that outranks it, as before.
+- **Label position.** The note comes after the version, language and original-title notes, before the timing fault,
+  agreement and "· showing" (the Mac's order).
+- **Apostrophe.** The label uses a typographic apostrophe ("Apple Music’s lyrics"), like the app's other source-list
+  strings.
+
+### Where it lives (Windows)
+
+- `LyricSourceRanking` and `LyricCandidate.RankingSource`.
+- `LyricRanking`: `Lead`, `Outranks`, `CouldBeat`, `CouldDemote` and `Annotate`.
+- `LyricAgreementRules.Weigh`.
+- `LyricPublication.Step`.
+- `LyricLookup`.
+- `LyricTimingRules.IsPhraseTimed`, `LyricsfileParser` and `LyricPresentation`.
+- `LyricSwap` and `AppController.SwapAtLineBoundaryAsync`, the line-boundary swap ported from the Mac's
+  `LyricsViewModel`.
+- Tests: `RankingDecisionsTests`, `LyricServiceEndToEndTests`, `LyricSwapTests`,
+  `LyricsfileTests.PhraseTokensAreNotWordTiming`, `LyricPresentationTests` and
+  `AppControllerTests.ABetterMatchWaitsForTheLineBeingSungToEnd`.
+
+## Parity with the Mac spec, 13 Nov 2026
+
+Checked section by section against `docs/MAC-LYRIC-LOOKUP-SPEC.md` (the Mac's `next/integration` at 7544de6), on
+branch `m5/lyric-parity`. Where the read-only checkout (79b84db) lacks something the spec describes, the spec was
+followed.
+
+**The same on both apps** (read in the Windows code, and covered by tests): the raw query and recording key (§1.1);
+each source's fields (§1.2) apart from rows 3 and 15 below; artist aliases (§1.3); original titles (§1.4); every
+source starting at once with its own limit, LRCLIB 20 s and the rest 8 s (§2.1); LRCLIB's exact match, instrumental
+stop, sound-timing check, search of 30 rows and its −12/−6 penalties (§2.2); the Lyrics+ mirrors, rests, second
+opinion, gzip, syllable rules and `checkable` names (§2.3); NetEase's `bestSong` (§2.4); QQ 3, Kugou 2×2 with KRC
+first, and Kuwo 2 hits tried, recording-check hits first (§2.5); lyrics.ovh, AMLL and Lyrimuse (§2.6–2.8); grace,
+settle, the publication steps with the shown match judged afresh, `couldBeat`, `matters` and `couldDemote` (§3.1–3.4,
+apart from rows 2 and 5); reception and the line-boundary swap (§3.5, apart from row 17); similarity and `core` (§4.1);
+the recording check (§4.2); version tags, the language rules and instrumental marks (§4.3–4.5); timing tiers with the
+evidence rule, timing faults, leads 0–4, `outranks`, `screen` and agreement (§5); cache, misses and pins (§6).
+
+| # | Spec (§) | Mac | Windows (before this check) | Verdict |
+|---|---|---|---|---|
+| 1 | §2.3, §5.3 Apple relay | `isAppleRelay`: upstream "apple" or "apple music", any case | "Apple" or "qApple" only, so "Apple Music via Lyrics+" ranked as plain Lyrics+ (lead 3) | **Fixed.** "Apple Music" is a relay; its label stays as written, as on the Mac. "qApple" stays (a Windows addition, owner decision). Cache v17. |
+| 2 | §3.4 `couldDemote` | only for LRCLIB timing that fits the playing version | no version check | **Fixed.** Nothing shows differently: `CouldBeat` already keeps every timed source for another version's lyrics. |
+| 3 | §1.2, §2.4 NetEase lyric request | `lv=1&kv=1&tv=-1&yv=1&rv=-1` | all five `-1` | **Fixed.** The Mac's parameters. Live: NetEase still answers with YRC word timing (Hurts Me) and line LRC (Lemon); `romalrc` was not checked live. |
+| 4 | §5.1 word-timing evidence | `hasWordTimingEvidence` on the Mac | the same rule, but its comment said "Windows-only" | **Fixed** (comment). |
+| 5 | §3.3 step 5 `couldBeat` | compares `lead(source)` by source alone, so a pending Lyrics+ is lead 3 (inferred: the spec gives lead 1 only to a relay in hand) | a pending Lyrics+ gets its best case, lead 1, since it might relay Apple | **Kept, read as part of owner decision 1** (the Apple relay; "Waiting for Lyrics+" above); overrule if that reading is wrong. When any source's word or mixed timing (not Apple's) answers first while Lyrics+ is pending, Windows shows it when the grace period ends (1.5 s) unless Lyrics+ has answered; the Mac shows it at once and swaps if a relay comes. Both end on the same match. (For line timing both apps wait, since Lyrics+ can give word timing.) Live: Blinding Lights (Live) and Racing into the Night showed LRCLIB's word or mixed timing at 1.65 s. **Question for the Mac.** |
+| 6 | §5.6 peers | the number of other-family *candidates* with the same words | the number of other *families* (Apple Music and its relay agreeing count once) | **Kept, read as part of the owner's "relay and its family" decision** (`RankingDecisionsTests.AppleMusicAndItsRelayAreOneSourceInAgreement`); overrule if wrong. No effect on Windows, which has no Apple Music cache. |
+| 7 | §5.1 `isPhraseTimed` | `letters/tokens > 4` (integer or real division not stated) | more than 4 letters per token on average (real division) | **Kept: owner decision 3** (phrase-token rule). Can differ only between 4 and 5 letters per token. |
+| 8 | §5.6 late demotion | outlier lead 4, `couldDemote`, refresh from `latest` | the same | **Kept: owner decision 2.** The open question above about line-only sources with a rival stands. |
+| 9 | §6.1 cache policy | v14 | v16 | **Kept: Windows numbering**, now **v18** (rows 13 and 19; v17 was row 1); **v19** for the Mac's 1cdde21 (its v16, rows 20–23 below). |
+| 10 | §2.2, §2.5, §2.8 hit score | `vc_match_score`: cut-offs title 0.62, artist 0.45, length 25 s; 48 / 27 / max(−22, 14 − 2Δ) / word 20, line 7 / album 4 | `LyricMatchScore`: 0.6, 0.5, 30 s; 50 / 25 / max(−25, 10 − 1.5Δ) / 20, 8 / 5 | **Open, for the owner** (kept for now under the provenance rule). `vc_match_score` is entirely Verso (blame: a99fd65), so it is not translated. It only orders one source's own hits, and every hit between the two sets of cut-offs fails the recording check anyway, so at most Windows lists a rejected near-miss that the Mac drops. **For the owner:** adopting the spec's constants would amount to translating Verso's function. |
+| 11 | §2.6 lyrics.ovh 404 | an error (`LyricHTTP.json` throws), so not remembered as a miss | lyrics.ovh's own "No lyrics found": a miss for 10 minutes | **Fixed (follow-up, 13 Nov 2026).** As on the Mac, the 404 is an error (`HttpStatus`), so lyrics.ovh is asked again at the next lookup. State text: "lyrics.ovh: no lyrics found (HTTP 404)." What is found doesn't change. |
+| 12 | (HTTP) | no spacing between requests to one host | 150 ms between requests to one host | **Open, for the owner** (kept for now, as politeness). Timing only: NetEase and AMLL share music.163.com. |
+| 13 | §4.5, §5.1 tier 0 | a synced result whose vocal lines are all empty is a tier-0 candidate; such an LRCLIB exact match also stops the search | dropped ("credits alone are not lyrics"); LRCLIB then searches | **Fixed (follow-up).** Kept as a synced candidate at tier 0, ranked with untimed text; LRCLIB's exact match of that kind ends its search. Credits-only lyrics are kept the same way. No owner decision covered the old drop (it came with the first pipeline commit). Re-implemented from the spec, since the Mac's LRCLIB block has Verso lines. As on the Mac, such a match can outrank lyrics.ovh's plain text, which reports no length. Cache v18. |
+| 14 | §2.1, §2.9, §3.4, §4.4 (b), §5.3, §7 Apple Music cache | lead 0, music first (0.7 s), second look (4 s), "Apple Music's own lyrics are showing", Music's lyrics set the language | ported and tested with fakes; the source is unavailable on Windows | **Can't apply:** Apple Music for Windows keeps no lyric cache Lunalyr can read (`APPLE-MUSIC-WINDOWS.md`). As §7 says, every source starts at once and the relay is the top lead. |
+| 15 | §1.3, §2.2, §2.3 User-Agents | three Mac agents (LRCLIB's names the Mac's repo) | one generic agent | **Can't apply:** the development rules ask for a generic agent. No service is known to answer differently. |
+| 16 | §1.4 storefront | `Locale.current.region` | `RegionInfo.CurrentRegion` | Platform equivalent (above). |
+| 17 | §3.5 offline | reruns 2 s after the connection returns; if already online, reruns at once, once per track | `AppController` reruns at once when the connection returns, and not at all when the network looked up | **Fixed (follow-up).** Ported from `LyricsViewModel.foundNothingOffline` and `connectionRestored` (Lunalyr's own lines): 2 s after the connection returns (`OnlineRetryDelay`), only for the same track with nothing showing; when Windows already reports a connection, at once, once per track (a track or player change resets it). **One difference, as the spec and the brief say:** the Mac's checkout also sends the already-online case through the 2 s wait ("runs again shortly"); Windows reruns at once. |
+| 18 | §3.5 rerun reception | a non-forced rerun while lyrics show ignores updates until complete | `LyricSwap.Reception` has the rule; the app never reruns (`rerun: false`) | The same rule. Still nothing to change: the offline rerun (row 17) runs only while nothing shows, where the rule doesn't apply. |
+| 19 | §4.1 similarity, §1.3 aliases | 周杰倫 vs 周杰伦 has similarity 0; aliases skip an artist already in CJK script | the same | **Changed on Windows (follow-up; suggest the Mac do the same).** `Similarity` folds traditional to simplified Chinese on both sides (`ChineseScripts`, a 2,852-pair table from ICU 72.1's `Hant-Hans`); `Normalize` and the recording key do not fold. When the listed names find nothing, NetEase, QQ, Kugou and Kuwo are asked again with the title and artist in simplified script, before the MusicBrainz aliases and under the same "Search under other names" switch. Names with kana are left alone. Simplified to traditional is not tried: these catalogues list simplified, and that mapping is one-to-many. Credit headings ("晴天 - 周杰伦") match across the scripts too. Cache v18. Live results below. |
+
+Mac tests not ported:
+
+- `NextVersionTests.testLRCLIBWordTimingLeadsOtherServicesInEitherModeAndOrder`: its one-word line is line timing under
+  §5.1, so the checkout's expectation is out of date. `RankingDecisionsTests` and `LyricPriorityTests` cover LRCLIB's
+  lead with real word timing.
+- `LyricParsingTests.testRecordingKeyIncludesAlbumAndDuration` and `testNonFiniteTrackDurationCannotCrashTheCacheKey`:
+  their lines trace to the Verso import (a99fd65). `MacSpecParityTests` checks the same behaviour from the spec, with
+  this port's inputs. `testTrackChangesRecogniseDifferentEdit` is about the Mac's now-playing track type, not the lookup.
+- `AMLLAndKRCTests.testARealAMLLFileParsesToWordTimedLines`: needs a downloaded file named by an environment variable
+  (skipped on the Mac too).
+
+New tests: `MacSpecParityTests` (from the spec: `testKugouWordTimingBeatsLRCLIBPhraseRows`,
+`testLemonOnLRCLIBIsLineSynced`, `testOneRealLineInTenIsNotEnoughEvidence`, the relay names, the relay leading LRCLIB
+in any order, `couldDemote`'s version check, Our Song 180/183/186 and the recording key; ported:
+`testAMLLIsAListedSourceAndOnByDefault`) and `NetEaseSourceTests` (the request parameters).
+
+### Live check
+
+`tools/LyricProbe`: automatic lookups, every source in the recommended order, Accuracy first, storefront `au` (this
+PC's region), the generic User-Agent, a fresh temp cache per run. Lengths, albums and genres are from the iTunes Search
+API (US storefront; 晴天 from the TW one). Outputs: `docs/measurements/lyric-parity/before-*.txt` (v16) and
+`after-*.txt` (v17). Live answers vary with mirror health, so one run per song per pass is a sample, not proof.
+
+| Song (length) | Before | After | The Mac (from the spec) |
+|---|---|---|---|
+| Racing into the Night — YOASOBI (261.013 s, J-Pop) | LRCLIB mixed timing ("Racing Into The Night", English lyrics), at 1.65 s | the same | **Not §9's outcome:** Windows shows English lyrics, the "naive port" column, though by the Mac's own rules. No match was found under an original title. The probable cause (the probe doesn't log the iTunes lookup) is that the `au` storefront lists the song as "Yoru ni kakeru" (above), which isn't the listed title, so the retry has nothing to search under; the Mac test's example is invented. With no original title, the Mac's rules give the same result for the same storefront. |
+| Idol (English Version) — YOASOBI (213.234 s, J-Pop) | Apple via Lyrics+, mixed timing; NetEase, AMLL and Kuwo's "Idol" marked other version (English) | the same; Lyrics+ answered first (0.59 s) and every other source was stopped | The same: the language tag expects Latin script, English lyrics fit, and there is no original-title search. |
+| Lemon — Kenshi Yonezu (256.116 s, J-Pop) | LRCLIB line-synced at 1.65 s, NetEase line-synced at 2.99 s, Kugou word-by-word at 5.01 s (final) | first run: LRCLIB line-synced only (no catalogue found it; probably the MusicBrainz alias request failed, since a failure isn't cached, but the probe doesn't log it); rerun (`after-rerun-lemon.txt`): Kugou word-by-word at 3.05 s (final) | Kugou's KRC wins, and LRCLIB's phrase rows are line timing. Matches. |
+| 晴天 — 周杰倫 (269.747 s, Mandopop) | QQ Music via Lyrics+ word-by-word at 1.65 s; LRCLIB line-synced second | the same | **Differs from §9**, which expects Kugou over LRCLIB. Here every Chinese catalogue found nothing. They list the artist as 周杰伦 (simplified; so do the repo's recorded `search-qingtian.json` replies), 周杰倫 vs 周杰伦 has similarity 0, and aliases skip an artist already in CJK script. With 周杰伦 (`after-qingtian-simplified-artist.txt`), QQ and Kugou answer and Kugou's word timing wins at 3.21 s, as §9 says. The Mac's rules are the same, so it should miss in the same way with 周杰倫 (not checked on a Mac). |
+| Hurts Me — Wallows (178.640 s) | NetEase word-by-word; LRCLIB "2 lines crammed from 1:39" second | the same | A crushed line is a timing fault and ranks below sound timing. Matches. |
+| Rather Be (feat. Jess Glynne) — Clean Bandit (227.833 s) | Apple via Lyrics+ mixed timing, every other source stopped; LRCLIB's upload has no bunched run now | the same | The relay settles everything (§7). Matches. |
+| Blinding Lights (Live) — The Weeknd (253.365 s) | LRCLIB word-by-word "Blinding Lights - Live" at 1.66 s | the same (Kugou word-by-word "(Live)" second) | A Live match fits the live recording. Matches, except that the Mac would show LRCLIB at once rather than at 1.65 s (row 5). |
+
+No song chose differently after the fixes, which touch cases these songs don't hit (a node naming "Apple Music",
+LRCLIB for another version). **Worth changing on both apps:** an artist written in traditional Chinese finds nothing in
+catalogues that list it in simplified script (晴天 above). Folding traditional and simplified Han for name matching, or
+letting the alias search run for CJK artists, would fix it. Windows now does both (row 19, follow-up below).
+
+Test runs: four full runs after the changes; the first had one failure, which the output filter didn't name, and the
+next three passed (1962 passed, 1 skipped). Probably a timing-sensitive test; not identified.
+
+### Follow-up, 13 Nov 2026: rows 11, 13, 17 and 19
+
+Branch `m6/lyric-fixes`. Rows 11, 13 and 17 now match the Mac; row 19 is a Windows addition. Cache policy **v18**.
+
+**Live check, traditional script.** The same probe set-up as above (automatic lookup, every source, Accuracy first,
+storefront `au`, generic User-Agent, a fresh temp cache, genre "Mandopop"). Lengths and albums are from the iTunes
+Search API's TW storefront. "Before" is `next/windows` 10bcb62 (v17), "after" is this branch (v18). Outputs:
+`docs/measurements/lyric-parity/traditional-{before,after}-*.txt`, with the lyric text left out. For 晴天,
+the raw Kugou and QQ replies to the traditional-script search (recorded) already listed the song under 周杰伦, and every
+hit failed the artist check; the replies for the other two songs were not inspected, so the probe output doesn't say
+whether the first search or the simplified retry found them.
+
+| Song (length) | Before | After |
+|---|---|---|
+| 晴天 — 周杰倫 (269.747 s, album 葉惠美) | QQ Music via Lyrics+ word-by-word at 1.67 s; LRCLIB line-synced second; QQ, Kugou and NetEase found nothing | QQ Music via Lyrics+ word-by-word at 1.67 s, then **Kugou word-by-word** ("晴天" / "周杰伦", 63 lines) as the final match at 2.32 s, ahead of the relay, LRCLIB and QQ's line timing. This is §9's expected outcome. NetEase still found nothing, as it didn't under 周杰伦 either. |
+| 後來 — 劉若英 (338.507 s, album 滾石三十青春音樂記事簿: 祝你幸福) | LRCLIB line-synced at 1.66 s; lyrics.ovh plain second; every catalogue found nothing | **NetEase word-by-word** ("后来" / "刘若英") at 1.67 s; Kugou word-by-word second, then QQ and LRCLIB line-synced. |
+| 愛情轉移 — 陳奕迅 (259.987 s, album 認了吧 (台灣版)) | LRCLIB line-synced at 1.68 s, nothing else found | NetEase line-synced at 1.65 s, then **Kugou word-by-word** ("爱情转移" / "陈奕迅") as the final match at 3.35 s; QQ, NetEase and LRCLIB line-synced behind it. |
+
+The chosen lyrics are now in simplified script where the player names the song in traditional script, because the
+catalogues hold simplified lyrics. Matching words across the scripts for agreement (`LyricAgreementRules`) was left
+unchanged: only names fold.
+
+### Mac lookup fixes (next/integration 1cdde21), 13 Nov 2026
+
+Branch `m6/mac-lookup-fixes`. The Mac landed four lookup fixes on `next/integration` 1cdde21 (its cache policy v16).
+That code is not in the read-only checkout (79b84db), so nothing was translated from Swift: everything was written
+from the Mac session's description, in Windows' own structure (its blame could not be checked). Cache policy
+**v19**. Every owner decision above is kept. No Mac tests were ported, since 1cdde21's tests aren't in the checkout
+either.
+
+| # | Spec (§) | Mac (1cdde21) | Windows before | Verdict |
+|---|---|---|---|---|
+| 20 | §2.3 Lyrics+ conversion | a `"type":"Line"` reply (entries with time, duration and text, no `syllabus`) is kept as line timing; from Apple it still ranks as Apple via Lyrics+; a missing duration ends the line at the next entry; a word reply with an unsyllabled line is mixed timing | dropped: `LyricsPlusSource` counted it as "not found" and `KPoeJsonParser` dropped lines without syllables (spec §2.3's "(inferred)") | **Fixed.** Lines get estimated words (`LyricLines.MakeLine`). A last line with no duration ends with the track, or 4 s after it starts (the LRC parser's rule; the description doesn't say). A line-timed relay ranks as Apple (lead 1) at line timing: it beats other line timing, LRCLIB's word timing still beats it, and sources that can give word timing keep running. |
+| 21 | §1.4 original titles | (a) this storefront's entry with the listed title, read again in `jp` by id, is final; (b) else the artist's first native-script entry for the playing version within max(3 s, 2%); (c) else `jp` searched by title, same rule; a `jp` storefront goes straight to (c). Also asked when the listed title found only Latin-script lyrics and the artist is East Asian: an East Asian genre, a native-script artist or album, or MusicBrainz country JP/KR/CN/TW/HK/MO (kept 30 days with the alias lookup). A native-script match found this way makes Latin lyrics rank as another language | (a) only, nothing in `jp`; East Asian meant the genre only | **Fixed** (`OriginalTitles.NativeEntry`, `IsEastAsianAsync`, `ArtistAliases.CountryAsync`). Readings: (b) runs over the reply (a) already has; (c) searches the title alone (the recordings below show why: Japan's artist + title search, recorded as `itunes/search-jp-yoasobi-racing-into-the-night.json`, lacks the single). The "makes Latin lyrics another language" part was already there (`LyricLanguage.Expected`). A "none" stored by the earlier rule is asked again (`OriginalTitles.CurrentRule`); alias entries without a country are asked again for it. |
+| 22 | §4.5, §5.6 credits | "role：names" lines count in opening and closing credit blocks (CN/JP/KR/EN roles; names may mix CJK and Latin, "吉他：蔡科俊Again"); a first line of only the artist, or only a title not sung again, is a header; agreement compares sung lines only; traditional and simplified count as the same name | everyday labels ("吉他", "鼓") only counted among other credits; mixed-script names failed; a lone title or artist line counted only right above credits; plain text's credits counted in agreement | **Fixed** (`LyricCredits.Flagging`, `IsRoleLine`, `SungLines`, `TrackNames.IsHeader`; `LyricAgreementRules.Text`). Japanese and Korean role words added. Names already folded traditional to simplified (row 19). |
+| 23 | (HTTP) cookies | NetEase answers unrelated songs once its NMTID cookie is sent back, so cookies are never kept | `UseCookies = false` already | **Pinned by a test** on the app's real handler (`LyricHttpCookieTests`), its connections answered in memory. |
+
+**Readings chosen where the description is silent (open questions for the Mac):**
+
+- **Where a line with no duration ends** when it is the last: the track's end, else start + 4 s.
+- **"Sung again"** for a title-only first line: any later line containing the title as whole words. This is the
+  conservative reading: fewer headers.
+- **Closing block**: the run of lines ending the song (instrumental breaks skipped) that are each "label：names" with
+  a colon. A label followed by sung words ("鼓：咚咚", "Music: it's all I need") is not part of it.
+- **The header rule applies before the first sung line**, also after opening credits, and to plain text's first line
+  (`DroppingLeadingCredits`).
+- **Step (b)** reads the reply step (a) already has; **step (c)** searches the title alone; an entry with no length
+  doesn't count in (b) or (c); the artist must match by whole names, so a Japanese storefront that lists the artist
+  in native script (米津玄師 for "Kenshi Yonezu") finds nothing in (c).
+- **The MusicBrainz country** is read for the playing artist credit as the alias lookup reads it (the whole credit),
+  and only when the cheaper signs (genre, native script) say nothing. It costs one request per artist the first time a
+  source's answer is Latin-only; a failed request counts as "not East Asian" and is asked again next time.
+- **Latency.** A source's Latin-only answer under the listed title is held until MusicBrainz replies (up to its 4 s
+  timeout, paced 1.1 s apart), on the first lookup of each artist and again on every lookup while the request fails.
+  For an English song that is a new wait before LRCLIB's or NetEase's answer can show (Pleaser's after-run: nothing
+  had answered before 1.50 s, where NetEase answered at 1.28 s before; one sample, the grace period hid it).
+- **The Japanese and Korean role words** (ボーカル, ギター, ベース, ドラム, キーボード, コーラス, プロデューサー, ミックス,
+  マスタリング, レコーディング, エンジニア, ディレクター…; 보컬, 기타, 베이스, 드럼, 키보드, 코러스, 믹싱, 마스터링, 녹음,
+  엔지니어, 디렉터…) are Windows' own selection; the Mac's list wasn't visible. Instruments and vocal parts are
+  everyday labels that need names (and a credit block) to count.
+
+**Live check.** The same probe set-up as above (automatic lookup, every source, Accuracy first, storefront `au`, the
+generic User-Agent, a fresh temp cache per run). "Before" is `next/windows` 98aa9f4 (v18), "after" is this branch
+(v19). Outputs: `docs/measurements/lyric-parity/mac-lookup-{before,after}-*.txt`, lyric text left out. One run per song
+per pass is a sample.
+
+| Song (length) | Before | After |
+|---|---|---|
+| Racing into the Night — YOASOBI (261.013 s, J-Pop) | LRCLIB mixed timing, English ("Racing Into The Night"), the only match | **AMLL word-by-word, Japanese** (found under 夜に駆ける), then the Apple relay's line timing and LRCLIB's Japanese line timing, both found under the original title. LRCLIB's line timing showed first at 2.14 s. |
+| the same, no genre | LRCLIB mixed timing, English | First run: AMLL word-by-word, Japanese; LRCLIB's English stayed (MusicBrainz probably refused the back-to-back request, so its country was unknown) and ranked as "lyrics in another language". Rerun (`mac-lookup-after-rerun-…-no-genre.txt`): LRCLIB found Japanese under 夜に駆ける too; AMLL word-by-word chosen. |
+| 晴天 — 周杰伦 (269.747 s, Mandopop) | Kugou word-by-word (final; the relay showed first) | Kugou word-by-word, shown first at 1.67 s. The same choice. |
+| Pleaser — Wallows (187.896 s, Alternative) | LRCLIB mixed timing; NetEase word-by-word second; Lyrics+ "no usable match" (its reply is line-only) | LRCLIB mixed timing; **Apple via Lyrics+ line-synced second** (the line-only reply now read). LRCLIB agrees with the relay, so it can't become an outlier and NetEase was stopped as not needed (owner decision 2). The same choice. |
+
+Pleaser is the line-only example: lyricsplus.binimum.org answers `"type":"Line"`, upstream `qApple`, empty `syllabus`
+(recorded as `Fixtures/LyricSources/lyricsplus/pleaser-line.json`, text invented). Racing into the Night's catalogue
+replies are recorded too (`itunes/search-au-yoasobi-racing-into-the-night.json`, `itunes/search-jp-racing-into-the-night.json`):
+Australia's storefront now lists the song only through other artists' covers and YOASOBI's "Into The Night"
+recordings, and Japan's title search has 夜に駆ける (YOASOBI, 261.013 s). YOASOBI's MusicBrainz entry
+(`musicbrainz/artist-yoasobi.json`) says JP.
+
+New tests: `MacLookupFixesTests` (the line-timed relay's rank and early stop, agreement without credits),
+`KPoeParsingTests` (line replies, missing durations, mixed timing), `LyricsPlusSourceTests.ALineReplyIsAnAnswer`,
+`OriginalTitleTests` (the recorded Racing into the Night lookup, steps (b) and (c), the `jp` storefront, stale
+"none" answers, East Asian artists, alias entries without a country), `CreditsTests` (headers, closing blocks,
+mixed-script names, Japanese and Korean roles, plain text's sung lines), `LyricHttpCookieTests` and
+`LyricServiceEndToEndTests.RacingIntoTheNightEndsOnJapaneseWordTimingInAustralia`. Changed: the Mac-ported
+`ASongWithoutAnotherTitleIsRememberedAsNone` (four requests, not three: Japan's title search now runs too),
+`ALoneTitleOnlyCountsAheadOfCredits` (a lone title never sung again is now a header), `AFailedRequestIsAskedAgain`
+(the `jp` storefront now asks) and the cache-policy pin (v19).

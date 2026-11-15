@@ -1,0 +1,664 @@
+{
+  "digest" : [
+    {
+      "candidate" : {
+        "agreement" : {
+          "peers" : 0,
+          "timedCompared" : 0,
+          "timingOutlier" : false
+        },
+        "appleRelay" : true,
+        "artist" : "OneRepublic",
+        "artistSimilarity" : 1,
+        "confidence" : 2,
+        "firstLine" : "Lately I've been, I've been losing sleep",
+        "languageMismatch" : false,
+        "lead" : 1,
+        "lines" : 69,
+        "metadataReported" : true,
+        "provenance" : "Word-by-word · Apple via Lyrics+",
+        "rank" : 1,
+        "rankedTiming" : 2,
+        "score" : 113,
+        "script" : "latin",
+        "source" : "lyricsPlus",
+        "timing" : "word",
+        "title" : "Counting Stars",
+        "titleSimilarity" : 1,
+        "verdict" : "accepted",
+        "versionMismatch" : [
+
+        ],
+        "versionTags" : [
+
+        ],
+        "viaOriginalTitle" : false
+      },
+      "elapsedMs" : 156,
+      "requests" : [
+        "404 118 ms https://lyricsplus.prjktla.workers.dev/v2/lyrics/get?title=Counting%20Stars&artist=OneRepublic&duration=257&album=Native",
+        "200 1 ms https://lyricsplus.binimum.org/v2/lyrics/get?title=Counting%20Stars&artist=OneRepublic&duration=257&album=Native"
+      ],
+      "source" : "lyricsPlus",
+      "state" : "Match found · Apple Music’s lyrics · showing",
+      "variants" : [
+        "listed title"
+      ],
+      "verdict" : "picked"
+    },
+    {
+      "elapsedMs" : 198,
+      "requests" : [
+        "cancelled 199 ms https://music.163.com/api/search/get?s=Counting%20Stars%20OneRepublic&type=1&limit=8"
+      ],
+      "source" : "amll",
+      "state" : "Not needed: it couldn’t beat the match showing",
+      "variants" : [
+        "listed title"
+      ],
+      "verdict" : "stopped"
+    },
+    {
+      "elapsedMs" : 198,
+      "requests" : [
+        "cancelled 199 ms https://music.163.com/api/search/get?s=Counting%20Stars%20OneRepublic&type=1&limit=8"
+      ],
+      "source" : "netEase",
+      "state" : "Not needed: it couldn’t beat the match showing",
+      "variants" : [
+        "listed title"
+      ],
+      "verdict" : "stopped"
+    },
+    {
+      "elapsedMs" : 198,
+      "requests" : [
+        "cancelled 199 ms https://lrclib.net/api/get?album_name=Native&artist_name=OneRepublic&duration=257&track_name=Counting%20Stars"
+      ],
+      "source" : "lrclib",
+      "state" : "Not needed: it couldn’t beat the match showing",
+      "variants" : [
+        "listed title"
+      ],
+      "verdict" : "stopped"
+    },
+    {
+      "elapsedMs" : 198,
+      "requests" : [
+        "cancelled 199 ms https://c.y.qq.com/soso/fcgi-bin/client_search_cp?format=json&n=8&p=1&w=Counting%20Stars%20OneRepublic"
+      ],
+      "source" : "qqMusic",
+      "state" : "Not needed: it couldn’t beat the match showing",
+      "variants" : [
+        "listed title"
+      ],
+      "verdict" : "stopped"
+    },
+    {
+      "elapsedMs" : 198,
+      "requests" : [
+        "cancelled 199 ms https://mobileservice.kugou.com/api/v3/search/song?format=json&keyword=Counting%20Stars%20OneRepublic&page=1&pagesize=8"
+      ],
+      "source" : "kugou",
+      "state" : "Not needed: it couldn’t beat the match showing",
+      "variants" : [
+        "listed title"
+      ],
+      "verdict" : "stopped"
+    },
+    {
+      "elapsedMs" : 198,
+      "requests" : [
+        "cancelled 199 ms https://search.kuwo.cn/r.s?all=Counting%20Stars%20OneRepublic&client=kt&encoding=utf8&ft=music&itemset=web_2013&pcjson=1&pn=0&rformat=json&rn=8&vipver=1"
+      ],
+      "source" : "kuwo",
+      "state" : "Not needed: it couldn’t beat the match showing",
+      "variants" : [
+        "listed title"
+      ],
+      "verdict" : "stopped"
+    },
+    {
+      "elapsedMs" : 198,
+      "requests" : [
+        "cancelled 199 ms https://api.lyrics.ovh/v1/OneRepublic/Counting%20Stars?"
+      ],
+      "source" : "lyricsOVH",
+      "state" : "Not needed: it couldn’t beat the match showing",
+      "variants" : [
+
+      ],
+      "verdict" : "stopped"
+    }
+  ],
+  "elapsedMs" : 222,
+  "events" : [
+    {
+      "at" : 0,
+      "kind" : "lookup",
+      "message" : "mode smart, automatic",
+      "query" : {
+        "album" : "Native",
+        "artist" : "OneRepublic",
+        "duration" : 257,
+        "title" : "Counting Stars"
+      },
+      "sources" : [
+        "lyricsPlus",
+        "amll",
+        "netEase",
+        "lrclib",
+        "qqMusic",
+        "kugou",
+        "kuwo",
+        "lyricsOVH"
+      ]
+    },
+    {
+      "at" : 0.002,
+      "kind" : "sourceStart",
+      "source" : "lyricsPlus"
+    },
+    {
+      "at" : 0.002,
+      "kind" : "sourceStart",
+      "source" : "amll"
+    },
+    {
+      "at" : 0.002,
+      "kind" : "sourceStart",
+      "source" : "netEase"
+    },
+    {
+      "at" : 0.002,
+      "kind" : "sourceStart",
+      "source" : "lrclib"
+    },
+    {
+      "at" : 0.002,
+      "kind" : "sourceStart",
+      "source" : "qqMusic"
+    },
+    {
+      "at" : 0.002,
+      "kind" : "sourceStart",
+      "source" : "kugou"
+    },
+    {
+      "at" : 0.002,
+      "kind" : "sourceStart",
+      "source" : "kuwo"
+    },
+    {
+      "at" : 0.002,
+      "kind" : "sourceStart",
+      "source" : "lyricsOVH"
+    },
+    {
+      "at" : 0.002,
+      "kind" : "variant",
+      "message" : "listed title",
+      "query" : {
+        "album" : "Native",
+        "artist" : "OneRepublic",
+        "duration" : 257,
+        "title" : "Counting Stars"
+      },
+      "source" : "lyricsPlus"
+    },
+    {
+      "at" : 0.002,
+      "kind" : "variant",
+      "message" : "listed title",
+      "query" : {
+        "album" : "Native",
+        "artist" : "OneRepublic",
+        "duration" : 257,
+        "title" : "Counting Stars"
+      },
+      "source" : "netEase"
+    },
+    {
+      "at" : 0.002,
+      "kind" : "variant",
+      "message" : "listed title",
+      "query" : {
+        "album" : "Native",
+        "artist" : "OneRepublic",
+        "duration" : 257,
+        "title" : "Counting Stars"
+      },
+      "source" : "qqMusic"
+    },
+    {
+      "at" : 0.002,
+      "kind" : "variant",
+      "message" : "listed title",
+      "query" : {
+        "album" : "Native",
+        "artist" : "OneRepublic",
+        "duration" : 257,
+        "title" : "Counting Stars"
+      },
+      "source" : "kugou"
+    },
+    {
+      "at" : 0.002,
+      "kind" : "variant",
+      "message" : "listed title",
+      "query" : {
+        "album" : "Native",
+        "artist" : "OneRepublic",
+        "duration" : 257,
+        "title" : "Counting Stars"
+      },
+      "source" : "kuwo"
+    },
+    {
+      "at" : 0.002,
+      "kind" : "variant",
+      "message" : "listed title",
+      "query" : {
+        "album" : "Native",
+        "artist" : "OneRepublic",
+        "duration" : 257,
+        "title" : "Counting Stars"
+      },
+      "source" : "lrclib"
+    },
+    {
+      "at" : 0.002,
+      "kind" : "variant",
+      "message" : "listed title",
+      "query" : {
+        "album" : "Native",
+        "artist" : "OneRepublic",
+        "duration" : 257,
+        "title" : "Counting Stars"
+      },
+      "source" : "amll"
+    },
+    {
+      "at" : 0.121,
+      "kind" : "request",
+      "request" : {
+        "bytes" : 19984,
+        "ms" : 118,
+        "status" : 404,
+        "timeout" : 4,
+        "url" : "https://lyricsplus.prjktla.workers.dev/v2/lyrics/get?title=Counting%20Stars&artist=OneRepublic&duration=257&album=Native"
+      },
+      "source" : "lyricsPlus"
+    },
+    {
+      "at" : 0.121,
+      "kind" : "note",
+      "message" : "Lyrics+ https://lyricsplus.prjktla.workers.dev: failed (HTTP 404); rests 600 s",
+      "source" : "lyricsPlus"
+    },
+    {
+      "at" : 0.122,
+      "kind" : "request",
+      "request" : {
+        "bytes" : 35413,
+        "ms" : 1,
+        "status" : 200,
+        "timeout" : 4,
+        "url" : "https://lyricsplus.binimum.org/v2/lyrics/get?title=Counting%20Stars&artist=OneRepublic&duration=257&album=Native"
+      },
+      "source" : "lyricsPlus"
+    },
+    {
+      "at" : 0.125,
+      "kind" : "note",
+      "message" : "Lyrics+ https://lyricsplus.binimum.org: 69 lines from Apple",
+      "source" : "lyricsPlus"
+    },
+    {
+      "at" : 0.146,
+      "candidate" : {
+        "agreement" : {
+          "peers" : 0,
+          "timedCompared" : 0,
+          "timingOutlier" : false
+        },
+        "appleRelay" : true,
+        "artist" : "OneRepublic",
+        "artistSimilarity" : 1,
+        "confidence" : 2,
+        "firstLine" : "Lately I've been, I've been losing sleep",
+        "languageMismatch" : false,
+        "lead" : 1,
+        "lines" : 69,
+        "metadataReported" : true,
+        "provenance" : "Word-by-word · Apple via Lyrics+",
+        "rankedTiming" : 2,
+        "score" : 113,
+        "script" : "latin",
+        "source" : "lyricsPlus",
+        "timing" : "word",
+        "title" : "Counting Stars",
+        "titleSimilarity" : 1,
+        "verdict" : "accepted",
+        "versionMismatch" : [
+
+        ],
+        "versionTags" : [
+
+        ],
+        "viaOriginalTitle" : false
+      },
+      "kind" : "variantResult",
+      "message" : "kept; no original-title search: listed-title answer is usable",
+      "source" : "lyricsPlus"
+    },
+    {
+      "at" : 0.158,
+      "candidate" : {
+        "agreement" : {
+          "peers" : 0,
+          "timedCompared" : 0,
+          "timingOutlier" : false
+        },
+        "appleRelay" : true,
+        "artist" : "OneRepublic",
+        "artistSimilarity" : 1,
+        "confidence" : 2,
+        "firstLine" : "Lately I've been, I've been losing sleep",
+        "languageMismatch" : false,
+        "lead" : 1,
+        "lines" : 69,
+        "metadataReported" : true,
+        "provenance" : "Word-by-word · Apple via Lyrics+",
+        "rankedTiming" : 2,
+        "score" : 113,
+        "script" : "latin",
+        "source" : "lyricsPlus",
+        "timing" : "word",
+        "title" : "Counting Stars",
+        "titleSimilarity" : 1,
+        "verdict" : "accepted",
+        "versionMismatch" : [
+
+        ],
+        "versionTags" : [
+
+        ],
+        "viaOriginalTitle" : false
+      },
+      "elapsedMs" : 156,
+      "kind" : "sourceEnd",
+      "message" : "Match found",
+      "source" : "lyricsPlus"
+    },
+    {
+      "at" : 0.175,
+      "kind" : "publication",
+      "publication" : {
+        "best" : "lyricsPlus",
+        "bestTiming" : "word",
+        "graceOver" : false,
+        "pending" : [
+          "amll",
+          "kugou",
+          "kuwo",
+          "lrclib",
+          "lyricsOVH",
+          "netEase",
+          "qqMusic"
+        ],
+        "revision" : 1,
+        "settleOver" : false,
+        "settled" : true,
+        "shownAfter" : "lyricsPlus",
+        "step" : "publish"
+      }
+    },
+    {
+      "at" : 0.199,
+      "kind" : "stop",
+      "message" : "Not needed: it couldn’t beat the match showing",
+      "sources" : [
+        "amll",
+        "kugou",
+        "kuwo",
+        "lrclib",
+        "lyricsOVH",
+        "netEase",
+        "qqMusic"
+      ]
+    },
+    {
+      "at" : 0.199,
+      "elapsedMs" : 198,
+      "kind" : "sourceEnd",
+      "message" : "Timed out (no answer)",
+      "source" : "amll"
+    },
+    {
+      "at" : 0.199,
+      "elapsedMs" : 198,
+      "kind" : "sourceEnd",
+      "message" : "Timed out (no answer)",
+      "source" : "qqMusic"
+    },
+    {
+      "at" : 0.199,
+      "elapsedMs" : 198,
+      "kind" : "sourceEnd",
+      "message" : "Timed out (no answer)",
+      "source" : "kugou"
+    },
+    {
+      "at" : 0.199,
+      "elapsedMs" : 198,
+      "kind" : "sourceEnd",
+      "message" : "Timed out (no answer)",
+      "source" : "lrclib"
+    },
+    {
+      "at" : 0.199,
+      "elapsedMs" : 198,
+      "kind" : "sourceEnd",
+      "message" : "Timed out (no answer)",
+      "source" : "netEase"
+    },
+    {
+      "at" : 0.199,
+      "elapsedMs" : 198,
+      "kind" : "sourceEnd",
+      "message" : "Timed out (no answer)",
+      "source" : "lyricsOVH"
+    },
+    {
+      "at" : 0.199,
+      "elapsedMs" : 198,
+      "kind" : "sourceEnd",
+      "message" : "Timed out (no answer)",
+      "source" : "kuwo"
+    },
+    {
+      "at" : 0.201,
+      "kind" : "request",
+      "request" : {
+        "error" : "cancelled",
+        "ms" : 199,
+        "timeout" : 6,
+        "url" : "https://mobileservice.kugou.com/api/v3/search/song?format=json&keyword=Counting%20Stars%20OneRepublic&page=1&pagesize=8"
+      },
+      "source" : "kugou"
+    },
+    {
+      "at" : 0.201,
+      "kind" : "request",
+      "request" : {
+        "error" : "cancelled",
+        "ms" : 199,
+        "timeout" : 6,
+        "url" : "https://c.y.qq.com/soso/fcgi-bin/client_search_cp?format=json&n=8&p=1&w=Counting%20Stars%20OneRepublic"
+      },
+      "source" : "qqMusic"
+    },
+    {
+      "at" : 0.201,
+      "kind" : "request",
+      "request" : {
+        "error" : "cancelled",
+        "ms" : 199,
+        "timeout" : 6,
+        "url" : "https://music.163.com/api/search/get?s=Counting%20Stars%20OneRepublic&type=1&limit=8"
+      },
+      "source" : "amll"
+    },
+    {
+      "at" : 0.201,
+      "kind" : "request",
+      "request" : {
+        "error" : "cancelled",
+        "ms" : 199,
+        "timeout" : 4,
+        "url" : "https://lrclib.net/api/get?album_name=Native&artist_name=OneRepublic&duration=257&track_name=Counting%20Stars"
+      },
+      "source" : "lrclib"
+    },
+    {
+      "at" : 0.201,
+      "kind" : "request",
+      "request" : {
+        "error" : "cancelled",
+        "ms" : 199,
+        "timeout" : 6,
+        "url" : "https://search.kuwo.cn/r.s?all=Counting%20Stars%20OneRepublic&client=kt&encoding=utf8&ft=music&itemset=web_2013&pcjson=1&pn=0&rformat=json&rn=8&vipver=1"
+      },
+      "source" : "kuwo"
+    },
+    {
+      "at" : 0.201,
+      "kind" : "request",
+      "request" : {
+        "error" : "cancelled",
+        "ms" : 199,
+        "timeout" : 6,
+        "url" : "https://api.lyrics.ovh/v1/OneRepublic/Counting%20Stars?"
+      },
+      "source" : "lyricsOVH"
+    },
+    {
+      "at" : 0.201,
+      "kind" : "request",
+      "request" : {
+        "error" : "cancelled",
+        "ms" : 199,
+        "timeout" : 6,
+        "url" : "https://music.163.com/api/search/get?s=Counting%20Stars%20OneRepublic&type=1&limit=8"
+      },
+      "source" : "netEase"
+    },
+    {
+      "at" : 0.206,
+      "kind" : "publication",
+      "publication" : {
+        "best" : "lyricsPlus",
+        "bestTiming" : "word",
+        "graceOver" : true,
+        "pending" : [
+
+        ],
+        "revision" : 1,
+        "settleOver" : true,
+        "settled" : true,
+        "shownAfter" : "lyricsPlus",
+        "shownBefore" : "lyricsPlus",
+        "step" : "wait"
+      }
+    },
+    {
+      "at" : 0.222,
+      "kind" : "cache",
+      "message" : "online choice saved to the cache",
+      "source" : "lyricsPlus"
+    },
+    {
+      "at" : 0.234,
+      "elapsedMs" : 222,
+      "kind" : "final",
+      "message" : "shown",
+      "ranked" : [
+        {
+          "agreement" : {
+            "peers" : 0,
+            "timedCompared" : 0,
+            "timingOutlier" : false
+          },
+          "appleRelay" : true,
+          "artist" : "OneRepublic",
+          "artistSimilarity" : 1,
+          "confidence" : 2,
+          "firstLine" : "Lately I've been, I've been losing sleep",
+          "languageMismatch" : false,
+          "lead" : 1,
+          "lines" : 69,
+          "metadataReported" : true,
+          "provenance" : "Word-by-word · Apple via Lyrics+",
+          "rank" : 1,
+          "rankedTiming" : 2,
+          "score" : 113,
+          "script" : "latin",
+          "source" : "lyricsPlus",
+          "timing" : "word",
+          "title" : "Counting Stars",
+          "titleSimilarity" : 1,
+          "verdict" : "accepted",
+          "versionMismatch" : [
+
+          ],
+          "versionTags" : [
+
+          ],
+          "viaOriginalTitle" : false
+        }
+      ],
+      "rejected" : [
+
+      ],
+      "source" : "lyricsPlus",
+      "states" : {
+        "amll" : "Not needed: it couldn’t beat the match showing",
+        "kugou" : "Not needed: it couldn’t beat the match showing",
+        "kuwo" : "Not needed: it couldn’t beat the match showing",
+        "lrclib" : "Not needed: it couldn’t beat the match showing",
+        "lyricsOVH" : "Not needed: it couldn’t beat the match showing",
+        "lyricsPlus" : "Match found · Apple Music’s lyrics · showing",
+        "netEase" : "Not needed: it couldn’t beat the match showing",
+        "qqMusic" : "Not needed: it couldn’t beat the match showing"
+      }
+    }
+  ],
+  "mode" : "mode smart, automatic",
+  "pick" : {
+    "artist" : "OneRepublic",
+    "provenance" : "Word-by-word · Apple via Lyrics+",
+    "source" : "lyricsPlus",
+    "timing" : "word",
+    "title" : "Counting Stars",
+    "viaOriginalTitle" : false
+  },
+  "song" : {
+    "album" : "Native",
+    "artist" : "OneRepublic",
+    "duration" : 257,
+    "title" : "Counting Stars"
+  },
+  "sources" : [
+    "lyricsPlus",
+    "amll",
+    "netEase",
+    "lrclib",
+    "qqMusic",
+    "kugou",
+    "kuwo",
+    "lyricsOVH"
+  ],
+  "startedAt" : "2026-11-13T06:17:04Z",
+  "storefront" : "au"
+}

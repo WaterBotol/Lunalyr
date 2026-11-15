@@ -1,0 +1,55 @@
+{
+  "stack": "lunalyr-app-aot",
+  "adapter": "NVIDIA GeForce RTX 5060 Laptop GPU, Intel(R) Graphics",
+  "monitors": [
+    {
+      "w": 2560,
+      "h": 1440,
+      "dpi": 120,
+      "hz": 280,
+      "mode": "Progman24H2",
+      "state": "Drawing",
+      "reason": "None",
+      "syncInterval": 1,
+      "hdr": true,
+      "adapterDrivesMonitor": true,
+      "idle": false
+    },
+    {
+      "w": 3200,
+      "h": 2000,
+      "dpi": 120,
+      "hz": 120,
+      "mode": "Progman24H2",
+      "state": "Drawing",
+      "reason": "None",
+      "syncInterval": 2,
+      "hdr": false,
+      "adapterDrivesMonitor": true,
+      "idle": false
+    }
+  ],
+  "seconds": 28.54,
+  "frames": 3420,
+  "fps": 119.8,
+  "cpuMsPerFrame": {
+    "avg": 0.706,
+    "p50": 0.677,
+    "p95": 1.086,
+    "p99": 1.335
+  },
+  "frameIntervalMs": {
+    "avg": 8.346,
+    "p50": 7.234,
+    "p95": 17.11,
+    "p99": 18.435
+  },
+  "slowFrames": 1,
+  "workingSetMB": 180.7,
+  "privateMB": 233,
+  "gcGen0": 1,
+  "gcGen2": 1,
+  "allocatedMB": 10.8,
+  "rebuilds": 1,
+  "deviceRecoveries": 0
+}

@@ -1,0 +1,37 @@
+{
+  "stack": "cs-winui-d2d-aot",
+  "adapter": "Intel(R) Graphics",
+  "monitors": [
+    {
+      "w": 2560,
+      "h": 1440,
+      "dpi": 120,
+      "hz": 60,
+      "mode": "24h2"
+    }
+  ],
+  "seconds": 34.81,
+  "frames": 2061,
+  "fps": 59.2,
+  "cpuMsPerFrame": {
+    "avg": 0.901,
+    "p50": 0.806,
+    "p95": 1.129,
+    "p99": 1.42
+  },
+  "frameIntervalMs": {
+    "avg": 16.879,
+    "p50": 16.679,
+    "p95": 17.141,
+    "p99": 26.868
+  },
+  "slowFrames": 21,
+  "startupMs": 291.9,
+  "workingSetMB": 404.9,
+  "peakWorkingSetMB": 404.9,
+  "privateMB": 378.8,
+  "processCpuPercent": 0.59,
+  "notes": [
+    "tree after attach:\nProgman 101AE ex=200080\r\n  SHELLDLL_DefView         20198 vis=True ex=80000 rect=(0,0,2560x1440)\r\n  LunalyrSpikeSurface      4F0106 vis=True ex=8000080 rect=(0,0,2560x1440)\r\n  WorkerW                  10254 vis=True ex=80000A0 rect=(0,0,2560x1440)\r\n"
+  ]
+}

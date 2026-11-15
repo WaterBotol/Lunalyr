@@ -1,0 +1,8 @@
+{"result":{"songs":[
+{"id":2668397359,"name":"晴天 (原唱 周杰伦)","artists":[{"name":"RyaVocal","id":0}],"album":{"name":"晴天","id":260499608},"duration":270738,"fee":8,"status":0},
+{"id":3440441479,"name":"晴天","artists":[{"name":"Jay","id":122200643}],"album":{"name":"晴天","id":400164559},"duration":112373,"fee":8,"status":0},
+{"id":2653714443,"name":"晴天 (女声版))","artists":[{"name":"GYBeat","id":0}],"album":{"name":"","id":0},"duration":268750,"fee":8,"status":0},
+{"id":1945894789,"name":"晴天 (钢琴版) [原唱: 周杰伦]","artists":[{"name":"纪钧瀚 (Bryan Chi)","id":0}],"album":{"name":"","id":0},"duration":238098,"fee":8,"status":0},
+{"id":3443412579,"name":"晴天","artists":[{"name":"舟子","id":0}],"album":{"name":"","id":0},"duration":252760,"fee":8,"status":0},
+{"id":108914,"name":"江南","artists":[{"name":"林俊杰","id":3684}],"album":{"name":"第二天堂","id":0},"duration":267946,"fee":8,"status":0}
+],"songCount":300},"code":200}

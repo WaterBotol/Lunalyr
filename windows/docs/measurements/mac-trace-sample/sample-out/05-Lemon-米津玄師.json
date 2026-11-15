@@ -1,0 +1,651 @@
+{
+  "digest" : [
+    {
+      "candidate" : {
+        "agreement" : {
+          "peers" : 0,
+          "timedCompared" : 0,
+          "timingOutlier" : false
+        },
+        "appleRelay" : true,
+        "artist" : "米津玄師",
+        "artistSimilarity" : 1,
+        "confidence" : 2,
+        "firstLine" : "夢ならばどれほどよかったでしょう",
+        "languageMismatch" : false,
+        "lead" : 1,
+        "lines" : 40,
+        "metadataReported" : false,
+        "provenance" : "Word-by-word · Apple via Lyrics+",
+        "rank" : 1,
+        "rankedTiming" : 2,
+        "score" : 113,
+        "script" : "native",
+        "source" : "lyricsPlus",
+        "timing" : "word",
+        "title" : "Lemon",
+        "titleSimilarity" : 1,
+        "verdict" : "accepted",
+        "versionMismatch" : [
+
+        ],
+        "versionTags" : [
+
+        ],
+        "viaOriginalTitle" : false
+      },
+      "elapsedMs" : 8,
+      "requests" : [
+        "200 2 ms https://lyricsplus.prjktla.my.id/v2/lyrics/get?title=Lemon&artist=%E7%B1%B3%E6%B4%A5%E7%8E%84%E5%B8%AB&duration=255&album=STRAY%20SHEEP"
+      ],
+      "source" : "lyricsPlus",
+      "state" : "Match found · Apple Music’s lyrics · showing",
+      "variants" : [
+        "listed title"
+      ],
+      "verdict" : "picked"
+    },
+    {
+      "elapsedMs" : 16,
+      "requests" : [
+        "cancelled 16 ms https://music.163.com/api/search/get?s=Lemon%20%E7%B1%B3%E6%B4%A5%E7%8E%84%E5%B8%AB&type=1&limit=8"
+      ],
+      "source" : "amll",
+      "state" : "Not needed: it couldn’t beat the match showing",
+      "variants" : [
+        "listed title"
+      ],
+      "verdict" : "stopped"
+    },
+    {
+      "elapsedMs" : 16,
+      "requests" : [
+        "cancelled 16 ms https://music.163.com/api/search/get?s=Lemon%20%E7%B1%B3%E6%B4%A5%E7%8E%84%E5%B8%AB&type=1&limit=8"
+      ],
+      "source" : "netEase",
+      "state" : "Not needed: it couldn’t beat the match showing",
+      "variants" : [
+        "listed title"
+      ],
+      "verdict" : "stopped"
+    },
+    {
+      "elapsedMs" : 16,
+      "requests" : [
+        "cancelled 16 ms https://lrclib.net/api/get?album_name=STRAY%20SHEEP&artist_name=%E7%B1%B3%E6%B4%A5%E7%8E%84%E5%B8%AB&duration=255&track_name=Lemon"
+      ],
+      "source" : "lrclib",
+      "state" : "Not needed: it couldn’t beat the match showing",
+      "variants" : [
+        "listed title"
+      ],
+      "verdict" : "stopped"
+    },
+    {
+      "elapsedMs" : 16,
+      "requests" : [
+        "cancelled 16 ms https://c.y.qq.com/soso/fcgi-bin/client_search_cp?format=json&n=8&p=1&w=Lemon%20%E7%B1%B3%E6%B4%A5%E7%8E%84%E5%B8%AB"
+      ],
+      "source" : "qqMusic",
+      "state" : "Not needed: it couldn’t beat the match showing",
+      "variants" : [
+        "listed title"
+      ],
+      "verdict" : "stopped"
+    },
+    {
+      "elapsedMs" : 16,
+      "requests" : [
+        "cancelled 16 ms https://mobileservice.kugou.com/api/v3/search/song?format=json&keyword=Lemon%20%E7%B1%B3%E6%B4%A5%E7%8E%84%E5%B8%AB&page=1&pagesize=8"
+      ],
+      "source" : "kugou",
+      "state" : "Not needed: it couldn’t beat the match showing",
+      "variants" : [
+        "listed title"
+      ],
+      "verdict" : "stopped"
+    },
+    {
+      "elapsedMs" : 16,
+      "requests" : [
+        "cancelled 16 ms https://search.kuwo.cn/r.s?all=Lemon%20%E7%B1%B3%E6%B4%A5%E7%8E%84%E5%B8%AB&client=kt&encoding=utf8&ft=music&itemset=web_2013&pcjson=1&pn=0&rformat=json&rn=8&vipver=1"
+      ],
+      "source" : "kuwo",
+      "state" : "Not needed: it couldn’t beat the match showing",
+      "variants" : [
+        "listed title"
+      ],
+      "verdict" : "stopped"
+    },
+    {
+      "elapsedMs" : 16,
+      "requests" : [
+        "cancelled 16 ms https://api.lyrics.ovh/v1/%E7%B1%B3%E6%B4%A5%E7%8E%84%E5%B8%AB/Lemon?"
+      ],
+      "source" : "lyricsOVH",
+      "state" : "Not needed: it couldn’t beat the match showing",
+      "variants" : [
+
+      ],
+      "verdict" : "stopped"
+    }
+  ],
+  "elapsedMs" : 21,
+  "events" : [
+    {
+      "at" : 0,
+      "kind" : "lookup",
+      "message" : "mode smart, automatic",
+      "query" : {
+        "album" : "STRAY SHEEP",
+        "artist" : "米津玄師",
+        "duration" : 255,
+        "title" : "Lemon"
+      },
+      "sources" : [
+        "lyricsPlus",
+        "amll",
+        "netEase",
+        "lrclib",
+        "qqMusic",
+        "kugou",
+        "kuwo",
+        "lyricsOVH"
+      ]
+    },
+    {
+      "at" : 0,
+      "kind" : "sourceStart",
+      "source" : "lyricsPlus"
+    },
+    {
+      "at" : 0,
+      "kind" : "sourceStart",
+      "source" : "amll"
+    },
+    {
+      "at" : 0,
+      "kind" : "sourceStart",
+      "source" : "netEase"
+    },
+    {
+      "at" : 0,
+      "kind" : "sourceStart",
+      "source" : "lrclib"
+    },
+    {
+      "at" : 0,
+      "kind" : "sourceStart",
+      "source" : "qqMusic"
+    },
+    {
+      "at" : 0,
+      "kind" : "sourceStart",
+      "source" : "kugou"
+    },
+    {
+      "at" : 0,
+      "kind" : "sourceStart",
+      "source" : "kuwo"
+    },
+    {
+      "at" : 0,
+      "kind" : "sourceStart",
+      "source" : "lyricsOVH"
+    },
+    {
+      "at" : 0,
+      "kind" : "variant",
+      "message" : "listed title",
+      "query" : {
+        "album" : "STRAY SHEEP",
+        "artist" : "米津玄師",
+        "duration" : 255,
+        "title" : "Lemon"
+      },
+      "source" : "lyricsPlus"
+    },
+    {
+      "at" : 0,
+      "kind" : "variant",
+      "message" : "listed title",
+      "query" : {
+        "album" : "STRAY SHEEP",
+        "artist" : "米津玄師",
+        "duration" : 255,
+        "title" : "Lemon"
+      },
+      "source" : "netEase"
+    },
+    {
+      "at" : 0,
+      "kind" : "variant",
+      "message" : "listed title",
+      "query" : {
+        "album" : "STRAY SHEEP",
+        "artist" : "米津玄師",
+        "duration" : 255,
+        "title" : "Lemon"
+      },
+      "source" : "amll"
+    },
+    {
+      "at" : 0,
+      "kind" : "variant",
+      "message" : "listed title",
+      "query" : {
+        "album" : "STRAY SHEEP",
+        "artist" : "米津玄師",
+        "duration" : 255,
+        "title" : "Lemon"
+      },
+      "source" : "lrclib"
+    },
+    {
+      "at" : 0,
+      "kind" : "note",
+      "message" : "Lyrics+ mirrors in order (resting ones last or skipped): [\"https://lyricsplus.prjktla.my.id\", \"https://lyricsplus.binimum.org\"]",
+      "source" : "lyricsPlus"
+    },
+    {
+      "at" : 0,
+      "kind" : "variant",
+      "message" : "listed title",
+      "query" : {
+        "album" : "STRAY SHEEP",
+        "artist" : "米津玄師",
+        "duration" : 255,
+        "title" : "Lemon"
+      },
+      "source" : "qqMusic"
+    },
+    {
+      "at" : 0,
+      "kind" : "variant",
+      "message" : "listed title",
+      "query" : {
+        "album" : "STRAY SHEEP",
+        "artist" : "米津玄師",
+        "duration" : 255,
+        "title" : "Lemon"
+      },
+      "source" : "kugou"
+    },
+    {
+      "at" : 0,
+      "kind" : "variant",
+      "message" : "listed title",
+      "query" : {
+        "album" : "STRAY SHEEP",
+        "artist" : "米津玄師",
+        "duration" : 255,
+        "title" : "Lemon"
+      },
+      "source" : "kuwo"
+    },
+    {
+      "at" : 0.002,
+      "kind" : "request",
+      "request" : {
+        "bytes" : 39326,
+        "ms" : 2,
+        "status" : 200,
+        "timeout" : 4,
+        "url" : "https://lyricsplus.prjktla.my.id/v2/lyrics/get?title=Lemon&artist=%E7%B1%B3%E6%B4%A5%E7%8E%84%E5%B8%AB&duration=255&album=STRAY%20SHEEP"
+      },
+      "source" : "lyricsPlus"
+    },
+    {
+      "at" : 0.004,
+      "kind" : "note",
+      "message" : "Lyrics+ https://lyricsplus.prjktla.my.id: 40 lines from Apple",
+      "source" : "lyricsPlus"
+    },
+    {
+      "at" : 0.006,
+      "candidate" : {
+        "agreement" : {
+          "peers" : 0,
+          "timedCompared" : 0,
+          "timingOutlier" : false
+        },
+        "appleRelay" : true,
+        "artist" : "米津玄師",
+        "artistSimilarity" : 1,
+        "confidence" : 2,
+        "firstLine" : "夢ならばどれほどよかったでしょう",
+        "languageMismatch" : false,
+        "lead" : 1,
+        "lines" : 40,
+        "metadataReported" : false,
+        "provenance" : "Word-by-word · Apple via Lyrics+",
+        "rankedTiming" : 2,
+        "score" : 113,
+        "script" : "native",
+        "source" : "lyricsPlus",
+        "timing" : "word",
+        "title" : "Lemon",
+        "titleSimilarity" : 1,
+        "verdict" : "accepted",
+        "versionMismatch" : [
+
+        ],
+        "versionTags" : [
+
+        ],
+        "viaOriginalTitle" : false
+      },
+      "kind" : "variantResult",
+      "message" : "kept; no original-title search: listed-title answer is usable",
+      "source" : "lyricsPlus"
+    },
+    {
+      "at" : 0.009,
+      "candidate" : {
+        "agreement" : {
+          "peers" : 0,
+          "timedCompared" : 0,
+          "timingOutlier" : false
+        },
+        "appleRelay" : true,
+        "artist" : "米津玄師",
+        "artistSimilarity" : 1,
+        "confidence" : 2,
+        "firstLine" : "夢ならばどれほどよかったでしょう",
+        "languageMismatch" : false,
+        "lead" : 1,
+        "lines" : 40,
+        "metadataReported" : false,
+        "provenance" : "Word-by-word · Apple via Lyrics+",
+        "rankedTiming" : 2,
+        "score" : 113,
+        "script" : "native",
+        "source" : "lyricsPlus",
+        "timing" : "word",
+        "title" : "Lemon",
+        "titleSimilarity" : 1,
+        "verdict" : "accepted",
+        "versionMismatch" : [
+
+        ],
+        "versionTags" : [
+
+        ],
+        "viaOriginalTitle" : false
+      },
+      "elapsedMs" : 8,
+      "kind" : "sourceEnd",
+      "message" : "Match found",
+      "source" : "lyricsPlus"
+    },
+    {
+      "at" : 0.012,
+      "kind" : "publication",
+      "publication" : {
+        "best" : "lyricsPlus",
+        "bestTiming" : "word",
+        "graceOver" : false,
+        "pending" : [
+          "amll",
+          "kugou",
+          "kuwo",
+          "lrclib",
+          "lyricsOVH",
+          "netEase",
+          "qqMusic"
+        ],
+        "revision" : 1,
+        "settleOver" : false,
+        "settled" : true,
+        "shownAfter" : "lyricsPlus",
+        "step" : "publish"
+      }
+    },
+    {
+      "at" : 0.016,
+      "kind" : "stop",
+      "message" : "Not needed: it couldn’t beat the match showing",
+      "sources" : [
+        "amll",
+        "kugou",
+        "kuwo",
+        "lrclib",
+        "lyricsOVH",
+        "netEase",
+        "qqMusic"
+      ]
+    },
+    {
+      "at" : 0.016,
+      "elapsedMs" : 16,
+      "kind" : "sourceEnd",
+      "message" : "Timed out (no answer)",
+      "source" : "qqMusic"
+    },
+    {
+      "at" : 0.016,
+      "elapsedMs" : 16,
+      "kind" : "sourceEnd",
+      "message" : "Timed out (no answer)",
+      "source" : "netEase"
+    },
+    {
+      "at" : 0.016,
+      "elapsedMs" : 16,
+      "kind" : "sourceEnd",
+      "message" : "Timed out (no answer)",
+      "source" : "amll"
+    },
+    {
+      "at" : 0.016,
+      "elapsedMs" : 16,
+      "kind" : "sourceEnd",
+      "message" : "Timed out (no answer)",
+      "source" : "lrclib"
+    },
+    {
+      "at" : 0.016,
+      "elapsedMs" : 16,
+      "kind" : "sourceEnd",
+      "message" : "Timed out (no answer)",
+      "source" : "lyricsOVH"
+    },
+    {
+      "at" : 0.016,
+      "kind" : "request",
+      "request" : {
+        "error" : "cancelled",
+        "ms" : 16,
+        "timeout" : 6,
+        "url" : "https://c.y.qq.com/soso/fcgi-bin/client_search_cp?format=json&n=8&p=1&w=Lemon%20%E7%B1%B3%E6%B4%A5%E7%8E%84%E5%B8%AB"
+      },
+      "source" : "qqMusic"
+    },
+    {
+      "at" : 0.016,
+      "elapsedMs" : 16,
+      "kind" : "sourceEnd",
+      "message" : "Timed out (no answer)",
+      "source" : "kugou"
+    },
+    {
+      "at" : 0.016,
+      "elapsedMs" : 16,
+      "kind" : "sourceEnd",
+      "message" : "Timed out (no answer)",
+      "source" : "kuwo"
+    },
+    {
+      "at" : 0.016,
+      "kind" : "request",
+      "request" : {
+        "error" : "cancelled",
+        "ms" : 16,
+        "timeout" : 6,
+        "url" : "https://music.163.com/api/search/get?s=Lemon%20%E7%B1%B3%E6%B4%A5%E7%8E%84%E5%B8%AB&type=1&limit=8"
+      },
+      "source" : "amll"
+    },
+    {
+      "at" : 0.016,
+      "kind" : "request",
+      "request" : {
+        "error" : "cancelled",
+        "ms" : 16,
+        "timeout" : 6,
+        "url" : "https://api.lyrics.ovh/v1/%E7%B1%B3%E6%B4%A5%E7%8E%84%E5%B8%AB/Lemon?"
+      },
+      "source" : "lyricsOVH"
+    },
+    {
+      "at" : 0.016,
+      "kind" : "request",
+      "request" : {
+        "error" : "cancelled",
+        "ms" : 16,
+        "timeout" : 6,
+        "url" : "https://mobileservice.kugou.com/api/v3/search/song?format=json&keyword=Lemon%20%E7%B1%B3%E6%B4%A5%E7%8E%84%E5%B8%AB&page=1&pagesize=8"
+      },
+      "source" : "kugou"
+    },
+    {
+      "at" : 0.016,
+      "kind" : "request",
+      "request" : {
+        "error" : "cancelled",
+        "ms" : 16,
+        "timeout" : 6,
+        "url" : "https://music.163.com/api/search/get?s=Lemon%20%E7%B1%B3%E6%B4%A5%E7%8E%84%E5%B8%AB&type=1&limit=8"
+      },
+      "source" : "netEase"
+    },
+    {
+      "at" : 0.016,
+      "kind" : "request",
+      "request" : {
+        "error" : "cancelled",
+        "ms" : 16,
+        "timeout" : 4,
+        "url" : "https://lrclib.net/api/get?album_name=STRAY%20SHEEP&artist_name=%E7%B1%B3%E6%B4%A5%E7%8E%84%E5%B8%AB&duration=255&track_name=Lemon"
+      },
+      "source" : "lrclib"
+    },
+    {
+      "at" : 0.016,
+      "kind" : "request",
+      "request" : {
+        "error" : "cancelled",
+        "ms" : 16,
+        "timeout" : 6,
+        "url" : "https://search.kuwo.cn/r.s?all=Lemon%20%E7%B1%B3%E6%B4%A5%E7%8E%84%E5%B8%AB&client=kt&encoding=utf8&ft=music&itemset=web_2013&pcjson=1&pn=0&rformat=json&rn=8&vipver=1"
+      },
+      "source" : "kuwo"
+    },
+    {
+      "at" : 0.017,
+      "kind" : "publication",
+      "publication" : {
+        "best" : "lyricsPlus",
+        "bestTiming" : "word",
+        "graceOver" : true,
+        "pending" : [
+
+        ],
+        "revision" : 1,
+        "settleOver" : true,
+        "settled" : true,
+        "shownAfter" : "lyricsPlus",
+        "shownBefore" : "lyricsPlus",
+        "step" : "wait"
+      }
+    },
+    {
+      "at" : 0.021,
+      "kind" : "cache",
+      "message" : "online choice saved to the cache",
+      "source" : "lyricsPlus"
+    },
+    {
+      "at" : 0.023,
+      "elapsedMs" : 21,
+      "kind" : "final",
+      "message" : "shown",
+      "ranked" : [
+        {
+          "agreement" : {
+            "peers" : 0,
+            "timedCompared" : 0,
+            "timingOutlier" : false
+          },
+          "appleRelay" : true,
+          "artist" : "米津玄師",
+          "artistSimilarity" : 1,
+          "confidence" : 2,
+          "firstLine" : "夢ならばどれほどよかったでしょう",
+          "languageMismatch" : false,
+          "lead" : 1,
+          "lines" : 40,
+          "metadataReported" : false,
+          "provenance" : "Word-by-word · Apple via Lyrics+",
+          "rank" : 1,
+          "rankedTiming" : 2,
+          "score" : 113,
+          "script" : "native",
+          "source" : "lyricsPlus",
+          "timing" : "word",
+          "title" : "Lemon",
+          "titleSimilarity" : 1,
+          "verdict" : "accepted",
+          "versionMismatch" : [
+
+          ],
+          "versionTags" : [
+
+          ],
+          "viaOriginalTitle" : false
+        }
+      ],
+      "rejected" : [
+
+      ],
+      "source" : "lyricsPlus",
+      "states" : {
+        "amll" : "Not needed: it couldn’t beat the match showing",
+        "kugou" : "Not needed: it couldn’t beat the match showing",
+        "kuwo" : "Not needed: it couldn’t beat the match showing",
+        "lrclib" : "Not needed: it couldn’t beat the match showing",
+        "lyricsOVH" : "Not needed: it couldn’t beat the match showing",
+        "lyricsPlus" : "Match found · Apple Music’s lyrics · showing",
+        "netEase" : "Not needed: it couldn’t beat the match showing",
+        "qqMusic" : "Not needed: it couldn’t beat the match showing"
+      }
+    }
+  ],
+  "mode" : "mode smart, automatic",
+  "pick" : {
+    "artist" : "米津玄師",
+    "provenance" : "Word-by-word · Apple via Lyrics+",
+    "source" : "lyricsPlus",
+    "timing" : "word",
+    "title" : "Lemon",
+    "viaOriginalTitle" : false
+  },
+  "song" : {
+    "album" : "STRAY SHEEP",
+    "artist" : "米津玄師",
+    "duration" : 255,
+    "title" : "Lemon"
+  },
+  "sources" : [
+    "lyricsPlus",
+    "amll",
+    "netEase",
+    "lrclib",
+    "qqMusic",
+    "kugou",
+    "kuwo",
+    "lyricsOVH"
+  ],
+  "startedAt" : "2026-11-13T06:17:07Z",
+  "storefront" : "au"
+}

@@ -1,0 +1,7 @@
+# Compressed data: never diffed or converted.
+*.br binary
+# Media (the welcome's recordings, posters and icon): never diffed or converted.
+*.mp4 binary
+*.jpg binary
+*.gif binary
+*.png binary

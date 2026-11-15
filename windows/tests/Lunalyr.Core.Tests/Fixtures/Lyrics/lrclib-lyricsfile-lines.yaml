@@ -1,0 +1,19 @@
+version: '1.0'
+metadata:
+  title: Quiet Harbour
+  artist: The Invented Band
+  album: Test Pressings (Deluxe)
+  duration_ms: 232000
+  instrumental: false
+lines:
+- text: When the tide goes out at evening
+  start_ms: 12670
+  end_ms: 17170
+- text: And the gulls have gone to sleep
+  start_ms: 17170
+  end_ms: 19980
+- text: I will wait beside the water
+  start_ms: 19980
+  end_ms: 26030
+- text: For the promise you will keep
+  start_ms: 26030

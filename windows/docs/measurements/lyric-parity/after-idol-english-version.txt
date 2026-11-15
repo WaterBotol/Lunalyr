@@ -1,0 +1,35 @@
+Query: "Idol (English Version)" by "YOASOBI" (3:33, 213.234 s), genre "J-Pop", automatic lookup
+Storefront for original titles: au; cache policy v17
+Sources:
+  Apple Music            unavailable: Apple Music for Windows doesn't keep its lyrics anywhere Lunalyr can read, so its own lyrics can't be used here.
+  Lyrimuse local files   available
+  Lyrics+ (KPoe)         available
+  AMLL TTML DB           available
+  NetEase Cloud Music    available
+  LRCLIB                 available
+  QQ Music               available
+  Kugou Music            available
+  Kuwo Music             available
+  lyrics.ovh             available
+  0.59s  done
+
+Source states:
+  Apple Music            Apple Music for Windows doesn't keep its lyrics anywhere Lunalyr can read, so its own lyrics can't be used here.
+  Lyrimuse local files   Choose the Lyrimuse lyrics folder
+  Lyrics+ (KPoe)         Match found · Apple Music’s lyrics · showing
+  AMLL TTML DB           Not needed: it couldn’t beat the match showing
+  NetEase Cloud Music    Not needed: it couldn’t beat the match showing
+  LRCLIB                 Not needed: it couldn’t beat the match showing
+  QQ Music               Not needed: it couldn’t beat the match showing
+  Kugou Music            Not needed: it couldn’t beat the match showing
+  Kuwo Music             Not needed: it couldn’t beat the match showing
+  lyrics.ovh             Not needed: it couldn’t beat the match showing
+
+Ranking:
+  1. Mixed timing · Apple via Lyrics+              "Idol (English Version)" / "YOASOBI" ?:??, 87 lines, score 95.0, tier 2
+
+Chosen: Mixed timing · Apple via Lyrics+
+  0:01  Couldn't beat her smile, it stirred up all the media  [7 timed words]
+  0:04  Secret side, I wanna know it  [4 timed words]
+  0:05  So mysterious  [2 timed words]
+  0:06  Even that elusive side, part of her controlled area  [7 timed words]

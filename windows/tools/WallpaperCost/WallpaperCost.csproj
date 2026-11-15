@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Measures what each wallpaper mode costs, idle and playing: the app's own layers drawn offscreen (no window, no
+       swap chain) at 60 fps on the GPU that drives the main display, the scene and clock from the app's controller
+       following the silent demo player, one child process per run while this one samples its CPU, memory and GPU
+       engine use. Plays nothing, captures nothing, touches no network and draws nothing on screen. Not part of the app
+       or the solution. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.19041.0</TargetPlatformMinVersion>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <Platforms>x64</Platforms>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- As the app: workstation GC. -->
+    <ServerGarbageCollection>false</ServerGarbageCollection>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Lunalyr.Render\Lunalyr.Render.csproj" />
+    <ProjectReference Include="..\..\src\Lunalyr.Platform.Windows\Lunalyr.Platform.Windows.csproj" />
+    <ProjectReference Include="..\..\src\Lunalyr.Shell\Lunalyr.Shell.csproj" />
+    <!-- The H.264 writer that makes the full-HD test clip (silent: no audio track). -->
+    <Compile Include="..\WallpaperTestMedia\Video.cs" Link="Media\Video.cs" />
+  </ItemGroup>
+</Project>

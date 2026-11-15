@@ -1,0 +1,35 @@
+{
+  "stack": "cs-winui-d2d",
+  "adapter": "NVIDIA GeForce RTX 5060 Laptop GPU",
+  "monitors": [
+    {
+      "w": 1262,
+      "h": 673,
+      "dpi": 120,
+      "hz": 60,
+      "mode": "windowed"
+    }
+  ],
+  "seconds": 4.01,
+  "frames": 237,
+  "fps": 59,
+  "cpuMsPerFrame": {
+    "avg": 1.067,
+    "p50": 0.627,
+    "p95": 4.77,
+    "p99": 5.083
+  },
+  "frameIntervalMs": {
+    "avg": 16.811,
+    "p50": 16.718,
+    "p95": 19.971,
+    "p99": 23.641
+  },
+  "slowFrames": 2,
+  "startupMs": 0,
+  "workingSetMB": 105.1,
+  "peakWorkingSetMB": 107.6,
+  "privateMB": 107.2,
+  "processCpuPercent": 0.56,
+  "notes": []
+}

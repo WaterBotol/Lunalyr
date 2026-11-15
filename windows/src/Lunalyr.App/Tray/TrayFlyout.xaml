@@ -1,0 +1,352 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The tray flyout: the Windows counterpart of the Mac's menu-bar panel (Sources/UI/MenuBarView.swift), top to bottom
+     the song and its transport, the line being sung with its source, this song's lyric timing, Search YouTube, the
+     wallpaper's quick controls, then Settings and Quit. Values are set from code-behind (no runtime binding under
+     Native AOT); styles live here, not in App.xaml, so the settings window's work never collides with them. -->
+<Window
+    x:Class="Lunalyr.App.Tray.TrayFlyout"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="Lunalyr panel">
+
+    <Grid x:Name="Root" KeyDown="Root_KeyDown">
+        <Grid.Resources>
+            <Style x:Key="FlyoutCard" TargetType="Border">
+                <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}" />
+                <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="8" />
+                <Setter Property="Padding" Value="14,12,14,12" />
+            </Style>
+            <Style x:Key="Caption" TargetType="TextBlock" BasedOn="{StaticResource CaptionTextBlockStyle}">
+                <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+                <Setter Property="TextWrapping" Value="Wrap" />
+            </Style>
+            <Style x:Key="SectionHeader" TargetType="TextBlock" BasedOn="{StaticResource BodyStrongTextBlockStyle}">
+                <Setter Property="VerticalAlignment" Value="Center" />
+            </Style>
+            <!-- A transport button: the glyph alone, borderless until hovered, like the system media flyout's. -->
+            <Style x:Key="TransportButton" TargetType="Button" BasedOn="{StaticResource DefaultButtonStyle}">
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="BorderBrush" Value="Transparent" />
+                <Setter Property="Width" Value="44" />
+
+                <Setter Property="Padding" Value="0" />
+            </Style>
+            <!-- A footer row, like the end of a menu: highlighted under the pointer, its keys at the trailing edge. -->
+            <Style x:Key="MenuRow" TargetType="Button" BasedOn="{StaticResource DefaultButtonStyle}">
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="BorderBrush" Value="Transparent" />
+                <Setter Property="HorizontalAlignment" Value="Stretch" />
+                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                <Setter Property="Padding" Value="10,6,10,6" />
+            </Style>
+            <!-- A wallpaper-type tile: lit in the accent while chosen. -->
+            <Style x:Key="ModeTile" TargetType="ToggleButton" BasedOn="{StaticResource DefaultToggleButtonStyle}">
+                <Setter Property="HorizontalAlignment" Value="Stretch" />
+                <Setter Property="HorizontalContentAlignment" Value="Center" />
+
+            </Style>
+            <!-- A quick toggle, drawn like a Control Center / Quick Settings control: a round button that lights in the
+                 accent while on, its name beneath. -->
+            <Style x:Key="QuickToggle" TargetType="ToggleButton" BasedOn="{StaticResource DefaultToggleButtonStyle}">
+                <Setter Property="Width" Value="44" />
+                <Setter Property="Height" Value="44" />
+                <Setter Property="CornerRadius" Value="22" />
+                <Setter Property="Padding" Value="0" />
+                <Setter Property="HorizontalAlignment" Value="Center" />
+            </Style>
+        </Grid.Resources>
+
+        <ScrollViewer x:Name="Scroller" HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled"
+                      VerticalScrollBarVisibility="Auto" IsTabStop="False">
+            <StackPanel x:Name="Panel" Spacing="12" Padding="12" VerticalAlignment="Top">
+
+                <!-- ===== Now playing ===== -->
+                <Border Style="{StaticResource FlyoutCard}">
+                    <StackPanel Spacing="8">
+                        <Grid ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Border Width="56" Height="56" CornerRadius="6"
+                                    Background="{ThemeResource ControlFillColorSecondaryBrush}"
+                                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1"
+                                    AutomationProperties.AccessibilityView="Raw">
+                                <Grid>
+                                    <FontIcon x:Name="CoverGlyph" Glyph="&#xE8D6;" FontSize="20"
+                                              Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                    <Image x:Name="CoverImage" Stretch="UniformToFill" />
+                                </Grid>
+                            </Border>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
+                                <TextBlock x:Name="TitleText" Style="{StaticResource BodyStrongTextBlockStyle}"
+                                           TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis" />
+                                <TextBlock x:Name="SubtitleText" Style="{StaticResource BodyTextBlockStyle}"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                           TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
+                                <TextBlock x:Name="PlayerText" Style="{StaticResource CaptionTextBlockStyle}"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                           TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
+                            </StackPanel>
+                        </Grid>
+
+                        <StackPanel x:Name="Transport" Orientation="Horizontal" HorizontalAlignment="Center" Spacing="16"
+                                    AutomationProperties.Name="Music playback">
+                            <Button x:Name="PreviousButton" Style="{StaticResource TransportButton}" Click="PreviousButton_Click">
+                                <FontIcon Glyph="&#xE892;" FontSize="16" />
+                            </Button>
+                            <Button x:Name="PlayButton" Style="{StaticResource AccentButtonStyle}" Width="52" Height="36"
+                                    Padding="0" CornerRadius="18" Click="PlayButton_Click">
+                                <FontIcon x:Name="PlayGlyph" Glyph="&#xE768;" FontSize="16" />
+                            </Button>
+                            <Button x:Name="NextButton" Style="{StaticResource TransportButton}" Click="NextButton_Click">
+                                <FontIcon Glyph="&#xE893;" FontSize="16" />
+                            </Button>
+                        </StackPanel>
+                        <TextBlock x:Name="TransportNote" Style="{StaticResource Caption}" TextAlignment="Center"
+                                   HorizontalAlignment="Center" Visibility="Collapsed" />
+
+                        <!-- The line being sung (one height whatever it shows, so nothing below moves as lines come and go)
+                             and this song's lyric timing, right under it. -->
+                        <StackPanel x:Name="LyricTools" Spacing="8">
+                        <Grid x:Name="LyricBlock" Height="86" Padding="0,4,0,0">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="*" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <StackPanel x:Name="LyricLines" Spacing="2" VerticalAlignment="Top">
+                                <TextBlock x:Name="LyricLine" FontSize="16" FontWeight="SemiBold" TextWrapping="Wrap"
+                                           MaxLines="2" TextTrimming="CharacterEllipsis" />
+                                <TextBlock x:Name="LyricQuiet" Style="{StaticResource BodyTextBlockStyle}"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap"
+                                           MaxLines="2" TextTrimming="CharacterEllipsis" Visibility="Collapsed" />
+                                <TextBlock x:Name="LyricNext" Style="{StaticResource BodyTextBlockStyle}"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                           TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
+                            </StackPanel>
+                            <TextBlock x:Name="LyricFooter" Grid.Row="1" Style="{StaticResource CaptionTextBlockStyle}"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                       TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
+                        </Grid>
+
+                        <!-- This song's lyric timing, right under the line it moves. -->
+                        <Grid ColumnSpacing="6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock x:Name="TimingHeader" Style="{StaticResource SectionHeader}" Text="Lyric timing" TextWrapping="NoWrap"
+                                       AutomationProperties.AccessibilityView="Raw" />
+                            <Button x:Name="EarlierButton" Grid.Column="1" Content="Earlier" Padding="10,4,10,5"
+                                    Click="EarlierButton_Click" />
+                            <!-- This song's offset; type +0.35, −1.2 or 350ms and press Enter to set it (the owner, 15 Nov 2026). -->
+                            <TextBox x:Name="OffsetText" Grid.Column="2" MinWidth="60" MaxWidth="76" TextAlignment="Center"
+                                     VerticalAlignment="Center" FontFamily="Segoe UI Variable Text" Padding="4,4,4,4"
+                                     AutomationProperties.LiveSetting="Polite" KeyDown="OffsetText_KeyDown" LostFocus="OffsetText_LostFocus"
+                                     ToolTipService.ToolTip="Type an offset such as +0.35 or −1.2 and press Enter" />
+                            <Button x:Name="LaterButton" Grid.Column="3" Content="Later" Padding="10,4,10,5"
+                                    Click="LaterButton_Click" />
+                            <Button x:Name="ResetButton" Grid.Column="4" Padding="8,6,8,6" Click="ResetButton_Click">
+                                <FontIcon Glyph="&#xE7A7;" FontSize="14" />
+                            </Button>
+                        </Grid>
+                        <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Right">
+                            <TextBlock x:Name="TapSyncNote" Style="{StaticResource Caption}" VerticalAlignment="Center" />
+                            <Button x:Name="TapUndoButton" Content="Undo tap sync" Padding="10,4,10,5" Visibility="Collapsed"
+                                    Click="TapUndoButton_Click" />
+                            <Button x:Name="TapSyncButton" Content="Tap to sync…" Padding="10,4,10,5"
+                                    Click="TapSyncButton_Click" />
+                        </StackPanel>
+                        </StackPanel>
+
+                        <!-- Search YouTube…: the Search YouTube window (the Mac's picker), never the browser. -->
+                        <Grid ColumnSpacing="8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <HyperlinkButton x:Name="SearchButton" Padding="6,4,6,4" Margin="-6,0,0,0" Click="SearchButton_Click">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <FontIcon Glyph="&#xE721;" FontSize="14" />
+                                    <TextBlock Text="Search YouTube…" />
+                                </StackPanel>
+                            </HyperlinkButton>
+                            <TextBlock x:Name="SearchNote" Grid.Column="1" Style="{StaticResource Caption}"
+                                       VerticalAlignment="Center" TextAlignment="Right" />
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!-- ===== Wallpaper and lyrics: the Mac panel's order (music video, Player, then Pause, Hide lyrics,
+                     Floating, Edit position) ===== -->
+                <Border x:Name="WallpaperCard" Style="{StaticResource FlyoutCard}">
+                    <StackPanel Spacing="10">
+                        <Grid>
+                            <TextBlock Style="{StaticResource SectionHeader}" Text="Wallpaper"
+                                       AutomationProperties.AccessibilityView="Raw" />
+                            <HyperlinkButton x:Name="OptionsButton" HorizontalAlignment="Right" Padding="6,2,6,2"
+                                             Margin="0,0,-6,0" Content="Options…" Click="OptionsButton_Click" />
+                        </Grid>
+                        <!-- The wallpaper type tiles left the panel (the owner, 15 Nov 2026: no wallpaper-type picker here;
+                             Options… opens Settings › Wallpaper). Kept collapsed, so the code that fills them is unchanged. -->
+                        <Grid x:Name="ModeTiles" ColumnSpacing="6" AutomationProperties.Name="Wallpaper type" Visibility="Collapsed">
+                            <!-- Filled from code: every wallpaper type as a tile (TrayFlyout.BuildModeTiles). -->
+                        </Grid>
+                        <!-- Music video: the video's timing, Tap to sync and Align (TrayFlyout.MusicVideo.cs), while it is the type. -->
+                        <StackPanel x:Name="MusicVideoPanel" Spacing="6" Visibility="Collapsed" />
+                        <!-- Player: which app Lunalyr follows (the Mac's Player ›), as Settings › Music players. -->
+                        <Grid ColumnSpacing="8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="Player" VerticalAlignment="Center" AutomationProperties.AccessibilityView="Raw" />
+                            <ComboBox x:Name="PlayerBox" Grid.Column="1" MinWidth="190" AutomationProperties.Name="Player"
+                                      SelectionChanged="PlayerBox_SelectionChanged" />
+                        </Grid>
+                        <Grid ColumnSpacing="8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="Layout" VerticalAlignment="Center" AutomationProperties.AccessibilityView="Raw" />
+                            <ComboBox x:Name="LayoutBox" Grid.Column="1" MinWidth="190" SelectionChanged="LayoutBox_SelectionChanged" />
+                        </Grid>
+                        <Grid ColumnSpacing="4" Padding="0,2,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Spacing="4">
+                                <ToggleButton x:Name="PauseToggle" Style="{StaticResource QuickToggle}" Click="PauseToggle_Click">
+                                    <FontIcon x:Name="PauseGlyph" Glyph="&#xE769;" FontSize="16" />
+                                </ToggleButton>
+                                <TextBlock x:Name="PauseLabel" HorizontalAlignment="Center" Style="{StaticResource CaptionTextBlockStyle}"
+                                           AutomationProperties.AccessibilityView="Raw" />
+                            </StackPanel>
+                            <StackPanel Grid.Column="1" Spacing="4">
+                                <ToggleButton x:Name="HideLyricsToggle" Style="{StaticResource QuickToggle}" Click="HideLyricsToggle_Click"
+                                              AutomationProperties.Name="Hide lyrics">
+                                    <FontIcon Glyph="&#xED1A;" FontSize="16" />
+                                </ToggleButton>
+                                <TextBlock Text="Hide lyrics" HorizontalAlignment="Center" Style="{StaticResource CaptionTextBlockStyle}"
+                                           AutomationProperties.AccessibilityView="Raw" />
+                            </StackPanel>
+                            <StackPanel Grid.Column="2" Spacing="4">
+                                <ToggleButton x:Name="FloatingToggle" Style="{StaticResource QuickToggle}" Click="FloatingToggle_Click"
+                                              AutomationProperties.Name="Floating lyrics">
+                                    <FontIcon Glyph="&#xE737;" FontSize="16" />
+                                </ToggleButton>
+                                <TextBlock Text="Floating" HorizontalAlignment="Center" Style="{StaticResource CaptionTextBlockStyle}"
+                                           AutomationProperties.AccessibilityView="Raw" />
+                            </StackPanel>
+                            <StackPanel Grid.Column="3" Spacing="4">
+                                <ToggleButton x:Name="EditPositionToggle" Style="{StaticResource QuickToggle}" Click="EditPositionToggle_Click"
+                                              AutomationProperties.Name="Edit position">
+                                    <FontIcon Glyph="&#xE7C2;" FontSize="16" />
+                                </ToggleButton>
+                                <TextBlock Text="Edit position" HorizontalAlignment="Center" Style="{StaticResource CaptionTextBlockStyle}"
+                                           AutomationProperties.AccessibilityView="Raw" />
+                            </StackPanel>
+                            <StackPanel Grid.Column="4" Spacing="4">
+                                <ToggleButton x:Name="StayVisibleToggle" Style="{StaticResource QuickToggle}" Click="StayVisibleToggle_Click"
+                                              AutomationProperties.Name="Floating lyrics stay visible under the pointer">
+                                    <FontIcon Glyph="&#xE890;" FontSize="16" />
+                                </ToggleButton>
+                                <TextBlock Text="Stay visible" HorizontalAlignment="Center" Style="{StaticResource CaptionTextBlockStyle}"
+                                           AutomationProperties.AccessibilityView="Raw" />
+                            </StackPanel>
+                        </Grid>
+                        <Grid ColumnSpacing="4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Spacing="4">
+                                <ToggleButton x:Name="ReadingsToggle" Style="{StaticResource QuickToggle}" Click="ReadingsToggle_Click">
+                                    <FontIcon Glyph="&#xE8C1;" FontSize="16" />
+                                </ToggleButton>
+                                <TextBlock Text="Readings" HorizontalAlignment="Center" Style="{StaticResource CaptionTextBlockStyle}"
+                                           AutomationProperties.AccessibilityView="Raw" />
+                            </StackPanel>
+                            <StackPanel Grid.Column="1" Spacing="4">
+                                <ToggleButton x:Name="CreditsToggle" Style="{StaticResource QuickToggle}" Click="CreditsToggle_Click">
+                                    <FontIcon Glyph="&#xE716;" FontSize="16" />
+                                </ToggleButton>
+                                <TextBlock Text="Credits" HorizontalAlignment="Center" Style="{StaticResource CaptionTextBlockStyle}"
+                                           AutomationProperties.AccessibilityView="Raw" />
+                            </StackPanel>
+                        </Grid>
+                        <TextBlock x:Name="PausedNote" Style="{StaticResource Caption}" Visibility="Collapsed" />
+                    </StackPanel>
+                </Border>
+
+                <!-- ===== Discord status, then the lyric card (the Mac panel's order) ===== -->
+                <Border Style="{StaticResource FlyoutCard}">
+                    <Grid ColumnSpacing="4">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <!-- Discord status on or off (discordPresence; its details are in Settings). -->
+                        <StackPanel Spacing="4">
+                            <ToggleButton x:Name="DiscordToggle" Style="{StaticResource QuickToggle}" Click="DiscordToggle_Click"
+                                          AutomationProperties.Name="Discord status">
+                                <FontIcon Glyph="&#xE8BD;" FontSize="16" />
+                            </ToggleButton>
+                            <TextBlock Text="Discord" HorizontalAlignment="Center" Style="{StaticResource CaptionTextBlockStyle}"
+                                       AutomationProperties.AccessibilityView="Raw" />
+                        </StackPanel>
+                        <!-- The lyric card (milestone 7): opens the card window, as the Mac's menu-bar tile does. -->
+                        <StackPanel Grid.Column="1" Spacing="4">
+                            <ToggleButton x:Name="LyricCardTile" Style="{StaticResource QuickToggle}" Click="LyricCardTile_Click"
+                                          AutomationProperties.Name="Lyric card">
+                                <FontIcon Glyph="&#xE91B;" FontSize="16" />
+                            </ToggleButton>
+                            <TextBlock Text="Lyric card" HorizontalAlignment="Center" Style="{StaticResource CaptionTextBlockStyle}"
+                                       AutomationProperties.AccessibilityView="Raw" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!-- ===== Footer ===== -->
+                <StackPanel Spacing="2" Margin="0,-4,0,0">
+                    <Button x:Name="SettingsButton" Style="{StaticResource MenuRow}" Click="SettingsButton_Click">
+                        <Grid ColumnSpacing="10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <FontIcon Glyph="&#xE713;" FontSize="16" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <TextBlock Grid.Column="1" Text="Settings…" />
+                            <TextBlock Grid.Column="2" Text="Ctrl+," Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        </Grid>
+                    </Button>
+                    <Button x:Name="QuitButton" Style="{StaticResource MenuRow}" Click="QuitButton_Click">
+                        <Grid ColumnSpacing="10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <FontIcon Glyph="&#xE7E8;" FontSize="16" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <TextBlock Grid.Column="1" Text="Quit Lunalyr" />
+                            <TextBlock Grid.Column="2" Text="Ctrl+Q" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        </Grid>
+                    </Button>
+                </StackPanel>
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</Window>

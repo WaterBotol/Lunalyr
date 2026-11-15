@@ -1,0 +1,54 @@
+Query: "Lemon" by "Kenshi Yonezu" (4:16, 256.116 s), album "Lemon - Single", genre "J-Pop", automatic lookup
+Storefront for original titles: au; cache policy v17
+Sources:
+  Apple Music            unavailable: Apple Music for Windows doesn't keep its lyrics anywhere Lunalyr can read, so its own lyrics can't be used here.
+  Lyrimuse local files   available
+  Lyrics+ (KPoe)         available
+  AMLL TTML DB           available
+  NetEase Cloud Music    available
+  LRCLIB                 available
+  QQ Music               available
+  Kugou Music            available
+  Kuwo Music             available
+  lyrics.ovh             available
+  0.65s    Apple Music: Apple Music for Windows doesn't keep its lyrics anywhere Lunalyr can read, so its own lyrics can't be used here.
+  0.65s    Lyrimuse local files: Choose the Lyrimuse lyrics folder
+  0.65s    Lyrics+ (KPoe): Searching…
+  0.65s    AMLL TTML DB: Searching…
+  0.65s    NetEase Cloud Music: Searching…
+  0.65s    LRCLIB: Match found
+  0.65s    QQ Music: Searching…
+  0.65s    Kugou Music: Searching…
+  0.65s    Kuwo Music: Searching…
+  0.65s    lyrics.ovh: Searching…
+  1.65s    LRCLIB: Match found · showing
+  1.65s    lyrics.ovh: Not needed: it couldn’t beat the match showing
+  1.65s  showing (revision 1): Line-synced · LRCLIB
+  2.04s    AMLL TTML DB: No usable match / unavailable
+  2.04s    Lyrics+ (KPoe): No usable match / unavailable
+  2.04s    Kugou Music: No usable match / unavailable
+  2.04s    NetEase Cloud Music: No usable match / unavailable
+  2.04s    QQ Music: No usable match / unavailable
+  5.27s  done
+
+Source states:
+  Apple Music            Apple Music for Windows doesn't keep its lyrics anywhere Lunalyr can read, so its own lyrics can't be used here.
+  Lyrimuse local files   Choose the Lyrimuse lyrics folder
+  Lyrics+ (KPoe)         No usable match / unavailable
+  AMLL TTML DB           No usable match / unavailable
+  NetEase Cloud Music    No usable match / unavailable
+  LRCLIB                 Match found · showing
+  QQ Music               No usable match / unavailable
+  Kugou Music            No usable match / unavailable
+  Kuwo Music             Match found
+  lyrics.ovh             Not needed: it couldn’t beat the match showing
+
+Ranking:
+  1. Line-synced · LRCLIB                          "Lemon" / "Kenshi Yonezu" 4:16, 37 lines, score 92.8, tier 1
+  2. Line-synced · Kuwo Music                      "Lemon" / "Kenshi Yonezu" 4:15, 58 lines, score 91.3, tier 1
+
+Chosen: Line-synced · LRCLIB
+  0:01  夢ならばどれほどよかったでしょう
+  0:07  未だにあなたのことを夢にみる
+  0:12  忘れた物を取りに帰るように
+  0:17  古びた思い出の埃を払う

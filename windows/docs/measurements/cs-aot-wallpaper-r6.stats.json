@@ -1,0 +1,60 @@
+{
+  "stack": "cs-winui-d2d-aot",
+  "adapter": "NVIDIA GeForce RTX 5060 Laptop GPU",
+  "monitors": [
+    {
+      "w": 2560,
+      "h": 1440,
+      "dpi": 120,
+      "hz": 60,
+      "mode": "24h2"
+    }
+  ],
+  "seconds": 35,
+  "frames": 2097,
+  "fps": 59.9,
+  "cpuMsPerFrame": {
+    "avg": 0.753,
+    "p50": 0.614,
+    "p95": 1.308,
+    "p99": 1.641
+  },
+  "frameIntervalMs": {
+    "avg": 16.684,
+    "p50": 16.664,
+    "p95": 17.283,
+    "p99": 18.659
+  },
+  "slowFrames": 2,
+  "startupMs": 244.2,
+  "workingSetMB": 73.7,
+  "peakWorkingSetMB": 73.7,
+  "privateMB": 105.3,
+  "processCpuPercent": 0.49,
+  "phasesMs": {
+    "buildLine": {
+      "avg": 9.115,
+      "p50": 5.9,
+      "p95": 42.377,
+      "p99": 42.377
+    },
+    "endDraw": {
+      "avg": 0.52,
+      "p50": 0.416,
+      "p95": 1.049,
+      "p99": 1.235
+    },
+    "present": {
+      "avg": 0.134,
+      "p50": 0.13,
+      "p95": 0.193,
+      "p99": 0.224
+    }
+  },
+  "gcGen0": 1,
+  "gcGen2": 1,
+  "allocatedMB": 4.5,
+  "notes": [
+    "tree after attach:\nProgman 3054E ex=200080\r\n  SHELLDLL_DefView         70BE4 vis=True ex=80000 rect=(0,0,2560x1440)\r\n  LunalyrSpikeSurface      C025A vis=True ex=8000080 rect=(0,0,2560x1440)\r\n  WorkerW                  6011C vis=True ex=80000A0 rect=(0,0,2560x1440)\r\n"
+  ]
+}

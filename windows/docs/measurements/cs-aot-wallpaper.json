@@ -1,0 +1,39 @@
+﻿{
+    "exe":  "lunalyr-spike-cs.exe",
+    "args":  "",
+    "seconds":  30,
+    "samples":  12,
+    "onBattery":  false,
+    "cpuPercentAvg":  0.69,
+    "cpuPercentMax":  1.07,
+    "gpu3dPercentAvg":  3.06,
+    "gpuAllEnginesPercentAvg":  3.17,
+    "workingSetMBAvg":  67.94,
+    "privateMBAvg":  88.76,
+    "gpuDedicatedMBAvg":  56.75,
+    "fps":  59.9,
+    "frameIntervalMs":  {
+                            "avg":  16.685,
+                            "p50":  16.671,
+                            "p95":  20.507,
+                            "p99":  21.943
+                        },
+    "cpuMsPerFrame":  {
+                          "avg":  1.253,
+                          "p50":  0.822,
+                          "p95":  4.68,
+                          "p99":  5.942
+                      },
+    "slowFrames":  1,
+    "adapter":  "NVIDIA GeForce RTX 5060 Laptop GPU",
+    "monitors":  [
+                     {
+                         "w":  2560,
+                         "h":  1440,
+                         "dpi":  120,
+                         "hz":  60,
+                         "mode":  "24h2"
+                     }
+                 ],
+    "startupMs":  249.9
+}

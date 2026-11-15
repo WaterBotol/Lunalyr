@@ -1,0 +1,136 @@
+using Lunalyr.Core.Compositions;
+using Lunalyr.Core.Lyrics;
+using Lunalyr.Shell.Settings;
+
+namespace Lunalyr.Shell;
+
+// "Custom Mix": with the layout setting on "automatic", each song gets a composition once, when its lyrics (or
+// the verdict that there are none) arrive: the next in the rotation that suits the song's character, or with the
+// rotation off the layout its character matches (docs/compositions/matching.md). A song keeps its layout for as long
+// as the app runs -- a second lookup or a late cover never changes it mid-song -- and only compositions the renderer
+// has registered are chosen, so new ones join as they are added.
+public sealed partial class AppController
+{
+    /// <summary>The <c>lyricComposition</c> value for "Custom Mix".</summary>
+    public const string AutomaticComposition = "automatic";
+
+    private const int RememberedLayouts = 512;
+    private static readonly string[] EveryBuildHas = ["constellation", "spoken"];
+
+    private LayoutRotation? _rotation;
+    private readonly Dictionary<string, string> _layouts = new(StringComparer.Ordinal);
+    private readonly Queue<string> _layoutOrder = new();
+    private string? _layout;
+    private string? _layoutTrack;
+
+    /// <summary>The composition "Custom Mix" chose for the song on screen, or null.</summary>
+    public string? MatchedComposition
+    {
+        get { lock (_gate) return _layout; }
+    }
+
+    /// <summary>
+    /// The composition drawn for the music playing now: the chosen one, the one remembered for it, or Custom Mix's
+    /// choice (what the settings' preview draws too).
+    /// </summary>
+    public string ShownComposition => CompositionFor(Settings);
+
+    // Must hold _gate.
+    private LayoutRotation RotationLocked() =>
+        _rotation ??= new LayoutRotation(_settings.RotateLayoutsCursor, _settings.RotateLayoutCounts);
+
+    /// <summary>The composition to draw for <paramref name="settings"/>: the chosen one, or the song's match.</summary>
+    private string CompositionFor(AppSettings settings)
+    {
+        lock (_gate)
+        {
+            // A layout remembered for the music playing wins over the chosen one.
+            var layout = Effective(settings).LyricComposition;
+            return layout == AutomaticComposition ? _layout ?? "constellation" : layout;
+        }
+    }
+
+    /// <summary>The compositions the renderer has (the ones every build has when it cannot say).</summary>
+    private IReadOnlyCollection<string> AvailableCompositions()
+    {
+        var ids = _renderer.LayerIds;
+        if (ids.Count == 0) return EveryBuildHas;
+        List<string> found = [.. AppSettings.Compositions.Where(id => id != AutomaticComposition && ids.Contains(id))];
+        return found.Count == 0 ? ["constellation"] : found;
+    }
+
+    /// <summary>
+    /// Picks the composition for the song on screen, once per song, from what is known of it now: its lyrics
+    /// (<paramref name="lyrics"/>, null when there are none) and its cover's colours if they have been read.
+    /// </summary>
+    /// <param name="onlyWhenSettled">Only when the song's lyrics are shown or its lookup has ended: a choice made mid-lookup
+    /// would know nothing of the song and would stick.</param>
+    private void ChooseLayout(LyricResult? lyrics = null, bool onlyWhenSettled = false)
+    {
+        ChooseWallpaper(lyrics, onlyWhenSettled);
+        string pick, title;
+        int? cursor = null;
+        var available = AvailableCompositions();
+        lock (_gate)
+        {
+            if (_disposed || Effective(_settings).LyricComposition != AutomaticComposition || _lookupTrack is not { } track) return;
+            if (onlyWhenSettled && _shown is null && _lookupCts is not null) return;
+            lyrics ??= _shown;
+            var key = track.TrackKey;
+            if (key == _layoutTrack && _layout is not null) return;
+            if (!_layouts.TryGetValue(key, out var remembered) || !available.Contains(remembered))
+            {
+                var cover = _palettes.TryGetValue(key, out var known) ? known.Palette.ArtworkStops : [];
+                var character = TrackCharacter.Of((lyrics as LyricResult.Synced)?.Lines, cover, track.Title, track.Artist);
+                if (_settings.RotateLayouts)
+                {
+                    var rotation = RotationLocked();
+                    var before = rotation.Cursor;
+                    remembered = rotation.Layout(key, character, available);
+                    if (rotation.Cursor != before) cursor = rotation.Cursor;
+                }
+                else
+                {
+                    remembered = LayoutMatch.For(character, available);
+                }
+                _layouts[key] = remembered;
+                _layoutOrder.Enqueue(key);
+                while (_layoutOrder.Count > RememberedLayouts) _layouts.Remove(_layoutOrder.Dequeue());
+            }
+            if (key == _layoutTrack && remembered == _layout) return;
+            pick = remembered;
+            _layout = pick;
+            _layoutTrack = key;
+            title = track.Title;
+        }
+
+        _app.Info($"Custom Mix: \"{title}\" takes the {pick} layout.");
+        PublishLayers();
+        if (cursor is { } moved) _options.LayoutCursorChanged?.Invoke(moved);
+    }
+
+    /// <summary>The rotation's counts or the layout setting changed.</summary>
+    /// <param name="layoutChanged">The layout the music playing sees changed (the chosen one, or the one remembered for it).</param>
+    private void ApplyLayoutSettings(AppSettings old, AppSettings settings, bool layoutChanged)
+    {
+        lock (_gate)
+        {
+            if (!SameCounts(old.RotateLayoutCounts, settings.RotateLayoutCounts)) _rotation?.SetCounts(settings.RotateLayoutCounts);
+            // Turned to "Custom Mix" (or its rotation switched): the song on screen is matched afresh.
+            if (layoutChanged || old.LyricComposition != settings.LyricComposition || old.RotateLayouts != settings.RotateLayouts)
+                ResetMatchedLayoutLocked();
+        }
+    }
+
+    // Must hold _gate. The song on screen is matched afresh (its layout setting, or the one remembered for it, changed).
+    private void ResetMatchedLayoutLocked()
+    {
+        _layoutTrack = null;
+        _layout = null;
+        _layouts.Clear();
+        _layoutOrder.Clear();
+    }
+
+    private static bool SameCounts(IReadOnlyDictionary<string, int> a, IReadOnlyDictionary<string, int> b) =>
+        a.Count == b.Count && a.All(pair => b.TryGetValue(pair.Key, out var value) && value == pair.Value);
+}

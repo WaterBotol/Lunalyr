@@ -1,0 +1,186 @@
+# Lyric compositions on Windows
+
+The lyric layer draws the current line(s) of a `SceneSnapshot` at `FrameContext.SongSeconds`. Each composition is an
+`IRenderLayer` made by a factory registered under the Mac's id:
+
+| Id | Mac composition | Renderer on the Mac | Windows types |
+|---|---|---|---|
+| `editorial` | Editorial: two typefaces in one line, set like a spread | `ScatteredLyricText` | `EditorialLayer`, `Lunalyr.Core.Compositions.EditorialSetting` |
+| `spoken` | Spoken: each sung word takes focus; recent words settle around it | `SpokenTypographyView` | `SpokenLayer`, `Lunalyr.Core.Compositions.RollingStage` |
+| `cascade` | Cascade: a moving column of words, arriving with the voice | `SpokenTypographyView` | `SpokenLayer` (Cascade), see [cascade-cutout.md](cascade-cutout.md) |
+| `cutout` | Cutout: uneven type and album-colour labels, built word by word | `SpokenTypographyView` | `SpokenLayer` (Cutout), `Lunalyr.Core.Compositions.RollingLabel`, see [cascade-cutout.md](cascade-cutout.md) |
+| `scattered` | Scattered: words set loose across the line | `ScatteredLyricText` | `LineSetLayer` (`ScatteredFactory`), see [scattered.md](scattered.md) |
+| `constellation` | Constellation: fragments linked by hairlines, like a star chart | `ScatteredLyricText` + `ConstellationLines` | `LineSetLayer` (`ConstellationFactory`), `ConstellationLayout`, `Lunalyr.Core.Motion.ConstellationGeometry` |
+| `constellationEditorial` | Constellation + Editorial: connected fragments with Editorial's contrasting typefaces | as Constellation | `LineSetLayer` (`ConstellationEditorialFactory`) |
+| `echo` | Echo: the phrase repeated at many sizes, some inverted | `ScatteredLyricText` + `EchoBackdrop` | `LineSetLayer` (`EchoFactory`), `Lunalyr.Core.Compositions.EchoBackdrop` |
+| `hinge` | Hinge: heavy words swing open on a spine, page by page, and the book snaps shut | `StageLyricView` | `HingeLayer`, `Lunalyr.Core.Compositions.HingeGeometry` ([stage.md](stage.md)) |
+| `broadside` | Broadside: one strip of big type that slides along, with little words as labels | `StageLyricView` | `BroadsideLayer`, `BroadsideGeometry` |
+| `portal` | Portal: the sung word in a pill; earlier words drift away as pale ones | `StageLyricView` | `PortalLayer`, `PortalGeometry` |
+| `mosaic` | Mosaic: a collage, each word set huge, on a colour bar, or letter by letter | `StageLyricView` | `MosaicLayer`, `MosaicGeometry` |
+| `torque` | Torque: words wrung into place with a thick edge, stacking upwards | `StageLyricView` | `TorqueLayer`, `TorqueGeometry` |
+| `fable` | Fable: a new shape and accent every line; each word lands its own way | `StageLyricView` | `FableLayer`, `FableStyle`, `FableLayout` |
+
+All share the stage logic of the Mac's `LyricLayer` (which line is drawn, hand-overs, held duet lines, previews,
+line-timed phrases, backing vocals, instrumental breaks, plain lyrics, status text): `Lunalyr.Core.Compositions.LineFlow`
+and `LyricCompositionLayer` in `src/Lunalyr.Render/Compositions/`. The four whole-line compositions (Scattered, the
+constellations, Echo) share Editorial's drawing, steered by their traits (`CompositionTraits`): see
+[scattered.md](scattered.md). Spoken, Cascade and Cutout share the rolling stage (`SpokenLayer`).
+
+The six stage layouts (Hinge, Broadside, Portal, Mosaic, Torque, Fable; the Mac's `fillsStage`) build on the same
+stage through `StageLayer` in `src/Lunalyr.Render/Compositions/Stage/`; see [stage.md](stage.md).
+
+## Provenance
+
+Several Mac files behind these compositions still carry lines from the squashed Verso import (`a99fd65`). Checked with
+`git blame -w -M -C` at `d63068a`:
+
+| File | Verso lines | Treatment |
+|---|---|---|
+| `LyricComposition.swift` | 245 | described in [shared.md](shared.md) and [scattered.md](scattered.md), re-implemented |
+| `ScatteredLyricText.swift` | 288 | described in [editorial.md](editorial.md) and [scattered.md](scattered.md), re-implemented; Lunalyr's own parts ported |
+| `LyricTypography.swift` | 165 | described in [editorial.md](editorial.md) and [spoken.md](spoken.md), re-implemented |
+| `SpokenTypographyView.swift` | 54 | described in [spoken.md](spoken.md) and [cascade-cutout.md](cascade-cutout.md); Lunalyr's own parts ported |
+| `WordPresentation.swift` | 24 | already re-implemented in Core (`WordReveal`, `WordPresentation`) |
+| `LyricLayerView.swift` | 28 | only declarations and comments; the logic around them is Lunalyr's and ported |
+| `BackingVocals.swift` | 3 | two modifier lines; ported |
+| `InstrumentalInterludeView.swift` | 18 | only the view's declarations and shell; the dot geometry used is Lunalyr's and ported |
+| `LyricSwipe.swift` | 4 | only closing modifier lines; ported |
+| `ConstellationGeometry.c` / `.h`, `ConnectionGeometryCache.swift` | 152, 39, 19 | already re-implemented (`ConstellationGeometry`, `ConnectionCache`) |
+| `CreditsLayer.swift` (cues), the rotation in `LyricComposition.swift` (lines 485–590) | 0 | ported faithfully; `TrackMood` and `matching()` are replaced by Windows' own `TrackCharacter`/`LayoutMatch` ([matching.md](matching.md)) |
+| `LyricHighlightTile.swift`, `LyricStageFit.swift`, `LayerExit.swift`, `LyricRuns.swift`, `StageLyricStyles.swift`, `OrganicMotion.swift` (the parts used) | 0 | ported faithfully |
+
+The descriptions say what the Mac does (inputs, outputs, edge cases, and the quantities that shape the look). The C# is
+written from them in its own structure; no Verso line was translated.
+
+## Contract notes
+
+- **Reveal ids.** `LyricStyle.Reveal` holds the Mac's `WordArrival` raw values, and every one is built: `fade` (Soft
+  focus, the default), `lift` (Float up), `pop`, `orbit`, `glide`, `unfold`, `cutoutFold`, `cutoutSlide`,
+  `cutoutHighlight`, `satinRibbon`, `splitInk`, `mix` and `automatic` (any case; the spelled-out `softFocus`,
+  `floatUp` and `matchStyle` are accepted too; unknown ids are Soft focus). "Match the style" (`automatic`) is
+  Editorial → Soft focus, Spoken → Glide, Scattered → Pop, Constellation → Orbit, Constellation + Editorial, Echo and
+  Cascade → Float up, Cutout → Cutout · Fold, and the six stage layouts → Soft focus.
+  - *Cutouts* (`cutoutFold`, `cutoutSlide`) follow the word's reveal rather than its spring, grow from 76%, fold up
+    from −30° or slide in 0.72 em with a turn, and are unmasked from their leading edge (`InkClip`). On the rolling
+    stage a Cutout label is unmasked as a whole (tile, word and reading), and Cascade and Cutout draw the fold as a
+    foreshortening about the unit's bottom edge (Spoken draws its folds without it, as it always has).
+  - *Swipes* (`satinRibbon`, `splitInk`) fade and blur in and draw decorative ink over the word while it arrives, in
+    colours from the album's accent (the most vivid of the cover's sampled colours, from `Palette.ArtworkStops`).
+  - `cutoutHighlight` moves as the layout's own entrance and presses a tile behind each sung word: see *Highlight
+    tiles* below.
+  - `mix` gives each word one entrance of the mix, by its visual seed. The mix list is not in the snapshot: `mix` is
+    the Mac's default mix (Soft focus, Float up, Cutout · Fold), and `mix:pop,orbit,satinRibbon` names its entrances.
+  - Every entrance applies word by word on word-timed lines (the rolling stage included), and to a line-timed phrase
+    as a whole (without tiles: the Mac has no words to highlight in a line sung as one). The stage layouts pick for
+    each run too (`StageLayer.ChosenFor`, the Mac's `chosenEntrance`; Torque and Fable are the two that make chosen
+    entrances), and a line-timed line on a stage picks for its phrase.
+- **Size.** The Mac's base size is `clamp(min(w, h·16/9) · 0.046, 24, 124)` points and the stage is 80% × 72% of the
+  screen. Its size slider (0.7–1.5) is `LyricStyle.SizeFraction / 0.075`, so the contract's 0.075 is the Mac's 1.0.
+  Points are physical pixels divided by `FrameContext.Scale`.
+- **Readings.** `SceneSnapshot.WordReadings` holds the romanizer's readings line by line, as the Mac's `romanized`.
+  With "Below" there is one reading per word of `line.Words`, or one word spanning the line when a reading can't be
+  split. With "Instead" it holds the words to show. Use them through `LineReadings.For(line, readings, display, glue)`
+  (Core): it gives the words to set, their glue, each run's reading (`RunReadings`, by the run index that
+  `EditorialSetting.Layout` counts) and a reading of the whole line. On a rolling stage, use
+  `new RollingSong(lines, breaker, scene.WordReadings, display, scene.Readings)`. `LyricCompositionLayer.WordReadingsOf(row)`
+  does this for a row.
+  - **Editorial and the Scattered family:** draw each run's reading under the run and an unsplittable reading once
+    under the line. With "Instead" they set the readings in the words' place. The constellations part an unspaced
+    line into fragments first, so each fragment reads its own words.
+  - **Spoken, Cascade, Cutout:** roll with them (the Mac's `rollingWindow`).
+  - **Stage layouts:** pair them by the runs the stage draws (`LyricReadingPairs.Parts` over `StageRun.Glue`, the
+    Mac's `readingPairs(byPart:)`), so each run carries only its own reading.
+  - **Filling in:** with "Below", each token keeps its share of its run's reading (`LyricReadingPairs.Shares`, or
+    `Parts` on a stage; `ReadingShares` in Core). The reading is baked whole once and each share is drawn as its token
+    is sung (`ReadingSlices` measures where each share falls): from its onset over `StageMotion.SyllableFade`, never
+    ahead of the syllable itself, at once under Reduce Motion; on a stage, with its part (`StageRun.PartOpacity`). A
+    share not yet sung keeps its room, so the reading never shifts. A reading that wraps, and line-timed lines, show
+    whole.
+  - **Fallback:** a line missing from `WordReadings` (scenes made without it, or before readings are worked out) uses
+    the per-line `Readings` string: under the line, or, when it has exactly one space-separated part per word run,
+    each run's part under that run.
+- **Credits** (`LyricStyle.Credits`; off in the contract's default, on in the app's settings as on the Mac). Every
+  layer that derives from `LyricCompositionLayer` draws the song's production credits over the lyric. They come one
+  after another (`CreditCues`, ported from `CreditsLayer.swift`), set as the layer's backing vocals are (`BackingKind`:
+  the Scattered family's own composition, Editorial's typography otherwise), in a band at the top or foot of the stage,
+  none before the opening title has gone. Backing vocals move to the other band (`CreditBands`).
+- **Opening title** (`LyricStyle.OpeningTitle` and `OpeningTitleCover`; off and on in the contract's defaults, both on
+  in the app's settings as on the Mac). Every layer draws the song's title card as it starts, over whatever else is
+  on the stage (`LyricCompositionLayer.OpeningTitle.cs`, ported from `OpeningTitle.swift`): the title in the lyric
+  family, the title's reading (`SceneSnapshot.TitleReading`), the artist in its own case, the album and the cover
+  (`SceneSnapshot.Cover`), low on the left with a soft corner shade. Since Mac Test Build 88 there is no bar above the
+  title, and the type and the cover glow in the album's colour: a tight halo (radius 0.18 of the card's unit, 0.7) and a
+  wide bloom (0.6, 0.45) on the type, one round the cover (0.22 of its side, 0.55), each times
+  `OpeningTitle.GlowStrength` (1 over a dark picture, 0.35 under dark type), baked once with the card. Its timing is
+  `Core.Compositions.OpeningTitle`'s: gone a second before the first line can show, compact or none when singing
+  starts soon, brief for a song joined part-way (`FrameContext.SongJoined`, kept by the engine), longer with no
+  lyrics. Under Reduce Motion it only fades. Previews: `CompositionPreview -opening` (`docs/previews/opening/`).
+- **Highlight tiles** ("Cutout · Highlight"). One port of the Mac's `LyricHighlightTile.swift` in Core
+  (`LyricHighlightTiming`, `HighlightPose`, `CutoutTile`, `HighlightMark`, and `HighlightSegment` for a run's sung
+  words), drawn by one method, `LyricCompositionLayer.DrawTile`. A tile presses in behind each sung word (a 0.12 s
+  ease-out from its leading edge), holds to the line's end and fades over 0.30 s; the word takes the tile's text
+  colour where it has pressed in. A word whose entrance is `cutoutHighlight` (the choice, or its pick of a mix) gets
+  one. Editorial and the Scattered family tile each word of a run (an unspaced run word by word) and keep tiled words
+  until the line's end; Spoken and Cascade tile the rolling word and hold it on the stage meanwhile (Cutout's labels
+  are tiles already): the tile lies behind the whole unit, word and reading, reaching a label's padding (9 × 3 points,
+  `RollingLabel.HighlightRect`) past it, and the reading takes the tile's text colour too (at the highlight's reading
+  opacity), as the Mac's `RollingUnit` does. A rolling word missing from the window's line ends releases with the
+  line on stage (the Mac's `defaultEnd`). The stage layouts only move. The colour follows `LyricStyle.HighlightMode` ("complement",
+  "album", "custom") and `HighlightCustom` through the ink director.
+- **Floating lyrics** (milestone 7). On the floating window's scene `LyricStyle.FloatingTextSize` is set (points): the
+  base size is that text size and the stage 94% × 88% of the window (`ViewportMetrics.ForText`, the Mac's
+  `LyricViewportMetrics(size:textSize:)`), the palette's `TextBackdrop` is the floating shade's, the opening title is
+  compact and centred with no corner shade, and the interlude dots wait for it. Null everywhere else, so the wallpaper
+  and the settings preview are unchanged. See docs/APP-SHELL.md, "Floating lyrics".
+- **Interludes.** `LyricStyle.Interludes` turns the dots off. `SceneSnapshot.Duration` (the track length) gives a
+  break after the last line its progress. A lit dot has the Mac's faint white ring.
+- **Reduce Motion** (`SceneSnapshot.ReduceMotion`, false by default). The app fills it from Windows' "Animation
+  effects" (Settings › Accessibility › Visual effects; off means Reduce Motion), read with
+  `SPI_GETCLIENTAREAANIMATION` and followed through `UISettings.AnimationsEnabledChanged` and `WM_SETTINGCHANGE`
+  (`Lunalyr.Platform.Desktop.SystemMotion`, through `AppControllerOptions.ReduceMotion` and
+  `AppController.SetReduceMotion`); it is never changed. A layer reads it each frame, and a change sets the lyric again.
+  Every layer does what the Mac's `lyricReduceMotion` does:
+  - entrances (and a line-timed phrase's) are plain fades with no blur, swipe, cutout mask or tilt; the line's own
+    swell and slide, the emphasis swell and drift, a held word's letter swell, the idle float and the travel of a word
+    leaving are gone (it only fades); Echo's repeats stay put;
+  - a held duet line cross-fades into its place above instead of travelling there;
+  - the rolling stage dissolves between settled places (`RollingWords.Stacks`), with Cutout's labels simply there;
+  - the stage layouts step and dissolve each step (see [stage.md](stage.md));
+  - highlight tiles only fade (no press, no tilt); credits and backing vocals leave by fading; the interlude dots do
+    not wander; the lyric colours drift ten times slower (`LyricInks.DriftPhase`);
+  - the colour field (`gradient`) moves at 15% without a jump when the setting changes (`AmbientClock`), and the
+    colour-only gradient (`colour`) holds still. `BackgroundOptions.ReduceMotion` still works on its own.
+- **Not in the snapshot:** the track mood (the neutral mood is used; "Match the music" uses Windows' own
+  `TrackCharacter`, see [matching.md](matching.md)) and translations; the Scattered family's settings
+  (the Mac's defaults are used: Spread 1.0, Links 0.20, Repeats 1.0), the custom mix's list (see above) and the
+  "reveal sung words" switch (words are always revealed one by one, which the cutouts and swipes need anyway). Plain
+  lyrics are still shown as a still, fitted block.
+
+## Previews and cost
+
+`docs/previews/compositions/` holds frames rendered by `tools/CompositionPreview` (offscreen Direct2D on the hardware
+device, 1920×1080 at 125%) for invented fixture songs, named `<composition>-<fixture>-<song seconds>.png`, or
+`<composition>-<reveal>-<fixture>-<song seconds>.png` for a shot rendered with `-reveal`, and with `-reduced` after the
+composition (and reveal) for one rendered with `-reduce` (Reduce Motion; the tool never reads the system's setting):
+
+    dotnet run --project tools/CompositionPreview -- -out docs/previews/compositions
+    dotnet run --project tools/CompositionPreview -- -out docs/previews/compositions -only scattered -reveal splitInk -shot english@12.17
+    dotnet run --project tools/CompositionPreview -- -out docs/previews/compositions -only hinge -reduce -shot english@11.3
+    dotnet run --project tools/CompositionPreview -- -bench -width 2560 -height 1440 [-reveal mix]
+
+The first command renders every composition at the default shots: the seven lyric fixtures and the extras
+(`japanesewords` and `japaneseinstead` for word-by-word readings, `credits`, and `highlight` for "Cutout · Highlight"
+in a custom green). The `scattered-<reveal>-*` shots show Scattered with each of the newer entrances (`cutoutFold`,
+`cutoutSlide`, `cutoutHighlight`, `satinRibbon`, `splitInk`, `mix`) part way through "rain" arriving
+(`-shot english@12.17`), settled (`english@12.5`), and a line-timed phrase arriving (`linetimed@10.15`). The
+`cascade-automatic-*` and `cutout-automatic-*` shots are `-reveal automatic` at `arabic@10.9`, `english@11.4`,
+`english@15.8` and `japanese@11.0`. The `*-reduced-*` shots are Editorial and Spoken at `english@11.3` (Spoken part way
+through a dissolve between two settled places), Hinge at `english@11.3` (part way through a step's dissolve, its faces
+flat), and Cutout, Portal and Torque at `english@12.9`.
+
+On the RTX 5060 at 2560×1440, a frame costs about 0.1–0.2 ms (Echo 0.2 ms, the constellations 0.16 ms on the
+English fixture; a swipe or tiles on every word add up to 0.06 ms) of render-thread time (draw calls and `EndDraw`, GPU
+work excluded). Setting a line (DirectWrite layout and baking its words) costs 2–8 ms once per line, done up to 1.5 s
+before the line starts; the first frame of a run also pays for JIT in this (non-AOT) tool. Once a line is set nothing
+is allocated per frame; Spoken allocates only on the frames where a word joins or leaves its rolling window (about 1
+frame in 50).

@@ -1,0 +1,12 @@
+[ui] Args { seconds: Some(8.0), stats: Some("results\\windowed-stats.json"), fps: None, windowed: true, snapshot: Some("results\\windowed-line1.png"), start_line: 1, snapshot_after: 3.0, layered: false, force_legacy: false }
+[ui] target 1280x720 dpi 120 60 Hz mode windowed
+[render] adapter: NVIDIA GeForce RTX 5060 Laptop GPU; 'Segoe UI Variable Display' in system collection: true
+[render] first present; startup 298.1 ms
+[render] snapshot 1280x720 at t=3.002s (line 1) -> C:\dev\Lunalyr-Windows-2\spikes\rust-d2d\results\windowed-line1.png
+[ui] stats -> results\windowed-stats.json
+{ "stack": "rust-d2d", "adapter": "NVIDIA GeForce RTX 5060 Laptop GPU", "monitors": [{"w":1280,"h":720,"dpi":120,"hz":60,"mode":"windowed"}],
+  "seconds": 7.767, "frames": 463, "fps": 59.48,
+  "cpuMsPerFrame": {"avg":0.585,"p50":0.489,"p95":0.898,"p99":1.504},
+  "frameIntervalMs": {"avg":16.832,"p50":16.667,"p95":17.068,"p99":19.555}, "slowFrames": 1,
+  "startupMs": 298.1, "workingSetMB": 64.8, "privateMB": 72.6, "processCpuPercent": 0.70 }
+

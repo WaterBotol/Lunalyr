@@ -1,0 +1,17 @@
+<Project>
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- App shell and rendering -->
+    <PackageVersion Include="Microsoft.WindowsAppSDK" Version="2.6.5" />
+    <!-- The app references only the Windows App SDK parts it uses (WinUI, Foundation), not the metapackage, so the
+         self-contained build leaves out the AI, ML, Widgets, Search and DWrite runtimes. -->
+    <PackageVersion Include="Microsoft.WindowsAppSDK.WinUI" Version="2.6.5" />
+    <PackageVersion Include="Microsoft.WindowsAppSDK.Foundation" Version="2.6.5" />
+    <PackageVersion Include="Vortice.Direct2D1" Version="3.8.3" />
+    <PackageVersion Include="Vortice.Direct3D11" Version="3.8.3" />
+    <!-- Tests -->
+    <PackageVersion Include="xunit.v3" Version="4.0.2" />
+  </ItemGroup>
+</Project>

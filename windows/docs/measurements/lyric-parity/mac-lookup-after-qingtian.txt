@@ -1,0 +1,55 @@
+Query: "晴天" by "周杰伦" (4:30, 269.747 s), album "葉惠美", genre "Mandopop", automatic lookup
+Storefront for original titles: au; cache policy v19
+Sources:
+  Apple Music            unavailable: Apple Music for Windows doesn't keep its lyrics anywhere Lunalyr can read, so its own lyrics can't be used here.
+  Lyrimuse local files   available
+  Lyrics+ (KPoe)         available
+  AMLL TTML DB           available
+  NetEase Cloud Music    available
+  LRCLIB                 available
+  QQ Music               available
+  Kugou Music            available
+  Kuwo Music             available
+  lyrics.ovh             available
+  0.50s    Apple Music: Apple Music for Windows doesn't keep its lyrics anywhere Lunalyr can read, so its own lyrics can't be used here.
+  0.50s    Lyrimuse local files: Choose the Lyrimuse lyrics folder
+  0.50s    Lyrics+ (KPoe): Match found
+  0.50s    AMLL TTML DB: Searching…
+  0.50s    NetEase Cloud Music: Searching…
+  0.50s    LRCLIB: Searching…
+  0.50s    QQ Music: Searching…
+  0.50s    Kugou Music: Searching…
+  0.50s    Kuwo Music: Searching…
+  0.50s    lyrics.ovh: Searching…
+  0.63s    LRCLIB: Match found
+  0.97s    NetEase Cloud Music: No usable match / unavailable
+  1.01s    lyrics.ovh: Match found
+  1.02s    AMLL TTML DB: No usable match / unavailable
+  1.14s    Lyrics+ (KPoe): Match found · 1 other source agrees
+  1.14s    Kugou Music: Match found · 1 other source agrees
+  1.67s    Kugou Music: Match found · 1 other source agrees · showing
+  1.67s    Kuwo Music: Not needed: it couldn’t beat the match showing
+  1.67s  showing (revision 1): Word-by-word · Kugou Music
+  1.81s  done
+
+Source states:
+  Apple Music            Apple Music for Windows doesn't keep its lyrics anywhere Lunalyr can read, so its own lyrics can't be used here.
+  Lyrimuse local files   Choose the Lyrimuse lyrics folder
+  Lyrics+ (KPoe)         Match found · 2 other sources agree
+  AMLL TTML DB           No usable match / unavailable
+  NetEase Cloud Music    No usable match / unavailable
+  LRCLIB                 Match found
+  QQ Music               Match found · 2 other sources agree
+  Kugou Music            Match found · 2 other sources agree · showing
+  Kuwo Music             Not needed: it couldn’t beat the match showing
+  lyrics.ovh             Match found
+
+Ranking:
+  1. Word-by-word · Kugou Music                    "晴天" / "周杰伦" 4:29, 63 lines, score 103.9, tier 3
+  2. Word-by-word · QQ Music via Lyrics+           "晴天" / "周杰伦" ?:??, 56 lines, score 95.0, tier 3
+  3. Line-synced · QQ Music                        "晴天" / "周杰伦" 4:29, 63 lines, score 91.9, tier 1
+  4. Line-synced · LRCLIB                          "晴天" / "周杰伦" 4:30, 39 lines, score 92.6, tier 1
+  5. Plain text · no timing · lyrics.ovh           "晴天" / "周杰伦" ?:??, 51 lines, score 75.0, tier 0
+
+Chosen: Word-by-word · Kugou Music
+  (lyric lines left out)

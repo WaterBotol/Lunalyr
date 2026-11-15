@@ -1,0 +1,54 @@
+Query: "Hurts Me" by "Wallows" (2:59, 178.64 s), album "Tell Me That It's Over", genre "Alternative", automatic lookup
+Storefront for original titles: au; cache policy v16
+Sources:
+  Apple Music            unavailable: Apple Music for Windows doesn't keep its lyrics anywhere Lunalyr can read, so its own lyrics can't be used here.
+  Lyrimuse local files   available
+  Lyrics+ (KPoe)         available
+  AMLL TTML DB           available
+  NetEase Cloud Music    available
+  LRCLIB                 available
+  QQ Music               available
+  Kugou Music            available
+  Kuwo Music             available
+  lyrics.ovh             available
+  1.32s    Apple Music: Apple Music for Windows doesn't keep its lyrics anywhere Lunalyr can read, so its own lyrics can't be used here.
+  1.32s    Lyrimuse local files: Choose the Lyrimuse lyrics folder
+  1.32s    Lyrics+ (KPoe): Searching…
+  1.32s    AMLL TTML DB: Searching…
+  1.32s    NetEase Cloud Music: Searching…
+  1.32s    LRCLIB: Match found · 2 lines crammed from 1:39
+  1.32s    QQ Music: Searching…
+  1.32s    Kugou Music: Searching…
+  1.32s    Kuwo Music: Searching…
+  1.32s    lyrics.ovh: Searching…
+  1.34s    NetEase Cloud Music: Match found
+  1.67s    NetEase Cloud Music: Match found · showing
+  1.67s    QQ Music: Not needed: it couldn’t beat the match showing
+  1.67s    Kugou Music: Not needed: it couldn’t beat the match showing
+  1.67s    Kuwo Music: Not needed: it couldn’t beat the match showing
+  1.67s    lyrics.ovh: Not needed: it couldn’t beat the match showing
+  1.67s  showing (revision 1): Word-by-word · NetEase
+  3.06s    AMLL TTML DB: No usable match / unavailable
+  5.24s  done
+
+Source states:
+  Apple Music            Apple Music for Windows doesn't keep its lyrics anywhere Lunalyr can read, so its own lyrics can't be used here.
+  Lyrimuse local files   Choose the Lyrimuse lyrics folder
+  Lyrics+ (KPoe)         No usable match / unavailable
+  AMLL TTML DB           No usable match / unavailable
+  NetEase Cloud Music    Match found · showing
+  LRCLIB                 Match found · 2 lines crammed from 1:39
+  QQ Music               Not needed: it couldn’t beat the match showing
+  Kugou Music            Not needed: it couldn’t beat the match showing
+  Kuwo Music             Not needed: it couldn’t beat the match showing
+  lyrics.ovh             Not needed: it couldn’t beat the match showing
+
+Ranking:
+  1. Word-by-word · NetEase                        "Hurts Me" / "Wallows" 2:59, 73 lines, score 105.0, tier 3
+  2. Word-by-word · LRCLIB                         "Hurts Me" / "Wallows" 2:59, 44 lines, score 104.5, tier 3
+
+Chosen: Word-by-word · NetEase
+  0:21  Haven't talked in months  [4 timed words]
+  0:24  I knew it'd be tough  [5 timed words]
+  0:26  Forward to  April  [3 timed words]
+  0:29  Did I give it enough?  [5 timed words]

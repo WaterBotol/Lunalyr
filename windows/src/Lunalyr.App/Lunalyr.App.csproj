@@ -1,0 +1,56 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The Lunalyr app: a tray process (plain Win32 while idle) that starts WinUI 3 only when a window is first opened.
+       Unpackaged, self-contained Windows App SDK, Native AOT. The logic lives in Lunalyr.Shell so it can be tested. -->
+  <PropertyGroup>
+    <!-- SharpGen.Runtime (under Vortice) reports a reflection path the renderer never uses; see tools/EngineHarness. -->
+    <NoWarn>$(NoWarn);IL2104</NoWarn>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.19041.0</TargetPlatformMinVersion>
+    <RootNamespace>Lunalyr.App</RootNamespace>
+    <AssemblyName>Lunalyr</AssemblyName>
+    <Version>0.8.0</Version>
+    <!-- The shared props still carry the old "Derived from Verso" line; the app's version resource must not. -->
+    <Copyright>© Lunalyr. All rights reserved.</Copyright>
+    <Platforms>x64</Platforms>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <UseWinUI>true</UseWinUI>
+    <WindowsPackageType>None</WindowsPackageType>
+    <!-- Publishes the app's .pri (the compiled XAML resources); without it the settings window can't load. -->
+    <EnableMsixTooling>true</EnableMsixTooling>
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <SelfContained>true</SelfContained>
+    <PublishAot>true</PublishAot>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- Lunalyr's mark (the Mac's app icon PNGs as one .ico): Explorer, the Start menu, Settings › Apps. -->
+    <ApplicationIcon>Assets\Lunalyr.ico</ApplicationIcon>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- Our own Main: the tray loop runs before (and often without) XAML. -->
+    <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
+    <!-- The Lunalyr EventSource (ETW/EventPipe logging) is off under Native AOT unless opted in. -->
+    <EventSourceSupport>true</EventSourceSupport>
+    <TieredPGO>true</TieredPGO>
+    <IsAotCompatible>true</IsAotCompatible>
+  </PropertyGroup>
+  <!-- Updates (docs/PACKAGING.md): the signed feed's address and public key, built in. Empty means no update service,
+       which the General page says. Pass -p:LunalyrUpdateFeed=https://… -p:LunalyrUpdateKey=<Base64 P-256 key>, and
+       -p:LunalyrRequireSignature=true once Lunalyr is code-signed. -->
+  <ItemGroup>
+    <AssemblyMetadata Include="LunalyrUpdateFeed" Value="$(LunalyrUpdateFeed)" />
+    <AssemblyMetadata Include="LunalyrUpdateKey" Value="$(LunalyrUpdateKey)" />
+    <AssemblyMetadata Include="LunalyrRequireSignature" Value="$(LunalyrRequireSignature)" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.WindowsAppSDK.WinUI" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.Foundation" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Lunalyr.Shell\Lunalyr.Shell.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="THIRD-PARTY-NOTICES.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <!-- The welcome's recordings and posters, its glass logo (also the Settings loader's), the Discord status recording and
+         Lunalyr's icon: the owner's own media, loaded by path next to Lunalyr.exe (docs/APP-SHELL.md, "Onboarding"). -->
+    <Content Include="Assets\Onboarding\*.*" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

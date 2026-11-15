@@ -1,0 +1,6 @@
+﻿listening lunalyr-check-tb7-0
+connected
+op 0 {"v":1,"client_id":"1568919234367717506"}
+op 1 {"cmd":"SET_ACTIVITY","args":{"pid":59272,"activity":{"type":2,"status_display_type":1,"details":"Neon Harbour \u00B7 The Lunalyr Demo Band","state":"The Lunalyr Demo Band","assets":{"large_text":"The Lunalyr Demo Band \u2014 Invented Songs","large_image":"https://raw.githubusercontent.com/WaterBotol/Lunalyr/main/Sources/Assets.xcassets/AppIcon.appiconset/icon_256.png"},"buttons":[{"label":"G…
+op 1 {"cmd":"SET_ACTIVITY","args":{"pid":59272},"nonce":"b67360c698ad44998b837b88baf8fc38-2"}
+closed

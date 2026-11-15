@@ -1,0 +1,18 @@
+[ui] Args { seconds: Some(6.0), stats: Some("results\\wallpaper-layered-stats.json"), fps: None, windowed: false, snapshot: None, start_line: 1, snapshot_after: 3.0, layered: true, force_legacy: false }
+[attach] 24H2 layout: Progman 0x101ae has child WorkerW 0x10254, DefView Some(0x20198)
+[attach] \\.\DISPLAY5 2560x1440 at (0,0) dpi 120 60 Hz -> hwnd 0xdc0622
+[tree] parent 0x101ae class=Progman exstyle=0x00200080 (NOREDIRECTIONBITMAP=true) rect=(0,0,2560,1440)
+[tree]  z=0 hwnd=0x20198 class=SHELLDLL_DefView visible=true style=0x56010000 exstyle=0x00080000 rect=(0,0,2560,1440)
+[tree]  z=1 hwnd=0xdc0622 class=LunalyrSpikeRsWallpaper (ours) visible=true style=0x5c000000 exstyle=0x08080000 rect=(0,0,2560,1440)
+[tree]  z=2 hwnd=0x9020e class=LunalyrSpikeSurface visible=true style=0x5c000000 exstyle=0x08000080 rect=(0,0,2560,1440)
+[tree]  z=3 hwnd=0x10254 class=WorkerW visible=true style=0x58000000 exstyle=0x080000a0 rect=(0,0,2560,1440)
+[ui] target 2560x1440 dpi 120 60 Hz mode 24h2
+[render] adapter: NVIDIA GeForce RTX 5060 Laptop GPU; 'Segoe UI Variable Display' in system collection: true
+[render] first present; startup 365.6 ms
+[ui] stats -> results\wallpaper-layered-stats.json
+{ "stack": "rust-d2d", "adapter": "NVIDIA GeForce RTX 5060 Laptop GPU", "monitors": [{"w":2560,"h":1440,"dpi":120,"hz":60,"mode":"24h2"}],
+  "seconds": 5.779, "frames": 348, "fps": 60.04,
+  "cpuMsPerFrame": {"avg":0.555,"p50":0.498,"p95":0.790,"p99":1.171},
+  "frameIntervalMs": {"avg":16.655,"p50":16.668,"p95":17.021,"p99":18.558}, "slowFrames": 0,
+  "startupMs": 365.6, "workingSetMB": 59.1, "privateMB": 73.4, "processCpuPercent": 0.68 }
+

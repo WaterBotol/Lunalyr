@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The app shell's logic with fakes only: a silent fake media source, a fake lyric lookup, a fake renderer and
+       temp folders. Nothing here reaches a real player, the network or the owner's settings. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.19041.0</TargetPlatformMinVersion>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <Platforms>x64</Platforms>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="xunit.v3" />
+    <Using Include="Xunit" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Lunalyr.Shell\Lunalyr.Shell.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="..\Shared\**\*.cs" Link="Shared\%(RecursiveDir)%(Filename)%(Extension)" />
+    <!-- The silent GSMTC stand-in the now-playing tests already use. -->
+    <Compile Include="..\Lunalyr.Platform.Windows.Tests\NowPlaying\FakeMediaSessionSource.cs" Link="Fakes\FakeMediaSessionSource.cs" />
+    <!-- Animated covers end to end: the replies recorded from Apple's public pages, and the silent generated clip as the
+         downloaded video. -->
+    <None Include="..\Lunalyr.Core.Tests\Fixtures\MotionArtwork\*" Link="Fixtures\MotionArtwork\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\Lunalyr.Platform.Windows.Tests\Fixtures\Wallpaper\clip.mp4" Link="Fixtures\clip.mp4" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

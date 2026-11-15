@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Windows services with no UI: now playing (GSMTC), settings store, logging, desktop attach, monitors, power. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.19041.0</TargetPlatformMinVersion>
+    <RootNamespace>Lunalyr.Platform</RootNamespace>
+    <IsAotCompatible>true</IsAotCompatible>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- WIC for artwork decoding: Vortice.WIC ships inside Vortice.Direct2D1, already pinned for the renderer. -->
+    <PackageReference Include="Vortice.Direct2D1" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Lunalyr.Core\Lunalyr.Core.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- The Japanese dictionary (IPAdic), built by tools/JapaneseDictionaryBuilder: see docs/READINGS-WINDOWS.md. -->
+    <EmbeddedResource Include="Readings\Data\ipadic.lunadic.br" LogicalName="Lunalyr.Platform.Readings.Data.ipadic.lunadic.br" />
+    <!-- Its licence asks for its notice with every copy: shipped next to the app (and anything referencing this). -->
+    <None Include="..\..\THIRD-PARTY-NOTICES.md" Link="THIRD-PARTY-NOTICES.md" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

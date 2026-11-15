@@ -1,0 +1,46 @@
+Query: "Rather Be (feat. Jess Glynne)" by "Clean Bandit" (3:48, 227.833 s), album "New Eyes", genre "Dance", automatic lookup
+Storefront for original titles: au; cache policy v16
+Sources:
+  Apple Music            unavailable: Apple Music for Windows doesn't keep its lyrics anywhere Lunalyr can read, so its own lyrics can't be used here.
+  Lyrimuse local files   available
+  Lyrics+ (KPoe)         available
+  AMLL TTML DB           available
+  NetEase Cloud Music    available
+  LRCLIB                 available
+  QQ Music               available
+  Kugou Music            available
+  Kuwo Music             available
+  lyrics.ovh             available
+  0.80s    Apple Music: Apple Music for Windows doesn't keep its lyrics anywhere Lunalyr can read, so its own lyrics can't be used here.
+  0.80s    Lyrimuse local files: Choose the Lyrimuse lyrics folder
+  0.80s    Lyrics+ (KPoe): Searching…
+  0.80s    AMLL TTML DB: Searching…
+  0.80s    NetEase Cloud Music: Searching…
+  0.80s    LRCLIB: Match found
+  0.80s    QQ Music: Searching…
+  0.80s    Kugou Music: Searching…
+  0.80s    Kuwo Music: Searching…
+  0.80s    lyrics.ovh: Searching…
+  0.94s  done
+
+Source states:
+  Apple Music            Apple Music for Windows doesn't keep its lyrics anywhere Lunalyr can read, so its own lyrics can't be used here.
+  Lyrimuse local files   Choose the Lyrimuse lyrics folder
+  Lyrics+ (KPoe)         Match found · Apple Music’s lyrics · 1 other source agrees · showing
+  AMLL TTML DB           Not needed: it couldn’t beat the match showing
+  NetEase Cloud Music    Not needed: it couldn’t beat the match showing
+  LRCLIB                 Match found · 1 other source agrees
+  QQ Music               Not needed: it couldn’t beat the match showing
+  Kugou Music            Not needed: it couldn’t beat the match showing
+  Kuwo Music             Not needed: it couldn’t beat the match showing
+  lyrics.ovh             Not needed: it couldn’t beat the match showing
+
+Ranking:
+  1. Mixed timing · Apple via Lyrics+              "Rather Be (feat. Jess Glynne)" / "Clean Bandit" ?:??, 53 lines, score 95.0, tier 2
+  2. Mixed timing · LRCLIB                         "Rather Be (feat. Jess Glynne)" / "Clean Bandit" 3:48, 55 lines, score 104.7, tier 2
+
+Chosen: Mixed timing · Apple via Lyrics+
+  0:16  We're a thousand miles from comfort  [6 timed words]
+  0:20  We have traveled land and sea  [6 timed words]
+  0:24  But as long as you are with me  [8 timed words]
+  0:28  There's no place I'd rather be  [6 timed words]

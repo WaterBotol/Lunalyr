@@ -1,0 +1,68 @@
+<Project>
+  <!--
+    The GPU effects' and line patterns' HLSL (Backgrounds/Gpu/Shaders), compiled with fxc at build time for Direct3D
+    feature level 10_0 (vs_4_0 / ps_4_0) and embedded in the assembly as "Lunalyr.Shaders.<folder>.<name>.cso", so
+    the app needs no shader compiler at run time and Native AOT has nothing to reflect over.
+
+    fxc comes from the Windows SDK (the same 10.0.26100 SDK the project targets): found through the Windows Kits root
+    in the registry, then the default install folder, newest version as a last resort. Override with -p:LunalyrFxc=…
+    Shaders are compiled again only when a .hlsl or .hlsli file changes.
+  -->
+  <PropertyGroup>
+    <LunalyrShaderDir>$(MSBuildThisFileDirectory)Shaders\</LunalyrShaderDir>
+    <LunalyrKitsRoot>$([MSBuild]::GetRegistryValueFromView('HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows Kits\Installed Roots', 'KitsRoot10', null, RegistryView.Registry64, RegistryView.Registry32))</LunalyrKitsRoot>
+    <LunalyrKitsRoot Condition="'$(LunalyrKitsRoot)' == ''">$(MSBuildProgramFiles32)\Windows Kits\10\</LunalyrKitsRoot>
+    <LunalyrFxcHost Condition="'$(PROCESSOR_ARCHITECTURE)' == 'ARM64'">arm64</LunalyrFxcHost>
+    <LunalyrFxcHost Condition="'$(LunalyrFxcHost)' == ''">x64</LunalyrFxcHost>
+    <LunalyrFxc Condition="'$(LunalyrFxc)' == '' and Exists('$(LunalyrKitsRoot)bin\10.0.26100.0\$(LunalyrFxcHost)\fxc.exe')">$(LunalyrKitsRoot)bin\10.0.26100.0\$(LunalyrFxcHost)\fxc.exe</LunalyrFxc>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <LunalyrShader Include="$(LunalyrShaderDir)**\*.hlsl" />
+    <LunalyrShaderInclude Include="$(LunalyrShaderDir)**\*.hlsli" />
+    <!-- Shown in the IDE, never compiled as C# or copied. -->
+    <None Include="@(LunalyrShader);@(LunalyrShaderInclude)" />
+  </ItemGroup>
+
+  <Target Name="LunalyrFindFxc" Condition="'$(LunalyrFxc)' == ''">
+    <ItemGroup>
+      <LunalyrFxcCandidate Include="$(LunalyrKitsRoot)bin\10.*\$(LunalyrFxcHost)\fxc.exe" />
+    </ItemGroup>
+    <PropertyGroup>
+      <LunalyrFxc>%(LunalyrFxcCandidate.FullPath)</LunalyrFxc>
+    </PropertyGroup>
+    <Error Condition="'$(LunalyrFxc)' == '' or !Exists('$(LunalyrFxc)')"
+           Text="fxc.exe (Windows SDK) was not found under $(LunalyrKitsRoot)bin. Install the Windows 10/11 SDK or pass -p:LunalyrFxc=&lt;path to fxc.exe&gt;." />
+  </Target>
+
+  <Target Name="LunalyrNameShaders">
+    <!-- Set here, not at the top: IntermediateOutputPath is only defined after the project body is read. -->
+    <PropertyGroup>
+      <LunalyrShaderOut>$([System.IO.Path]::Combine($(MSBuildProjectDirectory), $(IntermediateOutputPath)))shaders\</LunalyrShaderOut>
+    </PropertyGroup>
+    <ItemGroup>
+      <LunalyrShader>
+        <LogicalName>$([System.String]::Copy('%(RecursiveDir)').Replace('\', '.'))%(Filename)</LogicalName>
+      </LunalyrShader>
+      <LunalyrShader>
+        <Profile Condition="$([System.String]::Copy('%(Filename)').EndsWith('.vs'))">vs_4_0</Profile>
+        <Profile Condition="!$([System.String]::Copy('%(Filename)').EndsWith('.vs'))">ps_4_0</Profile>
+        <Compiled>$(LunalyrShaderOut)%(LogicalName).cso</Compiled>
+      </LunalyrShader>
+    </ItemGroup>
+  </Target>
+
+  <Target Name="LunalyrCompileShaders" DependsOnTargets="LunalyrFindFxc;LunalyrNameShaders"
+          Inputs="@(LunalyrShader);@(LunalyrShaderInclude);$(MSBuildThisFileFullPath)" Outputs="@(LunalyrShader->'%(Compiled)')">
+    <MakeDir Directories="$(LunalyrShaderOut)" />
+    <Exec Command="&quot;$(LunalyrFxc)&quot; /nologo /O3 /WX /Ges /Qstrip_reflect /Qstrip_debug /T %(LunalyrShader.Profile) /E main /Fo &quot;%(LunalyrShader.Compiled)&quot; &quot;%(LunalyrShader.FullPath)&quot;"
+          StandardOutputImportance="low" />
+  </Target>
+
+  <Target Name="LunalyrEmbedShaders" BeforeTargets="PrepareResourceNames" DependsOnTargets="LunalyrCompileShaders">
+    <ItemGroup>
+      <EmbeddedResource Include="%(LunalyrShader.Compiled)" LogicalName="Lunalyr.Shaders.%(LunalyrShader.LogicalName).cso" WithCulture="false" Type="Non-Resx" />
+      <FileWrites Include="%(LunalyrShader.Compiled)" />
+    </ItemGroup>
+  </Target>
+</Project>

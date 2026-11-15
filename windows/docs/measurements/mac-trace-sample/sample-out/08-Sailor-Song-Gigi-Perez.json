@@ -1,0 +1,651 @@
+{
+  "digest" : [
+    {
+      "candidate" : {
+        "agreement" : {
+          "peers" : 0,
+          "timedCompared" : 0,
+          "timingOutlier" : false
+        },
+        "appleRelay" : true,
+        "artist" : "Gigi Perez",
+        "artistSimilarity" : 1,
+        "confidence" : 2,
+        "firstLine" : "I saw her in the rightest way",
+        "languageMismatch" : false,
+        "lead" : 1,
+        "lines" : 32,
+        "metadataReported" : false,
+        "provenance" : "Word-by-word · Apple via Lyrics+",
+        "rank" : 1,
+        "rankedTiming" : 2,
+        "score" : 113,
+        "script" : "latin",
+        "source" : "lyricsPlus",
+        "timing" : "word",
+        "title" : "Sailor Song",
+        "titleSimilarity" : 1,
+        "verdict" : "accepted",
+        "versionMismatch" : [
+
+        ],
+        "versionTags" : [
+
+        ],
+        "viaOriginalTitle" : false
+      },
+      "elapsedMs" : 17,
+      "requests" : [
+        "200 3 ms https://lyricsplus.prjktla.my.id/v2/lyrics/get?title=Sailor%20Song&artist=Gigi%20Perez&duration=211&album=Sailor%20Song"
+      ],
+      "source" : "lyricsPlus",
+      "state" : "Match found · Apple Music’s lyrics · showing",
+      "variants" : [
+        "listed title"
+      ],
+      "verdict" : "picked"
+    },
+    {
+      "elapsedMs" : 39,
+      "requests" : [
+        "cancelled 39 ms https://music.163.com/api/search/get?s=Sailor%20Song%20Gigi%20Perez&type=1&limit=8"
+      ],
+      "source" : "amll",
+      "state" : "Not needed: it couldn’t beat the match showing",
+      "variants" : [
+        "listed title"
+      ],
+      "verdict" : "stopped"
+    },
+    {
+      "elapsedMs" : 39,
+      "requests" : [
+        "cancelled 39 ms https://music.163.com/api/search/get?s=Sailor%20Song%20Gigi%20Perez&type=1&limit=8"
+      ],
+      "source" : "netEase",
+      "state" : "Not needed: it couldn’t beat the match showing",
+      "variants" : [
+        "listed title"
+      ],
+      "verdict" : "stopped"
+    },
+    {
+      "elapsedMs" : 39,
+      "requests" : [
+        "cancelled 39 ms https://lrclib.net/api/get?album_name=Sailor%20Song&artist_name=Gigi%20Perez&duration=211&track_name=Sailor%20Song"
+      ],
+      "source" : "lrclib",
+      "state" : "Not needed: it couldn’t beat the match showing",
+      "variants" : [
+        "listed title"
+      ],
+      "verdict" : "stopped"
+    },
+    {
+      "elapsedMs" : 39,
+      "requests" : [
+        "cancelled 39 ms https://c.y.qq.com/soso/fcgi-bin/client_search_cp?format=json&n=8&p=1&w=Sailor%20Song%20Gigi%20Perez"
+      ],
+      "source" : "qqMusic",
+      "state" : "Not needed: it couldn’t beat the match showing",
+      "variants" : [
+        "listed title"
+      ],
+      "verdict" : "stopped"
+    },
+    {
+      "elapsedMs" : 39,
+      "requests" : [
+        "cancelled 39 ms https://mobileservice.kugou.com/api/v3/search/song?format=json&keyword=Sailor%20Song%20Gigi%20Perez&page=1&pagesize=8"
+      ],
+      "source" : "kugou",
+      "state" : "Not needed: it couldn’t beat the match showing",
+      "variants" : [
+        "listed title"
+      ],
+      "verdict" : "stopped"
+    },
+    {
+      "elapsedMs" : 39,
+      "requests" : [
+        "cancelled 39 ms https://search.kuwo.cn/r.s?all=Sailor%20Song%20Gigi%20Perez&client=kt&encoding=utf8&ft=music&itemset=web_2013&pcjson=1&pn=0&rformat=json&rn=8&vipver=1"
+      ],
+      "source" : "kuwo",
+      "state" : "Not needed: it couldn’t beat the match showing",
+      "variants" : [
+        "listed title"
+      ],
+      "verdict" : "stopped"
+    },
+    {
+      "elapsedMs" : 39,
+      "requests" : [
+        "cancelled 39 ms https://api.lyrics.ovh/v1/Gigi%20Perez/Sailor%20Song?"
+      ],
+      "source" : "lyricsOVH",
+      "state" : "Not needed: it couldn’t beat the match showing",
+      "variants" : [
+
+      ],
+      "verdict" : "stopped"
+    }
+  ],
+  "elapsedMs" : 51,
+  "events" : [
+    {
+      "at" : 0,
+      "kind" : "lookup",
+      "message" : "mode smart, automatic",
+      "query" : {
+        "album" : "Sailor Song",
+        "artist" : "Gigi Perez",
+        "duration" : 211,
+        "title" : "Sailor Song"
+      },
+      "sources" : [
+        "lyricsPlus",
+        "amll",
+        "netEase",
+        "lrclib",
+        "qqMusic",
+        "kugou",
+        "kuwo",
+        "lyricsOVH"
+      ]
+    },
+    {
+      "at" : 0,
+      "kind" : "sourceStart",
+      "source" : "lyricsPlus"
+    },
+    {
+      "at" : 0,
+      "kind" : "sourceStart",
+      "source" : "amll"
+    },
+    {
+      "at" : 0,
+      "kind" : "sourceStart",
+      "source" : "netEase"
+    },
+    {
+      "at" : 0,
+      "kind" : "sourceStart",
+      "source" : "lrclib"
+    },
+    {
+      "at" : 0,
+      "kind" : "sourceStart",
+      "source" : "qqMusic"
+    },
+    {
+      "at" : 0,
+      "kind" : "sourceStart",
+      "source" : "kugou"
+    },
+    {
+      "at" : 0,
+      "kind" : "sourceStart",
+      "source" : "kuwo"
+    },
+    {
+      "at" : 0,
+      "kind" : "sourceStart",
+      "source" : "lyricsOVH"
+    },
+    {
+      "at" : 0,
+      "kind" : "variant",
+      "message" : "listed title",
+      "query" : {
+        "album" : "Sailor Song",
+        "artist" : "Gigi Perez",
+        "duration" : 211,
+        "title" : "Sailor Song"
+      },
+      "source" : "lyricsPlus"
+    },
+    {
+      "at" : 0,
+      "kind" : "variant",
+      "message" : "listed title",
+      "query" : {
+        "album" : "Sailor Song",
+        "artist" : "Gigi Perez",
+        "duration" : 211,
+        "title" : "Sailor Song"
+      },
+      "source" : "amll"
+    },
+    {
+      "at" : 0,
+      "kind" : "variant",
+      "message" : "listed title",
+      "query" : {
+        "album" : "Sailor Song",
+        "artist" : "Gigi Perez",
+        "duration" : 211,
+        "title" : "Sailor Song"
+      },
+      "source" : "lrclib"
+    },
+    {
+      "at" : 0,
+      "kind" : "note",
+      "message" : "Lyrics+ mirrors in order (resting ones last or skipped): [\"https://lyricsplus.prjktla.my.id\", \"https://lyricsplus.binimum.org\"]",
+      "source" : "lyricsPlus"
+    },
+    {
+      "at" : 0,
+      "kind" : "variant",
+      "message" : "listed title",
+      "query" : {
+        "album" : "Sailor Song",
+        "artist" : "Gigi Perez",
+        "duration" : 211,
+        "title" : "Sailor Song"
+      },
+      "source" : "netEase"
+    },
+    {
+      "at" : 0,
+      "kind" : "variant",
+      "message" : "listed title",
+      "query" : {
+        "album" : "Sailor Song",
+        "artist" : "Gigi Perez",
+        "duration" : 211,
+        "title" : "Sailor Song"
+      },
+      "source" : "qqMusic"
+    },
+    {
+      "at" : 0,
+      "kind" : "variant",
+      "message" : "listed title",
+      "query" : {
+        "album" : "Sailor Song",
+        "artist" : "Gigi Perez",
+        "duration" : 211,
+        "title" : "Sailor Song"
+      },
+      "source" : "kuwo"
+    },
+    {
+      "at" : 0,
+      "kind" : "variant",
+      "message" : "listed title",
+      "query" : {
+        "album" : "Sailor Song",
+        "artist" : "Gigi Perez",
+        "duration" : 211,
+        "title" : "Sailor Song"
+      },
+      "source" : "kugou"
+    },
+    {
+      "at" : 0.003,
+      "kind" : "request",
+      "request" : {
+        "bytes" : 20577,
+        "ms" : 3,
+        "status" : 200,
+        "timeout" : 4,
+        "url" : "https://lyricsplus.prjktla.my.id/v2/lyrics/get?title=Sailor%20Song&artist=Gigi%20Perez&duration=211&album=Sailor%20Song"
+      },
+      "source" : "lyricsPlus"
+    },
+    {
+      "at" : 0.004,
+      "kind" : "note",
+      "message" : "Lyrics+ https://lyricsplus.prjktla.my.id: 32 lines from Apple",
+      "source" : "lyricsPlus"
+    },
+    {
+      "at" : 0.011,
+      "candidate" : {
+        "agreement" : {
+          "peers" : 0,
+          "timedCompared" : 0,
+          "timingOutlier" : false
+        },
+        "appleRelay" : true,
+        "artist" : "Gigi Perez",
+        "artistSimilarity" : 1,
+        "confidence" : 2,
+        "firstLine" : "I saw her in the rightest way",
+        "languageMismatch" : false,
+        "lead" : 1,
+        "lines" : 32,
+        "metadataReported" : false,
+        "provenance" : "Word-by-word · Apple via Lyrics+",
+        "rankedTiming" : 2,
+        "score" : 113,
+        "script" : "latin",
+        "source" : "lyricsPlus",
+        "timing" : "word",
+        "title" : "Sailor Song",
+        "titleSimilarity" : 1,
+        "verdict" : "accepted",
+        "versionMismatch" : [
+
+        ],
+        "versionTags" : [
+
+        ],
+        "viaOriginalTitle" : false
+      },
+      "kind" : "variantResult",
+      "message" : "kept; no original-title search: listed-title answer is usable",
+      "source" : "lyricsPlus"
+    },
+    {
+      "at" : 0.017,
+      "candidate" : {
+        "agreement" : {
+          "peers" : 0,
+          "timedCompared" : 0,
+          "timingOutlier" : false
+        },
+        "appleRelay" : true,
+        "artist" : "Gigi Perez",
+        "artistSimilarity" : 1,
+        "confidence" : 2,
+        "firstLine" : "I saw her in the rightest way",
+        "languageMismatch" : false,
+        "lead" : 1,
+        "lines" : 32,
+        "metadataReported" : false,
+        "provenance" : "Word-by-word · Apple via Lyrics+",
+        "rankedTiming" : 2,
+        "score" : 113,
+        "script" : "latin",
+        "source" : "lyricsPlus",
+        "timing" : "word",
+        "title" : "Sailor Song",
+        "titleSimilarity" : 1,
+        "verdict" : "accepted",
+        "versionMismatch" : [
+
+        ],
+        "versionTags" : [
+
+        ],
+        "viaOriginalTitle" : false
+      },
+      "elapsedMs" : 17,
+      "kind" : "sourceEnd",
+      "message" : "Match found",
+      "source" : "lyricsPlus"
+    },
+    {
+      "at" : 0.026,
+      "kind" : "publication",
+      "publication" : {
+        "best" : "lyricsPlus",
+        "bestTiming" : "word",
+        "graceOver" : false,
+        "pending" : [
+          "amll",
+          "kugou",
+          "kuwo",
+          "lrclib",
+          "lyricsOVH",
+          "netEase",
+          "qqMusic"
+        ],
+        "revision" : 1,
+        "settleOver" : false,
+        "settled" : true,
+        "shownAfter" : "lyricsPlus",
+        "step" : "publish"
+      }
+    },
+    {
+      "at" : 0.039,
+      "kind" : "stop",
+      "message" : "Not needed: it couldn’t beat the match showing",
+      "sources" : [
+        "amll",
+        "kugou",
+        "kuwo",
+        "lrclib",
+        "lyricsOVH",
+        "netEase",
+        "qqMusic"
+      ]
+    },
+    {
+      "at" : 0.039,
+      "elapsedMs" : 39,
+      "kind" : "sourceEnd",
+      "message" : "Timed out (no answer)",
+      "source" : "kugou"
+    },
+    {
+      "at" : 0.039,
+      "elapsedMs" : 39,
+      "kind" : "sourceEnd",
+      "message" : "Timed out (no answer)",
+      "source" : "lrclib"
+    },
+    {
+      "at" : 0.039,
+      "elapsedMs" : 39,
+      "kind" : "sourceEnd",
+      "message" : "Timed out (no answer)",
+      "source" : "qqMusic"
+    },
+    {
+      "at" : 0.039,
+      "elapsedMs" : 39,
+      "kind" : "sourceEnd",
+      "message" : "Timed out (no answer)",
+      "source" : "lyricsOVH"
+    },
+    {
+      "at" : 0.039,
+      "elapsedMs" : 39,
+      "kind" : "sourceEnd",
+      "message" : "Timed out (no answer)",
+      "source" : "kuwo"
+    },
+    {
+      "at" : 0.039,
+      "elapsedMs" : 39,
+      "kind" : "sourceEnd",
+      "message" : "Timed out (no answer)",
+      "source" : "netEase"
+    },
+    {
+      "at" : 0.039,
+      "kind" : "request",
+      "request" : {
+        "error" : "cancelled",
+        "ms" : 39,
+        "timeout" : 6,
+        "url" : "https://mobileservice.kugou.com/api/v3/search/song?format=json&keyword=Sailor%20Song%20Gigi%20Perez&page=1&pagesize=8"
+      },
+      "source" : "kugou"
+    },
+    {
+      "at" : 0.039,
+      "elapsedMs" : 39,
+      "kind" : "sourceEnd",
+      "message" : "Timed out (no answer)",
+      "source" : "amll"
+    },
+    {
+      "at" : 0.039,
+      "kind" : "request",
+      "request" : {
+        "error" : "cancelled",
+        "ms" : 39,
+        "timeout" : 6,
+        "url" : "https://api.lyrics.ovh/v1/Gigi%20Perez/Sailor%20Song?"
+      },
+      "source" : "lyricsOVH"
+    },
+    {
+      "at" : 0.039,
+      "kind" : "request",
+      "request" : {
+        "error" : "cancelled",
+        "ms" : 39,
+        "timeout" : 4,
+        "url" : "https://lrclib.net/api/get?album_name=Sailor%20Song&artist_name=Gigi%20Perez&duration=211&track_name=Sailor%20Song"
+      },
+      "source" : "lrclib"
+    },
+    {
+      "at" : 0.039,
+      "kind" : "request",
+      "request" : {
+        "error" : "cancelled",
+        "ms" : 39,
+        "timeout" : 6,
+        "url" : "https://c.y.qq.com/soso/fcgi-bin/client_search_cp?format=json&n=8&p=1&w=Sailor%20Song%20Gigi%20Perez"
+      },
+      "source" : "qqMusic"
+    },
+    {
+      "at" : 0.039,
+      "kind" : "request",
+      "request" : {
+        "error" : "cancelled",
+        "ms" : 39,
+        "timeout" : 6,
+        "url" : "https://music.163.com/api/search/get?s=Sailor%20Song%20Gigi%20Perez&type=1&limit=8"
+      },
+      "source" : "netEase"
+    },
+    {
+      "at" : 0.039,
+      "kind" : "request",
+      "request" : {
+        "error" : "cancelled",
+        "ms" : 39,
+        "timeout" : 6,
+        "url" : "https://search.kuwo.cn/r.s?all=Sailor%20Song%20Gigi%20Perez&client=kt&encoding=utf8&ft=music&itemset=web_2013&pcjson=1&pn=0&rformat=json&rn=8&vipver=1"
+      },
+      "source" : "kuwo"
+    },
+    {
+      "at" : 0.039,
+      "kind" : "request",
+      "request" : {
+        "error" : "cancelled",
+        "ms" : 39,
+        "timeout" : 6,
+        "url" : "https://music.163.com/api/search/get?s=Sailor%20Song%20Gigi%20Perez&type=1&limit=8"
+      },
+      "source" : "amll"
+    },
+    {
+      "at" : 0.042,
+      "kind" : "publication",
+      "publication" : {
+        "best" : "lyricsPlus",
+        "bestTiming" : "word",
+        "graceOver" : true,
+        "pending" : [
+
+        ],
+        "revision" : 1,
+        "settleOver" : true,
+        "settled" : true,
+        "shownAfter" : "lyricsPlus",
+        "shownBefore" : "lyricsPlus",
+        "step" : "wait"
+      }
+    },
+    {
+      "at" : 0.051,
+      "kind" : "cache",
+      "message" : "online choice saved to the cache",
+      "source" : "lyricsPlus"
+    },
+    {
+      "at" : 0.057,
+      "elapsedMs" : 51,
+      "kind" : "final",
+      "message" : "shown",
+      "ranked" : [
+        {
+          "agreement" : {
+            "peers" : 0,
+            "timedCompared" : 0,
+            "timingOutlier" : false
+          },
+          "appleRelay" : true,
+          "artist" : "Gigi Perez",
+          "artistSimilarity" : 1,
+          "confidence" : 2,
+          "firstLine" : "I saw her in the rightest way",
+          "languageMismatch" : false,
+          "lead" : 1,
+          "lines" : 32,
+          "metadataReported" : false,
+          "provenance" : "Word-by-word · Apple via Lyrics+",
+          "rank" : 1,
+          "rankedTiming" : 2,
+          "score" : 113,
+          "script" : "latin",
+          "source" : "lyricsPlus",
+          "timing" : "word",
+          "title" : "Sailor Song",
+          "titleSimilarity" : 1,
+          "verdict" : "accepted",
+          "versionMismatch" : [
+
+          ],
+          "versionTags" : [
+
+          ],
+          "viaOriginalTitle" : false
+        }
+      ],
+      "rejected" : [
+
+      ],
+      "source" : "lyricsPlus",
+      "states" : {
+        "amll" : "Not needed: it couldn’t beat the match showing",
+        "kugou" : "Not needed: it couldn’t beat the match showing",
+        "kuwo" : "Not needed: it couldn’t beat the match showing",
+        "lrclib" : "Not needed: it couldn’t beat the match showing",
+        "lyricsOVH" : "Not needed: it couldn’t beat the match showing",
+        "lyricsPlus" : "Match found · Apple Music’s lyrics · showing",
+        "netEase" : "Not needed: it couldn’t beat the match showing",
+        "qqMusic" : "Not needed: it couldn’t beat the match showing"
+      }
+    }
+  ],
+  "mode" : "mode smart, automatic",
+  "pick" : {
+    "artist" : "Gigi Perez",
+    "provenance" : "Word-by-word · Apple via Lyrics+",
+    "source" : "lyricsPlus",
+    "timing" : "word",
+    "title" : "Sailor Song",
+    "viaOriginalTitle" : false
+  },
+  "song" : {
+    "album" : "Sailor Song",
+    "artist" : "Gigi Perez",
+    "duration" : 211,
+    "title" : "Sailor Song"
+  },
+  "sources" : [
+    "lyricsPlus",
+    "amll",
+    "netEase",
+    "lrclib",
+    "qqMusic",
+    "kugou",
+    "kuwo",
+    "lyricsOVH"
+  ],
+  "startedAt" : "2026-11-13T06:17:09Z",
+  "storefront" : "au"
+}
