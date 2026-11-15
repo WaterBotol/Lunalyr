@@ -68,7 +68,7 @@ struct LyricStyleProfiles {
     /// Every preference that belongs to a lyric style.
     static let keys: [String] = [
         // Settings
-        "fontChoice", "googleFontFamily", "lyricComposition", "constellationSpread", "constellationLinkOpacity",
+        "fontChoice", "googleFontFamily", Settings.installedFontFamilyKey, "lyricComposition", "constellationSpread", "constellationLinkOpacity",
         "custom.wordRevealByStyle", "custom.wordArrivalByStyle", "custom.nextWordPreviewByStyle",
         "custom.nextWordPreviewLead", "custom.wordEntranceMix", "echoStrength", "lyricScale", "custom.showInterludes", ThinkingOrb.styleKey,
         "custom.editorialTypography", "custom.editorialAmount", "custom.randomizeLyricFonts",

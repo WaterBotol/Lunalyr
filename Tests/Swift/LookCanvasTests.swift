@@ -107,7 +107,7 @@ final class LookCanvasTests: XCTestCase {
         XCTAssertEqual(Set(LookChoices.layouts.compactMap { $0 }), Set(LyricComposition.allCases))
         XCTAssertEqual(Set(LookChoices.typefaces), Set(Settings.FontChoice.allCases))
         XCTAssertEqual(LookChoices.typefaces.map(LookChoices.shortName),
-                       ["Match", "Manrope", "SF Pro", "Avenir", "Charter", "Rockwell", "Rounded", "Other…"])
+                       ["Match", "Manrope", "SF Pro", "Avenir", "Charter", "Rockwell", "Rounded", "Google", "Installed"])
     }
 
     /// The spec's tile sizes at the default window: 139 x 70 types, 89 x 52

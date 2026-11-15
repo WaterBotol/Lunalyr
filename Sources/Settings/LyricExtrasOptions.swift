@@ -115,14 +115,14 @@ final class StyleMemory: ObservableObject {
         /// A `Settings.FontChoice` raw value. Styles saved before fonts
         /// were remembered have none and use the general typeface.
         var font: String?
-        /// The Google or installed family, when `font` is "google".
+        /// The family, when `font` is "google" or "installed".
         var fontFamily: String?
 
         var layout: LyricComposition? { composition.flatMap(LyricComposition.saved) }
         var colourMode: LyricColourMode? { colour.flatMap(LyricColourMode.savedChoice) }
         var songFont: Settings.SongFont? {
             guard let choice = font.flatMap(Settings.FontChoice.init(rawValue:)) else { return nil }
-            if choice == .google {
+            if choice.takesFamily {
                 guard let family = fontFamily, !family.isEmpty else { return nil }
                 return .init(choice: choice, family: family)
             }
@@ -131,7 +131,7 @@ final class StyleMemory: ObservableObject {
         /// "Serif — Charter", or the family's own name.
         var fontTitle: String? {
             guard let songFont else { return nil }
-            return songFont.choice == .google ? songFont.family : songFont.choice.title
+            return songFont.choice.takesFamily ? songFont.family : songFont.choice.title
         }
         var isEmpty: Bool { composition == nil && colour == nil && font == nil }
         var plist: [String: String] {
