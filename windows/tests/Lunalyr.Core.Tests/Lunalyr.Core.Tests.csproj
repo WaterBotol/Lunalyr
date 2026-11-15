@@ -13,6 +13,7 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="Fixtures\**\*" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\ThirdParty\ThinkingOrbs\orbs-golden.json" Link="Fixtures\ThinkingOrbs\orbs-golden.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
   <ItemGroup>
     <!-- Helpers shared by every test project (fake time). -->
