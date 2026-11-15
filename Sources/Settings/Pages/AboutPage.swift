@@ -52,6 +52,7 @@ struct AboutPage: View {
                 ThemedSection("Built on open source") {
                     AboutParagraph("Based on Verso by Akki / AkkiCode06. The upstream GPLv3 with Commons Clause licence and attribution are preserved.")
                     AboutParagraph("Visualisers include work from Synesthia, Fosfora, Wavefield, Wavecore and Cymatic (MIT). Bundled components retain their licence notices.")
+                    AboutParagraph("The instrumental-break orb is ported from thinking-orbs by Jakub Antalik (MIT).")
                     Button("View Bundled Licences") {
                         if let folder = Bundle.main.resourceURL { NSWorkspace.shared.open(folder) }
                     }

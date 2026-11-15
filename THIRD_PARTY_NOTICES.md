@@ -27,3 +27,7 @@ Wavecore bundles Dinesh Kadavakuduru's original WebGL scene and audio mapping un
 ## Cymatic Light 3D
 
 Light 3D bundles Corey Epstein's MIT-licensed Cymatic preset and its renderer. See the [source and licence](ThirdParty/Cymatic/SOURCE.md).
+
+## thinking-orbs
+
+The instrumental-break orb ports the dot engine of [thinking-orbs](https://github.com/Jakubantalik/thinking-orbs), copyright (c) 2026 Jakub Antalik, under MIT. Pinned commit: de85557ca220332586d070d8788c0e1d6e877a0d. The engine is transcribed in Sources/UI/ThinkingOrbEngine.swift, which carries the notice in its header; the library's spec and golden vectors are kept with the [adaptation manifest](ThirdParty/ThinkingOrbs/SOURCE.md). The full notice is bundled as Sources/Resources/ThinkingOrbs-LICENSE.txt.
