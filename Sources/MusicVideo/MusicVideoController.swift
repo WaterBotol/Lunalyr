@@ -65,8 +65,6 @@ final class MusicVideoController: ObservableObject {
     private var videoSample: (video: String, time: Double, playing: Bool, at: TimeInterval)?
     private var keyMonitor: Any?
     private var tapExpiry: Task<Void, Never>?
-    /// "Sync videos from their captions".
-    private(set) var captionSyncEnabled = true
     /// The caption cues the showing video's player passed on, by video key.
     private var captionCues: (video: String, cues: [MusicVideoCaptionCue])?
     /// Song and video pairs already measured (once the lyrics were there).
@@ -103,10 +101,6 @@ final class MusicVideoController: ObservableObject {
                 }
             }
             .store(in: &cancellables)
-        settings.$musicVideoCaptionSync.removeDuplicates()
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] on in MainActor.assumeIsolated { self?.setCaptionSync(on) } }
-            .store(in: &cancellables)
     }
 
     nonisolated private static func sameSong(_ a: NowPlayingMonitor.Track?, _ b: NowPlayingMonitor.Track?) -> Bool {
@@ -139,6 +133,7 @@ final class MusicVideoController: ObservableObject {
         self.enabled = enabled
         self.online = online
         guard changed else { return }
+        if playing != playingKey { offsets.clearAdjustments() }
         playingKey = playing
         song = next
         stillCheck?.cancel()
@@ -391,7 +386,7 @@ final class MusicVideoController: ObservableObject {
     /// Drops the user's nudge: back to the estimate.
     func resetOffset() {
         guard let song else { return }
-        offsets.clearManual(song.key)
+        offsets.clearManual(song.key, video: showingVideoKey)
         resetTaps()
         objectWillChange.send()
     }
@@ -422,23 +417,12 @@ final class MusicVideoController: ObservableObject {
 
     // MARK: From captions
 
-    /// Turns syncing from captions on or off; off drops what it measured.
-    func setCaptionSync(_ on: Bool) {
-        guard on != captionSyncEnabled else { return }
-        captionSyncEnabled = on
-        captionCues = nil
-        captionMeasured = []
-        offsets.clearCaptioned()
-        objectWillChange.send()
-    }
-
-    /// Whether the player for `source` should load its captions: the
-    /// setting is on, it is the video showing, and its timing is not the
-    /// user's nor already measured.
+    /// Whether the player for `source` should load its captions: always,
+    /// for the video showing (even one the user timed: captions win).
     func wantsCaptions(for source: MusicVideoSource) -> Bool {
-        guard captionSyncEnabled, let song, case .showing(let showing, _) = status, showing == source,
-              let video = MusicVideoOffsets.videoKey(source) else { return false }
-        return !offsets.hasManual(song.key, video: video) && !offsets.hasCaptioned(song.key, video: video)
+        guard song != nil, case .showing(let showing, _) = status, showing == source,
+              case .youTube = source else { return false }
+        return true
     }
 
     /// The language of the song's lyrics, for the caption track to ask for.
@@ -451,7 +435,7 @@ final class MusicVideoController: ObservableObject {
 
     /// A caption track the showing video's player loaded.
     func noteCaptions(_ data: Data, of source: MusicVideoSource) {
-        guard captionSyncEnabled, case .showing(let showing, _) = status, showing == source,
+        guard case .showing(let showing, _) = status, showing == source,
               let video = MusicVideoOffsets.videoKey(source) else { return }
         let cues = MusicVideoCaptionSync.cues(from: data)
         guard !cues.isEmpty else { return }
@@ -465,10 +449,10 @@ final class MusicVideoController: ObservableObject {
 
     /// Measures the offset once both the captions and the song's timed
     /// lyrics are here (whichever comes second), once per song and video.
-    /// Used only when trustworthy, and never over the user's own timing
-    /// (which `MusicVideoOffsets` puts first anyway).
+    /// Used only when trustworthy; then it wins over any saved timing
+    /// (`MusicVideoOffsets`).
     func measureCaptions() {
-        guard captionSyncEnabled, let song, let video = showingVideoKey, let captionCues,
+        guard let song, let video = showingVideoKey, let captionCues,
               captionCues.video == video else { return }
         let attempt = song.key + "\u{1}" + video
         guard !captionMeasured.contains(attempt), let lines = lyrics(song), !lines.isEmpty else { return }
@@ -649,7 +633,7 @@ final class MusicVideoController: ObservableObject {
         if isAligning { return true }
         guard alignAvailability.isAvailable, let song, let video = showingVideoKey else { return false }
         if case .armed = tapState { cancelTapSync() }
-        align = MusicVideoAlignSession(songKey: song.key, video: video, restore: offsets.manualEntry(song.key))
+        align = MusicVideoAlignSession(songKey: song.key, video: video, restore: offsets.manualEntry(song.key, video: video))
         alignDrag = nil
         alignTouched = false
         return true
@@ -730,7 +714,7 @@ final class MusicVideoController: ObservableObject {
             let restore = align.restore
             endAlign()
             if let restore {
-                offsets.restoreManual(restore, for: align.songKey)
+                offsets.restoreManual(restore, for: align.songKey, video: align.video)
                 resetTaps()
                 objectWillChange.send()
             } else {

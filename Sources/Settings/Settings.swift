@@ -137,12 +137,6 @@ final class Settings: ObservableObject {
     /// plays in YouTube's embedded player (`iframe_api` from www.youtube.com,
     /// the video from youtube-nocookie.com), with this on or off.
     @Published var musicVideoOnline: Bool { didSet { store(musicVideoOnline, "custom.musicVideoOnline") } }
-    /// On by default: a YouTube video's captions, loaded (unseen) by its
-    /// own player, are matched with the song's timed lyrics to set the
-    /// video's timing ("From captions"). The user's own timing always wins.
-    @Published var musicVideoCaptionSync: Bool {
-        didSet { store(musicVideoCaptionSync, "custom.musicVideoCaptionSync") }
-    }
     /// How much the video is darkened, 0...`musicVideoDimRange` upper bound.
     @Published var musicVideoDim: Double { didSet { store(musicVideoDim, "custom.musicVideoDim") } }
     /// Blur radius in points.
@@ -478,7 +472,6 @@ final class Settings: ObservableObject {
         let fallback = BackgroundMode(rawValue: d.string(forKey: "custom.musicVideoFallback") ?? "") ?? .auto
         musicVideoFallback = fallback == .musicVideo ? .auto : fallback
         musicVideoOnline = d.bool(forKey: "custom.musicVideoOnline")
-        musicVideoCaptionSync = d.object(forKey: "custom.musicVideoCaptionSync") as? Bool ?? true
         musicVideoDim = min(Self.musicVideoDimRange.upperBound,
                             max(0, d.object(forKey: "custom.musicVideoDim") as? Double ?? 0.35))
         musicVideoBlur = min(Self.musicVideoBlurRange.upperBound, max(0, d.object(forKey: "custom.musicVideoBlur") as? Double ?? 0))

@@ -1211,8 +1211,6 @@ final class YouTubeMusicVideoCoordinator: NSObject, WKNavigationDelegate, WKScri
     private(set) var videoID: String?
     private weak var view: WKWebView?
     private var navigation: WKNavigation?
-    /// The web view was opened with the caption capture script.
-    private var captionsWanted = false
     /// The video whose captions this page already passed on.
     private var capturedCaptions: String?
     private var blur: Double = -1
@@ -1258,13 +1256,10 @@ final class YouTubeMusicVideoCoordinator: NSObject, WKNavigationDelegate, WKScri
         guard let host else { return }
         let configuration = YouTubeEmbed.configuration()
         configuration.userContentController.add(WeakScriptHandler(self), name: YouTubeEmbed.messageName)
-        captionsWanted = Settings.shared.musicVideoCaptionSync
-        if captionsWanted {
-            configuration.userContentController.add(WeakScriptHandler(self), name: MusicVideoCaptionSync.messageName)
-            configuration.userContentController.addUserScript(
-                WKUserScript(source: MusicVideoCaptionSync.captureScript, injectionTime: .atDocumentStart,
-                             forMainFrameOnly: false))
-        }
+        configuration.userContentController.add(WeakScriptHandler(self), name: MusicVideoCaptionSync.messageName)
+        configuration.userContentController.addUserScript(
+            WKUserScript(source: MusicVideoCaptionSync.captureScript, injectionTime: .atDocumentStart,
+                         forMainFrameOnly: false))
         let view = BackgroundYouTubeView(frame: host.bounds, configuration: configuration)
         view.alphaValue = 0
         playerVisible = false
@@ -1284,9 +1279,7 @@ final class YouTubeMusicVideoCoordinator: NSObject, WKNavigationDelegate, WKScri
         playerVisible = false
         guard let view else { return }
         view.configuration.userContentController.removeScriptMessageHandler(forName: YouTubeEmbed.messageName)
-        if captionsWanted {
-            view.configuration.userContentController.removeScriptMessageHandler(forName: MusicVideoCaptionSync.messageName)
-        }
+        view.configuration.userContentController.removeScriptMessageHandler(forName: MusicVideoCaptionSync.messageName)
         view.navigationDelegate = nil
         view.stopLoading()
         view.removeFromSuperview()
@@ -1312,7 +1305,7 @@ final class YouTubeMusicVideoCoordinator: NSObject, WKNavigationDelegate, WKScri
                                                    videoDuration: nil) ?? 0
             capturedCaptions = nil
             let controller = MusicVideoController.shared
-            let captions = captionsWanted && controller.wantsCaptions(for: .youTube(videoID))
+            let captions = controller.wantsCaptions(for: .youTube(videoID))
                 ? (controller.captionLanguage() ?? YouTubeEmbed.playerLanguage()) : nil
             let html = YouTubeEmbed.html(videoID: videoID, start: start, page: page,
                                          overscan: framing.youTubeOverscan, box: box, captions: captions)
@@ -1571,7 +1564,7 @@ final class YouTubeMusicVideoCoordinator: NSObject, WKNavigationDelegate, WKScri
     /// for this view and video (`MusicVideoCaptionSync.capture`); the first
     /// one per page is used, then the player unloads its captions.
     private func receiveCaptions(_ message: WKScriptMessage) {
-        guard captionsWanted, message.webView === view, let videoID, capturedCaptions != videoID,
+        guard message.webView === view, let videoID, capturedCaptions != videoID,
               let body = message.body as? [String: Any], let url = body["url"] as? String,
               let text = body["text"] as? String, text.utf8.count <= MusicVideoCaptionSync.maximumReply else { return }
         let origin = message.frameInfo.securityOrigin
