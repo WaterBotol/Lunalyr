@@ -145,6 +145,19 @@ final class LyricSourceOptions: ObservableObject {
     /// The switched-on sources for a saved choice (nil: never saved), with
     /// each newer source not yet `seen` switched on; also returns the
     /// seen keys to record.
+    /// The switched-on sources stored in `defaults`. A source added after
+    /// someone saved their choices starts switched on, once, and is written
+    /// into the saved choices so it stays on (`enabled`'s didSet does not
+    /// run during init).
+    static func loadEnabled(_ defaults: UserDefaults) -> Set<LyricSourceID> {
+        let saved = defaults.stringArray(forKey: "custom.lyricSources")
+        let chosen = enabled(saved: saved, seen: { defaults.bool(forKey: $0) })
+        for key in chosen.newlySeen { defaults.set(true, forKey: key) }
+        if saved != nil, !chosen.newlySeen.isEmpty {
+            defaults.set(chosen.enabled.map(\.rawValue).sorted(), forKey: "custom.lyricSources")
+        }
+        return chosen.enabled
+    }
     static func enabled(saved: [String]?, seen: (String) -> Bool) -> (enabled: Set<LyricSourceID>, newlySeen: [String]) {
         var chosen = Set((saved ?? LyricSourceID.allCases.filter { !$0.isLocal }.map(\.rawValue)).compactMap(LyricSourceID.init(rawValue:)))
         var newlySeen: [String] = []
@@ -170,10 +183,7 @@ final class LyricSourceOptions: ObservableObject {
     private init() {
         let d = UserDefaults.standard
         order = Self.order(saved: d.stringArray(forKey: "custom.lyricSourceOrder"))
-        // A source added after someone saved their choices starts switched on, once.
-        let chosen = Self.enabled(saved: d.stringArray(forKey: "custom.lyricSources"), seen: { d.bool(forKey: $0) })
-        for key in chosen.newlySeen { d.set(true, forKey: key) }
-        enabled = chosen.enabled
+        enabled = Self.loadEnabled(d)
         mode = Mode(rawValue: d.string(forKey: "custom.lyricMatchMode") ?? "") ?? .smart
         repairQQGaps = d.object(forKey: "custom.repairQQGaps") as? Bool ?? true
     }

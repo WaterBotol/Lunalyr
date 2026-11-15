@@ -254,8 +254,11 @@ enum MusixmatchLyricsProvider {
             LyricTrace.note("Musixmatch refused a user token; not asking it again for \(Int(pause / 60)) min")
             return nil
         default:
+            // No usable token (refused, or a placeholder for a blocked
+            // client): asking again each song would not help, so pause too.
             guard let token = json.flatMap(token(from:)) else {
-                LyricTrace.note("Musixmatch gave no usable user token")
+                let pause = state.noteBlocked()
+                LyricTrace.note("Musixmatch gave no usable user token; not asking it again for \(Int(pause / 60)) min")
                 return nil
             }
             state.store(token: token)

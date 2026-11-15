@@ -204,6 +204,18 @@ final class MusixmatchProviderTests: XCTestCase {
         XCTAssertEqual(state.snapshot.blocks, 0)
     }
 
+    func testPlaceholderTokenPausesToo() async throws {
+        MusixmatchFixtureProtocol.reset(["token.get": [(200, #"{"message":{"header":{"status_code":200},"body":{"user_token":"UpgradeOnlyUpgradeOnlyUpgradeOnly"}}}"#)]])
+        let state = state()
+        let found = try await MusixmatchLyricsProvider.lookup(query, session: session, state: state)
+        XCTAssertNil(found)
+        XCTAssertNil(state.freshToken())
+        XCTAssertNotNil(state.blockedFor())
+        var other = query; other.title = "Another Song"
+        _ = try await MusixmatchLyricsProvider.lookup(other, session: session, state: state)
+        XCTAssertEqual(MusixmatchFixtureProtocol.actions, ["token.get"])
+    }
+
     // MARK: Source list
 
     @MainActor
@@ -225,6 +237,23 @@ final class MusixmatchProviderTests: XCTestCase {
         let later = LyricSourceOptions.enabled(saved: ["lrclib", "amll"], seen: { seen.contains($0) })
         XCTAssertEqual(later.enabled, [.lrclib, .amll], "switching it off again sticks")
         XCTAssertTrue(LyricSourceOptions.enabled(saved: nil, seen: { _ in false }).enabled.contains(.musixmatch))
+
+        // Across launches against stored defaults: still on at the second launch,
+        // and off for good once switched off.
+        let suite = "MusixmatchMigration-\(UUID().uuidString)"
+        let defaults = try! XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set(["lrclib", "amll"], forKey: "custom.lyricSources")
+        defaults.set(true, forKey: "custom.lyricSourcesSeenAMLL")
+        XCTAssertTrue(LyricSourceOptions.loadEnabled(defaults).contains(.musixmatch), "first launch")
+        XCTAssertTrue(LyricSourceOptions.loadEnabled(defaults).contains(.musixmatch), "second launch")
+        defaults.set(["lrclib", "amll"], forKey: "custom.lyricSources") // the user switches it off
+        XCTAssertFalse(LyricSourceOptions.loadEnabled(defaults).contains(.musixmatch), "stays off")
+        let fresh = "MusixmatchMigration-\(UUID().uuidString)"
+        let newUser = try! XCTUnwrap(UserDefaults(suiteName: fresh))
+        defer { newUser.removePersistentDomain(forName: fresh) }
+        XCTAssertTrue(LyricSourceOptions.loadEnabled(newUser).contains(.musixmatch))
+        XCTAssertNil(newUser.stringArray(forKey: "custom.lyricSources"), "a never-saved choice stays unsaved")
         XCTAssertEqual(LyricSourceID.musixmatch.timingCeiling, 3)
         XCTAssertEqual(LyricSourceID.musixmatch.title, "Musixmatch")
     }
