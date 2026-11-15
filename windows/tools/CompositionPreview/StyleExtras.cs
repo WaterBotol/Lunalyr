@@ -29,6 +29,7 @@ internal static class StyleExtras
                 "lead" => style with { PreviewLead = Number(value) },
                 "symbols" => style with { WordSymbols = value != "off" },
                 "presence" => style with { WordPresence = Number(value) },
+                "orb" => style with { OrbStyle = value },
                 "actions" => style with { ActionWords = value != "off" },
                 _ => throw new ArgumentException($"Unknown style extra {name}"),
             };

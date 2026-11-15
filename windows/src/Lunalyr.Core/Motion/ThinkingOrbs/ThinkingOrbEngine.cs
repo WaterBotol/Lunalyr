@@ -185,7 +185,8 @@ public static class ThinkingOrbEngine
     // ---- registry.ts ----------------------------------------------------------------------------------------------
 
     /// <summary>The frame for <paramref name="mode"/> at <paramref name="size"/> and engine time <paramref name="t"/>, into <paramref name="frame"/>.</summary>
-    public static OrbFrame Frame(OrbMode mode, double size, double t, OrbOpts o, OrbFrame? frame = null)
+    /// <param name="swell">Lunalyr's hook: how deep the listening wave swells, unless the options set "swell" (1: upstream's).</param>
+    public static OrbFrame Frame(OrbMode mode, double size, double t, OrbOpts o, OrbFrame? frame = null, double swell = 1)
     {
         frame ??= new OrbFrame();
         frame.Clear();
@@ -194,7 +195,7 @@ public static class ThinkingOrbEngine
             case OrbMode.Orbits: Orbits(size, t, o, frame); break;
             case OrbMode.Globe: Globe(size, t, o, frame); break;
             case OrbMode.Rubik: Rubik(size, t, o, frame); break;
-            case OrbMode.Wave: Wave(size, t, o, frame); break;
+            case OrbMode.Wave: Wave(size, t, o, frame, swell); break;
             case OrbMode.Web: Web(size, t, o, frame); break;
             case OrbMode.Braid: Braid(size, t, o, frame); break;
             case OrbMode.Ribbon:
@@ -359,14 +360,14 @@ public static class ThinkingOrbEngine
     }
 
     /// <summary>Wave: a waveform rolls through the rings (listening). Local hook: "swell" scales the wave's depth.</summary>
-    private static void Wave(double size, double t, OrbOpts o, OrbFrame frame)
+    private static void Wave(double size, double t, OrbOpts o, OrbFrame frame, double swellHook = 1)
     {
         var cx = size / 2;
         var cy = size / 2;
         var r = size / 2 * 0.874;
         var pt = new Proj(t * 0.18, 0.38, cx, cy, 1);
         var rs = RadiusScale(size, o["rsPow", 0.6]);
-        var swell = o["swell", 1];
+        var swell = o["swell", swellHook];
         var rings = (int)o["rings", 15];
         var lonDensity = o["lonDensity", 40];
         for (var ri = 0; ri <= rings; ri++)

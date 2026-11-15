@@ -159,6 +159,9 @@ public sealed record LyricStyle
     /// <summary>Three dots during instrumental breaks (the Mac's <c>custom.showInterludes</c>).</summary>
     public bool Interludes { get; init; } = true;
 
+    /// <summary>The thinking orb's style (the Mac's custom.thinkingOrb.style): one of thinking-orbs' nine states, or "mix".</summary>
+    public string OrbStyle { get; init; } = "listening";
+
     /// <summary>
     /// How present word animations are (Mac queue item 5): 1 is the look before 15 Nov 2026; above it, words travel
     /// further in, swell and glow more while sung, and drift further out. 2, the stronger sample, is what the user chose.

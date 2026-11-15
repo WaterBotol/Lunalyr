@@ -516,7 +516,7 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
             DrawLine(dc, line, time, _offsets[k]);
         }
         DrawCredits(dc, time);
-        if (SceneShown?.Style.Interludes != false && gap is { } found && found.InterludeCue(time, Options.PreviewLead) is { } cue) DrawCue(dc, cue, InterludeYield(time));
+        if (SceneShown?.Style.Interludes != false && gap is { } found && found.InterludeCue(time, Options.PreviewLead) is { } cue) DrawCue(dc, cue, wall, InterludeYield(time));
         // The next line is set a little ahead of time, not on the frame it first appears: laid out now, within the
         // pass's allowance, and baked a slice at a time over the next frames. The next line is the first one with words
         // after the one being sung (before anything is sung, the song's first). Setting each line whole, as before, it

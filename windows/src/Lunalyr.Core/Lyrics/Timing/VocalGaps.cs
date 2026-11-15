@@ -38,7 +38,7 @@ public readonly record struct VocalGap(double Start, double End, int NextVocal)
         var opacity = Math.Min(fadeIn, fadeOut);
         double? progress = knownEnd ? Math.Min(1, Math.Max(0, elapsed / Math.Max(0.01, cueEnd - Start))) : null;
         var seed = LyricPhraseTiming.TimeSeed(Start) ^ 0x1D07_5EEDUL;
-        return opacity > 0 ? new InstrumentalCue(elapsed, opacity, progress, seed, energy, fadeOut) : null;
+        return opacity > 0 ? new InstrumentalCue(elapsed, opacity, progress, seed, energy, fadeOut, knownEnd ? cueEnd - Start : null) : null;
     }
 }
 
@@ -48,9 +48,10 @@ public readonly record struct VocalGap(double Start, double End, int NextVocal)
 /// <param name="Progress">How far through the break, 0…1; null when its end is unknown.</param>
 /// <param name="Seed">Seeds the dots' wander, so each break moves in its own way.</param>
 /// <param name="Energy">Live or timing-derived intensity, 0…1: livelier music, livelier dots.</param>
+/// <param name="Span">From the break's start to where the cue hands over (its end less the preview), null when unknown.</param>
 /// <param name="FadeOut">1 until the cue starts leaving, falling to 0 as it goes (the orb shrinks as it leaves).</param>
 public readonly record struct InstrumentalCue(double Elapsed, double Opacity, double? Progress, ulong Seed = 0x1D07_5EED,
-                                             double Energy = 0, double FadeOut = 1)
+                                             double Energy = 0, double FadeOut = 1, double? Span = null)
 {
     /// <summary>
     /// Vertical wander of one dot, -1…1. Each dot follows its own seeded noise over a shared slow swell, so the three

@@ -37,6 +37,12 @@ public static class VisualiserServices
     {
         _audio = audio;
         _sound = sound;
+        // The thinking orb hears the same sound: its level, bass and beat (silent while capture is off).
+        Lunalyr.Render.Compositions.OrbSound.Use(sound is null ? null : () =>
+        {
+            var heard = sound.Latest();
+            return (heard.Level, heard.Bass, heard.Beat);
+        });
     }
 
     /// <summary>Power saving replaced the visualiser (its fallback is line patterns or colour only).</summary>
