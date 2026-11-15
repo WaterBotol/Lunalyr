@@ -541,10 +541,15 @@ final class LyricsFetcher {
             return .publish
         }
         /// Another source's match that ranks higher, or the same source's
-        /// lyrics given better timing (`LyricsFetcher.mergingTiming`).
+        /// lyrics given better timing (`LyricsFetcher.mergingTiming`). A
+        /// merge that took word timing from a better donor once more
+        /// sources answered replaces the earlier merge of the same text, so
+        /// what shows is what is listed and saved.
         func isUpgrade(_ next: LyricCandidate, over current: LyricCandidate) -> Bool {
-            let better = next.source != current.source
-                || LyricsFetcher.rankedTiming(next.result) > LyricsFetcher.rankedTiming(current.result)
+            let nextTiming = LyricsFetcher.rankedTiming(next.result), currentTiming = LyricsFetcher.rankedTiming(current.result)
+            if next.source == current.source, LyricsFetcher.timingDonor(next) != nil, LyricsFetcher.timingDonor(current) != nil,
+               nextTiming == currentTiming, !LyricsFetcher.sameResult(next.result, current.result) { return true }
+            let better = next.source != current.source || nextTiming > currentTiming
             return better && LyricsFetcher.outranks(next, current, query: query, options: options)
         }
         private mutating func show(_ candidate: LyricCandidate) {

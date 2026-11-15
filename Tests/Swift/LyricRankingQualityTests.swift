@@ -376,7 +376,7 @@ final class LyricRankingQualityTests: XCTestCase {
 
     func testTheMergeReplacesTheSameSourceOnScreen() throws {
         let pair = mergePair()
-        let options = options([.musixmatch, .qqMusic])
+        let options = options([.musixmatch, .qqMusic, .kugou])
         var publication = LyricsFetcher.Publication(options: options, query: query)
         let first = LyricsFetcher.screen([pair.recipient], query: query, options: options).accepted
         XCTAssertEqual(publication.step(best: first.first, settled: false, graceOver: true, settleOver: false, latest: first), .publish)
@@ -385,6 +385,25 @@ final class LyricRankingQualityTests: XCTestCase {
         XCTAssertEqual(publication.shown.flatMap(LyricsFetcher.timingDonor), "QQ Music")
         // The same lyrics again change nothing.
         XCTAssertEqual(publication.step(best: later.first, settled: true, graceOver: true, settleOver: true, latest: later), .wait)
+        // A donor that lends more lines once it answers replaces the first merge, so what shows is what is listed.
+        let fuller = candidate(.kugou, pair.donorLines, provenance: "Kugou Music")
+        var sparse = pair.donor
+        if case .synced(let lines, let p) = sparse.result {
+            sparse.result = .synced(lines.enumerated().map { index, line in
+                guard index % 4 == 1 else { return line }
+                var copy = line
+                copy.words = line.words.map { Word(text: $0.text + "x", start: $0.start, end: $0.end) }
+                copy.text = copy.words.map(\.text).joined(separator: " ")
+                return copy
+            }, p)
+        }
+        var stepwise = LyricsFetcher.Publication(options: options, query: query)
+        let early = LyricsFetcher.screen([pair.recipient, sparse], query: query, options: options).accepted
+        XCTAssertEqual(stepwise.step(best: early.first, settled: false, graceOver: true, settleOver: false, latest: early), .publish)
+        let full = LyricsFetcher.screen([pair.recipient, sparse, fuller], query: query, options: options).accepted
+        XCTAssertEqual(LyricsFetcher.timingDonor(full[0]), "Kugou Music")
+        XCTAssertEqual(stepwise.step(best: full.first, settled: true, graceOver: true, settleOver: true, latest: full), .publish)
+        XCTAssertTrue(LyricsFetcher.sameResult(stepwise.shown?.result, full[0].result))
     }
 
     func testTheLookupShowsAndSavesTheMerge() async throws {
