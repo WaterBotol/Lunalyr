@@ -17,7 +17,7 @@ public readonly record struct RunAccent(string? Symbol, WordAction? Action)
 }
 
 /// <summary>The two word lists, keyed by <see cref="WordAccents.EnglishKey"/>, in their display order.</summary>
-public sealed class WordAccentLists
+public sealed class WordAccentLists : IEquatable<WordAccentLists>
 {
     public WordAccentLists(IReadOnlyList<KeyValuePair<string, string>> symbols, IReadOnlyList<KeyValuePair<string, WordAction>> actions)
     {
@@ -33,6 +33,14 @@ public sealed class WordAccentLists
     public IReadOnlyList<KeyValuePair<string, WordAction>> ActionOrder { get; }
 
     public static WordAccentLists Defaults { get; } = new(WordAccents.DefaultSymbols, WordAccents.DefaultActions);
+
+    /// <summary>Lists are equal when they hold the same words with the same values, in the same order.</summary>
+    public bool Equals(WordAccentLists? other) =>
+        other is not null && (ReferenceEquals(this, other) || SymbolOrder.SequenceEqual(other.SymbolOrder) && ActionOrder.SequenceEqual(other.ActionOrder));
+
+    public override bool Equals(object? obj) => Equals(obj as WordAccentLists);
+
+    public override int GetHashCode() => HashCode.Combine(SymbolOrder.Count, ActionOrder.Count);
 }
 
 public static class WordAccents

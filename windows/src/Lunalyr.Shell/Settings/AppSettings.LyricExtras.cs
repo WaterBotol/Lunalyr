@@ -32,6 +32,37 @@ public sealed partial record AppSettings
     /// <summary>The layouts backing words can animate in (the Mac's <c>BackingVocals.choices</c>).</summary>
     public static IReadOnlyList<string> BackingVocalChoices { get; } = ["scattered", "constellation", "echo"];
 
+    // ---- Word symbols and action words (the Mac's ad5a6a6 and cba108f) ----
+
+    /// <summary>"Show symbols beside listed words" (Mac <c>custom.wordSymbols.enabled</c>), per surface.</summary>
+    public bool WordSymbolsEnabled { get; init; } = true;
+
+    /// <summary>
+    /// The word symbol list (Mac <c>custom.wordSymbols.words</c>): word → SF Symbol name. Null is the default list
+    /// (Restore Defaults removes it); any edit stores the whole list. Shared by both surfaces.
+    /// </summary>
+    public IReadOnlyDictionary<string, string>? WordSymbolsWords { get; init; }
+
+    /// <summary>"Animate listed action words" (Mac <c>custom.actionWords.enabled</c>), per surface.</summary>
+    public bool ActionWordsEnabled { get; init; } = true;
+
+    /// <summary>The action word list (Mac <c>custom.actionWords.words</c>): word → action. Null is the default list.</summary>
+    public IReadOnlyDictionary<string, string>? ActionWordsWords { get; init; }
+
+    private static (IReadOnlyDictionary<string, string>? Symbols, IReadOnlyDictionary<string, string>? Actions, WordAccentLists Lists) _wordLists =
+        (null, null, WordAccentLists.Defaults);
+
+    /// <summary>The two lists as the renderer uses them (made once per stored list).</summary>
+    public WordAccentLists WordLists()
+    {
+        var cached = _wordLists;
+        if (ReferenceEquals(cached.Symbols, WordSymbolsWords) && ReferenceEquals(cached.Actions, ActionWordsWords)) return cached.Lists;
+        var lists = WordSymbolsWords is null && ActionWordsWords is null ? WordAccentLists.Defaults
+            : new WordAccentLists(WordAccents.CleanSymbols(WordSymbolsWords), WordAccents.CleanActions(ActionWordsWords));
+        _wordLists = (WordSymbolsWords, ActionWordsWords, lists);
+        return lists;
+    }
+
     // ---- Typography ----
 
     /// <summary>"Add Editorial typography" (Mac <c>custom.editorialTypography</c>): a second, contrasting face in every layout.</summary>
@@ -241,6 +272,9 @@ public sealed partial record AppSettings
             NoWordReveal = new ValueList(noReveal),
             NoNextWordPreview = new ValueList(noPreview),
             PreviewLead = lead,
+            WordSymbols = WordSymbolsEnabled,
+            ActionWords = ActionWordsEnabled,
+            WordLists = WordLists(),
         };
     }
 }

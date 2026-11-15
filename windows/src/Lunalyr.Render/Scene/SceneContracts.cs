@@ -159,6 +159,15 @@ public sealed record LyricStyle
     /// <summary>Three dots during instrumental breaks (the Mac's <c>custom.showInterludes</c>).</summary>
     public bool Interludes { get; init; } = true;
 
+    /// <summary>"Show symbols beside listed words" (the Mac's ad5a6a6): a small symbol beside a listed word of a word-timed line.</summary>
+    public bool WordSymbols { get; init; } = true;
+
+    /// <summary>"Animate listed action words" (the Mac's cba108f): a short motion on a listed action word as it is sung.</summary>
+    public bool ActionWords { get; init; } = true;
+
+    /// <summary>The word symbol and action word lists (shared by both surfaces).</summary>
+    public Lunalyr.Core.Compositions.WordAccentLists WordLists { get; init; } = Lunalyr.Core.Compositions.WordAccentLists.Defaults;
+
     /// <summary>
     /// Where highlight tiles take their colour from, as the Mac's <c>LyricHighlightMode</c> raw values: "complement"
     /// (opposite the lyric colour; the default), "album" (the cover's richest colour) or "custom"

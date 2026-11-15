@@ -195,7 +195,7 @@ public static class LyricStyleProfiles
         // Settings
         "fontChoice", "fontFamily", "lyricComposition", "constellationSpread", "constellationLinkOpacity",
         "wordRevealByStyle", "wordArrival", "wordArrivalByStyle", "nextWordPreviewByStyle", "nextWordPreviewLead",
-        "wordEntranceMix", "echoStrength", "lyricScale", "showInterludes",
+        "wordEntranceMix", "echoStrength", "lyricScale", "showInterludes", "wordSymbolsEnabled", "actionWordsEnabled",
         "editorialTypography", "editorialAmount", "randomizeLyricFonts",
         // Layout rotation, backing vocals, credits, the opening title
         "rotateLayouts", "backingVocalsLayer", "backingVocalStyle", "creditsLayer", "openingTitle", "openingTitleCover",

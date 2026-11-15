@@ -198,6 +198,22 @@ internal static class LyricStylePage
         page.Children.Add(Card("Show a glowing orb during instrumental breaks", null, "",
             Toggle(ctx, s => s.ShowInterludes, (s, v) => s with { ShowInterludes = v })));
 
+        // ---- Word symbols and action words (the Mac's ad5a6a6 and cba108f) ----
+        Section(page, "Word symbols");
+        page.Children.Add(Card("Show symbols beside listed words", "A small symbol beside words like love, fire or home, in English lines timed by word.", "",
+            Toggle(ctx, s => s.WordSymbolsEnabled, (s, v) => s with { WordSymbolsEnabled = v })));
+        page.Children.Add(SettingsKit.Expander("Word symbol list", "The words that take a symbol, and which.", null,
+            WordListEditor.Build(ctx, "word symbol list", s => s.WordSymbolsWords, (s, v) => s with { WordSymbolsWords = v },
+                WordAccents.DefaultSymbols, WordListEditor.SymbolChoices, "star")));
+
+        Section(page, "Action words");
+        page.Children.Add(Card("Animate listed action words", "Words like spin, fall or freeze move as they are sung, in English lines timed by word.", "",
+            Toggle(ctx, s => s.ActionWordsEnabled, (s, v) => s with { ActionWordsEnabled = v })));
+        page.Children.Add(SettingsKit.Expander("Action word list", "The words that move, and how.", null,
+            WordListEditor.Build(ctx, "action word list", s => s.ActionWordsWords, (s, v) => s with { ActionWordsWords = v },
+                WordAccents.DefaultActions.Select(pair => new KeyValuePair<string, string>(pair.Key, pair.Value.Name())).ToList(),
+                WordListEditor.ActionChoices, "spin")));
+
         // ---- Remember a style ----
         Section(page, "Remember a style");
         page.Children.Add(Card("Use remembered styles", "A layout and text colour kept for a song or an artist wins while it plays.", "",
