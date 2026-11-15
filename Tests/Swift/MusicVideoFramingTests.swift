@@ -92,29 +92,29 @@ final class MusicVideoFramingTests: XCTestCase {
         XCTAssertGreaterThan(MusicVideoFraming.whole.backdropShare(aspect: hd, in: tall), 0.6)
     }
 
-    func testWholeMatchesTheWidthEvenWhenTheVideoIsNarrower() {
-        for screen in [laptop, wide, tall] {
+    func testWholeNeverCropsANarrowerVideo() {
+        for screen in [laptop, wide] {
             let rect = MusicVideoFraming.whole.rect(aspect: 4.0 / 3.0, in: screen)
-            XCTAssertEqual(rect.width, screen.width * MusicVideoFraming.wholeBleed, accuracy: 0.01,
-                           "the picture's width is the screen's, \(screen)")
+            XCTAssertEqual(rect.height, screen.height * MusicVideoFraming.wholeBleed, accuracy: 0.01,
+                           "the picture's height is the screen's, \(screen)")
+            XCTAssertLessThan(rect.width, screen.width, "space at the sides for the backdrop")
             XCTAssertEqual(rect.width / rect.height, 4.0 / 3.0, accuracy: 0.001)
-            XCTAssertEqual(rect.midY, screen.height / 2, accuracy: 0.001, "centred; top and bottom lose alike")
+            XCTAssertEqual(rect.midX, screen.width / 2, accuracy: 0.001)
+            XCTAssertLessThanOrEqual(MusicVideoFraming.whole.croppedShare(aspect: 4.0 / 3.0, in: screen), 0.021,
+                                     "only the hairline bleed")
+            XCTAssertGreaterThan(MusicVideoFraming.whole.backdropShare(aspect: 4.0 / 3.0, in: screen), 0.05)
         }
-        let onLaptop = MusicVideoFraming.whole.rect(aspect: 4.0 / 3.0, in: laptop)
-        XCTAssertGreaterThan(onLaptop.height, laptop.height, "4:3 on a 16:10 screen runs past the top and bottom")
-        XCTAssertEqual(MusicVideoFraming.whole.backdropShare(aspect: 4.0 / 3.0, in: laptop), 0, accuracy: 0.0001,
-                       "no side bands")
         let cinema = MusicVideoFraming.whole.rect(aspect: 2.39, in: laptop)
         XCTAssertLessThan(cinema.height, laptop.height, "a wider picture leaves bands above and below")
+        XCTAssertEqual(MusicVideoFraming.ambient.rect(aspect: 4.0 / 3.0, in: laptop),
+                       MusicVideoFraming.whole.rect(aspect: 4.0 / 3.0, in: laptop))
     }
 
-    func testLibraryGravityMatchesTheWidth() {
+    func testLibraryGravityFitsTheWholePicture() {
         let whole = MusicVideoFraming.whole
         XCTAssertEqual(whole.videoGravity(contentAspect: hd, in: laptop), .resizeAspect, "wider: bands above and below")
-        XCTAssertEqual(whole.videoGravity(contentAspect: 4.0 / 3.0, in: laptop), .resizeAspectFill,
-                       "taller: width matched, top and bottom cut")
+        XCTAssertEqual(whole.videoGravity(contentAspect: 4.0 / 3.0, in: laptop), .resizeAspect, "narrower: bands at the sides")
         XCTAssertEqual(whole.videoGravity(contentAspect: nil, in: laptop), .resizeAspect, "unknown yet")
-        XCTAssertEqual(whole.videoGravity(contentAspect: hd, in: tall), .resizeAspect)
         XCTAssertEqual(MusicVideoFraming.fill.videoGravity(contentAspect: hd, in: laptop), .resizeAspectFill)
         XCTAssertEqual(MusicVideoFraming.fill.videoGravity(contentAspect: nil, in: laptop), .resizeAspectFill)
     }
@@ -268,8 +268,9 @@ final class MusicVideoFramingTests: XCTestCase {
                 let layout = MusicVideoFraming.wholeLayout(contentAspect: aspect, in: screen)
                 XCTAssertLessThanOrEqual(layout.visible.width, screen.width + 0.001, "\(screen) \(aspect)")
                 XCTAssertLessThanOrEqual(layout.visible.height, screen.height + 0.001, "\(screen) \(aspect)")
-                XCTAssertEqual(layout.frame.width, screen.width * MusicVideoFraming.wholeBleed, accuracy: 0.01,
-                               "the width is matched")
+                let fitted = max(layout.frame.width / (screen.width * MusicVideoFraming.wholeBleed),
+                                 layout.frame.height / (screen.height * MusicVideoFraming.wholeBleed))
+                XCTAssertEqual(fitted, 1, accuracy: 0.0001, "fitted: width or height matched, never cut")
                 let box = try XCTUnwrap(layout.box)
                 XCTAssertGreaterThanOrEqual(box.width, 99.9, "the player covers the view across")
                 XCTAssertGreaterThanOrEqual(box.height, 99.9, "and down")
@@ -281,7 +282,7 @@ final class MusicVideoFramingTests: XCTestCase {
         XCTAssertEqual(try XCTUnwrap(hdOnLaptop.box).height, 100, accuracy: 0.1)
         // A 4:3 video: the player is wider than the view, so its own side bars fall outside.
         let square = MusicVideoFraming.wholeLayout(contentAspect: 4.0 / 3.0, in: laptop)
-        XCTAssertEqual(square.visible.height, laptop.height, accuracy: 0.01, "top and bottom cut")
+        XCTAssertLessThan(square.visible.width, laptop.width, "bands at the sides, nothing cut")
         XCTAssertGreaterThan(try XCTUnwrap(square.box).width, 130)
     }
 

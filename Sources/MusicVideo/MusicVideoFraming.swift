@@ -9,11 +9,12 @@ enum MusicVideoFraming: String, CaseIterable, Identifiable, Sendable {
     /// Aspect-filled, cropping the edges. A YouTube video is zoomed a
     /// further `fillOverscan` so YouTube's title bar and logo fall off-screen.
     case fill
-    /// The picture's width matched to the screen's (grown by `wholeBleed`):
-    /// nothing is cut from its sides. A picture wider than the screen leaves
-    /// space above and below, which shows a blurred, darkened copy of the
-    /// album cover or the video's own still, never black bars; a taller one
-    /// (4:3 on a laptop) loses a little of its top and bottom. A YouTube
+    /// The whole picture fitted inside the screen (grown by `wholeBleed`):
+    /// nothing is ever cut off. A picture wider than the screen leaves space
+    /// above and below, a narrower one (4:3 on a laptop) space at the sides;
+    /// it shows a blurred, darkened copy of the album cover or the video's
+    /// own still (or the ambient glow), never black bars. (Until 16 Nov 2026
+    /// the width was matched, so a narrower picture lost its top and bottom.) A YouTube
     /// player shows as soon as it plays; YouTube's controls over its first
     /// seconds are covered (`MusicVideoOverlayMask`).
     case whole
@@ -60,10 +61,7 @@ enum MusicVideoFraming: String, CaseIterable, Identifiable, Sendable {
     /// width, which is AVFoundation's fit for a wider picture and its fill
     /// for a taller one.
     func videoGravity(contentAspect: CGFloat?, in container: CGSize) -> AVLayerVideoGravity {
-        guard isWhole else { return .resizeAspectFill }
-        guard let contentAspect, contentAspect > 0, contentAspect.isFinite,
-              container.width > 0, container.height > 0 else { return .resizeAspect }
-        return contentAspect >= container.width / container.height ? .resizeAspect : .resizeAspectFill
+        isWhole ? .resizeAspect : .resizeAspectFill
     }
 
     /// The extra scale of a fitted picture (none when filled).
@@ -84,7 +82,7 @@ enum MusicVideoFraming: String, CaseIterable, Identifiable, Sendable {
         var size: CGSize
         switch self {
         case .fill: size = fits ? byHeight : byWidth
-        case .whole, .ambient: size = byWidth
+        case .whole, .ambient: size = fits ? byWidth : byHeight
         }
         let grow = isWhole ? Self.wholeBleed : 1
         size = CGSize(width: size.width * grow, height: size.height * grow)
