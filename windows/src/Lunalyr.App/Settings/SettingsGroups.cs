@@ -133,11 +133,13 @@ internal static class SettingsGroups
         return expander;
     }
 
-    /// <summary>"Advanced layout", "Advanced sources"; a name stays capitalised ("Advanced Discord").</summary>
+    /// <summary>"Advanced layout", "Advanced sources"; a name stays capitalised ("Advanced Discord"); "This …" sections get "More for this …".</summary>
     internal static string AdvancedTitle(string? sectionTitle)
     {
         if (string.IsNullOrWhiteSpace(sectionTitle)) return "Advanced";
         var first = sectionTitle.Split(' ')[0];
+        // "This song’s video" reads badly after "Advanced": "More for this song’s video".
+        if (first == "This") return "More for t" + sectionTitle[1..];
         var keep = first.Length > 1 && (char.IsUpper(first[1]) || Names.Contains(first));
         return "Advanced " + (keep ? sectionTitle : char.ToLowerInvariant(sectionTitle[0]) + sectionTitle[1..]);
     }
