@@ -137,20 +137,29 @@ public static class ThinkingOrbStage
                                 Brighten: 0.25 * onset + 0.2 * focus, HaloAlpha: 0.10 + 0.14 * focus, first, second);
     }
 
+    /// <summary>The Mix pool, in the Mac's order (its styles list without mix).</summary>
+    public static readonly IReadOnlyList<OrbState> MixPool =
+        [OrbState.Listening, OrbState.Searching, OrbState.Solving, OrbState.Working, OrbState.Weaving, OrbState.Connecting,
+         OrbState.Composing, OrbState.Shaping, OrbState.Breathing];
+
     /// <summary>
-    /// "Mix": one of the nine states for a break, from a hash of its seed, never the previous break's.
+    /// "Mix": one of the nine states for a break, never the previous break's, picked as the Mac does: splitmix64 of the
+    /// break's seed (TimeSeed(start) ^ 0x1D075EED) over the pool in <see cref="MixPool"/> order.
     /// </summary>
     public static OrbState Mix(ulong seed, OrbState? previous)
     {
-        var count = previous is null ? 9 : 8;
-        var hash = (seed ^ (seed >> 29)) * 0x9E37_79B9_7F4A_7C15UL;
-        var pick = (int)((hash >> 33) % (ulong)count);
-        foreach (var state in ThinkingOrbEngine.States)
+        Span<OrbState> pool = stackalloc OrbState[9];
+        var count = 0;
+        foreach (var state in MixPool)
+            if (state != previous) pool[count++] = state;
+        unchecked
         {
-            if (state == previous) continue;
-            if (pick-- == 0) return state;
+            var z = seed + 0x9E3779B97F4A7C15UL;
+            z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9UL;
+            z = (z ^ (z >> 27)) * 0x94D049BB133111EBUL;
+            z ^= z >> 31;
+            return pool[(int)(z % (ulong)count)];
         }
-        return OrbState.Listening;
     }
 
     /// <summary>
