@@ -985,6 +985,9 @@ private struct ScatteredRunInk: View, Equatable {
                                        tint: frame.ink.sweeps ? frame.tint : 0, opacity: symbolOpacity)
                     }
                 }
+                // Word and symbol at their own size: a slot proposed only
+                // the word's width must not wrap the word to fit the symbol.
+                .fixedSize(horizontal: symbol != nil, vertical: false)
                 run.reading?.revealing(frame.readingReveal).tinted(frame.ink.reading).opacity(frame.readingOpacity)
             }
             .modifier(Self.Motion(run: run, frame: frame, arrival: arrival, settles: settles, reduceMotion: reduceMotion))

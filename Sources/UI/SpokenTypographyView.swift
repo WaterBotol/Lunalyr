@@ -490,6 +490,8 @@ struct RollingUnit: View {
                                    opacity: symbolOpacity)
                 }
             }
+            // A word with a symbol keeps its own width, never wrapping to fit it.
+            .fixedSize(horizontal: symbol != nil, vertical: false)
             if let reading = token.reading?.revealing(readingReveal).tinted(reading.opacity(readingOpacity)) {
                 if let readingWidth { reading.wrapping(at: readingWidth) } else { reading }
             }

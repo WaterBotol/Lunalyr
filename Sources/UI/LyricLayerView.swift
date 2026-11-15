@@ -1022,15 +1022,19 @@ struct LyricLayer: View {
     /// the window's runs.
     private func wordAccents(_ index: Int, words: [LyricsFetcher.Word], glue: [Bool],
                              rolling: LyricLayerCache.RollingWindow?, scene: SceneLines) -> WordAccentPlan {
+        let lists = settings.wordAccentLists
+        guard lists.symbols != nil || lists.actions != nil else { return .none }
         guard readingOptions.display != .replace || scene.romanized[index] == nil else { return .none }
         guard let rolling else { return WordAccentPlan.line(words, glue: glue, settings: settings) }
-        var plan = WordAccentPlan()
-        for row in LyricPhraseTiming.rollingRange(around: index, lines: scene.lines) {
-            let line = scene.lines[row]
-            plan.merge(WordAccentPlan.line(line.words, glue: LyricRuns.rollingGlue(line: line, words: line.words),
-                                           settings: settings))
+        return WordAccentPlan.kept(rolling.words.map(\.presentationID), settings: settings) {
+            var plan = WordAccentPlan()
+            for row in LyricPhraseTiming.rollingRange(around: index, lines: scene.lines) {
+                let line = scene.lines[row]
+                plan.merge(WordAccentPlan.line(line.words, glue: LyricRuns.rollingGlue(line: line, words: line.words),
+                                               settings: settings))
+            }
+            return plan.rekeyed(for: rolling.words, parts: rolling.parts)
         }
-        return plan.rekeyed(for: rolling.words, parts: rolling.parts)
     }
 
     /// Reading pairs for a line set in runs, built once per line rather

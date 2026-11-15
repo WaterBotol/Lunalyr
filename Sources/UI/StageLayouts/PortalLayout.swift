@@ -296,9 +296,13 @@ extension StageLyricView {
         let reach = (0.8 + 0.5 * chance(nil, 3)) / speed.squareRoot()
         let shiftX = (chance(nil, 4) - 0.5) * 0.24 * stageSize.width
         let lift = stageSize.height * (0.1 + 0.08 * chance(nil, 5))
-        // A word on the Word symbols list carries the user's symbol in its pill.
+        // Portal keeps its own pictures; a listed word it has none for
+        // (one the user added) carries its Word symbol in its pill.
         let icons = Self.portalIcons(all.map(\.text)) { chance($0 < 0 ? nil : $0, 6) }
-            .enumerated().map { accent(all[$0.offset])?.symbol ?? $0.element }
+            .enumerated().map { item in
+                LyricWordIcons.symbol(for: all[item.offset].text) == nil
+                    ? accent(all[item.offset])?.symbol ?? item.element : item.element
+            }
         let shapes = Self.portalShapes(count: total) { chance($0, 16) }
         // The trail zig-zags a little either side; the pills' heights, not
         // the stage's, set how far apart they are, so no two overlap.

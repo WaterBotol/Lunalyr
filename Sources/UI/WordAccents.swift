@@ -254,16 +254,36 @@ struct WordAccentPlan: Equatable {
     }
 
     /// The plan for one line with the app's lists, kept for the line so a
-    /// frame never matches the words again.
+    /// frame never matches the words again. Bracketed backing vocals, which
+    /// `LyricLineView` lifts out and draws without accents, are left out
+    /// first (when `liftsBacking`), so "(love)" never takes the lead's
+    /// symbol or action.
     @MainActor
-    static func line(_ words: [LyricsFetcher.Word], glue: [Bool], settings: Settings = .shared) -> WordAccentPlan {
+    static func line(_ words: [LyricsFetcher.Word], glue: [Bool], settings: Settings = .shared,
+                     liftsBacking: Bool = BackingVocals.isOn) -> WordAccentPlan {
         let lists = settings.wordAccentLists
         guard lists.symbols != nil || lists.actions != nil else { return .none }
-        let key = MemoKey(words: words.map(\.presentationID), glue: glue, version: lists.version)
+        let key = MemoKey(words: words.map(\.presentationID), glue: glue, version: lists.version, lifts: liftsBacking)
         if let cached = memo[key] { return cached }
         if memo.count > 96 { memo.removeAll(keepingCapacity: true) }
-        let plan = make(words: words, glue: glue, symbols: lists.symbols, actions: lists.actions)
+        let lead = liftsBacking ? BackingVocals.split(words, glue: glue) : nil
+        let plan = make(words: lead?.main ?? words, glue: lead?.mainGlue ?? glue,
+                        symbols: lists.symbols, actions: lists.actions)
         memo[key] = plan
+        return plan
+    }
+
+    /// A plan built once per `key` (a rolling window's runs) and list
+    /// version, for callers that combine several lines' plans.
+    @MainActor
+    static func kept(_ key: [TimedWordKey], settings: Settings = .shared, build: () -> WordAccentPlan) -> WordAccentPlan {
+        let lists = settings.wordAccentLists
+        guard lists.symbols != nil || lists.actions != nil else { return .none }
+        let memoKey = MemoKey(words: key, glue: [], version: lists.version, lifts: BackingVocals.isOn, window: true)
+        if let cached = memo[memoKey] { return cached }
+        if memo.count > 96 { memo.removeAll(keepingCapacity: true) }
+        let plan = build()
+        memo[memoKey] = plan
         return plan
     }
 
@@ -271,6 +291,8 @@ struct WordAccentPlan: Equatable {
         let words: [TimedWordKey]
         let glue: [Bool]
         let version: Int
+        var lifts = false
+        var window = false
     }
     @MainActor private static var memo: [MemoKey: WordAccentPlan] = [:]
 

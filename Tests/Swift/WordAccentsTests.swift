@@ -134,6 +134,19 @@ final class WordAccentsTests: XCTestCase {
         XCTAssertEqual(plan.accents.count, 1, "sun·shine is one word, not sun")
     }
 
+    func testBackingVocalsTakeNoSlot() {
+        let defaults = LunalyrTestEnvironment.isolatedDefaults("LunalyrTests.WordAccents")
+        let settings = Settings(defaults: defaults, notifications: NotificationCenter())
+        let words = Self.line(["(spin", "love)", "we", "fall", "in", "love"])
+        let lifted = WordAccentPlan.line(words, glue: [], settings: settings, liftsBacking: true)
+        XCTAssertNil(lifted[words[0].presentationID])
+        XCTAssertNil(lifted[words[1].presentationID])
+        XCTAssertEqual(lifted[words[3].presentationID]?.action, .dip, "the lead's action word moves")
+        XCTAssertEqual(lifted[words[5].presentationID]?.symbol, "heart.fill", "the lead's love shows its heart")
+        let kept = WordAccentPlan.line(words, glue: [], settings: settings, liftsBacking: false)
+        XCTAssertEqual(kept[words[0].presentationID]?.action, .spin)
+    }
+
     func testOffPlansNothing() {
         let words = Self.line(["love", "spin"])
         XCTAssertTrue(WordAccentPlan.make(words: words, glue: [], symbols: nil, actions: nil).isEmpty)
