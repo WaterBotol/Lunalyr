@@ -180,13 +180,13 @@ describe("state relay", () => {
     const listener = await open(`/rooms/${room}/listen`);
     expect(await host.next((m) => m.type === "listeners")).toEqual({ type: "listeners", count: 1 });
 
-    host.send(state(1, { lyrics: LYRICS, host: { name: "Tommy" } }));
+    host.send(state(1, { lyrics: LYRICS, host: { name: "Alex" } }));
     const got = await listener.next((m) => m.type === "state");
     expect(got.age).toBe(0);
     expect(got.seq).toBe(1);
     expect(got.track.title).toBe("Blinding Lights");
     expect(got.lyrics).toEqual(LYRICS);
-    expect(got.host).toEqual({ name: "Tommy" });
+    expect(got.host).toEqual({ name: "Alex" });
 
     const res = await worker.fetch(`${BASE}/rooms/${room}/state`, { headers: { Origin: "https://example.com" } });
     expect(res.status).toBe(200);

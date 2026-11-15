@@ -14,7 +14,7 @@ final class ListenAlongFlowTests: XCTestCase {
 
     private func stateText(playing: Bool = true, position: Double, track: ListenProtocol.Track? = nil) -> String {
         let state = ListenProtocol.State(seq: 1, track: track ?? self.track, playing: playing,
-                                         position: position, lyrics: nil, host: .init(name: "Tommy"))
+                                         position: position, lyrics: nil, host: .init(name: "Alex"))
         return String(decoding: ListenProtocol.encode(state), as: UTF8.self)
     }
 

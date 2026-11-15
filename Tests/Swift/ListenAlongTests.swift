@@ -14,7 +14,7 @@ final class ListenProtocolTests: XCTestCase {
     func testStateEncodesEveryFieldOfTheContract() throws {
         let state = ListenProtocol.State(seq: 42, track: track, playing: true, position: 63.2,
                                          lyrics: [.init(start: 12.1, end: 15, text: "I said, ooh")],
-                                         host: .init(name: "Tommy"))
+                                         host: .init(name: "Alex"))
         let json = try object(ListenProtocol.encode(state))
         XCTAssertEqual(json["type"] as? String, "state")
         XCTAssertEqual(json["v"] as? Int, 1)
@@ -34,7 +34,7 @@ final class ListenProtocolTests: XCTestCase {
         XCTAssertEqual(lyrics.first?["start"] as? Double, 12.1)
         XCTAssertEqual(lyrics.first?["end"] as? Double, 15)
         XCTAssertEqual(lyrics.first?["text"] as? String, "I said, ooh")
-        XCTAssertEqual((json["host"] as? [String: Any])?["name"] as? String, "Tommy")
+        XCTAssertEqual((json["host"] as? [String: Any])?["name"] as? String, "Alex")
     }
 
     func testNothingPlayingIsAnExplicitNullTrackAndOptionalFieldsAreLeftOut() throws {
@@ -51,7 +51,7 @@ final class ListenProtocolTests: XCTestCase {
 
     func testStateRoundTripsAndKeepsTheRelaysAge() throws {
         var state = ListenProtocol.State(seq: 7, track: track, playing: true, position: 63.2,
-                                         lyrics: [.init(start: 1, end: 2, text: "a")], host: .init(name: "Tommy"))
+                                         lyrics: [.init(start: 1, end: 2, text: "a")], host: .init(name: "Alex"))
         state.age = 1500
         XCTAssertEqual(ListenProtocol.decode(ListenProtocol.encode(state)), .state(state))
     }
@@ -136,21 +136,21 @@ final class ListenProtocolTests: XCTestCase {
     }
 
     func testJoinSecretsCarryTheHostsNameCleanedAndCapped() throws {
-        XCTAssertEqual(ListenProtocol.joinSecret(room: "abc123defg", hostName: "Tommy"), "abc123defg|Tommy")
+        XCTAssertEqual(ListenProtocol.joinSecret(room: "abc123defg", hostName: "Alex"), "abc123defg|Alex")
         XCTAssertEqual(ListenProtocol.joinSecret(room: "abc123defg", hostName: "  "), "abc123defg")
         XCTAssertEqual(ListenProtocol.joinSecret(room: "abc123defg", hostName: nil), "abc123defg")
-        let invite = try XCTUnwrap(ListenProtocol.joinInvite(fromSecret: "abc123defg|Tommy"))
+        let invite = try XCTUnwrap(ListenProtocol.joinInvite(fromSecret: "abc123defg|Alex"))
         XCTAssertEqual(invite.room, "abc123defg")
-        XCTAssertEqual(invite.hostName, "Tommy")
+        XCTAssertEqual(invite.hostName, "Alex")
         let bare = try XCTUnwrap(ListenProtocol.joinInvite(fromSecret: "abc123defg"))
         XCTAssertNil(bare.hostName, "an older build's secret is just the room")
-        XCTAssertNil(ListenProtocol.joinInvite(fromSecret: "nope|Tommy"))
+        XCTAssertNil(ListenProtocol.joinInvite(fromSecret: "nope|Alex"))
         XCTAssertNil(ListenProtocol.joinInvite(fromSecret: ""))
         let long = String(repeating: "x", count: 200)
         let capped = try XCTUnwrap(ListenProtocol.cleanHostName(long))
         XCTAssertEqual(capped.count, ListenProtocol.maximumHostNameLength)
         XCTAssertLessThanOrEqual(ListenProtocol.joinSecret(room: "abc123defg", hostName: long).count, 128, "Discord's secret limit")
-        XCTAssertEqual(ListenProtocol.cleanHostName("To\u{0}m\nmy"), "Tommy")
+        XCTAssertEqual(ListenProtocol.cleanHostName("Al\u{0}e\nx"), "Alex")
         XCTAssertEqual(ListenProtocol.joinInvite(fromSecret: "abc123defg|A|B")?.hostName, "A|B")
     }
 
@@ -240,8 +240,8 @@ final class DiscordListenAlongTests: XCTestCase {
                        .join(secret: "abc123defg"))
         XCTAssertEqual(DiscordPresence.event(fromFrame: frame(#"{"cmd":"DISPATCH","evt":"ACTIVITY_JOIN_REQUEST","data":{"user":{"id":"53908232506183680","username":"mason","global_name":"Mason","avatar":"a"}}}"#)),
                        .joinRequest(userID: "53908232506183680", name: "Mason"))
-        XCTAssertEqual(DiscordPresence.event(fromFrame: frame(#"{"cmd":"DISPATCH","evt":"READY","data":{"v":1,"user":{"id":"1","username":"tommy","global_name":null}}}"#)),
-                       .ready(userName: "tommy"))
+        XCTAssertEqual(DiscordPresence.event(fromFrame: frame(#"{"cmd":"DISPATCH","evt":"READY","data":{"v":1,"user":{"id":"1","username":"alex","global_name":null}}}"#)),
+                       .ready(userName: "alex"))
         XCTAssertEqual(DiscordPresence.event(fromFrame: frame(#"{"cmd":"SET_ACTIVITY","evt":"ERROR","data":{"code":4000,"message":"secrets cannot currently be sent with buttons"}}"#)),
                        .error(code: 4000, message: "secrets cannot currently be sent with buttons"))
     }
@@ -304,8 +304,8 @@ final class DiscordListenAlongTests: XCTestCase {
         XCTAssertEqual(sentParty["id"] as? String, "abc123defg")
         XCTAssertEqual(sentParty["size"] as? [Int], [3, 51])
         XCTAssertEqual(activity["secrets"] as? [String: String], ["join": "abc123defg"])
-        let named = DiscordPresence.ListenParty(room: "abc123defg", listeners: 2, webURL: nil, hostName: "Tommy")
-        XCTAssertEqual(self.activity(party: named, join: true)["secrets"] as? [String: String], ["join": "abc123defg|Tommy"])
+        let named = DiscordPresence.ListenParty(room: "abc123defg", listeners: 2, webURL: nil, hostName: "Alex")
+        XCTAssertEqual(self.activity(party: named, join: true)["secrets"] as? [String: String], ["join": "abc123defg|Alex"])
         XCTAssertNotNil(DiscordPresence.frame(.frame, DiscordPresence.setActivityPayload(activity, pid: 1, nonce: "n")))
     }
 
@@ -397,7 +397,7 @@ final class ListenSessionTests: XCTestCase {
     private func stateText(playing: Bool = true, position: Double, age: Double? = nil, track: ListenProtocol.Track? = nil,
                            lyrics: [ListenProtocol.LyricLine]? = nil) -> String {
         var state = ListenProtocol.State(seq: 1, track: track ?? self.track, playing: playing, position: position,
-                                         lyrics: lyrics, host: .init(name: "Tommy"))
+                                         lyrics: lyrics, host: .init(name: "Alex"))
         state.age = age
         return String(decoding: ListenProtocol.encode(state), as: UTF8.self)
     }
@@ -421,7 +421,7 @@ final class ListenSessionTests: XCTestCase {
         await waitUntil { player.log.contains { $0.hasPrefix("play spotify") } }
         XCTAssertEqual(player.log.first { $0.hasPrefix("play") }, "play spotify(id: \"0VjIjW4GlUZAMYd2vXMi3b\") at 60.5")
         XCTAssertEqual(follower.phase, .following)
-        XCTAssertEqual(follower.displayName, "Tommy")
+        XCTAssertEqual(follower.displayName, "Alex")
         XCTAssertEqual(follower.lyrics.count, 1)
         await waitUntil { player.log.contains("shuffle off") }
 
@@ -573,7 +573,7 @@ final class ListenSessionTests: XCTestCase {
         XCTAssertTrue(http.requests.isEmpty, "no room until something plays")
 
         let lyrics = [ListenProtocol.LyricLine(start: 12.1, end: 15, text: "I said, ooh")]
-        host.update(ListenHostSnapshot(track: track, playing: true, position: 10, lyrics: lyrics, hostName: "Tommy"))
+        host.update(ListenHostSnapshot(track: track, playing: true, position: 10, lyrics: lyrics, hostName: "Alex"))
         await waitUntil { sockets.opened.first?.sent.isEmpty == false }
         XCTAssertEqual(http.requests, ["POST https://relay.example.com/rooms"])
         XCTAssertEqual(host.room, "abc123defg")
@@ -581,7 +581,7 @@ final class ListenSessionTests: XCTestCase {
         XCTAssertEqual(socket.url.absoluteString, "wss://relay.example.com/rooms/abc123defg/host?key=0123456789abcdef0123456789abcdef")
         guard case .state(let first)? = ListenProtocol.decode(socket.sent[0]) else { return XCTFail("not a state") }
         XCTAssertEqual(first.lyrics, lyrics)
-        XCTAssertEqual(first.host?.name, "Tommy")
+        XCTAssertEqual(first.host?.name, "Alex")
 
         socket.push(#"{"type":"listeners","count":3}"#)
         await waitUntil { host.listeners == 3 }

@@ -15,7 +15,7 @@ final class ListenFollowerConsentTests: XCTestCase {
 
     private func stateText(playing: Bool = true, position: Double, track: ListenProtocol.Track? = nil, noTrack: Bool = false) -> String {
         let state = ListenProtocol.State(seq: 1, track: noTrack ? nil : (track ?? self.track), playing: playing,
-                                         position: position, lyrics: nil, host: .init(name: "Tommy"))
+                                         position: position, lyrics: nil, host: .init(name: "Alex"))
         return String(decoding: ListenProtocol.encode(state), as: UTF8.self)
     }
 
@@ -200,8 +200,8 @@ final class ListenFollowerConsentTests: XCTestCase {
         try XCTUnwrap(sockets.opened.first).drop(closeCode: ListenProtocol.roomFullCloseCode)
         await waitUntil { endedWith == .full }
         XCTAssertEqual(sockets.opened.count, 1, "not retried")
-        XCTAssertEqual(ListenAlong.endNote(.full, name: "Tommy", connected: false), "That listen-along is full")
-        XCTAssertEqual(ListenAlong.endNote(.ended, name: "tommy", connected: true), "Tommy stopped sharing")
+        XCTAssertEqual(ListenAlong.endNote(.full, name: "Alex", connected: false), "That listen-along is full")
+        XCTAssertEqual(ListenAlong.endNote(.ended, name: "alex", connected: true), "Alex stopped sharing")
         XCTAssertTrue(ListenAlong.endNote(.notFound, name: "a friend", connected: false).contains("another relay"))
     }
 
@@ -234,14 +234,14 @@ final class ListenJoinConsentTests: XCTestCase {
 
     func testADiscordJoinAsksFirstAndNothingConnectsUntilAccepted() async {
         let (listen, sockets, confirmer, player) = makeListen()
-        XCTAssertTrue(listen.requestJoin(discordSecret: "abc123defg|Tommy"))
+        XCTAssertTrue(listen.requestJoin(discordSecret: "abc123defg|Alex"))
         await waitUntil { confirmer.isAsking }
-        XCTAssertEqual(confirmer.asked.map(\.question), ["Listen along with Tommy?"])
+        XCTAssertEqual(confirmer.asked.map(\.question), ["Listen along with Alex?"])
         XCTAssertTrue(sockets.opened.isEmpty, "nothing connects while asking")
         XCTAssertNil(listen.follower)
 
         // A second click while asking doesn't stack another question.
-        listen.requestJoin(discordSecret: "abc123defg|Tommy")
+        listen.requestJoin(discordSecret: "abc123defg|Alex")
         XCTAssertEqual(confirmer.asked.count, 1)
 
         confirmer.answer(false)
@@ -250,7 +250,7 @@ final class ListenJoinConsentTests: XCTestCase {
         XCTAssertNil(listen.follower)
         XCTAssertFalse(player.everPlayed)
 
-        listen.requestJoin(discordSecret: "abc123defg|Tommy")
+        listen.requestJoin(discordSecret: "abc123defg|Alex")
         await waitUntil { confirmer.isAsking }
         confirmer.answer(true)
         await waitUntil { listen.follower != nil }
@@ -283,13 +283,13 @@ final class ListenJoinConsentTests: XCTestCase {
         let confirmer = FakeListenConfirmer()
         let listen = ListenAlong(sockets: FakeListenSockets(), makePlayer: { FakeListenPlayer() }, confirmer: confirmer,
                                  connects: true, observesPlayback: false)
-        XCTAssertFalse(listen.requestJoin(discordSecret: "abc123defg|Tommy"))
+        XCTAssertFalse(listen.requestJoin(discordSecret: "abc123defg|Alex"))
         try? await Task.sleep(nanoseconds: 20_000_000)
         XCTAssertTrue(confirmer.asked.isEmpty)
     }
 
     func testTheAlertSaysWhoAndWhat() {
-        XCTAssertEqual(ListenInvite(room: "abc123defg", hostName: "Tommy").question, "Listen along with Tommy?")
+        XCTAssertEqual(ListenInvite(room: "abc123defg", hostName: "Alex").question, "Listen along with Alex?")
         XCTAssertTrue(ListenInvite.explanation.contains("pauses listening along"))
         XCTAssertEqual(ListenInvite.acceptTitle, "Listen Along")
     }
@@ -320,7 +320,7 @@ final class ListenSharingPrivacyTests: XCTestCase {
         let defaults = UserDefaults(suiteName: name)!
         defer { defaults.removePersistentDomain(forName: name) }
         let presence = DiscordPresence(extras: LunalyrExtras(defaults: defaults))
-        ListenAlong.shared.discordUserName = "Tommy"
+        ListenAlong.shared.discordUserName = "Alex"
         presence.stop()
         XCTAssertNil(ListenAlong.shared.discordUserName)
     }
