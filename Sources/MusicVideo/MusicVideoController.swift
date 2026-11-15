@@ -148,7 +148,25 @@ final class MusicVideoController: ObservableObject {
             return
         }
         status = .searching(title: next.title)
+        if let track, let ahead = QueueLookAhead.shared.lookedUp(track) {
+            resolver.adopt(from: ahead.videoSong, to: next)
+        }
         start(next)
+    }
+
+    /// Finds an upcoming song's video ahead of time, while "Music video" is
+    /// the wallpaper with online search on (`QueueLookAhead`): the YouTube
+    /// ID, remembered as the song's own lookup would, then its shape
+    /// (remembered for the run), so the player is sized right at once. No
+    /// player is made. False when there is no answer yet (the rate limit
+    /// had no room or answered "later", or it was cancelled): try again
+    /// later.
+    func lookAhead(_ song: MusicVideoSong) async -> Bool {
+        guard enabled, online, let found = await resolver.lookAhead(song) else { return false }
+        LookAheadLog.note("video looked up ahead: \(Self.traceName(found))")
+        if found == .missing(.rateLimited) { return false }
+        if case .found(.youTube(let id)) = found, !Task.isCancelled { _ = await YouTubeVideoShape.aspect(of: id) }
+        return true
     }
 
     private func start(_ song: MusicVideoSong) {
@@ -162,6 +180,7 @@ final class MusicVideoController: ObservableObject {
     }
 
     private func apply(_ result: MusicVideoResolution, for song: MusicVideoSong) {
+        SongStartLog.note("music video \(Self.traceName(result))")
         switch result {
         case .found(let source):
             status = .showing(source, title: song.title)
@@ -169,6 +188,15 @@ final class MusicVideoController: ObservableObject {
         case .missing(let miss):
             status = .missing(miss, title: song.title)
             if (miss == .rateLimited || miss == .lookupFailed) && retried != song.key { scheduleRetry(song) }
+        }
+    }
+
+    /// What a lookup found, for `SongStartLog` (no IDs or paths).
+    nonisolated static func traceName(_ result: MusicVideoResolution) -> String {
+        switch result {
+        case .found(.youTube): return "found (YouTube)"
+        case .found(.local): return "found (library)"
+        case .missing(let miss): return "missing (\(miss))"
         }
     }
 

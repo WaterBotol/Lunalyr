@@ -13,6 +13,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         AudioReactiveController.shared.resumeIfEnabled()
         LunalyrExtras.shared.start()
         MusicVideoController.shared.start()
+        QueueLookAhead.shared.start()
         AppUpdates.shared.startIfConfigured()
         if !Settings.shared.hasOnboarded {
             // Onboarding explains the permission prompt before anything can

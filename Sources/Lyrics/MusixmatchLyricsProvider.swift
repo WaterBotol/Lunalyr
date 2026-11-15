@@ -172,7 +172,7 @@ enum MusixmatchLyricsProvider {
     static func lookup(_ query: LyricQuery, session: URLSession = .shared,
                        state: MusixmatchState = .shared) async throws -> LyricCandidate? {
         guard !query.title.trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
-        let key = query.recordingKey
+        let key = state.requestKey(query.recordingKey)
         if let answered = state.answered(key) {
             LyricTrace.note("Musixmatch: already asked about this song; reusing its answer")
             return answered.candidate
@@ -181,6 +181,72 @@ enum MusixmatchLyricsProvider {
             LyricTrace.note("Musixmatch: paused after it turned this Mac away; \(Int(left / 60) + 1) min left")
             return nil
         }
+        // One request per song, even when two lookups ask at once (a
+        // look-ahead still in flight when its song starts): the second
+        // waits for the first's answer. The request runs on its own, so a
+        // lookup cancelled while waiting does not lose the answer.
+        try Task.checkCancellation()
+        let request = state.request(for: key) {
+            Task {
+                defer { state.finishRequest(for: key) }
+                return try await ask(query, key: key, session: session, state: state)
+            }
+        }
+        return try await answer(of: request)
+    }
+
+    /// The shared request's answer; a cancelled lookup stops waiting at
+    /// once (as a cancelled request used to), while the request finishes
+    /// and is remembered for the next lookup.
+    static func answer(of request: Task<LyricCandidate?, Error>) async throws -> LyricCandidate? {
+        let once = ResumeOnce()
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<LyricCandidate?, Error>) in
+                once.set(continuation)
+                Task {
+                    do { once.resume(.success(try await request.value)) } catch { once.resume(.failure(error)) }
+                }
+            }
+        } onCancel: {
+            once.resume(.failure(CancellationError()))
+        }
+    }
+
+    /// Resumes a continuation exactly once, whichever comes first.
+    private final class ResumeOnce: @unchecked Sendable {
+        private let lock = NSLock()
+        private var continuation: CheckedContinuation<LyricCandidate?, Error>?
+        private var pending: Result<LyricCandidate?, Error>?
+        private var done = false
+
+        func set(_ continuation: CheckedContinuation<LyricCandidate?, Error>) {
+            let early: Result<LyricCandidate?, Error>? = lock.withLock {
+                guard !done else { return nil }
+                if let pending { done = true; return pending }
+                self.continuation = continuation
+                return nil
+            }
+            if let early { continuation.resume(with: early) }
+        }
+
+        func resume(_ result: Result<LyricCandidate?, Error>) {
+            let waiting: CheckedContinuation<LyricCandidate?, Error>? = lock.withLock {
+                guard !done else { return nil }
+                guard let continuation else {
+                    if pending == nil { pending = result }
+                    return nil
+                }
+                done = true
+                self.continuation = nil
+                return continuation
+            }
+            waiting?.resume(with: result)
+        }
+    }
+
+    /// The song's one `macro.subtitles.get` (and a token first, if needed).
+    private static func ask(_ query: LyricQuery, key: String, session: URLSession,
+                            state: MusixmatchState) async throws -> LyricCandidate? {
         var parameters = [
             "q_track": query.title, "q_artist": query.artist,
             "namespace": "lyrics_richsynched", "subtitle_format": "lrc", "optional_calls": "track.richsync",
@@ -325,6 +391,8 @@ final class MusixmatchState: @unchecked Sendable {
     private let lock = NSLock()
     private var stored: Stored
     private var answers: [String: (at: Date, candidate: LyricCandidate?)] = [:]
+    private var inFlight: [String: Task<LyricCandidate?, Error>] = [:]
+    private var links: [String: String] = [:]
 
     init(file: URL?, clock: @escaping () -> Date = Date.init) {
         self.file = file
@@ -387,6 +455,36 @@ final class MusixmatchState: @unchecked Sendable {
     }
 
     struct Answer { let candidate: LyricCandidate? }
+
+    /// The request in flight for `key`, joined if there is one, else the
+    /// one `start` makes. Its task calls `finishRequest` when it ends.
+    func request(for key: String, start: () -> Task<LyricCandidate?, Error>) -> Task<LyricCandidate?, Error> {
+        lock.withLock {
+            if let running = inFlight[key] { return running }
+            let task = start()
+            inFlight[key] = task
+            return task
+        }
+    }
+
+    func finishRequest(for key: String) {
+        lock.withLock { _ = inFlight.removeValue(forKey: key) }
+    }
+
+    /// Asks about the song `playing` as about `prefetched`: the same song
+    /// looked up ahead from Music's queue under slightly different details
+    /// (MediaRemote's duration). A lookup for it then joins that request,
+    /// even one still in flight, or reuses its answer.
+    func link(_ playing: String, to prefetched: String) {
+        guard playing != prefetched else { return }
+        lock.withLock {
+            if links.count >= 100 { links.removeAll() }
+            links[playing] = prefetched
+        }
+    }
+
+    /// The key a song's request is kept under (`link`).
+    func requestKey(_ key: String) -> String { lock.withLock { links[key] ?? key } }
 
     /// The answer already given for a song, while it is recent.
     func answered(_ key: String) -> Answer? {

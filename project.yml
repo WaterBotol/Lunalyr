@@ -59,6 +59,13 @@ targets:
         product: Yams
       - package: Sparkle
         product: Sparkle
+      # Copied into Contents/Frameworks and signed with the app, never
+      # linked: perl loads it to read Music's queue (MusicQueueReader).
+      - target: LunalyrQueue
+        embed: true
+        link: false
+        copy:
+          destination: frameworks
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: local.verso.custom
@@ -80,6 +87,26 @@ targets:
           # or rewrite the installed app's settings. Release keeps
           # local.verso.custom, which existing installs and updates rely on.
           PRODUCT_BUNDLE_IDENTIFIER: local.verso.custom.debug
+
+  # Reads Apple Music's Up Next for the queue look-ahead. Loaded into
+  # /usr/bin/perl, never into Lunalyr itself (MusicQueueReader.swift).
+  LunalyrQueue:
+    type: library.dynamic
+    platform: macOS
+    sources:
+      - path: Helpers/QueueReader
+    settings:
+      base:
+        PRODUCT_NAME: LunalyrQueue
+        EXECUTABLE_PREFIX: ""
+        CLANG_ENABLE_OBJC_ARC: YES
+        CODE_SIGN_IDENTITY: "-"
+        CODE_SIGN_STYLE: Manual
+        DEVELOPMENT_TEAM: ""
+        MACOSX_DEPLOYMENT_TARGET: "14.0"
+        SKIP_INSTALL: YES
+        DYLIB_INSTALL_NAME_BASE: "@rpath"
+        OTHER_LDFLAGS: "-framework Foundation"
 
   VersoCustomTests:
     type: bundle.unit-test

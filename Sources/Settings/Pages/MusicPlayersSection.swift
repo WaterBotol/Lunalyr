@@ -34,6 +34,8 @@ struct MusicPlayersSection: View {
                 PlayerAccessList()
                 InspectorCaption("Lunalyr only reads the song and its position.", more: "Lunalyr reads the song and its position, and controls playback only when you use its buttons. Allow Access asks macOS; once refused, access is turned back on in Privacy & Security › Automation.")
                     .environment(\.captionFollowsControl, false)
+                Toggle(Self.lookAheadTitle, isOn: $players.looksAhead)
+                InspectorCaption(Self.lookAheadCaption, more: Self.lookAheadDetail)
             }
         }
         .id(SettingsAnchor.players)
@@ -46,6 +48,10 @@ struct MusicPlayersSection: View {
 
     static let localCaption = "Lyrics are looked up by the title or file name playing."
     static let localDetail = "Lunalyr reads the title playing in VLC, Swinsian or VOX, or the file name when there is no title, and looks its lyrics up with lyric services such as LRCLIB under that name. Leave this off if you play personal videos in them."
+
+    static let lookAheadTitle = "Look ahead in the queue"
+    static let lookAheadCaption = "Lyrics and videos for the next songs in Music are ready when they start."
+    static let lookAheadDetail = "Lunalyr reads Music’s Up Next on your Mac and looks up the next few songs before they play, the way it looks up the playing one: lyric services (and, with the music-video wallpaper’s online search on, YouTube) receive their titles and artists a few minutes early, including songs you may skip. It eases off on battery and stops in Low Power Mode or offline. Turn it off to look up only the song that is playing."
 
     static let webCaption = "YouTube Music, SoundCloud and Amazon Music in Safari, Chrome, Arc, Brave or Edge."
 

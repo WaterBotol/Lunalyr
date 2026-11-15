@@ -408,6 +408,54 @@ final class MusicVideoResolver {
         return result
     }
 
+    // MARK: Looking ahead
+
+    /// Slots of the rate limit a look-ahead leaves free in its window, so
+    /// the song that starts next never waits on one.
+    static let lookAheadReserve = 4
+    /// The most slots one lookup can take: the search and each candidate's still check.
+    static var lookupSlots: Int { 1 + candidatesChecked }
+
+    /// Whether a look-ahead may search now: no wait, and room in the window
+    /// for its own worst case with `lookAheadReserve` slots still free.
+    var hasLookAheadHeadroom: Bool {
+        let now = uptime()
+        let recent = rateLimit.sent.filter { $0 > now - rateLimit.window }.count
+        return rateLimit.delay(at: now) == 0
+            && recent + Self.lookupSlots + Self.lookAheadReserve <= rateLimit.maximumPerWindow
+    }
+
+    /// Finds an upcoming song's video ahead of time (`QueueLookAhead`) and
+    /// remembers it as `resolve` would, so the song's own lookup is a cache
+    /// hit. Online search only (with it on): a pasted link or a remembered
+    /// answer is enough, a song with a video in the library needs nothing
+    /// (that video is the answer, not remembered: the library is asked
+    /// again as the song starts), and nothing is searched without
+    /// `hasLookAheadHeadroom`. Nil when nothing was looked up: try later.
+    func lookAhead(_ song: MusicVideoSong) async -> MusicVideoResolution? {
+        guard !song.title.trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
+        let key = song.key
+        if let pasted = links.videoID(for: key) { return .found(.youTube(pasted)) }
+        if let cached = cache.lookup(key, now: now()) { return cached }
+        // Without room, nothing is asked, not even the library: a later plan tries again.
+        guard hasLookAheadHeadroom else { return nil }
+        if let local = await library.localVideo(for: song) { return .found(.local(local)) }
+        guard !Task.isCancelled, hasLookAheadHeadroom else { return nil }
+        let result = await searchYouTube(song)
+        guard !Task.isCancelled || result.isCacheable else { return nil }
+        cache.store(result, for: key, now: now())
+        return result
+    }
+
+    /// Carries the answer found for a song looked up ahead under slightly
+    /// different details (MediaRemote's duration) over to the playing
+    /// song's key, unless that has its own.
+    func adopt(from prefetched: MusicVideoSong, to playing: MusicVideoSong) {
+        let from = prefetched.key, to = playing.key
+        guard from != to, cache.lookup(to, now: now()) == nil, let answer = cache.lookup(from, now: now()) else { return }
+        cache.store(answer, for: to, now: now())
+    }
+
     /// Videos YouTube's player refused for each song this session; the
     /// song's next search skips them.
     private var refused: [String: Set<String>] = [:]

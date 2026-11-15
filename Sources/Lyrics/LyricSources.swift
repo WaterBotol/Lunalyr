@@ -531,6 +531,15 @@ final class LyricMissCache: @unchecked Sendable {
         }
     }
     func remove(_ key: String) { lock.withLock { misses[key] = nil } }
+    /// Gives `to` the answers recorded for `from` that it lacks, keeping
+    /// their times (a song looked up ahead under slightly different details).
+    func copy(from: String, to: String) {
+        guard from != to else { return }
+        lock.withLock {
+            guard let answers = misses[from] else { return }
+            misses[to] = answers.merging(misses[to] ?? [:]) { _, existing in existing }
+        }
+    }
 }
 
 enum LyricHTTP {

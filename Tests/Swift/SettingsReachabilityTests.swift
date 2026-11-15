@@ -304,6 +304,7 @@ private enum SourceKeys {
         "custom.pauseWhenCovered",
         "custom.player",
         "custom.player.localPlayers",
+        "custom.player.lookAhead",
         "custom.player.webPlayers",
         "custom.preferWordTimedLRCLIB",
         "custom.preferWordTiming",
