@@ -47,6 +47,8 @@ internal sealed class StageWord : IDisposable
     /// <summary>The word's action motion (the Mac's action words), if it takes one.</summary>
     public WordAction? Action { get; init; }
     public Vector4[] Colours { get; init; } = [];
+    /// <summary>The centre of the word and its symbol together: an action turns and scales about it.</summary>
+    public Vector2 Pivot { get; init; }
     /// <summary>The size the label was set at (after any shrinking), layout pixels.</summary>
     public double FontSize { get; init; }
 
@@ -87,7 +89,11 @@ internal sealed record WordSpec(double Size, Vector4[] Colours)
 
 /// <summary>What a stage line is built from.</summary>
 internal sealed record StageSource(int Row, LyricLine Line, IReadOnlyList<StageRun> Runs, string?[] Readings, double Speed,
-                                   double InkTime, ReadingShares?[]? Shares = null);
+                                   double InkTime, ReadingShares?[]? Shares = null)
+{
+    /// <summary>The runs are the line's romanisation, shown instead of its words (they take no word accents).</summary>
+    public bool Romanised { get; init; }
+}
 
 /// <summary>A line set for a stage layout, with the scratch its frames use (so a frame allocates nothing).</summary>
 internal class StageLine : IDisposable
@@ -252,19 +258,21 @@ internal abstract class StageLayer(CompositionKind kind, IWordBreaker breaker, L
         // Word-by-word readings where the scene has them (the Mac's romanized): "Instead" sets them in the words' place,
         // grouped as the line's words were.
         var set = WordReadingsOf(row);
-        if (set is { Replaced: true }) { words = set.Words; glue = set.Glue; }
+        var romanised = set is { Replaced: true };
+        if (romanised) { words = set!.Words; glue = set.Glue; }
         IReadOnlyList<BackingGroup> groups = [];
         if (source.WordTimed && StyleShown.BackingVocals)
         {
             var split = BackingVocals.Split(words, glue);
             if (split.Backing.Count > 0) { words = split.Main; glue = split.MainGlue; groups = split.Backing; }
         }
-        if (set is null && Replaced(row, words) is { } romanised)
+        if (set is null && Replaced(row, words) is { } swapped)
         {
+            romanised = true;
             // "Instead", with one part per sung word: the Mac's replace hands the layouts the romanised words, each a
             // word of its own (a Latin reading of a Japanese character stands apart), at the words' own times.
-            words = romanised;
-            glue = new bool[romanised.Count];
+            words = swapped;
+            glue = new bool[swapped.Count];
         }
         var runs = MakeRuns(words, glue);
         var (readings, lineReading, shares) = set is not null ? PairWordReadings(row, set, runs) : PairReadings(row, words, runs);
@@ -277,7 +285,7 @@ internal abstract class StageLayer(CompositionKind kind, IWordBreaker breaker, L
         Kit!.Dark = (float)InkAt(source.Start).Dark;
         try
         {
-            line = Build(new StageSource(row, source, runs, readings, StageShared.LineSpeed(starts), source.Start, shares));
+            line = Build(new StageSource(row, source, runs, readings, StageShared.LineSpeed(starts), source.Start, shares) { Romanised = romanised });
         }
         finally
         {
@@ -565,9 +573,11 @@ internal abstract class StageLayer(CompositionKind kind, IWordBreaker breaker, L
         try
         {
             var width = label.Metrics.Width;
-            if (width > spec.MaxWidth && width > 0)
+            // A word with a symbol fits with the symbol's room beside it (its gap and about half the size).
+            var reserve = spec.Colours.Length > 0 && WordSymbolGlyphs.Glyph(spec.Accent.Symbol) is not null ? size * 0.85 : 0;
+            if (width + reserve > spec.MaxWidth && width > 0)
             {
-                size *= Math.Max(spec.MinimumScale, spec.MaxWidth / width);
+                size *= Math.Max(spec.MinimumScale, spec.MaxWidth / (width + reserve));
                 label.Dispose();
                 label = kit.Layout(text, face, (float)size, locale, rightToLeft, mix: mix);
             }
@@ -651,6 +661,7 @@ internal abstract class StageLayer(CompositionKind kind, IWordBreaker breaker, L
                     : new Vector2(Aligned(wordWidth) + wordShift + side * (float)(w / 2 + symbolGap + symbolWidth / 2),
                                   (float)(-unitHeight / 2 + h / 2 + symbolDy)),
                 Action = spec.Colours.Length > 0 ? spec.Accent.Action : null,
+                Pivot = new Vector2(Aligned(wordWidth), (float)(-unitHeight / 2 + h / 2)),
                 FontSize = size,
                 Colours = spec.Colours,
             };
@@ -699,7 +710,7 @@ internal abstract class StageLayer(CompositionKind kind, IWordBreaker breaker, L
         {
             _accentSource = source;
             var style = StyleShown;
-            var shown = source.Line.WordTimed && style.Readings != ReadingPlacement.Instead;
+            var shown = source.Line.WordTimed && !source.Romanised;
             var symbolsOn = shown && style.WordSymbols;
             var actionsOn = shown && style.ActionWords;
             var texts = new string[source.Runs.Count];
@@ -743,9 +754,10 @@ internal abstract class StageLayer(CompositionKind kind, IWordBreaker breaker, L
     /// layout pixels → device). Flat transforms take the ink's own path (blur, syllables, shadow); a turn in depth draws
     /// the bitmaps through Direct2D's perspective transform (without blur).
     /// </summary>
+    /// <param name="glow">A glow behind the ink (an action word's), its radius in unit layout pixels; flat transforms only.</param>
     protected static void DrawInk(ID2D1DeviceContext dc, Ink ink, in Matrix4x4 unit, Vector2 offset, double opacity, float blur = 0,
                                   float shadow = 1, ReadOnlySpan<double> boundaries = default,
-                                  ReadOnlySpan<double> opacities = default, bool rightToLeft = false)
+                                  ReadOnlySpan<double> opacities = default, bool rightToLeft = false, GlowSpec glow = default)
     {
         if (!(opacity > 0.002)) return;
         var world = Matrix4x4.CreateTranslation(offset.X, offset.Y, 0) * unit;
@@ -753,7 +765,8 @@ internal abstract class StageLayer(CompositionKind kind, IWordBreaker breaker, L
         {
             var flat = Homography.Flat(world);
             var scale = MathF.Sqrt(MathF.Abs(flat.GetDeterminant()));
-            ink.Draw(dc, flat, scale, (float)opacity, blur, GlowSpec.None, shadow, boundaries, opacities, rightToLeft);
+            ink.Draw(dc, flat, scale, (float)opacity, blur, glow.Visible ? glow with { Radius = glow.Radius * scale } : GlowSpec.None,
+                     shadow, boundaries, opacities, rightToLeft);
             return;
         }
         // Baked now if its turn has not come yet (it is about to be drawn).
@@ -821,13 +834,18 @@ internal abstract class StageLayer(CompositionKind kind, IWordBreaker breaker, L
         // its colour cue laid over it; the symbol beside it moves with it and fades in from the word's onset.
         var moved = Acting(word, run, time, unit, nudge, out var pose);
         var shown = opacity * pose.Opacity;
+        // An action's glow (and Reduce Motion's cue): a shadow in the word's own colour.
+        var tone = word.Colours[Math.Min(colour, word.Colours.Length - 1)];
+        var glow = pose.Glow > 0.002
+            ? new GlowSpec(new Vector4(tone.X, tone.Y, tone.Z, (float)pose.GlowOpacity), (float)pose.GlowRadius(word.FontSize))
+            : GlowSpec.None;
         DrawInk(dc, word.Labels[colour], moved, word.LabelOffset + nudge, shown, blur, shadow, word.Boundaries, parts,
-                word.RightToLeft);
+                word.RightToLeft, glow);
         if (pose.Tints) DrawCue(dc, word.Labels[colour], word.Colours[Math.Min(colour, word.Colours.Length - 1)], pose, moved, word.LabelOffset + nudge, shown);
         if (word.Symbols.Length > colour)
         {
             var symbol = shown * WordActionMotion.SymbolOpacity(time - run.Start);
-            DrawInk(dc, word.Symbols[colour], moved, word.SymbolOffset + nudge, symbol, blur, shadow);
+            DrawInk(dc, word.Symbols[colour], moved, word.SymbolOffset + nudge, symbol, blur, shadow, glow: glow);
             if (pose.Tints) DrawCue(dc, word.Symbols[colour], word.Colours[Math.Min(colour, word.Colours.Length - 1)], pose, moved, word.SymbolOffset + nudge, symbol);
         }
     }
@@ -842,7 +860,7 @@ internal abstract class StageLayer(CompositionKind kind, IWordBreaker breaker, L
         pose = word.Action is { } action ? WordActionMotion.Pose(action, time - run.Start, ReduceMotion) : WordActionPose.Identity;
         if (pose.IsIdentity) return unit;
         var size = word.FontSize;
-        var centre = word.LabelOffset + nudge;
+        var centre = (word.Symbols.Length > 0 ? word.Pivot : word.LabelOffset) + nudge;
         return Matrix4x4.CreateTranslation(-centre.X, -centre.Y, 0)
             * Matrix4x4.CreateScale((float)(pose.TurnScale * pose.Scale), (float)pose.Scale, 1)
             * Matrix4x4.CreateTranslation(centre.X + (float)(pose.Dx * size), centre.Y + (float)(pose.Dy * size), 0) * unit;

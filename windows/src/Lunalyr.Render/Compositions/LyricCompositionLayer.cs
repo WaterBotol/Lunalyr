@@ -750,10 +750,22 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
         // Dense web layouts set long lines smaller.
         var lineBase = connections ? BaseSize * ConstellationLayout.DensityScale(line.Words) : BaseSize;
         // "Cutout · Highlight": each sung word gets a tile, held until the line ends (see Decorate).
-        return BuildPlan(words, mainGlue, lineBase, row, line.Start, wordTimed: true, editorial: Kind.HasEditorialTypography(),
-                         runReadings, lineReading, FitFor(row), Stage.Width, groups, row, kind: Kind, lineEnd: line.End,
-                         runShares: runShares, translation: TranslationOf(row));
+        // Word symbols and action words: this lyric line's own words only (not when its romanisation is shown instead).
+        _accentLine = set is not { Replaced: true };
+        try
+        {
+            return BuildPlan(words, mainGlue, lineBase, row, line.Start, wordTimed: true, editorial: Kind.HasEditorialTypography(),
+                             runReadings, lineReading, FitFor(row), Stage.Width, groups, row, kind: Kind, lineEnd: line.End,
+                             runShares: runShares, translation: TranslationOf(row));
+        }
+        finally
+        {
+            _accentLine = false;
+        }
     }
+
+    /// <summary>True while a lead lyric line is set (credits, backing groups and romanised lines never take accents).</summary>
+    private bool _accentLine;
 
     /// <summary>A line's reading, split over its runs when it has one part per run, otherwise for the whole line.</summary>
     private (string?[]? Runs, string? Line) Readings(int row, IReadOnlyList<LyricWord> words, IReadOnlyList<bool> glue)
@@ -822,9 +834,9 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
             RandomFonts: StyleShown.RandomFonts,
             TranslationSize: BaseSize * LineTranslations.LineSize * Metrics.UserScale,
             FillStage: Stage,
-            // Word symbols and action words: lead lines only, never a romanisation shown instead of the words.
-            Symbols: StyleShown.WordSymbols && StyleShown.Readings != ReadingPlacement.Instead,
-            Actions: StyleShown.ActionWords && StyleShown.Readings != ReadingPlacement.Instead,
+            // Word symbols and action words: lead lyric lines only, never a romanisation shown instead of the words.
+            Symbols: _accentLine && StyleShown.WordSymbols,
+            Actions: _accentLine && StyleShown.ActionWords,
             WordLists: StyleShown.WordLists);
         var plan = LinePlans.Build(Kit!, words, glue, spec, runReadings, lineReading, runShares, translation);
         Decorate(plan, planKind, words, glue, lineEnd, lineIndex, baseSize, Stage, ink);

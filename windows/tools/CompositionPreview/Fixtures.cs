@@ -66,14 +66,21 @@ public static class Fixtures
 
     /// <summary>
     /// Word symbols and action words (the Mac's ad5a6a6 and cba108f): "love" takes a heart and "spin" turns; "falling"
-    /// dips beside a moon and a flame; "frozen" frosts beside a heart and a sun.
+    /// dips beside a moon and a flame; "frozen" frosts beside a heart and a sun; "fire·fly dan·cing heartbreak" tests glued runs and a long word.
     /// </summary>
     public static SceneSnapshot Accents(LyricStyle? style = null)
     {
         Sung[] first = Even(10.0, 0.45, 0.4, "I", "love", "the", "way", "you", "spin");
         Sung[] second = Even(14.0, 0.5, 0.45, "Falling", "through", "the", "night", "like", "fire");
         Sung[] third = Even(18.0, 0.5, 0.45, "Frozen", "hearts", "under", "the", "sun");
-        var payload = Ttml("en", first, second, third);
+        // Glued syllables match as their joined text: "fire·fly" is not "fire", "dan·cing" is "dancing"; and a long
+        // listed word, for the stage layouts' fit.
+        Sung[] fourth =
+        [
+            new("fire", 22.0, 22.3, false), new("fly", 22.3, 22.7), new("dan", 22.8, 23.1, false), new("cing", 23.1, 23.5),
+            new("heartbreak", 23.6, 24.6),
+        ];
+        var payload = Ttml("en", first, second, third, fourth);
         return Scene("Word Accents", Parse(LyricFormat.Ttml, payload, 30), style: style);
     }
 

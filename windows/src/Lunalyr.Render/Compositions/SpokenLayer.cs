@@ -104,7 +104,7 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger, Composit
     {
         // Word-by-word readings where the scene has them, each line's reading string otherwise.
         _song = new RollingSong(lines, Breaker, scene.WordReadings, ReadingDisplay, scene.Readings, scene.Style.BackingVocals);
-        PlanAccents(lines, scene.Style);
+        PlanAccents(lines, scene);
         _trackSeed = (int)(RollingWords.Fnv1a((scene.Title ?? "") + "\u001f" + (scene.Artist ?? "")) & 0x7FFF_FFFF);
     }
 
@@ -115,19 +115,21 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger, Composit
     /// caps, from the runs it rolls as (lifted backing vocals already out), never from the window on screen; the
     /// window's runs look theirs up. None where readings replace the words.
     /// </summary>
-    private void PlanAccents(IReadOnlyList<LyricLine> lines, LyricStyle style)
+    private void PlanAccents(IReadOnlyList<LyricLine> lines, SceneSnapshot scene)
     {
+        var style = scene.Style;
         _accents.Clear();
-        var symbols = style.WordSymbols && style.Readings != ReadingPlacement.Instead;
-        var actions = style.ActionWords && style.Readings != ReadingPlacement.Instead;
-        if (!(symbols || actions) || _song is null) return;
+        if (!(style.WordSymbols || style.ActionWords) || _song is null) return;
+        var replacing = style.Readings == ReadingPlacement.Instead;
         for (var row = 0; row < lines.Count; row++)
         {
             if (!lines[row].WordTimed) continue;
+            // A line whose romanisation rolls in its words' place takes none.
+            if (replacing && (scene.WordReadings.TryGetValue(row, out var read) && read.Count > 0 || scene.Readings.ContainsKey(row))) continue;
             var words = _song.WordsOf(row);
             var texts = new string[words.Count];
             for (var i = 0; i < texts.Length; i++) texts[i] = words[i].Text;
-            var plan = WordAccents.Plan(texts, symbols, actions, style.WordLists);
+            var plan = WordAccents.Plan(texts, style.WordSymbols, style.ActionWords, style.WordLists);
             for (var i = 0; i < plan.Length; i++)
                 if (!plan[i].IsEmpty) _accents[words[i]] = plan[i];
         }
@@ -277,7 +279,11 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger, Composit
                 var tileRect = tile.IsVisible ? RollingLabel.HighlightRect(unit.Size.Width, unit.Size.Height, Scale) : default;
                 if (tile.IsVisible) DrawTileRect(dc, world, tileRect, tile, token.RightToLeft, opacity);
                 unit.Label.Draw(dc, labelWorld, scale, (float)opacity, blur,
-                                GlowSpec.None, 1, reveal.IsEmpty ? default : AsSpan(token.Boundaries), reveal, token.RightToLeft, clip);
+                                action.Glow > 0.002
+                                    ? new GlowSpec(new Vector4(unit.RestColour.X, unit.RestColour.Y, unit.RestColour.Z, (float)action.GlowOpacity),
+                                                   (float)action.GlowRadius(token.PointSize) * scale)
+                                    : GlowSpec.None,
+                                1, reveal.IsEmpty ? default : AsSpan(token.Boundaries), reveal, token.RightToLeft, clip);
                 // "Sung sweep": the sung colour fills the word from its leading edge as it is sung (the Mac's RollingUnit tint).
                 if (unit.Sung is { } sung && !tile.IsVisible && !clip.IsSet && SungSweep.Progress(token, time) is var tint and > 0)
                 {
@@ -410,7 +416,7 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger, Composit
         if (!(shown > 0.002)) return;
         var symbolWorld = Matrix3x2.CreateTranslation(unit.SymbolOffset) * world;
         var glow = action.Glow > 0.002
-            ? new GlowSpec(new Vector4(unit.SungColour.X, unit.SungColour.Y, unit.SungColour.Z, (float)action.GlowOpacity),
+            ? new GlowSpec(new Vector4(unit.RestColour.X, unit.RestColour.Y, unit.RestColour.Z, (float)action.GlowOpacity),
                            (float)action.GlowRadius(token.PointSize) * scale)
             : GlowSpec.None;
         symbol.Draw(dc, symbolWorld, scale, (float)shown, blur, glow, 1, clip: clip);

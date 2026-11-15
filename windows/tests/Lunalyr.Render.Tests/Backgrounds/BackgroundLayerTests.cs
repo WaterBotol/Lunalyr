@@ -105,7 +105,7 @@ public sealed class BackgroundLayerTests : IDisposable
         using var layer = Factory(id).Create();
         _surface.Prepare(layer);
         // A mid-tone wallpaper: light enough to need a backing, not so light the lyrics turn dark (dark lyrics take
-        // no backing; see TheBackingFadesWithDarkLyrics).
+        // no backing, so a pale wallpaper would show none).
         var pale = Uniform(0.62f, 0.6f, 0.52f);
         var empty = Frame(layer, Quiet(pale), 1);
         using var playing = Factory(id).Create();

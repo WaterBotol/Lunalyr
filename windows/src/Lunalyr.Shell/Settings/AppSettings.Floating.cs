@@ -259,10 +259,14 @@ public static class LyricStyleProfiles
     private static AppSettings Apply(AppSettings settings, IReadOnlyDictionary<string, JsonElement> style)
     {
         var node = JsonSerializer.SerializeToNode(settings, AppSettingsJsonContext.Default.AppSettings)!.AsObject();
+        // A key the style lacks takes the setting's own default, written out: left missing, the generated reader would
+        // set it to the type's zero (false for a switch that defaults on).
+        var defaults = JsonSerializer.SerializeToNode(new AppSettings(), AppSettingsJsonContext.Default.AppSettings)!.AsObject();
         foreach (var key in Keys)
         {
             node.Remove(key);
             if (style.TryGetValue(key, out var value)) node[key] = JsonSerializer.SerializeToNode(value, AppSettingsJsonContext.Default.JsonElement);
+            else if (defaults[key] is { } fallback) node[key] = fallback.DeepClone();
         }
         var applied = node.Deserialize(AppSettingsJsonContext.Default.AppSettings) ?? settings;
         // The kept styles are not part of a style: they come back as they were.

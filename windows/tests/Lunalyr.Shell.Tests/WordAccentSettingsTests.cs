@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Lunalyr.Core.Compositions;
+using Lunalyr.Core.Floating;
 using Lunalyr.Shell.Settings;
 
 namespace Lunalyr.Shell.Tests;
@@ -56,5 +57,21 @@ public class WordAccentSettingsTests
         Assert.Equal("heart", back.WordSymbolsWords!["love"]);
         var restored = (back with { WordSymbolsWords = null }).Normalized();
         Assert.Null(restored.WordSymbolsWords);
+    }
+
+    [Fact]
+    public void A_stored_surface_style_from_before_comes_back_with_both_on()
+    {
+        // The floating style was stored before these settings existed: it lacks both keys.
+        var old = new Dictionary<string, JsonElement> { ["lyricComposition"] = JsonSerializer.SerializeToElement("hinge") };
+        var settings = new AppSettings { WordSymbolsEnabled = false, ActionWordsEnabled = false, LyricStyleFloating = old };
+        var floating = settings.WithLyricsSurface(LyricsSurface.Floating);
+        Assert.True(new AppSettings { ShowInterludes = false, LyricStyleFloating = old }.WithLyricsSurface(LyricsSurface.Floating).ShowInterludes, "an older switch that defaults on comes back on too");
+        Assert.True(floating.WordSymbolsEnabled);
+        Assert.True(floating.ActionWordsEnabled);
+        // And the desktop keeps its own switches off for when it comes back.
+        var back = floating.WithLyricsSurface(LyricsSurface.Desktop);
+        Assert.False(back.WordSymbolsEnabled);
+        Assert.False(back.ActionWordsEnabled);
     }
 }
