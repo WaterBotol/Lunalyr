@@ -762,6 +762,8 @@ struct LivelyTwister {
 struct LivelyGlyphHook: ViewModifier {
     /// Whether this layer draws the particles (the first layer of the word).
     var particles = true
+    /// For a word set as one `Text` per letter: this letter's place.
+    var slot: LivelyLetterSlot? = nil
     @Environment(\.lyricLivelyGlyphs) private var glyphs
     @Environment(\.lyricLivelyParticles) private var particlesAllowed
     /// For the opt-in renders only: draw as macOS 14 does (whole word only).
@@ -769,11 +771,20 @@ struct LivelyGlyphHook: ViewModifier {
 
     func body(content: Content) -> some View {
         if #available(macOS 15.0, *), let glyphs, !Self.disabledForPreview {
-            content.textRenderer(LivelyGlyphRenderer(state: glyphs, particles: particles && particlesAllowed))
+            content.textRenderer(LivelyGlyphRenderer(state: glyphs, particles: particles && particlesAllowed, slot: slot))
         } else {
             content
         }
     }
+}
+
+/// A letter of a word set one `Text` per letter (Mosaic's letter-by-letter
+/// words): its index in the word and the word's letter count, so each
+/// letter moves as that letter of the word, and the word's particles are
+/// drawn once, by its middle letter, over the word's estimated extent.
+struct LivelyLetterSlot: Equatable {
+    var index: Int
+    var count: Int
 }
 
 /// Marks text an action word's letters leave alone (a symbol set inline
@@ -792,8 +803,8 @@ extension Text {
 extension View {
     /// Lets an action in progress move this word's letters (macOS 15+);
     /// `particles` on only one layer of a word drawn in several.
-    func livelyLetters(particles: Bool = true) -> some View {
-        modifier(LivelyGlyphHook(particles: particles))
+    func livelyLetters(particles: Bool = true, slot: LivelyLetterSlot? = nil) -> some View {
+        modifier(LivelyGlyphHook(particles: particles, slot: slot))
     }
 
     /// A sweep mask that, while an action moves the letters, reaches past
@@ -820,6 +831,7 @@ extension View {
 struct LivelyGlyphRenderer: TextRenderer {
     var state: LivelyGlyphs
     var particles: Bool
+    var slot: LivelyLetterSlot? = nil
 
     var displayPadding: EdgeInsets {
         let room = state.size * 2.2 + 20
@@ -856,10 +868,26 @@ struct LivelyGlyphRenderer: TextRenderer {
             return
         }
         for run in still { context.draw(run) }
-        let width = maxX - minX
-        glyphs = glyphs.map {
-            Glyph(slice: $0.slice, rect: $0.rect, baseline: $0.baseline, index: $0.index,
-                  along: Double(($0.rect.midX - minX) / width))
+        var width = maxX - minX
+        var count = glyphs.count
+        var particles = self.particles
+        if let slot, slot.count > 0 {
+            // One letter of a word set letter by letter: placed as that
+            // letter of the word, which is estimated from its own width.
+            let place = Double(slot.index)
+            glyphs = glyphs.enumerated().map { k, g in
+                Glyph(slice: g.slice, rect: g.rect, baseline: g.baseline, index: slot.index + k,
+                      along: slot.count > 1 ? min(1, (place + Double(k)) / Double(slot.count - 1)) : 0.5)
+            }
+            minX -= width * CGFloat(slot.index)
+            width *= CGFloat(max(1, slot.count))
+            count = slot.count
+            particles = particles && slot.index == slot.count / 2
+        } else {
+            glyphs = glyphs.map {
+                Glyph(slice: $0.slice, rect: $0.rect, baseline: $0.baseline, index: $0.index,
+                      along: Double(($0.rect.midX - minX) / width))
+            }
         }
         let top = glyphs.map(\.rect.minY).min() ?? 0
         let bottom = glyphs.map(\.rect.maxY).max() ?? 0
@@ -867,7 +895,7 @@ struct LivelyGlyphRenderer: TextRenderer {
         let baseline = glyphs[0].baseline
         if particles { behind(word: word, baseline: baseline, in: &context) }
         for glyph in glyphs {
-            draw(glyph, count: glyphs.count, word: word, in: context)
+            draw(glyph, count: count, word: word, in: context)
         }
         if particles { front(glyphs: glyphs, word: word, baseline: baseline, in: &context) }
     }

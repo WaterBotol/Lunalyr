@@ -206,11 +206,14 @@ extension StageLyricView {
                             let size = unit * 2.4
                             withReading(run, size: size, colour: sample.reading, maxWidth: stage.width * 0.8) {
                             HStack(spacing: size * 0.02) {
-                                ForEach(Array(run.text.enumerated()), id: \.offset) { index, character in
+                                let letters = Array(run.text)
+                                ForEach(Array(letters.enumerated()), id: \.offset) { index, character in
                                     let reveal = Self.glide((time - (run.start + Double(index) * 0.05)) / 0.25)
                                     Text(String(character))
                                         .font(font(size * (0.85 + 0.3 * CGFloat(chance(run.id * 31 + index, 24))), hero: true, id: run.id))
                                         .foregroundStyle(sample.sung)
+                                        // Each letter moves as that letter of the action word.
+                                        .livelyLetters(slot: LivelyLetterSlot(index: index, count: letters.count))
                                         .offset(y: CGFloat(chance(run.id * 31 + index, 25) - 0.5) * size * 0.28
                                                 + (reduceMotion ? 0 : CGFloat(1 - reveal) * size * 0.3))
                                         .rotationEffect(.degrees((chance(run.id * 31 + index, 26) - 0.5) * 22))
