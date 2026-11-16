@@ -211,9 +211,16 @@ public sealed class LyricLookup
         // needs no network lookup.
         if (LyricRanking.Choose(report.Candidates.Where(c => !c.Source.IsLocal()), query, options) is { } best)
         {
+            IReadOnlyList<LyricCandidate> found = [.. report.Candidates.Where(c => !c.Source.IsLocal())];
+            if (UnansweredRival(best, collected, query, found) is { } missing)
+            {
+                // Saved for two weeks, it would stand without asking again while a search would find the better match:
+                // kept for an hour only (the Mac's 291b50b and b3c0909).
+                _saved.Save(best, key, provisional: true);
+                _log.Debug($"Lyric lookup: online choice saved for an hour only: {missing.RawValue()}, which could have beaten it, did not answer");
+            }
             // A choice that a source stopped early might have beaten is not kept.
-            if (LyricRanking.IsSettled(best, collected.Stopped.Where(s => !s.IsLocal()), query, options,
-                    [.. report.Candidates.Where(c => !c.Source.IsLocal())]))
+            else if (LyricRanking.IsSettled(best, collected.Stopped.Where(s => !s.IsLocal()), query, options, found))
             {
                 _saved.Save(best, key);
                 _misses.Remove(key);
@@ -229,6 +236,27 @@ public sealed class LyricLookup
         _log.Debug($"Lyric lookup done: {report.Candidates.Count} matches, revision {report.Revision}"
             + (report.Result is null ? ", nothing found" : $", showing {report.Result.Provenance.Label}"));
         return report;
+    }
+
+    /// <summary>
+    /// An online source that was asked but gave no answer (it timed out, failed or was paused) whose answer could have
+    /// led <paramref name="best"/>: a higher timing, or a better lead at its timing (<see cref="LyricRanking.CouldOutlead"/>),
+    /// or word timing for a leading text in hand (<see cref="LyricRanking.CouldLendTiming"/>). The choice is then kept for
+    /// an hour only, so a later automatic lookup asks again. Sources that could only win a tie-break do not count, so
+    /// one that keeps failing does not keep every choice provisional.
+    /// </summary>
+    private static LyricSourceId? UnansweredRival(LyricCandidate best, Collected collected, LyricQuery query, IReadOnlyList<LyricCandidate> found)
+    {
+        var failed = collected.Asked.Except(collected.Answered).Except(collected.Stopped).Where(id => !id.IsLocal())
+            .OrderBy(id => id.RawValue(), StringComparer.Ordinal);
+        foreach (var id in failed)
+        {
+            if (LyricRanking.CouldOutlead(best, id, query) || LyricRanking.CouldLendTiming(best, id, found, query))
+            {
+                return id;
+            }
+        }
+        return null;
     }
 
     /// <summary>

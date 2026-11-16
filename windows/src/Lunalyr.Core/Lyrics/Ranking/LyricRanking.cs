@@ -337,6 +337,34 @@ public static class LyricRanking
     }
 
     /// <summary>
+    /// Whether the best answer <paramref name="source"/> could give would rank above <paramref name="best"/> on timing,
+    /// version or lead alone, before any tie-break (<see cref="CouldBeat"/>; the Mac's 291b50b).
+    /// </summary>
+    public static bool CouldOutlead(LyricCandidate best, LyricSourceId source, LyricQuery query)
+    {
+        ArgumentNullException.ThrowIfNull(best);
+        if (source == best.Source)
+        {
+            return false;
+        }
+        var timing = LyricTimingRules.RankedTiming(best.Result);
+        var ceiling = Math.Min(source.TimingCeiling(), 2);
+        if (ceiling > 0 != timing > 0)
+        {
+            return ceiling > 0;
+        }
+        if (timing > 0 && !FitsVersion(best, query))
+        {
+            return true;
+        }
+        if (ceiling != timing)
+        {
+            return ceiling > timing;
+        }
+        return Lead(source, LyricSourceRanking.BestRankingSource(source), timing) < Lead(best, timing);
+    }
+
+    /// <summary>
     /// Whether a pending source must keep answering because, with another, it could still agree against the timing of
     /// LRCLIB showing and demote it (the Mac's <c>couldDemote</c>; ranking decisions of 12 Nov 2026). All of these hold:
     /// LRCLIB's word or mixed timing for the playing version is the best match, and not already an outlier; it agrees

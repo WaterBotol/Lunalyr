@@ -83,9 +83,12 @@ public sealed record LyricSourceSnapshot(
     /// MusicBrainz country) and looks that title up in more places, treats closing "role：names" lines and a lone
     /// artist or title header as credits, and leaves credits and headers out of agreement. v20 (tester feedback on 0.9.0,
     /// 14 Nov 2026) drops "纯音乐，请欣赏"-style filler lines, and asks Lyrics+ again without the album when the album made
-    /// it answer "not found" (Heathens found NetEase's timing instead of Apple's).
+    /// it answer "not found" (Heathens found NetEase's timing instead of Apple's). v21 (the Mac's v17, 16 Nov 2026): word
+    /// stamps spread evenly rank as line timing, a timeline shifted to another recording ranks lower, the leading text
+    /// timed by the line takes another match's word timing, QQ Music and Kuwo give word timing, and seven sources were
+    /// added; choices cached under the earlier ranking are looked up again.
     /// </summary>
-    public const string CachePolicy = "v20";
+    public const string CachePolicy = "v21";
 
     /// <summary>The order a fresh install uses.</summary>
     public static IReadOnlyList<LyricSourceId> RecommendedOrder { get; } =

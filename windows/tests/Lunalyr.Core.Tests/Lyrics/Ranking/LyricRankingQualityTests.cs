@@ -493,4 +493,103 @@ public sealed class LyricRankingQualityTests
         Assert.True(IsAppleRelay(ranked[0]));
         Assert.Equal(1, LyricRanking.Lead(ranked[0], LyricTimingRules.RankedTiming(ranked[0].Result)));
     }
+
+    // Ported from LyricRankingQualityTests.swift: testReadingsAndCreditsWorkOnMergedLines (the Mac's b3c0909)
+    [Fact]
+    public void ReadingsAndCreditsWorkOnMergedLines()
+    {
+        string[] texts = ["作詞：山田", "今日も君と歩く", "夜の街を抜けて", "明日を探して走る", "空に星が光る", "風の音を聞いて", "遠い夢を見てる", "二人で笑う日まで", "この道を進む"];
+        double[] lengths = [0.2, 0.45, 0.3, 0.6, 0.25];
+        var donorLines = texts.Select((text, index) =>
+        {
+            var start = 5 + (index * 4.0);
+            // Sung unevenly, as a singer does.
+            var cursor = start;
+            var words = new List<LyricWord>();
+            foreach (var (character, k) in text.Select((c, k) => (c, k)))
+            {
+                var length = lengths[(k + index) % 5];
+                words.Add(L.Word(character.ToString(), cursor, cursor + length));
+                cursor += length;
+            }
+            return L.Timed(L.Line(text, start, Math.Max(start + 3.6, cursor)), [.. words]);
+        }).ToList();
+        var recipientLines = donorLines.Select((line, index) =>
+            L.Line(line.Text, line.Start, index + 1 < donorLines.Count ? donorLines[index + 1].Start : line.End)).ToList();
+        var ranked = LyricRanking.Screen([Candidate(QQMusic, donorLines, "QQ Music"), Candidate(Musixmatch, recipientLines, "Musixmatch")],
+            _query, Options([Musixmatch, QQMusic])).Accepted;
+        Assert.Equal("QQ Music", LyricTimingMerge.TimingDonor(ranked[0]));
+        var merged = Assert.IsType<LyricResult.Synced>(ranked[0].Result).Lines;
+        Assert.All(merged, line => Assert.True(line.WordTimed));
+        // The credit row is set apart all the same.
+        var flagged = Lunalyr.Core.Lyrics.Parsing.LyricCredits.Flagging(merged);
+        Assert.True(flagged[0].Credit);
+        Assert.Empty(flagged[0].Words);
+        // Readings are timed by the merged words.
+        var readings = new Lunalyr.Tests.Shared.ReadingTestLines(Lunalyr.Core.Lyrics.Readings.ReadingServices.Basic).Song(merged);
+        var line = readings[1];
+        Assert.NotEmpty(line);
+        var starts = merged[1].Words.Select(w => w.Start).ToHashSet();
+        Assert.All(line, reading => Assert.Contains(reading.Start, starts));
+        Assert.Equal(merged[1].Words[0].Start, line[0].Start);
+    }
+
+    // ---- Automatic lookups and searches (the Mac's 291b50b and b3c0909) ----
+
+    private static ValueTask<LyricCandidate?> Down() =>
+        ValueTask.FromException<LyricCandidate?>(new Lunalyr.Core.Lyrics.Sources.LyricSourceException(Lunalyr.Core.Lyrics.Sources.LyricSourceFailure.Unreachable, "down"));
+
+    // Ported from LyricRankingQualityTests.swift: testAChoiceASilentBetterSourceMightHaveBeatenIsKeptForAnHourOnly
+    // (an hour passes on the lookup clock rather than by editing the saved file)
+    [Fact]
+    public async Task AChoiceASilentBetterSourceMightHaveBeatenIsKeptForAnHourOnly()
+    {
+        using var folder = new TempFolder();
+        var clock = new FakeClock();
+        var qq = Candidate(QQMusic, Lines(LyricRankingFixtures.QrcLatin), "QQ Music");
+        var musixmatch = Candidate(Musixmatch, Lines(LyricRankingFixtures.QrcLatin), "Musixmatch");
+        var order = Options([Musixmatch, QQMusic, SodaMusic]);
+        var ct = TestContext.Current.CancellationToken;
+        // Musixmatch fails and Soda Music fails: QQ shows, but is kept for an hour only (Musixmatch leads it).
+        var first = await Lookups.Create(folder.Path, (id, _, _, _) => id == QQMusic ? ValueTask.FromResult<LyricCandidate?>(qq) : Down(), clock)
+            .LookupAsync(_query, order, cancellationToken: ct);
+        Assert.Equal(QQMusic, first.Candidates[0].Source);
+        // A replay meanwhile asks nothing.
+        var replay = await Lookups.Create(folder.Path, (_, _, _, _) => ValueTask.FromResult<LyricCandidate?>(null), clock)
+            .LookupAsync(_query, order, cancellationToken: ct);
+        Assert.True(replay.Cached);
+        Assert.True(LyricTimingRules.SameResult(replay.Result, first.Result));
+        // An hour on, the next automatic lookup asks again and finds Musixmatch's.
+        clock.Advance(Lunalyr.Core.Lyrics.Storage.SavedLyrics.ProvisionalLifetime + TimeSpan.FromSeconds(1));
+        var second = await Lookups.Create(folder.Path, (id, _, _, _) =>
+                ValueTask.FromResult(id == QQMusic ? qq : id == Musixmatch ? musixmatch : null), clock)
+            .LookupAsync(_query, order, cancellationToken: ct);
+        Assert.False(second.Cached);
+        Assert.Equal("Musixmatch", Assert.IsType<LyricResult.Synced>(second.Result).Provenance.Source);
+        // Musixmatch answered this time, so its choice is saved and replayed without asking, even days later.
+        clock.Advance(TimeSpan.FromDays(3));
+        var third = await Lookups.Create(folder.Path, (_, _, _, _) => ValueTask.FromResult<LyricCandidate?>(null), clock)
+            .LookupAsync(_query, order, cancellationToken: ct);
+        Assert.True(third.Cached);
+        Assert.True(LyricTimingRules.SameResult(third.Result, second.Result));
+    }
+
+    // Ported from LyricRankingQualityTests.swift: testASourceThatCouldOnlyTieDoesNotHoldBackSaving
+    [Fact]
+    public async Task ASourceThatCouldOnlyTieDoesNotHoldBackSaving()
+    {
+        using var folder = new TempFolder();
+        var clock = new FakeClock();
+        var qq = Candidate(QQMusic, Lines(LyricRankingFixtures.QrcLatin), "QQ Music");
+        var order = Options([QQMusic, SodaMusic], LyricMatchMode.SourceOrder);
+        var ct = TestContext.Current.CancellationToken;
+        _ = await Lookups.Create(folder.Path, (id, _, _, _) => id == QQMusic ? ValueTask.FromResult<LyricCandidate?>(qq) : Down(), clock)
+            .LookupAsync(_query, order, cancellationToken: ct);
+        clock.Advance(TimeSpan.FromHours(2));
+        var again = await Lookups.Create(folder.Path, (_, _, _, _) => ValueTask.FromResult<LyricCandidate?>(null), clock)
+            .LookupAsync(_query, order, cancellationToken: ct);
+        Assert.True(again.Cached, "Soda Music leads no better than QQ: the choice stands");
+        Assert.True(LyricRanking.CouldOutlead(qq, Musixmatch, _query));
+        Assert.False(LyricRanking.CouldOutlead(qq, SodaMusic, _query));
+    }
 }

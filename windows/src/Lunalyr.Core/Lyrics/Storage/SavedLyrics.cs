@@ -65,11 +65,21 @@ public sealed class SavedLyrics
         return new LyricCandidate(source, result, title, artist, entry.Duration, 0);
     }
 
-    /// <summary>Caches a lookup's automatic choice under <paramref name="key"/>.</summary>
-    public bool Save(LyricCandidate candidate, string key) => Write(new SavedEntryDto
+    /// <summary>
+    /// How long a provisional choice is kept: a source that could have beaten it gave no answer, so it is asked again
+    /// after this, while replays meanwhile ask nothing (the Mac's b3c0909).
+    /// </summary>
+    public static readonly TimeSpan ProvisionalLifetime = TimeSpan.FromHours(1);
+
+    /// <summary>
+    /// Caches a lookup's automatic choice under <paramref name="key"/>. <paramref name="provisional"/>: kept for
+    /// <see cref="ProvisionalLifetime"/> instead of <see cref="CacheLifetime"/>; its time is set back so it expires then,
+    /// so the entry's shape is unchanged.
+    /// </summary>
+    public bool Save(LyricCandidate candidate, string key, bool provisional = false) => Write(new SavedEntryDto
     {
         Result = ToDto(candidate.Result),
-        StoredAt = _time.GetUtcNow(),
+        StoredAt = provisional ? _time.GetUtcNow() + ProvisionalLifetime - CacheLifetime : _time.GetUtcNow(),
         Source = candidate.Source.RawValue(),
         Title = candidate.Title,
         Artist = candidate.Artist,
