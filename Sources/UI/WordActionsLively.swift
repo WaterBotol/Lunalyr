@@ -632,21 +632,15 @@ struct LivelyActionEffect: ViewModifier {
     }
 }
 
-/// A real turn about the upright axis, in perspective. Drawn flattened
-/// (with room around it for the near edge to grow), so it reads the same
-/// wherever the word is drawn, including a snapshot of the view.
+/// A real turn about the upright axis, in perspective.
 struct LivelyTurn: ViewModifier {
-    /// Nil: no turn (and no flattening).
+    /// Nil: no turn.
     let degrees: Double?
     let room: CGFloat
 
     func body(content: Content) -> some View {
         if let degrees {
-            content
-                .rotation3DEffect(.degrees(degrees), axis: (x: 0, y: 1, z: 0), perspective: 0.5)
-                .padding(room)
-                .drawingGroup()
-                .padding(-room)
+            content.rotation3DEffect(.degrees(degrees), axis: (x: 0, y: 1, z: 0), perspective: 0.5)
         } else {
             content
         }
@@ -1473,7 +1467,7 @@ struct LivelyGlyphRenderer: TextRenderer {
                 }
             }
         case .bleed:
-            // A few thick, glossy runs (2 to 4) from the letters' feet, of
+            // A hint of blood: a few glossy runs (2 or 3) from the letters' feet, of
             // uneven length and pace, slow and heavy, each with a round bead
             // at its tip; the longest lets its bead go, which falls and
             // splats.
@@ -1481,7 +1475,7 @@ struct LivelyGlyphRenderer: TextRenderer {
             guard e > 0.005, !glyphs.isEmpty else { break }
             let crimson = Color(red: 0.42, green: 0.0, blue: 0.05)
             let gloss = Color(red: 1, green: 0.8, blue: 0.82)
-            let runs = min(4, max(2, glyphs.count / 2 + 1))
+            let runs = min(3, max(2, glyphs.count / 3 + 1))
             for k in 0..<runs {
                 let r = { (n: Int) in L.rnd(seed, 300 + k, n) }
                 // Spread along the word, a little uneven.
@@ -1491,14 +1485,14 @@ struct LivelyGlyphRenderer: TextRenderer {
                 let lip = g.baseline - size * 0.06
                 let start = 0.35 + 0.35 * r(3) + 0.15 * Double(k % 2)
                 let pace = 1.0 + 0.7 * r(4)
-                let reach = (0.45 + 0.6 * r(5)) * A
+                let reach = (0.22 + 0.3 * r(5)) * A
                 let flow = L.ss5((t - start) / pace)
                 guard flow > 0.003 else { continue }
-                let w = size * CGFloat(0.085 + 0.035 * r(6))
+                let w = size * CGFloat(0.06 + 0.025 * r(6))
                 let releases = k == 0
                 let release = start + pace * 0.85
                 var length = size * CGFloat(reach * flow)
-                var bead = w * CGFloat(0.55 + 0.35 * L.ss5((t - start) / (pace * 0.7)))
+                var bead = w * CGFloat(0.45 + 0.25 * L.ss5((t - start) / (pace * 0.7)))
                 var fallen = 0.0
                 if releases, t > release {
                     fallen = t - release
@@ -1528,9 +1522,9 @@ struct LivelyGlyphRenderer: TextRenderer {
                              with: .color(gloss.opacity(0.4 * e)))
                 // The released bead: falls with gravity, then splats.
                 if releases, fallen > 0 {
-                    let big = w * 0.95
+                    let big = w * 0.7
                     let drop = size * CGFloat(0.4 * fallen + 0.5 * 6 * fallen * fallen)
-                    let floor = size * CGFloat(reach + 0.55)
+                    let floor = size * CGFloat(reach + 0.35)
                     if lip + length + drop < lip + floor {
                         let y = tip.y + drop
                         context.fill(Path(ellipseIn: CGRect(x: x - big * 0.85, y: y - big * 1.1, width: big * 1.7, height: big * 2.3)),
@@ -1542,13 +1536,13 @@ struct LivelyGlyphRenderer: TextRenderer {
                         let spread = CGFloat(L.easeOutCubic(since / 0.18))
                         let fade = 1 - L.ss5((since - 0.25) / 0.6)
                         let y = lip + floor
-                        let pw = big * (1.6 + 1.4 * spread), ph = big * (0.9 - 0.35 * spread)
+                        let pw = big * (1.4 + 0.9 * spread), ph = big * (0.8 - 0.3 * spread)
                         context.fill(Path(ellipseIn: CGRect(x: x - pw / 2, y: y - ph / 2, width: pw, height: ph)),
-                                     with: .color(crimson.opacity(0.9 * e * fade)))
+                                     with: .color(crimson.opacity(0.7 * e * fade)))
                         for side in [-1.0, 1.0] {
-                            let fx = x + CGFloat(side) * big * (0.9 + 1.4 * spread)
-                            let fy = y - big * CGFloat(0.9 * sin(.pi * min(1, since / 0.3)))
-                            let fr = big * 0.22
+                            let fx = x + CGFloat(side) * big * (0.8 + 0.9 * spread)
+                            let fy = y - big * CGFloat(0.5 * sin(.pi * min(1, since / 0.3)))
+                            let fr = big * 0.16
                             context.fill(Path(ellipseIn: CGRect(x: fx - fr, y: fy - fr, width: fr * 2, height: fr * 2)),
                                          with: .color(crimson.opacity(0.85 * e * fade)))
                         }

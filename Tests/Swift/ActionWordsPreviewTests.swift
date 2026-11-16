@@ -248,7 +248,11 @@ final class ActionWordsPreviewTests: XCTestCase {
         try fileManager.createDirectory(atPath: dir + "/keyframes", withIntermediateDirectories: true)
         try fileManager.createDirectory(atPath: dir + "/dropped", withIntermediateDirectories: true)
         try fileManager.createDirectory(atPath: dir + "/sheets", withIntermediateDirectories: true)
-        let painter = StageLayoutVideoTests.Painter(size: Self.canvas, renderer: .window)
+        // ImageRenderer, not a window snapshot: the snapshot (cacheDisplay)
+        // missed a word's draw scale until its entrance mask came off, so
+        // every word seemed to zoom ~1.25× in one frame about half a second
+        // in (on screen it is smooth), and it dropped 3D turns.
+        let painter = StageLayoutVideoTests.Painter(size: Self.canvas, renderer: .image)
         defer { painter.close() }
         func image(_ view: some View) throws -> (NSBitmapImageRep, CGImage) {
             let rep = try painter.draw(view)
