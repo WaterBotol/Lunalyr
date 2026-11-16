@@ -86,7 +86,7 @@ struct LayoutTileChoices: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .firstTextBaseline) {
                 ChoiceHeader(title: "Layout", value: ShowingLayout.title(chosen: settings.lyricComposition,
-                                                                         showing: showing.layout))
+                                                                         showing: showing.layout(for: LyricStyles.shared.editingSlot)))
                 Spacer(minLength: 8)
                 Toggle("Change layout every song", isOn: $rotateLayouts)
                     .toggleStyle(StudioCheckboxStyle())

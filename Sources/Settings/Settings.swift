@@ -668,6 +668,73 @@ final class Settings: ObservableObject {
         }
     }
 
+    /// Rereads every wallpaper preference a monitor's look keeps
+    /// (`MonitorLookKeys.wallpaper`) after Settings moved to another
+    /// monitor, with the same fallbacks as at launch.
+    func reloadWallpaper() {
+        let d = defaults
+        func set<T: Equatable>(_ path: ReferenceWritableKeyPath<Settings, T>, _ value: T) {
+            if self[keyPath: path] != value { self[keyPath: path] = value }
+        }
+        // Read both first: entering Music video stores the type it leaves as
+        // the fallback, which would overwrite the one being loaded.
+        let mode = BackgroundMode(rawValue: d.string(forKey: "backgroundMode") ?? "") ?? .auto
+        let storedFallback = BackgroundMode(rawValue: d.string(forKey: "custom.musicVideoFallback") ?? "") ?? .auto
+        let fallback = storedFallback == .musicVideo ? .auto : storedFallback
+        set(\.backgroundMode, mode)
+        set(\.musicVideoFallback, fallback)
+        set(\.musicVideoDim, min(Self.musicVideoDimRange.upperBound,
+                                 max(0, d.object(forKey: "custom.musicVideoDim") as? Double ?? 0.35)))
+        set(\.musicVideoBlur, min(Self.musicVideoBlurRange.upperBound,
+                                  max(0, d.object(forKey: "custom.musicVideoBlur") as? Double ?? 0)))
+        set(\.musicVideoFraming, MusicVideoFraming(stored: d.object(forKey: MusicVideoFraming.youTubeKey)))
+        set(\.libraryVideoFraming, MusicVideoFraming(stored: d.object(forKey: MusicVideoFraming.libraryKey)))
+        set(\.albumGradientWallpaper, d.object(forKey: "custom.albumGradientWallpaper") as? Bool ?? true)
+        set(\.patternStyle, (d.object(forKey: "patternStyle") as? Int).flatMap(BackgroundStyle.init(rawValue:)))
+        set(\.shaderStyle, d.string(forKey: "shaderStyle").flatMap(ShaderStyle.init(rawValue:)))
+        set(\.useMotionArtwork, d.object(forKey: "useMotionArtwork") as? Bool ?? true)
+        set(\.effectSpeed, d.object(forKey: "effectSpeed") as? Double ?? 1.0)
+        let preset = d.string(forKey: "custom.wavefieldPreset") ?? "default"
+        set(\.wavefieldPreset, WavefieldWebPreset.catalogue.contains { $0.id == preset } ? preset : "default")
+        set(\.wavefieldProjection, WavefieldProjection(rawValue: d.string(forKey: "custom.wavefieldProjection") ?? "") ?? .preset)
+        set(\.audioVisualizerStyle, AudioVisualizerStyle(rawValue: d.string(forKey: "custom.visualizerStyle") ?? "") ?? .silk)
+        set(\.patternOpacity, d.object(forKey: "patternOpacity") as? Double ?? 0.85)
+        set(\.preferredScrimStrength, d.object(forKey: "scrimStrength") as? Double ?? 1.0)
+        set(\.vividness, d.object(forKey: "vividness") as? Double ?? 1.0)
+        set(\.motionBlur, d.object(forKey: "motionBlur") as? Double ?? 5.0)
+        set(\.motionPlacement, MotionPlacement(rawValue: d.string(forKey: "motionPlacement") ?? "") ?? .fill)
+        set(\.customWallpaperPath, d.string(forKey: "custom.wallpaperPath") ?? "")
+        set(\.customWallpaperName, d.string(forKey: "custom.wallpaperName") ?? "")
+        set(\.customWallpaperPlacement, MotionPlacement(rawValue: d.string(forKey: "custom.wallpaperPlacement") ?? "") ?? .fill)
+        set(\.light3DColours, Light3DColours(rawValue: d.string(forKey: "custom.light3DColours") ?? "") ?? .album)
+    }
+
+    /// Takes on `source`'s settings that no monitor's look keeps (power,
+    /// frame rate, timing, music video sources...), so a monitor's own
+    /// stores answer every question as the app's do. Never stored: on a
+    /// parked look's preferences these keys are not written.
+    func follow(appSettingsOf source: Settings) {
+        func set<T: Equatable>(_ path: ReferenceWritableKeyPath<Settings, T>) {
+            if self[keyPath: path] != source[keyPath: path] { self[keyPath: path] = source[keyPath: path] }
+        }
+        set(\.lowPowerVisuals)
+        set(\.respectLowPower)
+        set(\.onBattery)
+        set(\.animationRate)
+        set(\.pauseWhenCovered)
+        set(\.noLyrics)
+        set(\.lyricOffset)
+        set(\.motionExclusions)
+        set(\.musicVideoOnline)
+        set(\.musicVideoDisplays)
+        set(\.audioReactiveEnabled)
+        set(\.audioSensitivity)
+        set(\.audioCaptureMethod)
+        set(\.wordSymbolList)
+        set(\.actionWordList)
+        if songFont != source.songFont { applySongFont(source.songFont) }
+    }
+
     private func store(_ value: Any?, _ key: String) {
         if let value { defaults.set(value, forKey: key) } else { defaults.removeObject(forKey: key) }
     }

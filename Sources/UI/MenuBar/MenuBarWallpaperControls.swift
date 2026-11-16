@@ -98,7 +98,7 @@ struct MenuBarWallpaperControls: View {
             }
             .help("Which music player Lunalyr follows")
             MenuPanelSubmenuRow("Layout", value: ShowingLayout.title(chosen: settings.lyricComposition,
-                                                                     showing: showing.layout)) {
+                                                                     showing: showing.layout(for: LyricStyles.shared.editingSlot))) {
                 [MenuPanelMenuItem(id: "custom-mix", title: "Custom Mix", checked: settings.lyricComposition == nil) {
                     settings.lyricComposition = nil
                 }] + LyricCompositionGroup.allCases.flatMap(\.layouts).map { layout in

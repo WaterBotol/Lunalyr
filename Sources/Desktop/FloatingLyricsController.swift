@@ -216,7 +216,7 @@ final class FloatingLyricsController {
         let screens = NSScreen.screens.compactMap { screen in screen.versoDisplayID.map { (screen, FloatingFrame.cachedKey($0)) } }
         let floating = Set(options.floatingDisplays(among: screens.map(\.1)))
         if floating.isEmpty, state.editing { state.editing = false }
-        if !floating.isEmpty { LyricStyles.shared.keepFloatingStyle() }
+        if !floating.isEmpty { LyricStyles.shared.keepFloatingStyle(displays: Array(floating)) }
         let input = visibilityInput(floats: true)
         pauseCheck?.cancel()
         pauseCheck = nil
@@ -357,9 +357,11 @@ final class FloatingLyricsController {
         switch slot.kind {
         case .lyrics:
             view = AnyView(FloatingLyricsView(state: slot.state, onDrag: onDrag, onDone: onDone)
+                .environment(\.lyricDisplay, window.key)
                 .environmentObject(NowPlayingMonitor.shared))
         case .title:
             view = AnyView(FloatingTitleCardView(state: slot.state, onDrag: onDrag, onDone: onDone)
+                .environment(\.lyricDisplay, window.key)
                 .environmentObject(NowPlayingMonitor.shared))
         }
         let hosting = FirstClickHostingView(rootView: view)

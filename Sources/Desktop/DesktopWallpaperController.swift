@@ -41,10 +41,12 @@ final class DesktopWallpaperController {
         // Only "Your wallpaper" draws over the existing desktop. Every other
         // mode paints an opaque black base, so its window can be opaque too:
         // the window server then skips blending the desktop picture beneath.
-        modeCancellable = Settings.shared.$backgroundMode.removeDuplicates()
-            .combineLatest(Settings.shared.$musicVideoFallback.removeDuplicates())
-            .sink { [weak self] mode, _ in
-                Task { @MainActor [weak self] in self?.applyOpacity(for: mode) }
+        // Each display has its own wallpaper type (`LyricStyles`).
+        modeCancellable = LyricStyles.shared.changes
+            .map { [weak self] in self?.transparencyNeeds() ?? [:] }
+            .removeDuplicates()
+            .sink { [weak self] _ in
+                Task { @MainActor [weak self] in self?.applyOpacity() }
             }
         // A paused wallpaper cannot run its fade; resuming lets it finish.
         pauseCancellable = LunalyrExtras.shared.$wallpaperPaused.removeDuplicates().dropFirst().sink { [weak self] paused in
@@ -61,28 +63,48 @@ final class DesktopWallpaperController {
     }
 
     private var pendingOpacity: DispatchWorkItem?
-    /// The mode whose windows turn opaque once its wallpaper has faded in.
-    private var opacityChange: (mode: Settings.BackgroundMode, at: TimeInterval, resumedAt: TimeInterval?)?
+    /// When windows last had to wait to turn opaque, until their incoming
+    /// wallpaper has faded in.
+    private var opacityChange: (at: TimeInterval, resumedAt: TimeInterval?)?
 
-    private func applyOpacity(for mode: Settings.BackgroundMode) {
+    /// The wallpaper settings `displayID` draws with: its monitor's look.
+    private static func wallpaper(for displayID: CGDirectDisplayID) -> Settings {
+        LyricStyles.shared.wallpaperStyle(for: FloatingFrame.cachedKey(displayID)).settings
+    }
+
+    /// Whether each display's wallpaper needs the desktop to show through.
+    private func transparencyNeeds() -> [CGDirectDisplayID: Bool] {
+        Dictionary(uniqueKeysWithValues: surfaces.keys.map { id in
+            let settings = Self.wallpaper(for: id)
+            return (id, Self.needsTransparency(settings.backgroundMode, musicVideoFallback: settings.musicVideoFallback))
+        })
+    }
+
+    private func applyOpacity() {
         pendingOpacity?.cancel()
         pendingOpacity = nil
         opacityChange = nil
-        guard !Self.needsTransparency(mode, musicVideoFallback: Settings.shared.musicVideoFallback) else {
-            // Transparent at once, so the outgoing wallpaper can fade away
-            // over the desktop instead of cutting to black.
-            for surface in surfaces.values { Self.configureOpacity(surface.window, mode: mode) }
-            return
+        var waits = false
+        for (id, surface) in surfaces {
+            let settings = Self.wallpaper(for: id)
+            if Self.needsTransparency(settings.backgroundMode, musicVideoFallback: settings.musicVideoFallback) {
+                // Transparent at once, so the outgoing wallpaper can fade
+                // away over the desktop instead of cutting to black.
+                Self.configureOpacity(surface.window, settings: settings)
+            } else if !surface.window.isOpaque {
+                waits = true
+            }
         }
+        guard waits else { return }
         // Stay transparent until the incoming wallpaper has faded in over
         // the desktop; an opaque window would show black beneath the fade.
-        opacityChange = (mode, ProcessInfo.processInfo.systemUptime, nil)
+        opacityChange = (ProcessInfo.processInfo.systemUptime, nil)
         scheduleOpacityCheck(after: WallpaperOpacityPolicy.settleTime)
     }
 
     private func wallpaperResumed() {
         guard let change = opacityChange else { return }
-        opacityChange = (change.mode, change.at, ProcessInfo.processInfo.systemUptime)
+        opacityChange = (change.at, ProcessInfo.processInfo.systemUptime)
         checkOpacity()
     }
 
@@ -98,14 +120,13 @@ final class DesktopWallpaperController {
     private func checkOpacity() {
         pendingOpacity = nil
         guard let change = opacityChange else { return }
-        guard Settings.shared.backgroundMode == change.mode else { opacityChange = nil; return }
         let effects = ShaderPipelineCache.shared
         switch WallpaperOpacityPolicy.step(now: ProcessInfo.processInfo.systemUptime, changedAt: change.at,
                                            compiling: effects.isCompiling, settledAt: effects.lastSettledAt,
                                            paused: LunalyrExtras.shared.wallpaperPaused, resumedAt: change.resumedAt) {
         case .opaque:
             opacityChange = nil
-            for surface in surfaces.values { Self.configureOpacity(surface.window, mode: change.mode) }
+            for (id, surface) in surfaces { Self.configureOpacity(surface.window, settings: Self.wallpaper(for: id)) }
         case .wait(let seconds):
             scheduleOpacityCheck(after: seconds)
         case .hold:
@@ -113,8 +134,8 @@ final class DesktopWallpaperController {
         }
     }
 
-    private static func configureOpacity(_ window: NSWindow, mode: Settings.BackgroundMode) {
-        let opaque = !needsTransparency(mode, musicVideoFallback: Settings.shared.musicVideoFallback)
+    private static func configureOpacity(_ window: NSWindow, settings: Settings) {
+        let opaque = !needsTransparency(settings.backgroundMode, musicVideoFallback: settings.musicVideoFallback)
         guard window.isOpaque != opaque else { return }
         window.isOpaque = opaque
         window.backgroundColor = opaque ? .black : .clear
@@ -122,6 +143,9 @@ final class DesktopWallpaperController {
 
     private func rebuild() {
         HoverState.shared.reset()
+        // A display seen for the first time starts with the main display's
+        // look; one unplugged lets its look go.
+        LyricStyles.shared.displaysChanged()
         let screens = NSScreen.screens
         let connected = Set(screens.compactMap(\.versoDisplayID))
         for id in Set(surfaces.keys).subtracting(connected) {
@@ -156,7 +180,7 @@ final class DesktopWallpaperController {
             window.ignoresMouseEvents = true
             window.isOpaque = true
             window.backgroundColor = .black
-            Self.configureOpacity(window, mode: Settings.shared.backgroundMode)
+            Self.configureOpacity(window, settings: Self.wallpaper(for: displayID))
             window.hasShadow = false
             window.canHide = false
             window.isReleasedWhenClosed = false
@@ -167,11 +191,13 @@ final class DesktopWallpaperController {
 
             let activity = WindowRenderActivity()
             let shade = max(0, screen.frame.maxY - screen.visibleFrame.maxY)
+            // Drawn in this display's look (`LyricStyles`).
             let hosting = NSHostingView(rootView: ZStack(alignment: .top) {
                 NowPlayingView(displayID: displayID, renderActivity: activity)
                     .environmentObject(NowPlayingMonitor.shared)
                 MenuBarShade(menuBarHeight: shade)
-            })
+            }
+            .environment(\.lyricDisplay, FloatingFrame.cachedKey(displayID)))
             hosting.frame = NSRect(origin: .zero, size: screen.frame.size)
             hosting.autoresizingMask = [.width, .height]
             window.contentView = hosting
@@ -229,10 +255,11 @@ enum WallpaperOpacityPolicy {
 @MainActor
 struct MenuBarShade: View {
     let menuBarHeight: CGFloat
-    @ObservedObject private var options = DesktopOptions.shared
+    /// This display's choice (`lyricDisplay`).
+    @SurfaceStyle(.wallpaper) private var look
 
     var body: some View {
-        if options.shadesMenuBar {
+        if look.desktop.shadesMenuBar {
             LinearGradient(colors: [Color.black.opacity(0.42), Color.black.opacity(0.18), .clear],
                            startPoint: .top, endPoint: .bottom)
                 .frame(height: max(menuBarHeight, 24) + 36)

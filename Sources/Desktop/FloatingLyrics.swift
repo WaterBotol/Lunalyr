@@ -197,6 +197,7 @@ struct LyricStyleProfiles {
 @MainActor
 final class FloatingLyricsOptions: ObservableObject {
     static let shared = FloatingLyricsOptions(defaults: .standard, connected: FloatingFrame.connectedKeys(),
+                                              mainDisplay: { LyricStyles.connectedDisplays().first },
                                               reloadStyle: FloatingLyricsOptions.reloadSharedStyle)
 
     enum Keys {
@@ -236,8 +237,13 @@ final class FloatingLyricsOptions: ObservableObject {
     @Published var surface: LyricsSurface {
         didSet {
             guard surface != oldValue else { return }
+            // The monitor being edited keeps it; only the style changes.
+            let slots = MonitorLookSlots(defaults: defaults)
+            let main = mainDisplay()
+            let display = slots.editing(main: main).display
             defaults.set(surface.rawValue, forKey: Keys.surface)
-            LyricStyleProfiles(defaults: defaults).switchSurface(from: oldValue, to: surface)
+            slots.switchEditing(from: LookSlot(display: display, surface: oldValue),
+                                to: LookSlot(display: display, surface: surface), main: main)
             reloadStyle()
         }
     }
@@ -293,14 +299,19 @@ final class FloatingLyricsOptions: ObservableObject {
 
     private let defaults: UserDefaults
     private let reloadStyle: () -> Void
+    private let mainDisplay: () -> String?
 
     /// `reloadStyle` makes the app's lyric settings read the style just
     /// swapped in; tests pass their own.
     /// `connected`: the keys of the displays connected now, main first, for
     /// the first launch with a choice per display (`DisplayLyrics.migrated`).
-    init(defaults: UserDefaults, connected: [String] = [], reloadStyle: @escaping () -> Void = {}) {
+    /// `mainDisplay`: the display with the menu bar, whose look Settings
+    /// edits until another monitor is picked (`MonitorLookSlots`).
+    init(defaults: UserDefaults, connected: [String] = [], mainDisplay: @escaping () -> String? = { nil },
+         reloadStyle: @escaping () -> Void = {}) {
         self.defaults = defaults
         self.reloadStyle = reloadStyle
+        self.mainDisplay = mainDisplay
         surface = LyricsSurface(rawValue: defaults.string(forKey: Keys.surface) ?? "") ?? .desktop
         textSize = Self.clampedTextSize(defaults.object(forKey: Keys.textSize) as? Double ?? Self.defaultTextSize)
         let backdrop = defaults.object(forKey: Keys.backdrop) as? Double ?? Self.defaultBackdrop
@@ -422,12 +433,9 @@ final class FloatingLyricsOptions: ObservableObject {
     }
 
     /// The shared stores reread the lyric style just swapped in.
+    /// Also after Settings moved to another monitor (`LyricStyles.edit`).
     static func reloadSharedStyle() {
-        Settings.shared.reloadLyricStyle()
-        RomanizationOptions.shared.reloadDisplay()
-        LyricColourOptions.shared.reload()
-        LyricHighlightOptions.shared.reload()
-        LunalyrExtras.shared.reloadTranslations()
+        LyricStyles.shared.reloadEditedStores()
         LyricStyles.shared.followEditing()
     }
 }

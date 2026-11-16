@@ -10,6 +10,8 @@ struct NowPlayingView: View {
     @ObservedObject private var lyricsVM = LyricsViewModel.shared
     @ObservedObject private var tone = LyricTone.shared
     @ObservedObject private var hover = HoverState.shared
+    /// The app's settings; a test passes its own, which then stand for
+    /// the display's look too.
     @ObservedObject var settings: Settings = .shared
     /// Passed to the web scenes, so a test can host this view with its own.
     /// Also decides where a music video plays ("Heavy scenes on main
@@ -21,7 +23,14 @@ struct NowPlayingView: View {
     // meter publication would trigger extra wallpaper redraws outside it.
     @ObservedObject private var readingOptions = RomanizationOptions.shared
     @ObservedObject private var songOffsets = SongOffsets.shared
-    @ObservedObject private var desktopOptions = DesktopOptions.shared
+    /// This display's look (`lyricDisplay`): its wallpaper, scenes and
+    /// text backing; the monitor Settings edits when no display is set.
+    @SurfaceStyle(.wallpaper) private var look
+    private var wall: Settings { settings === Settings.shared ? look.settings : settings }
+    private var scenes: VisualizerPreferences {
+        visualizerPreferences === VisualizerPreferences.shared ? look.visualizer : visualizerPreferences
+    }
+    private var desktopOptions: DesktopOptions { look.desktop }
     @ObservedObject private var floatingOptions = FloatingLyricsOptions.shared
     /// Published when an effect finishes compiling, so a crossfade into it
     /// can start.
@@ -99,7 +108,7 @@ struct NowPlayingView: View {
     /// (`WindowRenderActivity.state`), so it runs exactly while a visualiser
     /// can be drawn. The Settings preview ignores the user's Pause wallpaper.
     private var renderingPaused: Bool {
-        !renderActivity.shouldRender(pauseWhenCovered: settings.pauseWhenCovered,
+        !renderActivity.shouldRender(pauseWhenCovered: wall.pauseWhenCovered,
                                      wallpaperPaused: !isSettingsPreview && extras.wallpaperPaused)
     }
 
@@ -166,13 +175,13 @@ struct NowPlayingView: View {
 
     private var desiredLayer: BackgroundLayer {
         // Read once: on battery each read asks IOKit for the power source.
-        let mode = settings.effectiveBackgroundMode
+        let mode = wall.effectiveBackgroundMode
         if mode == .musicVideo {
             if let source = musicVideoHere { return .musicVideo(source) }
             if awaitsMusicVideo { return .musicVideoPending }
             // No video for this song, or kept off this display: whatever
             // was chosen before Music video, under the same power rules.
-            return layer(for: Settings.effectiveMode(settings.musicVideoFallback, under: settings.powerConstraint))
+            return layer(for: Settings.effectiveMode(wall.musicVideoFallback, under: wall.powerConstraint))
         }
         return layer(for: mode)
     }
@@ -199,30 +208,30 @@ struct NowPlayingView: View {
     private var showsMusicVideoHere: Bool {
         // Placement does not depend on the video, so any source asks it.
         MusicVideoController.placement(source: .youTube(""), preview: isSettingsPreview,
-                                       heavyScenesOnMainDisplayOnly: visualizerPreferences.heavyScenesOnMainDisplayOnly,
-                                       choice: settings.musicVideoDisplays, displays: mainDisplay.displays,
+                                       heavyScenesOnMainDisplayOnly: scenes.heavyScenesOnMainDisplayOnly,
+                                       choice: wall.musicVideoDisplays, displays: mainDisplay.displays,
                                        display: effectDisplay, mainDisplay: mainDisplay.id) != nil
     }
 
     /// The song's video, when this surface shows it.
     private var musicVideoHere: MusicVideoSource? {
         MusicVideoController.placement(source: musicVideo.source(for: nowPlaying.current), preview: isSettingsPreview,
-                                       heavyScenesOnMainDisplayOnly: visualizerPreferences.heavyScenesOnMainDisplayOnly,
-                                       choice: settings.musicVideoDisplays, displays: mainDisplay.displays,
+                                       heavyScenesOnMainDisplayOnly: scenes.heavyScenesOnMainDisplayOnly,
+                                       choice: wall.musicVideoDisplays, displays: mainDisplay.displays,
                                        display: effectDisplay, mainDisplay: mainDisplay.id)
     }
 
     /// The type drawn, with Music video resolved to the video or its fallback.
     private var drawnMode: Settings.BackgroundMode {
-        let mode = settings.effectiveBackgroundMode
+        let mode = wall.effectiveBackgroundMode
         guard mode == .musicVideo, musicVideoHere == nil, !awaitsMusicVideo else { return mode }
-        return Settings.effectiveMode(settings.musicVideoFallback, under: settings.powerConstraint)
+        return Settings.effectiveMode(wall.musicVideoFallback, under: wall.powerConstraint)
     }
 
     private func layer(for mode: Settings.BackgroundMode) -> BackgroundLayer {
         if mode == .auto,
-           let motion = nowPlaying.motionArtwork, settings.motionArtworkEnabled,
-           !settings.excludesMotion(artist: nowPlaying.current?.artist,
+           let motion = nowPlaying.motionArtwork, wall.motionArtworkEnabled,
+           !wall.excludesMotion(artist: nowPlaying.current?.artist,
                                     album: nowPlaying.current?.album) {
             // Portrait displays get the tall rendition when the album has a
             // dependable one.
@@ -233,23 +242,23 @@ struct NowPlayingView: View {
         let mood = inputs.mood
         let seed = inputs.seed
         if mode == .desktop { return .desktop }
-        if mode == .custom, CustomWallpaperStore.isAvailable(settings.customWallpaperPath) {
-            return .custom(URL(fileURLWithPath: settings.customWallpaperPath))
+        if mode == .custom, CustomWallpaperStore.isAvailable(wall.customWallpaperPath) {
+            return .custom(URL(fileURLWithPath: wall.customWallpaperPath))
         }
         if mode == .visualizer {
-            let style = settings.audioVisualizerStyle
+            let style = wall.audioVisualizerStyle
             guard style.webEngine != nil else { return .visualizer(style) }
             return .visualizer(style, web: WebVisualizerView.placement(
-                preview: isSettingsPreview, heavyScenesOnMainDisplayOnly: visualizerPreferences.heavyScenesOnMainDisplayOnly,
+                preview: isSettingsPreview, heavyScenesOnMainDisplayOnly: scenes.heavyScenesOnMainDisplayOnly,
                 display: effectDisplay, mainDisplay: mainDisplay.id))
         }
         if mode == .shader || (mode == .auto && mood.energy > 0.72) {
-            return .shader(settings.resolvedShader(for: mood, seed: seed), epoch: shaderEpoch)
+            return .shader(wall.resolvedShader(for: mood, seed: seed), epoch: shaderEpoch)
         }
         if mode == .colourOnly {
-            return settings.albumGradientWallpaper ? .albumGradient : .generated(pattern: nil, seed: 0)
+            return wall.albumGradientWallpaper ? .albumGradient : .generated(pattern: nil, seed: 0)
         }
-        return .generated(pattern: settings.resolvedPattern(for: mood), seed: seed)
+        return .generated(pattern: wall.resolvedPattern(for: mood), seed: seed)
     }
 
     private var trackSeed: Int {
@@ -364,7 +373,7 @@ struct NowPlayingView: View {
             hasTrack: nowPlaying.current != nil, idleSince: nowPlaying.idleSince,
             isLoading: lyricsVM.isLoading, hasTimedLines: !lyricsVM.lines.isEmpty,
             hasPlainLines: !lyricsVM.plainLines.isEmpty, notFound: lyricsVM.notFound,
-            notFoundAt: lyricsVM.notFoundAt, noLyrics: settings.noLyrics, lyricsShown: extras.lyricsVisible && drawsLyrics),
+            notFoundAt: lyricsVM.notFoundAt, noLyrics: wall.noLyrics, lyricsShown: extras.lyricsVisible && drawsLyrics),
             at: date, timing: .init(idleHold: Self.idleHoldDuration, noticeHold: Self.noticeHoldDuration,
                                     noticeFade: Self.noticeFadeDuration))
     }
@@ -392,7 +401,7 @@ struct NowPlayingView: View {
     /// The Settings preview follows the desktop's frame rate, except while
     /// power is being saved.
     private var frameInterval: Double {
-        isSettingsPreview && settings.sparesGPU ? 1.0 / 15 : settings.effectiveAnimationRate.interval
+        isSettingsPreview && wall.sparesGPU ? 1.0 / 15 : wall.effectiveAnimationRate.interval
     }
 
     /// When the frame clock may stop: every visible layer draws itself or
@@ -404,7 +413,7 @@ struct NowPlayingView: View {
         if nowPlaying.current == nil, let since = nowPlaying.idleSince {
             ends.append(since.addingTimeInterval(Self.idleHoldDuration + Self.noticeFadeDuration))
         }
-        if lyricsVM.notFound, settings.noLyrics == .notice, let at = lyricsVM.notFoundAt {
+        if lyricsVM.notFound, wall.noLyrics == .notice, let at = lyricsVM.notFoundAt {
             ends.append(at.addingTimeInterval(Self.noticeHoldDuration + Self.noticeFadeDuration))
         }
         let lyricsAdvance = drawsLyrics && nowPlaying.current != nil && nowPlaying.isPlaying
@@ -431,7 +440,7 @@ struct NowPlayingView: View {
         let _ = clockCheck
         let clockIdle = FrameClockPolicy.isIdle(quietAfter: quietAfter, now: Date())
         // Power state is read once per update, never once per frame.
-        let economical = settings.sparesGPU
+        let economical = wall.sparesGPU
         GeometryReader { geometry in
             let mood = self.mood
 
@@ -441,7 +450,7 @@ struct NowPlayingView: View {
             TimelineView(.animation(minimumInterval: frameInterval, paused: renderingPaused || clockIdle)) { timeline in
                 let now = timeline.date.timeIntervalSinceReferenceDate
 
-                let speed = settings.effectSpeed
+                let speed = wall.effectSpeed
                 // Reduce Motion slows the ambient wallpaper, as the
                 // visualisers already slow themselves.
                 let ambientSpeed = speed * (reduceMotion ? Self.reducedMotionRate : 1)
@@ -642,8 +651,8 @@ struct NowPlayingView: View {
     }
 
     private var backdropSource: BackdropSource {
-        BackdropSource(mode: drawnMode, path: settings.customWallpaperPath,
-                       placement: settings.customWallpaperPlacement, screen: viewportSize)
+        BackdropSource(mode: drawnMode, path: wall.customWallpaperPath,
+                       placement: wall.customWallpaperPlacement, screen: viewportSize)
     }
 
     /// The cover and the track it belongs to. Compared by identity: holding
@@ -705,7 +714,7 @@ struct NowPlayingView: View {
         case .custom(let url):
             ZStack {
                 // Reduce Motion holds an imported video on a still frame.
-                CustomWallpaperView(url: url, placement: settings.customWallpaperPlacement,
+                CustomWallpaperView(url: url, placement: wall.customWallpaperPlacement,
                                     paused: renderingPaused || reduceMotion, onFirstFrame: firstFrameDrawn(layer))
                 if tint > 0 { cover.gradient.opacity(0.18 * tint).ignoresSafeArea() }
                 scrim
@@ -721,10 +730,10 @@ struct NowPlayingView: View {
                 // on screen; that picture shows at once, as the crossfade
                 // is the fade (`WallpaperTransition`).
                 MusicVideoBackground(source: source, paused: renderingPaused,
-                                     dim: settings.musicVideoDim, blur: settings.musicVideoBlur,
+                                     dim: wall.musicVideoDim, blur: wall.musicVideoBlur,
                                      preview: isSettingsPreview, still: reduceMotion, standIn: cover.gradient,
-                                     youTubeFraming: settings.musicVideoFraming,
-                                     libraryFraming: settings.libraryVideoFraming,
+                                     youTubeFraming: wall.musicVideoFraming,
+                                     libraryFraming: wall.libraryVideoFraming,
                                      artwork: videoCovers[source] ?? nowPlaying.artwork,
                                      revealsAtOnce: isHeld(layer), onFirstFrame: firstFrameDrawn(layer))
                 scrim
@@ -736,7 +745,7 @@ struct NowPlayingView: View {
                 // MusicVideoBackground's stand-in, as it looks before a
                 // video's first frame.
                 cover.gradient.ignoresSafeArea()
-                Color.black.opacity(min(Settings.musicVideoDimRange.upperBound, max(0, settings.musicVideoDim)))
+                Color.black.opacity(min(Settings.musicVideoDimRange.upperBound, max(0, wall.musicVideoDim)))
                     .ignoresSafeArea()
                 scrim
                 textBacking(backing, presence: stage, size: size)
@@ -749,20 +758,20 @@ struct NowPlayingView: View {
                     if still {
                         stillCover(artwork)
                     } else {
-                        MotionArtworkView(url: url, placement: settings.motionPlacement, isPaused: renderingPaused,
+                        MotionArtworkView(url: url, placement: wall.motionPlacement, isPaused: renderingPaused,
                                           onFirstFrame: firstFrameDrawn(layer))
                     }
                 }
                 .ignoresSafeArea()
                 // Only softened enough to stop fine detail fighting the
                 // type -- the footage should still be recognisable.
-                .blur(radius: settings.motionBlur)
+                .blur(radius: wall.motionBlur)
                 // A fixed overscan, purely to keep the blur from showing
                 // the frame edge. It used to breathe with the beat; that
                 // twitched the whole picture on every hit.
                 .scaleEffect(1.04)
                 if tint > 0 { cover.gradient.opacity(0.18 * tint).ignoresSafeArea() }
-                Color.black.opacity(0.40 * settings.scrimStrength).ignoresSafeArea()
+                Color.black.opacity(0.40 * wall.scrimStrength).ignoresSafeArea()
                 RadialGradient(
                     colors: [.black.opacity(0.5), .black.opacity(0.16), .clear],
                     center: .center,
@@ -778,7 +787,7 @@ struct NowPlayingView: View {
                 // The album tint and colour richness are applied inside the
                 // effect's own pass, at a bounded resolution.
                 ShaderBackgroundView(style: style, time: phases.colour, flow: phases.flow, palette: cover,
-                                     vividness: settings.vividness, paused: renderingPaused,
+                                     vividness: wall.vividness, paused: renderingPaused,
                                      preview: isSettingsPreview, economical: phases.economical,
                                      displayID: effectDisplay)
                     .ignoresSafeArea()
@@ -789,14 +798,14 @@ struct NowPlayingView: View {
         case .visualizer(let style, let web):
             ZStack {
                 if let engine = style.webEngine {
-                    let originalLight3D = style == .light3D && settings.light3DColours == .original
-                    WebVisualizerView(engine: engine, preset: settings.wavefieldPreset, projection: settings.wavefieldProjection,
-                        sensitivity: settings.audioSensitivity, motion: settings.effectSpeed, tick: phases.visualizer, paused: renderingPaused, preview: isSettingsPreview, palette: hasAlbumPalette && !originalLight3D ? cover : nil,
+                    let originalLight3D = style == .light3D && wall.light3DColours == .original
+                    WebVisualizerView(engine: engine, preset: wall.wavefieldPreset, projection: wall.wavefieldProjection,
+                        sensitivity: wall.audioSensitivity, motion: wall.effectSpeed, tick: phases.visualizer, paused: renderingPaused, preview: isSettingsPreview, palette: hasAlbumPalette && !originalLight3D ? cover : nil,
                         displayID: effectDisplay, placement: web, onFirstFrame: firstFrameDrawn(layer),
-                        preferences: visualizerPreferences)
+                        preferences: scenes)
                         .id(engine)
                         .ignoresSafeArea()
-                        .saturation(originalLight3D ? 1 : settings.vividness)
+                        .saturation(originalLight3D ? 1 : wall.vividness)
                 } else {
                     AudioVisualizerView(style: style, time: phases.visualizer, paused: renderingPaused, preview: isSettingsPreview,
                         palette: hasAlbumPalette ? cover : nil, onFirstFrame: firstFrameDrawn(layer))
@@ -809,7 +818,7 @@ struct NowPlayingView: View {
         case .albumGradient:
             let turn = reduceMotion ? 0 : sin(phases.flow * 0.16) * 0.2
             ZStack {
-                LinearGradient(colors: cover.gradientStops(vividness: settings.vividness).map(AlbumWallpaperPalette.color),
+                LinearGradient(colors: cover.gradientStops(vividness: wall.vividness).map(AlbumWallpaperPalette.color),
                     startPoint: UnitPoint(x: 0, y: 0.22 + turn), endPoint: UnitPoint(x: 1, y: 0.78 - turn))
                     .ignoresSafeArea()
                 scrim
@@ -822,7 +831,7 @@ struct NowPlayingView: View {
                 AnimatedGradientView(
                     palette: cover,
                     time: colourFlow,
-                    vividness: settings.vividness,
+                    vividness: wall.vividness,
                     economical: phases.economical
                 )
                 if let pattern {
@@ -831,7 +840,7 @@ struct NowPlayingView: View {
                         phase: phases.pattern,
                         style: pattern
                     )
-                    .opacity(settings.patternOpacity)
+                    .opacity(wall.patternOpacity)
                 }
                 scrim
                 textBacking(backing, presence: stage, size: size)
@@ -848,17 +857,17 @@ struct NowPlayingView: View {
             GeometryReader { geometry in
                 Image(nsImage: artwork)
                     .resizable()
-                    .aspectRatio(contentMode: settings.motionPlacement == .fit ? .fit : .fill)
+                    .aspectRatio(contentMode: wall.motionPlacement == .fit ? .fit : .fill)
                     .frame(width: geometry.size.width, height: geometry.size.height,
-                           alignment: settings.motionPlacement == .fillTop ? .top
-                               : settings.motionPlacement == .fillBottom ? .bottom : .center)
+                           alignment: wall.motionPlacement == .fillTop ? .top
+                               : wall.motionPlacement == .fillBottom ? .bottom : .center)
                     .clipped()
             }
         }
     }
 
     private var scrim: some View {
-        let strength = settings.scrimStrength
+        let strength = wall.scrimStrength
         return LinearGradient(
             colors: WallpaperShade.scrim.map { .black.opacity($0 * strength) },
             startPoint: .top, endPoint: .bottom
@@ -886,7 +895,7 @@ struct NowPlayingView: View {
 
     private func lyricBackdrop(for cover: AlbumWallpaperPalette) -> Double? {
         switch currentLayer {
-        case .albumGradient: return cover.gradientLuminance(vividness: settings.vividness)
+        case .albumGradient: return cover.gradientLuminance(vividness: wall.vividness)
         case .generated(pattern: nil, seed: _): return nil
         default: return backdrop.luminance
         }
@@ -903,9 +912,9 @@ struct NowPlayingView: View {
         // The lyric target whenever a song plays, not only once its lyrics
         // are in: switching then stepped the backing darker mid-fade.
         let hasLyrics = nowPlaying.current != nil || !lyricsVM.lines.isEmpty || !lyricsVM.plainLines.isEmpty
-        let target = hasLyrics ? LyricLegibility.pastelBackingTarget(increaseContrast: settings.increaseContrast)
+        let target = hasLyrics ? LyricLegibility.pastelBackingTarget(increaseContrast: wall.increaseContrast)
             : LyricLegibility.targetContrast(baseSize: LyricViewportMetrics(size: size).baseSize)
-        let strength = max(0, settings.scrimStrength)
+        let strength = max(0, wall.scrimStrength)
         // The shared scrim is lightest exactly where the lyrics sit.
         let scrim = WallpaperShade.scrimAtStage(strength: strength)
         let luminance: Double, existing: Double
@@ -919,7 +928,7 @@ struct NowPlayingView: View {
         case .musicVideo, .musicVideoPending:
             // Footage is unmeasured; the dimming is laid over it before the scrim.
             luminance = LyricLegibility.unknownBackdropLuminance
-            existing = 1 - (1 - min(1, max(0, settings.musicVideoDim))) * (1 - scrim)
+            existing = 1 - (1 - min(1, max(0, wall.musicVideoDim))) * (1 - scrim)
         case .motion:
             // From the interpolated colours, so it follows the palette fade.
             luminance = Self.coverLuminance(cover)
@@ -931,10 +940,10 @@ struct NowPlayingView: View {
             luminance = LyricLegibility.visualizerLuminance(cover)
             existing = scrim
         case .albumGradient:
-            luminance = cover.gradientLuminance(vividness: settings.vividness)
+            luminance = cover.gradientLuminance(vividness: wall.vividness)
             existing = scrim
         case .generated(let pattern, _):
-            luminance = LyricLegibility.colourFieldLuminance(cover, patternOpacity: pattern == nil ? nil : settings.patternOpacity)
+            luminance = LyricLegibility.colourFieldLuminance(cover, patternOpacity: pattern == nil ? nil : wall.patternOpacity)
             existing = scrim
         }
         return LyricLegibility.stageBacking(forLuminance: luminance, existingDarkening: existing, target: target)
@@ -943,7 +952,7 @@ struct NowPlayingView: View {
     /// The line being sung, for VoiceOver.
     /// Where the song is, with the same offsets the lyric stage applies.
     private var accessiblePlaybackTime: TimeInterval {
-        nowPlaying.playbackTime() + settings.lyricOffset + songOffsets.offset(for: lyricsVM.currentQuery)
+        nowPlaying.playbackTime() + wall.lyricOffset + songOffsets.offset(for: lyricsVM.currentQuery)
     }
 
     private func accessibleLyric(at time: TimeInterval) -> String {

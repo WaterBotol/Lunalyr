@@ -25,18 +25,26 @@ final class LyricsViewModel: ObservableObject {
     private var readingGeneration = UUID()
     /// How `romanized` shows readings: the style being edited's choice.
     private var readingDisplay: RomanizationOptions.Display = .off
-    /// The readings again for the other lyric style (`LyricStyles`), made
-    /// only when it shows them and differently ("Below" against "Replace").
-    @Published private(set) var otherRomanized: [Int: [LyricsFetcher.Word]] = [:]
-    private var otherDisplay: RomanizationOptions.Display = .off
-    private var otherTask: Task<Void, Never>?
+    /// The readings again for the other lyric styles on screen (every
+    /// monitor's, `LyricStyles.liveStyles`), made once per way of showing
+    /// them that differs from the edited style's ("Below" against
+    /// "Replace"): however many monitors there are, at most two more.
+    @Published private(set) var otherRomanized: [RomanizationOptions.Display: [Int: [LyricsFetcher.Word]]] = [:]
+    private var otherDisplays: Set<RomanizationOptions.Display> = []
+    private var otherTasks: [RomanizationOptions.Display: Task<Void, Never>] = [:]
     private var otherGeneration = UUID()
 
     /// The readings as a style showing them `display` draws them.
     func romanized(for display: RomanizationOptions.Display) -> [Int: [LyricsFetcher.Word]] {
         if display == readingDisplay { return romanized }
-        if display == otherDisplay { return otherRomanized }
-        return [:]
+        return otherRomanized[display] ?? [:]
+    }
+
+    /// The ways of showing readings that need their own: every style's on
+    /// screen, less Off and the edited style's.
+    nonisolated static func otherReadingDisplays(_ wanted: [RomanizationOptions.Display],
+                                                 base: RomanizationOptions.Display) -> Set<RomanizationOptions.Display> {
+        Set(wanted).subtracting([.off, base])
     }
     @Published var plainLines: [String] = []
     @Published var isLoading = false
@@ -154,23 +162,26 @@ final class LyricsViewModel: ObservableObject {
     /// changed.
     private func updateOtherReadings(base: RomanizationOptions.Snapshot? = nil, force: Bool = true) {
         let base = base ?? RomanizationOptions.shared.snapshot
-        let wanted = LyricStyles.shared.parked.readingDisplay
-        let display: RomanizationOptions.Display = wanted == base.display ? .off : wanted
-        guard force || display != otherDisplay else { return }
-        otherTask?.cancel()
+        let displays = Self.otherReadingDisplays(LyricStyles.shared.liveStyles.map(\.readingDisplay), base: base.display)
+        guard force || displays != otherDisplays else { return }
+        for task in otherTasks.values { task.cancel() }
+        otherTasks = [:]
         let ticket = UUID()
         otherGeneration = ticket
-        otherDisplay = display
+        otherDisplays = displays
         otherRomanized = [:]
         let value = lines
-        guard !value.isEmpty, display != .off else { return }
-        var chosen = base
-        chosen.display = display
-        otherTask = Task { [weak self] in
-            let worker = Task.detached(priority: .utility) { LyricRomanizer.readings(value, options: chosen) }
-            let readings = await withTaskCancellationHandler(operation: { await worker.value }, onCancel: { worker.cancel() })
-            guard let self, !Task.isCancelled, self.otherGeneration == ticket else { return }
-            self.otherRomanized = readings
+        guard !value.isEmpty else { return }
+        for display in displays {
+            var chosen = base
+            chosen.display = display
+            otherTasks[display] = Task { [weak self] in
+                let worker = Task.detached(priority: .utility) { LyricRomanizer.readings(value, options: chosen) }
+                let readings = await withTaskCancellationHandler(operation: { await worker.value },
+                                                                 onCancel: { worker.cancel() })
+                guard let self, !Task.isCancelled, self.otherGeneration == ticket else { return }
+                self.otherRomanized[display] = readings
+            }
         }
     }
 

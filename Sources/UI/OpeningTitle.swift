@@ -132,9 +132,9 @@ enum OpeningTitle {
 
     /// Whether the card wants the album's animated cover looked up, apart
     /// from the wallpaper's own Animated covers.
-    /// Either lyric style's card counts: the two draw at once.
+    /// Every style on screen counts: every monitor's draw at once.
     @MainActor static var wantsMotionCover: Bool {
-        wantsMotionCover([LyricStyles.shared.edited, LyricStyles.shared.parked])
+        wantsMotionCover(LyricStyles.shared.liveStyles)
     }
 
     @MainActor static func wantsMotionCover(_ styles: [LyricStyle]) -> Bool {

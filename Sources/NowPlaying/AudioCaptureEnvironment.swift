@@ -23,11 +23,15 @@ struct AudioCapturePreferences: Equatable {
     /// visualiser is shown nowhere (see `AudioCaptureGate.videoCoversEveryWallpaper`).
     var musicVideoShowing = false
 
-    @MainActor static func current(_ settings: Settings, extras: LunalyrExtras? = nil) -> AudioCapturePreferences {
+    /// `wallpapers`: every monitor's wallpaper settings (each monitor has
+    /// its own type); by default, `settings`' own.
+    @MainActor static func current(_ settings: Settings, extras: LunalyrExtras? = nil,
+                                   wallpapers: [Settings]? = nil) -> AudioCapturePreferences {
         let extras = extras ?? .shared
         let lowPowerMode = settings.respectLowPower && ProcessInfo.processInfo.isLowPowerModeEnabled
-        let chosen = settings.backgroundMode
-        let fallback = settings.musicVideoFallback
+        let wallpaper = listening(among: wallpapers ?? [settings]) ?? settings
+        let chosen = wallpaper.backgroundMode
+        let fallback = wallpaper.musicVideoFallback
         // Music video shows its fallback where it has no video, so power
         // rules are judged on that fallback.
         let shown = chosen == .musicVideo ? fallback : chosen
@@ -45,6 +49,16 @@ struct AudioCapturePreferences: Equatable {
                 status: MusicVideoController.shared.status, choice: settings.musicVideoDisplays,
                 heavyScenesOnMainDisplayOnly: VisualizerPreferences.shared.heavyScenesOnMainDisplayOnly,
                 displays: displays.displays, main: displays.id))
+    }
+}
+
+extension AudioCapturePreferences {
+    /// The wallpaper System audio is judged by: one whose visualiser always
+    /// shows (Visualisers chosen) before one that shows it only without a
+    /// video (Music video falling back to Visualisers); nil, none wants one.
+    @MainActor static func listening(among wallpapers: [Settings]) -> Settings? {
+        let wanting = wallpapers.filter { AudioCaptureGate.visualiserChosen($0.backgroundMode, fallback: $0.musicVideoFallback) }
+        return wanting.first { $0.backgroundMode != .musicVideo } ?? wanting.first
     }
 }
 
@@ -136,13 +150,14 @@ extension AudioCaptureEnvironment {
         AudioCaptureEnvironment(
             now: { ProcessInfo.processInfo.systemUptime },
             schedule: { delay, repeating, action in scheduleOnMain(after: delay, repeating: repeating, action) },
-            preferences: { .current(.shared) },
+            preferences: { .current(.shared, wallpapers: LyricStyles.shared.wallpaperSettings) },
             setEnabled: { Settings.shared.audioReactiveEnabled = $0 },
             preferencesChanged: {
                 // Music video's video starting or ending, and where it
                 // plays, decide whether its fallback visualiser shows.
                 Settings.shared.objectWillChange
                     .merge(with: LunalyrExtras.shared.$wallpaperPaused.removeDuplicates().map { _ in () },
+                           LyricStyles.shared.objectWillChange.map { _ in () },
                            MusicVideoController.shared.$status.map { _ in () },
                            VisualizerPreferences.shared.objectWillChange.map { _ in () },
                            MainDisplayMonitor.shared.objectWillChange.map { _ in () })

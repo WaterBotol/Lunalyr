@@ -35,6 +35,12 @@ final class LyricStylesTests: XCTestCase {
                       styles: styles, options: options)
     }
 
+    /// The edited monitor's Floating style as kept. Each monitor keeps its
+    /// own now (`MonitorLookSlots`), no longer under `custom.lyricStyle.floating`.
+    private func keptFloating(_ s: Stores) -> [String: Any]? {
+        MonitorLookSlots(defaults: s.defaults).saved(LookSlot(display: s.styles.editingDisplay, surface: .floating))
+    }
+
     func testTheFloatingStyleStartsFromTheDesktopsLessItsSize() {
         let s = stores { defaults in
             defaults.set("echo", forKey: "lyricComposition")
@@ -45,7 +51,7 @@ final class LyricStylesTests: XCTestCase {
         XCTAssertTrue(s.styles.style(for: .desktop).settings === s.settings, "the desktop draws with the app's stores")
         XCTAssertEqual(floating.settings.lyricComposition, .echo)
         XCTAssertEqual(floating.settings.lyricScale, 1)
-        XCTAssertNil(LyricStyleProfiles(defaults: s.defaults).saved(.floating), "not kept until floating lyrics are used")
+        XCTAssertNil(keptFloating(s), "not kept until floating lyrics are used")
     }
 
     func testTheFloatingStyleIsKeptWhenFloatingLyricsAreFirstUsed() {
@@ -53,7 +59,7 @@ final class LyricStylesTests: XCTestCase {
         // Months later, the desktop has moved on before anything floats.
         s.settings.lyricComposition = .torque
         s.styles.keepFloatingStyle()
-        XCTAssertEqual(LyricStyleProfiles(defaults: s.defaults).saved(.floating)?["lyricComposition"] as? String, "torque",
+        XCTAssertEqual(keptFloating(s)?["lyricComposition"] as? String, "torque",
                        "it starts from the desktop's look of the day floating lyrics are first used")
         XCTAssertEqual(s.styles.style(for: .floating).settings.lyricComposition, .torque)
         // From then on the two are apart.
@@ -114,7 +120,7 @@ final class LyricStylesTests: XCTestCase {
         parked.settings.lyricComposition = .mosaic
         parked.settings.lyricOffset = 3
         XCTAssertNil(s.defaults.object(forKey: "custom.lyricOffset"), "settings outside the style are not written")
-        XCTAssertNotEqual(LyricStyleProfiles(defaults: s.defaults).saved(.floating)?["lyricComposition"] as? String,
+        XCTAssertNotEqual(keptFloating(s)?["lyricComposition"] as? String,
                           "mosaic", "nor is the kept style")
         XCTAssertNil(s.defaults.object(forKey: "lyricComposition"))
     }
