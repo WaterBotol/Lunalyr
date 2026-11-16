@@ -167,4 +167,57 @@ final class HangulWordTests: XCTestCase {
         let fallback = CTFontCreateForString(charter, "우리의" as CFString, CFRange(location: 0, length: 3))
         XCTAssertNotEqual(CTFontCopyPostScriptName(fallback) as String, "Charter-Black")
     }
+
+    // MARK: The real stage, at real times
+
+    /// L6 of the same song: Ah-oh 비로소 내 세상이 되어줘. Ah-oh ends at
+    /// 72.919 and 비 begins at 75.974, so at 74.06 the stage rightly holds
+    /// only a fading Ah-oh. Every Korean word is drawn once it is sung,
+    /// in each rolling stage, with its romanisation under it.
+    static let l6 = """
+        <tt xmlns="http://www.w3.org/ns/ttml" xmlns:itunes="http://music.apple.com/lyric-ttml-internal" \
+        xmlns:ttm="http://www.w3.org/ns/ttml#metadata" itunes:timing="Word" xml:lang="en"><body dur="5:07.750">\
+        <div begin="1:11.539" end="1:23.746"><p begin="1:11.539" end="1:23.746" itunes:key="L6" ttm:agent="v1">\
+        <span begin="1:11.539" end="1:12.919">Ah-oh</span> <span begin="1:15.974" end="1:16.406">비</span>\
+        <span begin="1:16.406" end="1:16.907">로</span><span begin="1:16.907" end="1:17.408">소</span> \
+        <span begin="1:17.408" end="1:17.910">내</span> <span begin="1:17.910" end="1:18.374">세</span>\
+        <span begin="1:18.374" end="1:18.859">상</span><span begin="1:18.859" end="1:19.291">이</span> \
+        <span begin="1:19.291" end="1:20.019">되</span><span begin="1:20.019" end="1:21.563">어</span>\
+        <span begin="1:21.814" end="1:23.746">줘</span></p></div></body></tt>
+        """
+
+    func testEveryKoreanWordIsDrawnOnTheRollingStagesOnceSung() throws {
+        let line = try XCTUnwrap(TTMLLyricParser.parse(Self.l6, duration: 307.75).first { $0.wordTimed })
+        let options = RomanizationOptions.Snapshot(display: .below, language: .automatic, toneMarks: true, preferSaved: true)
+        let romanized = LyricRomanizer.readings([line], options: options)
+        var placed: [RollingStack.Placed] = []
+        RollingStackLayout.recorder = { placed = $0 }
+        defer { RollingStackLayout.recorder = nil }
+        func stage(_ composition: LyricComposition, at time: Double) throws -> [(String, Double)] {
+            let window = LyricLayerCache.rollingWindow(around: 0, lines: [line], romanized: romanized, time: time,
+                                                       lead: 1.2, display: .below)
+            placed = []
+            let renderer = ImageRenderer(content: SpokenTypographyView(words: window.words, time: time, baseSize: 52,
+                mood: .neutral, composition: composition, seed: 3, accent: .mint, energy: 0, readings: window.readings,
+                stageHeight: 700, following: window.following, ordinals: window.ordinals, parts: window.parts,
+                lineEnds: window.lineEnds).frame(width: 1200, height: 700))
+            renderer.scale = 0.25
+            _ = try XCTUnwrap(renderer.cgImage)
+            // The stage sets the words within reach of focus; here only
+            // words still to come fall outside, so the placed units are
+            // the window's first ones, in order.
+            XCTAssertLessThanOrEqual(placed.count, window.words.count)
+            return zip(window.words.map(\.text), placed.map(\.slot.shown)).map { ($0, $1) }
+        }
+        let sung: [(word: String, at: Double)] = [("비로소", 76.8), ("내", 77.6), ("세상이", 78.6), ("되어줘", 80.0)]
+        for composition in [LyricComposition.spoken, .cascade, .cutout] {
+            let paused = try stage(composition, at: 74.06)
+            XCTAssertEqual(paused.first?.0, "Ah-oh")
+            XCTAssertTrue(paused.dropFirst().allSatisfy { $0.1 < 0.01 }, "nothing Korean is sung yet: \(paused)")
+            for (word, time) in sung {
+                let shown = try stage(composition, at: time).first { $0.0 == word }?.1 ?? 0
+                XCTAssertGreaterThan(shown, 0.9, "\(composition.title): \(word) at \(time)")
+            }
+        }
+    }
 }
