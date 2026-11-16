@@ -53,6 +53,9 @@ enum MonitorLookKeys {
     /// Settings on the Look pages that every monitor shares, and why.
     static let shared: [String: String] = [
         FloatingLyricsOptions.Keys.surface: "Which style Settings edits, not part of a style.",
+        MonitorLookSlots.editingKey: "Which monitor Settings edits, not part of a look.",
+        MonitorLookSlots.sameEverywhereKey: "Whether every monitor shows one look, so not one monitor's.",
+        "custom.look.": "Where every monitor's looks are kept.",
         FloatingLyricsOptions.Keys.displays: "What each display shows is already kept per display.",
         FloatingLyricsOptions.Keys.textSize: "The floating window's own size, with its frames per display.",
         FloatingLyricsOptions.Keys.placement: "The floating window's place, already kept per display.",

@@ -318,16 +318,36 @@ struct ChoiceMenu<Selection: Hashable, Options: View>: View {
     @Binding var selection: Selection
     let selectedTitle: (Selection) -> String
     let options: Options
+    /// Label left, menu right on one line always, a long label cut short
+    /// rather than the menu moving under it (a list of displays).
+    let oneLine: Bool
 
     init(_ title: String, selection: Binding<Selection>, selectedTitle: @escaping (Selection) -> String,
-         @ViewBuilder options: () -> Options) {
+         oneLine: Bool = false, @ViewBuilder options: () -> Options) {
         self.title = title
         _selection = selection
         self.selectedTitle = selectedTitle
+        self.oneLine = oneLine
         self.options = options()
     }
 
     var body: some View {
+        if oneLine {
+            HStack(spacing: 8) {
+                label
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .help(title)
+                Spacer(minLength: 8)
+                menu.fixedSize().layoutPriority(1)
+            }
+            .frame(maxWidth: .infinity, minHeight: 24, alignment: .leading)
+        } else {
+            wrapping
+        }
+    }
+
+    private var wrapping: some View {
         ViewThatFits(in: .horizontal) {
             HStack(spacing: 8) {
                 label.fixedSize()

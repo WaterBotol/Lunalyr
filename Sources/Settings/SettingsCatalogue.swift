@@ -147,7 +147,7 @@ enum SettingsCatalogue {
         "custom.lyricSourcesSeen": "One-time migration that offers lyric sources added later.",
         "custom.lyricSourcesSeenAMLL": "One-time migration that offered AMLL.",
         "custom.lyricSourcesSeenMusixmatch": "One-time migration that offered Musixmatch.",
-        "custom.lyricStyle.": "The Desktop and Floating styles, swapped by Editing.",
+        "custom.lyricStyle.": "The Desktop and Floating styles from before each monitor had its own; read once to migrate, for one release.",
         "custom.floatingTitleCentre": "Where the floating title row used to sit; read once to place the title card.",
         "custom.floatingTitleEdge": "Where the floating title row used to sit; read once to place the title card.",
         "custom.floatingTitleScale": "Where the floating title row used to sit; read once to place the title card.",
@@ -169,6 +169,15 @@ enum SettingsCatalogue {
     // MARK: Look
 
     private static let wallpaper: [SettingsCatalogueEntry] = [
+        .init(.wallpaper, "Monitor", "Monitor", .choice, keys: ["custom.lookMonitor"],
+              keywords: ["display", "screen", "monitors", "each monitor", "per monitor", "separate settings",
+                         "second display", "external display"]),
+        .init(.wallpaper, "Monitor", "This monitor shows", .choice, keys: ["custom.displayLyrics"],
+              keywords: ["display", "screen", "floating", "desktop", "both", "none", "wallpaper only"]),
+        .init(.wallpaper, "Monitor", "Copy to All Monitors…", .action, keys: ["custom.look."],
+              keywords: ["display", "screen", "every monitor", "same look", "copy look"]),
+        .init(.wallpaper, "Monitor", "Same on every monitor", .toggle, keys: ["custom.lookSameEverywhere"],
+              keywords: ["display", "screen", "all monitors", "one look", "mirror look"]),
         .init(.wallpaper, "Picture", "Wallpaper type", .choice, keys: ["backgroundMode"],
               keywords: ["background", "mode", "custom mix", "match the music", "gpu effects", "line patterns", "visualiser",
                          "visualizer", "colour only", "your wallpaper", "image or video", "music video"],

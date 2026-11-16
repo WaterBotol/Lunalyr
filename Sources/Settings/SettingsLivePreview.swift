@@ -23,12 +23,29 @@ final class SettingsPreviewDisplay: ObservableObject {
     }
 
     func follow(_ screen: NSScreen?) {
+        follows = true
         displayID = (screen ?? NSScreen.main)?.versoDisplayID
         refresh()
     }
+    /// Snapshots draw for the size they were given and never follow a screen.
+    private var follows = false
+
+    /// The monitor Settings edits (`LyricStyles.editingDisplay`): the
+    /// picture takes its shape and desktop picture, wherever the window is.
+    func show(display key: String) {
+        guard picked != key else { return }
+        picked = key
+        if follows { refresh() }
+    }
+    private var picked: String?
 
     func refresh() {
-        guard let screen = NSScreen.screens.first(where: { $0.versoDisplayID == displayID }) ?? NSScreen.main else { return }
+        let screens = NSScreen.screens
+        let chosen = picked.flatMap { key in
+            screens.first { $0.versoDisplayID.map(FloatingFrame.cachedKey) == key }
+        }
+        guard let screen = chosen ?? screens.first(where: { $0.versoDisplayID == displayID }) ?? NSScreen.main
+        else { return }
         if size != screen.frame.size { size = screen.frame.size }
         updatePicture(for: screen)
     }

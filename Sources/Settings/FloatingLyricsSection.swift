@@ -3,11 +3,17 @@ import SwiftUI
 
 /// A short reminder, on pages whose settings belong to a lyric style
 /// (readings, translations), of which style they change.
+@MainActor
 struct LyricStyleEditingNote: View {
     @ObservedObject var options: FloatingLyricsOptions = .shared
+    @ObservedObject private var styles = LyricStyles.shared
 
     var body: some View {
-        if options.isFloating {
+        let screens = FloatingDisplayChoice.connected()
+        if screens.count > 1, !styles.sameEverywhere {
+            InspectorCaption("These settings change \(MonitorBar.name(of: styles.editingDisplay, among: screens))’s "
+                             + "\(options.surface.styleName) style; other monitors keep their own.")
+        } else if options.isFloating {
             InspectorCaption("These settings change the Floating style; the desktop lyrics keep their own.")
         }
     }
@@ -59,13 +65,13 @@ struct DisplayLyricsSection: View {
             ForEach(screens, id: \.key) { screen in
                 ChoiceMenu(screens.count > 1 ? screen.name : "This display", selection: Binding(
                     get: { options.choice(for: screen.key) },
-                    set: { options.setChoice($0, for: screen.key) }), selectedTitle: \.title) {
+                    set: { options.setChoice($0, for: screen.key) }), selectedTitle: \.title, oneLine: true) {
                     ForEach(DisplayLyrics.allCases) { Text($0.title).tag($0) }
                 }
                 .help("What \(screen.name) shows: lyrics on its desktop, floating over its apps, both, or the wallpaper alone")
             }
-            InspectorCaption("Desktop lyrics use the Desktop style and floating lyrics the Floating style.",
-                             more: "Each display can show either, both, or no lyrics at all. A display you plug in for the first time shows Desktop lyrics.")
+            InspectorCaption("Each monitor has its own look: pick one at the top of the picture. Its desktop lyrics use its Desktop style and its floating lyrics its Floating style.",
+                             more: "Each display can show either, both, or no lyrics at all. A display you plug in for the first time shows Desktop lyrics and starts with the main display's look.")
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didChangeScreenParametersNotification)) { _ in
             screens = FloatingDisplayChoice.connected()
