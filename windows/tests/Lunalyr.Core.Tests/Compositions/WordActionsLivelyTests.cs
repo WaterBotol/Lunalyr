@@ -521,7 +521,9 @@ public class WordActionsLivelyTests
             var r = LivelyAction.Rnd(11, n, 3);
             Assert.InRange(r, 0, 0.9999);
         });
-        Assert.Equal(LivelyAction.Rnd(11, 5, 1), LivelyAction.Rnd(11, 5, 1));
-        Assert.NotEqual(LivelyAction.Rnd(11, 5, 1), LivelyAction.Rnd(11, 5, 2));
+        // The Mac's values (computed on the Mac at a1610363, 16 Nov 2026): every particle lands where it does there.
+        Assert.Equal(0.3994, LivelyAction.Rnd(11, 5, 1));
+        Assert.Equal(0.7452, LivelyAction.Rnd(11, 1234, 4));
+        Assert.Equal(0.3491, LivelyAction.Rnd(5, 3, 2));
     }
 }
