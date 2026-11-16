@@ -195,7 +195,11 @@ internal abstract partial class LyricCompositionLayer
     private void DrawOpening(ID2D1DeviceContext dc, OpeningSchedule? schedule, in FrameContext frame)
     {
         var time = frame.SongSeconds;
-        if (schedule is null || !double.IsFinite(time) || SceneShown is not { } scene || Kit is null || _paint is null) return;
+        if (schedule is null || !double.IsFinite(time) || SceneShown is not { } scene || Kit is null || _paint is null)
+        {
+            ReleaseCardVideo();
+            return;
+        }
         // The clock runs every frame while the card moves or is about to (the Mac's OpeningTitle.pace); held, the
         // picture does not change, but the wallpaper still needs a frame when it starts to leave.
         // A card that stays with no leave due needs frames only until it has eased to rest (an idle surface draws
@@ -203,7 +207,12 @@ internal abstract partial class LyricCompositionLayer
         if (frame.IsPlaying && OpeningTitle.Upcoming(schedule, time) is not null
             && (!OpeningTitle.Stays(schedule) || time < schedule.Value.RestsFrom + OpeningTitle.RestFade))
             IsAnimating = true;
-        if (OpeningTitle.Phase(schedule, time, scene.Style.OpeningTitleStrength) is not { } phase) return;
+        if (OpeningTitle.Phase(schedule, time, scene.Style.OpeningTitleStrength) is not { } phase)
+        {
+            // No card up: its animated cover lets its decoder go.
+            ReleaseCardVideo();
+            return;
+        }
         var floating = FloatingStage;
         if (floating && phase.Kept)
         {
@@ -260,6 +269,21 @@ internal abstract partial class LyricCompositionLayer
             dc.Transform = world;
             var radius = (float)card.CoverRadius;
             dc.FillRoundedRectangle(new RoundedRectangle(new RawRectF(0, 0, side, side), radius, radius), _coverBrush);
+            // Over the still, the album's animated cover, once it has a frame.
+            if (CardVideo(dc, scene, frame) is { } video)
+            {
+                var videoFill = side / Math.Min(video.Width, video.Height);
+                video.Brush.Transform = Matrix3x2.CreateScale(videoFill)
+                    * Matrix3x2.CreateTranslation((side - video.Width * videoFill) / 2, (side - video.Height * videoFill) / 2);
+                video.Brush.Opacity = alpha * (float)video.Fade;
+                dc.Transform = world;
+                dc.FillRoundedRectangle(new RoundedRectangle(new RawRectF(0, 0, side, side), radius, radius), video.Brush);
+            }
+        }
+        else
+        {
+            // No cover drawn (none yet, or it has gone): the animated one waits with it.
+            if (scene.MotionCover is null) ReleaseCardVideo();
         }
 
         var x = card.Left + card.ColumnLeft;
@@ -492,6 +516,65 @@ internal abstract partial class LyricCompositionLayer
         }
     }
 
+    private Backgrounds.LoopingVideo? _cardVideo;
+    private string? _cardVideoPath;
+    private ID2D1BitmapBrush1? _cardVideoBrush;
+    private ID2D1Bitmap1? _cardVideoBrushFor;
+    private double _cardVideoShown;
+
+    /// <summary>The animated cover's fade in once its first frame is ready, in wall seconds (the shared player's own fade on the Mac).</summary>
+    internal const double CardVideoFadeIn = 0.35;
+
+    /// <summary>
+    /// The album's animated cover for the card (the Mac's <c>TitleCover</c>, 134455a): the scene's
+    /// <see cref="SceneSnapshot.MotionCover"/> looping silently, its clock moving only while the song plays (it pauses
+    /// with the stage); none under Reduce Motion, where the still stays (a looping picture is motion like any other).
+    /// Null until it has a frame, or when it can't be played.
+    /// </summary>
+    private (ID2D1BitmapBrush1 Brush, int Width, int Height, double Fade)? CardVideo(ID2D1DeviceContext dc, SceneSnapshot scene, in FrameContext frame)
+    {
+        if (scene.MotionCover is not { } path || ReduceMotion)
+        {
+            ReleaseCardVideo();
+            return null;
+        }
+        if (path != _cardVideoPath) ReleaseCardVideo();
+        if (_cardVideo is null)
+        {
+            _cardVideo = new Backgrounds.LoopingVideo("Animated cover (title card)", _log) { Path = path };
+            _cardVideoPath = path;
+        }
+        var video = _cardVideo;
+        if (video.Error is not null) return null;
+        var had = video.First;
+        video.Advance(dc, frame.IsPlaying ? frame.DeltaSeconds : 0, reduceMotion: false);
+        if (frame.IsPlaying || !video.First) IsAnimating = true;
+        if (video.Frame is not { } bitmap) return null;
+        if (!had) _cardVideoShown = frame.WallSeconds;
+        if (!ReferenceEquals(bitmap, _cardVideoBrushFor))
+        {
+            _cardVideoBrush?.Dispose();
+            _cardVideoBrush = dc.CreateBitmapBrush(bitmap,
+                new BitmapBrushProperties1(ExtendMode.Clamp, ExtendMode.Clamp, InterpolationMode.Linear),
+                new BrushProperties(1, Matrix3x2.Identity));
+            _cardVideoBrushFor = bitmap;
+        }
+        var fade = Easing.Smoothstep(Math.Clamp((frame.WallSeconds - _cardVideoShown) / CardVideoFadeIn, 0, 1));
+        if (fade < 1) IsAnimating = true;
+        return (_cardVideoBrush!, video.Width, video.Height, fade);
+    }
+
+    /// <summary>Stops the card's animated cover and lets go of its decoder and frame.</summary>
+    private void ReleaseCardVideo()
+    {
+        _cardVideoBrush?.Dispose();
+        _cardVideoBrush = null;
+        _cardVideoBrushFor = null;
+        _cardVideo?.Dispose();
+        _cardVideo = null;
+        _cardVideoPath = null;
+    }
+
     // Not any track's key at first (a scene without one included), so the first song is always seen as new.
     private string? _fadeTrack = "\u0001";
     private double? _coverArrived;
@@ -637,6 +720,7 @@ internal abstract partial class LyricCompositionLayer
     /// <summary>Lets go of the card and its device resources (the device or the surface is going).</summary>
     private void ReleaseOpening()
     {
+        ReleaseCardVideo();
         _card?.Dispose();
         _card = null;
         DropCover();

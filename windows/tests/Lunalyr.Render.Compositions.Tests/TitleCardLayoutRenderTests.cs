@@ -199,6 +199,71 @@ public sealed class TitleCardLayoutRenderTests : IDisposable
         Assert.InRange(Magenta(_stage.Pixels()), whole - 50, whole + 50);
     }
 
+    /// <summary>A second of flat green, 64 × 64, as a silent MP4 (the owner allowed playing silent animated covers, 17 Nov 2026).</summary>
+    private static string GreenVideo(string folder)
+    {
+        var path = System.IO.Path.Combine(folder, "cover.mp4");
+        using var writer = new Lunalyr.Platform.Media.CardVideoWriter(path, 64, 64);
+        var frame = new byte[64 * 64 * 4];
+        for (var i = 0; i < frame.Length; i += 4) (frame[i], frame[i + 1], frame[i + 2], frame[i + 3]) = (0, 255, 0, 255);
+        for (var f = 0; f < 30; f++) writer.Write(frame, 1.0 / 30);
+        writer.Finish();
+        return path;
+    }
+
+    /// <summary>Pixels of the card's cover, in the lower left of the screen, that are green or magenta.</summary>
+    private (int Green, int Magenta) CoverColours()
+    {
+        var pixels = _stage.Pixels();
+        int green = 0, magenta = 0;
+        for (var y = Height / 2; y < Height; y++)
+            for (var x = 0; x < Width / 2; x += 2)
+            {
+                var i = (y * Width + x) * 4;
+                if (pixels[i + 1] > 180 && pixels[i + 2] < 80 && pixels[i] < 80) green++;
+                if (pixels[i + 2] > 180 && pixels[i + 1] < 76 && pixels[i] > 180) magenta++;
+            }
+        return (green, magenta);
+    }
+
+    // The Mac's 134455a: the album's animated cover plays in the cover's place, over the still, which shows until its
+    // first frame; under Reduce Motion the still stays.
+    [Fact]
+    public void TheAnimatedCoverPlaysInTheCoversPlace()
+    {
+        var folder = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "lunalyr-tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(folder);
+        try
+        {
+            var video = GreenVideo(folder);
+            var song = Song(Flat, pending: false) with { MotionCover = video, ReduceMotion = false };
+            using var layer = new EditorialFactory(IcuWordBreaker.TryCreate(), _logger).Create();
+            layer.CreateResources(_stage.Dc, _stage.DWrite, new Vector2(Width, Height), 1);
+            // Settled, then on while the decoder starts: the still until the first frame, then the video over it.
+            (int Green, int Magenta) seen = default;
+            var clock = System.Diagnostics.Stopwatch.StartNew();
+            for (var t = 5.0; clock.Elapsed < TimeSpan.FromSeconds(10); t += 1.0 / 30)
+            {
+                _stage.Render([layer], song, t, 100 + t, 1);
+                seen = CoverColours();
+                if (seen.Green > 1000 && seen.Magenta < 50) break;
+                Thread.Sleep(15);
+            }
+            Assert.True(seen.Green > 1000 && seen.Magenta < 50, $"green {seen.Green}, magenta {seen.Magenta}");
+
+            // Under Reduce Motion, only the still.
+            using var still = new EditorialFactory(IcuWordBreaker.TryCreate(), _logger).Create();
+            still.CreateResources(_stage.Dc, _stage.DWrite, new Vector2(Width, Height), 1);
+            for (var t = 5.0; t < 6; t += 1.0 / 30) _stage.Render([still], song with { ReduceMotion = true }, t, 200 + t, 1);
+            var reduced = CoverColours();
+            Assert.True(reduced.Magenta > 1000 && reduced.Green == 0, $"green {reduced.Green}, magenta {reduced.Magenta}");
+        }
+        finally
+        {
+            try { Directory.Delete(folder, true); } catch (IOException) { }
+        }
+    }
+
     // Ported from OpeningTitleFaceTests.swift: testATwoLineTitleSpansTheCover
     [Fact]
     public void ATwoLineTitleSpansTheCover()

@@ -129,6 +129,12 @@ public sealed record SceneSnapshot
     /// move when it comes (the Mac's 297b2f2).
     /// </summary>
     public bool CoverPending { get; init; }
+
+    /// <summary>
+    /// The album's animated cover (a looping, silent video file) for the opening title to play in the cover's place,
+    /// whatever Use animated covers says (the Mac's 134455a): only the playing song's own; null for none.
+    /// </summary>
+    public string? MotionCover { get; init; }
 }
 
 /// <summary>Settings shared by the lyric compositions. Each composition reads what applies to it.</summary>

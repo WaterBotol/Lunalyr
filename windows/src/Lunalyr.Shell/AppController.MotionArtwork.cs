@@ -31,8 +31,8 @@ public sealed record MotionCoverStatus(MotionCoverState State, string? Artist = 
 
 // Animated covers (the Mac's NowPlayingMonitor.updateMotionArtwork and NowPlayingView.layer(for:), Lunalyr's own lines;
 // the gate's settings check is re-implemented from Settings.swift's behaviour). A cover is looked up only where it could
-// be shown: "Use animated covers" on, Custom Mix, the album not excluded, a song (not a stream) playing in Apple
-// Music. Other players' listening is never sent to Apple. The cover found stays while the next song of the same album
+// be shown: "Use animated covers" on in Custom Mix, or the opening title with its cover on (the Mac's 134455a); the
+// album not excluded, a song (not a stream) playing in Apple Music. Other players' listening is never sent to Apple. The cover found stays while the next song of the same album
 // plays, and until a different answer arrives; it is drawn in place of Custom Mix's effect or pattern, unless
 // power saving holds the wallpaper to patterns or colour only.
 public sealed partial class AppController
@@ -154,7 +154,8 @@ public sealed partial class AppController
     private void ApplyMotionSettings(AppSettings old, AppSettings settings)
     {
         if (old.UseMotionArtwork != settings.UseMotionArtwork || old.BackgroundMode != settings.BackgroundMode
-            || !ReferenceEquals(old.MotionExclusions, settings.MotionExclusions) || old.MotionPlacement != settings.MotionPlacement)
+            || !ReferenceEquals(old.MotionExclusions, settings.MotionExclusions) || old.MotionPlacement != settings.MotionPlacement
+            || CardWantsMotion(old) != CardWantsMotion(settings))
             UpdateMotionArtwork();
     }
 
@@ -175,8 +176,10 @@ public sealed partial class AppController
             // Apple Music still playing but its next song not read yet (players briefly report nothing between songs):
             // nothing is decided until it is, so the next song of the same album never cuts away from its cover.
             if (current is null or { IsEmpty: true } && IsAppleMusic(app) && _motionKey is not null) return;
+            // Looked up for the wallpaper, or for the opening title's cover whatever Use animated covers says (the Mac's
+            // 134455a): an album left out of animated covers stays still in both.
             var allowed = _motionSource is not null && current is { IsEmpty: false } && IsAppleMusic(app)
-                && _streamTrack != current.TrackKey && settings.UseMotionArtwork && settings.BackgroundMode == "auto"
+                && _streamTrack != current.TrackKey && (WallpaperWantsMotion(settings) || CardWantsMotion(settings))
                 && !settings.ExcludesMotion(current.Artist, NullIfEmpty(current.AlbumTitle));
             if (!allowed)
             {
@@ -206,6 +209,8 @@ public sealed partial class AppController
             ShowMotion(allowedFiles: null, keepCurrent: true);
             return;
         }
+        // Another album: the card lets go of the last one's animated cover at once (the wallpaper keeps it until the answer).
+        SyncCardMotion();
         _player.Info($"Animated cover: checking Apple Music for this album.");
         RaiseStatusChanged();
         Track(LookUpMotionAsync(lookup.Key, lookup.Track, lookup.Source, lookup.Portrait, lookup.Cts));
@@ -276,7 +281,43 @@ public sealed partial class AppController
         }
         if (replace is not null) _renderer.ReplaceLayer(replace);
         if (changed || replace is not null) PublishLayers();
+        SyncCardMotion();
         RaiseStatusChanged();
+    }
+
+    /// <summary>The wallpaper shows animated covers: Use animated covers in Custom Mix.</summary>
+    private static bool WallpaperWantsMotion(AppSettings settings) => settings.UseMotionArtwork && settings.BackgroundMode == "auto";
+
+    /// <summary>The opening title would play the album's animated cover: the title and its cover are on.</summary>
+    private static bool CardWantsMotion(AppSettings settings) => settings.OpeningTitle && settings.OpeningTitleCover;
+
+    /// <summary>The animated cover the opening title plays (its square file), handed to the scene.</summary>
+    private string? _cardMotion;
+
+    /// <summary>
+    /// Hands the scene the playing song's own animated cover for the opening title (the Mac's
+    /// <c>currentMotionArtwork</c>, 297b2f2): only the answer for this song's album, never one kept from the album
+    /// before while the new one is looked up, and none when the title's cover is off.
+    /// </summary>
+    private void SyncCardMotion()
+    {
+        var track = Monitor.Track;
+        bool changed;
+        lock (_gate)
+        {
+            if (_disposed) return;
+            string? path = null;
+            if (_motionFiles is { } files && track is { IsEmpty: false } && CardWantsMotion(_settings)
+                && _motionKey == MotionArtworkPages.CacheKey(NullIfEmpty(track.AlbumTitle), track.Artist, track.Title))
+                path = files.Square;
+            changed = path != _cardMotion;
+            if (changed)
+            {
+                _cardMotion = path;
+                _scene = _scene with { MotionCover = path };
+            }
+        }
+        if (changed) PublishScene();
     }
 
     // Must hold _gate.

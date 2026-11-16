@@ -96,7 +96,8 @@ public sealed class MotionCoverTests : IAsyncDisposable
     {
         _covers.Albums["Dawn"] = Dawn;
         var first = _source.Add(Playing("First Light", "Dawn"));
-        var controller = Start(new AppSettings { UseMotionArtwork = false });
+        // Neither the wallpaper nor the opening title could show one (the title plays it too since the Mac's 134455a).
+        var controller = Start(new AppSettings { UseMotionArtwork = false, OpeningTitle = false });
         await WaitUntil(() => controller.Monitor.Track is not null);
         await controller.WhenIdleAsync();
         Assert.Equal(MotionCoverState.Off, controller.MotionStatus.State);
@@ -128,6 +129,37 @@ public sealed class MotionCoverTests : IAsyncDisposable
         Assert.Equal(["Dawn", "Far"], _covers.Lookups);
         Assert.Single(_renderer.Replaced); // no cut away and back within an album
         GC.KeepAlive(first);
+    }
+
+    // The Mac's 134455a and 297b2f2: the opening title plays the album's animated cover whatever Use animated covers
+    // says, and only the playing song's own (never the last album's while the new one is looked up).
+    [Fact]
+    public async Task TheTitleCardPlaysTheSongsOwnAnimatedCoverWhateverTheSwitch()
+    {
+        _covers.Albums["Dawn"] = Dawn;
+        _source.Add(Playing("First Light", "Dawn"));
+        var controller = Start(new AppSettings { UseMotionArtwork = false });
+        await WaitUntil(() => controller.Scene.MotionCover is not null);
+        Assert.Equal(Dawn.Square, controller.Scene.MotionCover);
+        Assert.NotEqual("motion", _renderer.Layers.Background); // the wallpaper's switch is still off
+        Assert.Equal(["Dawn"], _covers.Lookups);
+
+        // Another album: the card lets go at once, while the new one is looked up.
+        _covers.Hold = new TaskCompletionSource();
+        _source.Add(Playing("Elsewhere", "Far"));
+        await WaitUntil(() => controller.Monitor.Track?.Title == "Elsewhere" && controller.Scene.Title == "Elsewhere");
+        await WaitUntil(() => _covers.Lookups.Count == 2);
+        Assert.Null(controller.Scene.MotionCover);
+        _covers.Hold.SetResult();
+        await controller.WhenIdleAsync();
+        Assert.Null(controller.Scene.MotionCover); // that album has none
+
+        // The title's cover off: no animated cover for it either.
+        _covers.Hold = null;
+        _source.Add(Playing("Second Light", "Dawn"));
+        await WaitUntil(() => controller.Scene.MotionCover == Dawn.Square);
+        controller.ApplySettings(controller.Settings with { OpeningTitleCover = false });
+        await WaitUntil(() => controller.Scene.MotionCover is null);
     }
 
     // Ported from SpotifyPlayerTests.swift: testSpotifyListeningIsNeverSentToApplesCatalogue (the animated-cover half;

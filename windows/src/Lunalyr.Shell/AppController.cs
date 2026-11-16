@@ -634,6 +634,7 @@ public sealed partial class AppController : IAsyncDisposable
                 TrackKey = track.TrackKey,
                 Cover = _cover,
                 CoverPending = _coverPending,
+                MotionCover = _cardMotion,
                 // Looking the same song up again keeps its title's reading.
                 TitleReading = _scene.Title == track.Title ? _scene.TitleReading : null,
             };
