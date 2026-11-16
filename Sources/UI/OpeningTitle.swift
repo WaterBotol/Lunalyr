@@ -28,7 +28,10 @@ enum OpeningTitle {
     /// setting's present meaning ("show it in full mid-song too").
     static let alwaysKey = "custom.openingTitleAlways"
 
-    static var keeps: Bool { UserDefaults.standard.bool(forKey: alwaysKey) }
+    static var keeps: Bool { keeps(in: .standard) }
+    static func keeps(in defaults: UserDefaults) -> Bool {
+        defaults.object(forKey: alwaysKey) as? Bool ?? ShippedDefaults.openingTitleAlways
+    }
 
     /// The album cover beside the title.
     static let coverKey = "custom.openingTitleCover"
@@ -60,30 +63,43 @@ enum OpeningTitle {
         var corner: CGPoint?
         var scale = 1.0
 
-        static let standard = Placement()
-        var isStandard: Bool { corner == nil && abs(scale - 1) < 0.001 }
+        /// Stored as both shares: the place worked out from the screen
+        /// (`box`'s nil corner), kept by installs from before the shipped
+        /// place (`DefaultsMigration`).
+        static let computedPlace = -1.0
+        /// Where it sits with nothing stored (`ShippedDefaults`).
+        static let standard = Placement(
+            corner: CGPoint(x: ShippedDefaults.openingTitleLeft, y: ShippedDefaults.openingTitleLift),
+            scale: ShippedDefaults.openingTitleScale)
+        var isStandard: Bool {
+            guard let corner, let home = Self.standard.corner else { return false }
+            return abs(corner.x - home.x) < 0.0001 && abs(corner.y - home.y) < 0.0001
+                && abs(scale - Self.standard.scale) < 0.001
+        }
 
         static func stored(_ defaults: UserDefaults = .standard) -> Placement {
-            var placement = Placement()
-            if let left = defaults.object(forKey: leftKey) as? Double, let lift = defaults.object(forKey: liftKey) as? Double,
-               left.isFinite, lift.isFinite {
-                placement.corner = CGPoint(x: left, y: lift)
+            resolved(left: defaults.object(forKey: leftKey) as? Double, lift: defaults.object(forKey: liftKey) as? Double,
+                     scale: defaults.object(forKey: scaleKey) as? Double)
+        }
+
+        /// The placement the three stored values describe; nil ones are
+        /// the standard place and scale.
+        static func resolved(left: Double?, lift: Double?, scale: Double?) -> Placement {
+            var placement = standard
+            if let left, let lift, left.isFinite, lift.isFinite {
+                placement.corner = left < 0 || lift < 0 ? nil : CGPoint(x: left, y: lift)
             }
-            if let scale = defaults.object(forKey: scaleKey) as? Double, scale.isFinite {
+            if let scale, scale.isFinite {
                 placement.scale = min(scales.upperBound, max(scales.lowerBound, scale))
             }
             return placement
         }
 
         func store(_ defaults: UserDefaults = .standard) {
-            if let corner {
-                defaults.set(Double(corner.x), forKey: Self.leftKey)
-                defaults.set(Double(corner.y), forKey: Self.liftKey)
-            } else {
-                defaults.removeObject(forKey: Self.leftKey)
-                defaults.removeObject(forKey: Self.liftKey)
-            }
-            if abs(scale - 1) < 0.001 { defaults.removeObject(forKey: Self.scaleKey) }
+            let corner = corner ?? CGPoint(x: Self.computedPlace, y: Self.computedPlace)
+            defaults.set(Double(corner.x), forKey: Self.leftKey)
+            defaults.set(Double(corner.y), forKey: Self.liftKey)
+            if abs(scale - Self.standard.scale) < 0.001 { defaults.removeObject(forKey: Self.scaleKey) }
             else { defaults.set(min(Self.scales.upperBound, max(Self.scales.lowerBound, scale)), forKey: Self.scaleKey) }
         }
 
@@ -370,12 +386,15 @@ extension OpeningTitle {
     static let restEase = 2.0
     static let restOpacity = 0.55
     /// "Title strength": how strong a kept card (`keeps`) stays once it
-    /// has rested, 30% to 100% (solid); `restOpacity` by default.
+    /// has rested, 30% to 100% (solid); `ShippedDefaults.openingTitleStrength`
+    /// by default (`restOpacity` before November 2026).
     static let strengthKey = "custom.openingTitleStrength"
     static let strengthRange: ClosedRange<Double> = 0.3...1
 
     static func keptStrength(_ defaults: UserDefaults = .standard) -> Double {
-        guard let value = defaults.object(forKey: strengthKey) as? Double, value.isFinite else { return restOpacity }
+        guard let value = defaults.object(forKey: strengthKey) as? Double, value.isFinite else {
+            return ShippedDefaults.openingTitleStrength
+        }
         return min(strengthRange.upperBound, max(strengthRange.lowerBound, value))
     }
 

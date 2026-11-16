@@ -170,8 +170,10 @@ final class Settings: ObservableObject {
     static let musicVideoBlurRange: ClosedRange<Double> = 0...24
     @Published var albumGradientWallpaper: Bool { didSet { store(albumGradientWallpaper, "custom.albumGradientWallpaper") } }
     /// `nil` means let the track pick within the mode.
-    @Published var patternStyle: BackgroundStyle? { didSet { store(patternStyle?.rawValue, "patternStyle") } }
-    @Published var shaderStyle: ShaderStyle? { didSet { store(shaderStyle?.rawValue, "shaderStyle") } }
+    /// Stored as `ShippedDefaults.noPattern` / `.automatic`, as nothing stored
+    /// is the shipped pin.
+    @Published var patternStyle: BackgroundStyle? { didSet { store(patternStyle?.rawValue ?? ShippedDefaults.noPattern, "patternStyle") } }
+    @Published var shaderStyle: ShaderStyle? { didSet { store(shaderStyle?.rawValue ?? ShippedDefaults.automatic, "shaderStyle") } }
     @Published var useMotionArtwork: Bool { didSet { store(useMotionArtwork, "useMotionArtwork") } }
     /// `nil` means let the track pick.
     @Published var lyricComposition: LyricComposition? { didSet { store(lyricComposition?.rawValue ?? "automatic", "lyricComposition") } }
@@ -514,10 +516,10 @@ final class Settings: ObservableObject {
          loginItem: LoginItemService = SMAppService.mainApp) {
         defaults = d
         self.loginItem = loginItem
-        fontChoice = FontChoice(rawValue: d.string(forKey: "fontChoice") ?? "") ?? .manrope
+        fontChoice = FontChoice(rawValue: d.string(forKey: "fontChoice") ?? "") ?? ShippedDefaults.fontChoice
         googleFontFamily = d.string(forKey: "googleFontFamily") ?? ""
         installedFontFamily = d.string(forKey: Self.installedFontFamilyKey) ?? ""
-        backgroundMode = BackgroundMode(rawValue: d.string(forKey: "backgroundMode") ?? "") ?? .auto
+        backgroundMode = BackgroundMode(rawValue: d.string(forKey: "backgroundMode") ?? "") ?? ShippedDefaults.backgroundMode
         let fallback = BackgroundMode(rawValue: d.string(forKey: "custom.musicVideoFallback") ?? "") ?? .auto
         musicVideoFallback = fallback == .musicVideo ? .auto : fallback
         musicVideoOnline = d.bool(forKey: "custom.musicVideoOnline")
@@ -528,19 +530,20 @@ final class Settings: ObservableObject {
         musicVideoFraming = MusicVideoFraming(stored: d.object(forKey: MusicVideoFraming.youTubeKey))
         libraryVideoFraming = MusicVideoFraming(stored: d.object(forKey: MusicVideoFraming.libraryKey))
         albumGradientWallpaper = d.object(forKey: "custom.albumGradientWallpaper") as? Bool ?? true
-        patternStyle = (d.object(forKey: "patternStyle") as? Int).flatMap(BackgroundStyle.init(rawValue:))
-        shaderStyle = (d.string(forKey: "shaderStyle")).flatMap(ShaderStyle.init(rawValue:))
-        useMotionArtwork = d.object(forKey: "useMotionArtwork") as? Bool ?? true
+        patternStyle = (d.object(forKey: "patternStyle") as? Int).map(BackgroundStyle.init(rawValue:)) ?? ShippedDefaults.patternStyle
+        shaderStyle = (d.string(forKey: "shaderStyle")).map(ShaderStyle.init(rawValue:)) ?? ShippedDefaults.shaderStyle
+        useMotionArtwork = d.object(forKey: "useMotionArtwork") as? Bool ?? ShippedDefaults.useMotionArtwork
         let savedComposition = d.string(forKey: "lyricComposition")
-        lyricComposition = savedComposition == "automatic" ? nil : savedComposition.flatMap(LyricComposition.saved) ?? .constellation
-        constellationSpread = d.object(forKey: "constellationSpread") as? Double ?? 1.0
-        constellationLinkOpacity = d.object(forKey: "constellationLinkOpacity") as? Double ?? 0.20
-        wordRevealByStyle = d.dictionary(forKey: "custom.wordRevealByStyle") as? [String: Bool] ?? [:]
-        wordArrivalByStyle = d.dictionary(forKey: "custom.wordArrivalByStyle") as? [String: String] ?? [:]
-        nextWordPreviewByStyle = d.dictionary(forKey: "custom.nextWordPreviewByStyle") as? [String: Bool] ?? [:]
-        echoStrength = d.object(forKey: "echoStrength") as? Double ?? 1.0
+        lyricComposition = savedComposition == "automatic" ? nil
+            : savedComposition.flatMap(LyricComposition.saved) ?? ShippedDefaults.lyricComposition
+        constellationSpread = d.object(forKey: "constellationSpread") as? Double ?? ShippedDefaults.constellationSpread
+        constellationLinkOpacity = d.object(forKey: "constellationLinkOpacity") as? Double ?? ShippedDefaults.constellationLinkOpacity
+        wordRevealByStyle = d.dictionary(forKey: "custom.wordRevealByStyle") as? [String: Bool] ?? ShippedDefaults.wordRevealByStyle
+        wordArrivalByStyle = d.dictionary(forKey: "custom.wordArrivalByStyle") as? [String: String] ?? ShippedDefaults.wordArrivalByStyle
+        nextWordPreviewByStyle = d.dictionary(forKey: "custom.nextWordPreviewByStyle") as? [String: Bool] ?? ShippedDefaults.nextWordPreviewByStyle
+        echoStrength = d.object(forKey: "echoStrength") as? Double ?? ShippedDefaults.echoStrength
         lyricOffset = d.object(forKey: "custom.lyricOffset") as? Double ?? 0
-        lyricScale = d.object(forKey: "lyricScale") as? Double ?? 1.0
+        lyricScale = d.object(forKey: "lyricScale") as? Double ?? ShippedDefaults.lyricScale
         showInterludes = d.object(forKey: "custom.showInterludes") as? Bool ?? true
         thinkingOrbStyle = ThinkingOrb.normalised(d.string(forKey: ThinkingOrb.styleKey))
         wordSymbols = d.object(forKey: Self.wordSymbolsKey) as? Bool ?? true
@@ -548,30 +551,33 @@ final class Settings: ObservableObject {
         actionWords = d.object(forKey: Self.actionWordsKey) as? Bool ?? true
         actionWordList = d.dictionary(forKey: Self.actionWordListKey) as? [String: String]
         actionWordStrength = ActionWordStrength(rawValue: d.string(forKey: Self.actionWordStrengthKey) ?? "") ?? .wild
-        animationRate = AnimationRate(rawValue: d.integer(forKey: "custom.animationRate")) ?? .balanced
+        animationRate = AnimationRate(rawValue: d.object(forKey: "custom.animationRate") as? Int
+            ?? ShippedDefaults.animationRate.rawValue) ?? .balanced
         pauseWhenCovered = d.object(forKey: "custom.pauseWhenCovered") as? Bool ?? true
         hasOnboarded = d.bool(forKey: "hasOnboarded")
         respectLowPower = d.object(forKey: "respectLowPower") as? Bool ?? true
-        onBattery = PowerBehaviour(rawValue: d.string(forKey: "onBattery") ?? "") ?? .lightEffects
-        noLyrics = NoLyricsBehaviour(rawValue: d.string(forKey: "noLyrics") ?? "") ?? .notice
+        onBattery = PowerBehaviour(rawValue: d.string(forKey: "onBattery") ?? "") ?? ShippedDefaults.onBattery
+        noLyrics = NoLyricsBehaviour(rawValue: d.string(forKey: "noLyrics") ?? "") ?? ShippedDefaults.noLyrics
         launchAtLogin = Self.launchesAtLogin(loginItem.status)
         effectSpeed = d.object(forKey: "effectSpeed") as? Double ?? 1.0
-        audioReactiveEnabled = d.bool(forKey: "custom.audioReactiveEnabled")
-        audioSensitivity = d.object(forKey: "custom.audioSensitivity") as? Double ?? 1.0
+        audioReactiveEnabled = d.object(forKey: "custom.audioReactiveEnabled") as? Bool ?? ShippedDefaults.audioReactiveEnabled
+        audioSensitivity = d.object(forKey: "custom.audioSensitivity") as? Double ?? ShippedDefaults.audioSensitivity
         audioCaptureMethod = AudioCaptureMethod(rawValue: d.string(forKey: "custom.audioCaptureMethod") ?? "") ?? .automatic
         let wavefieldPreset = d.string(forKey: "custom.wavefieldPreset") ?? "default"
         self.wavefieldPreset = WavefieldWebPreset.catalogue.contains { $0.id == wavefieldPreset } ? wavefieldPreset : "default"
-        wavefieldProjection = WavefieldProjection(rawValue: d.string(forKey: "custom.wavefieldProjection") ?? "") ?? .preset
-        audioVisualizerStyle = AudioVisualizerStyle(rawValue: d.string(forKey: "custom.visualizerStyle") ?? "") ?? .silk
+        wavefieldProjection = WavefieldProjection(rawValue: d.string(forKey: "custom.wavefieldProjection") ?? "")
+            ?? ShippedDefaults.wavefieldProjection
+        audioVisualizerStyle = AudioVisualizerStyle(rawValue: d.string(forKey: "custom.visualizerStyle") ?? "")
+            ?? ShippedDefaults.visualizerStyle
         patternOpacity = d.object(forKey: "patternOpacity") as? Double ?? 0.85
-        preferredScrimStrength = d.object(forKey: "scrimStrength") as? Double ?? 1.0
+        preferredScrimStrength = d.object(forKey: "scrimStrength") as? Double ?? ShippedDefaults.scrimStrength
         vividness = d.object(forKey: "vividness") as? Double ?? 1.0
         motionBlur = d.object(forKey: "motionBlur") as? Double ?? 5.0
-        motionPlacement = MotionPlacement(rawValue: d.string(forKey: "motionPlacement") ?? "") ?? .fill
+        motionPlacement = MotionPlacement(rawValue: d.string(forKey: "motionPlacement") ?? "") ?? ShippedDefaults.motionPlacement
         motionExclusions = d.stringArray(forKey: "motionExclusions") ?? []
         nextWordPreviewLead = d.object(forKey: "custom.nextWordPreviewLead") as? Double ?? 0.45
         wordEntranceMix = d.stringArray(forKey: "custom.wordEntranceMix")
-            ?? [WordArrival.fade.rawValue, WordArrival.lift.rawValue, WordArrival.cutoutFold.rawValue]
+            ?? ShippedDefaults.wordEntranceMix
         lowPowerVisuals = d.bool(forKey: "custom.lowPowerVisuals")
         editorialTypography = d.bool(forKey: "custom.editorialTypography")
         editorialAmount = d.object(forKey: "custom.editorialAmount") as? Double ?? 1
@@ -579,7 +585,7 @@ final class Settings: ObservableObject {
         customWallpaperPath = d.string(forKey: "custom.wallpaperPath") ?? ""
         customWallpaperName = d.string(forKey: "custom.wallpaperName") ?? ""
         customWallpaperPlacement = MotionPlacement(rawValue: d.string(forKey: "custom.wallpaperPlacement") ?? "") ?? .fill
-        light3DColours = Light3DColours(rawValue: d.string(forKey: "custom.light3DColours") ?? "") ?? .album
+        light3DColours = Light3DColours(rawValue: d.string(forKey: "custom.light3DColours") ?? "") ?? ShippedDefaults.light3DColours
         increaseContrast = NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast
         if launchAtLogin && loginItem.status == .requiresApproval { launchAtLoginError = Self.loginItemNeedsApproval }
         refreshWordAccentLists()
@@ -631,17 +637,17 @@ final class Settings: ObservableObject {
         }
         let savedComposition = d.string(forKey: "lyricComposition")
         set(\.lyricComposition, savedComposition == "automatic" ? nil
-            : savedComposition.flatMap(LyricComposition.saved) ?? .constellation)
-        set(\.constellationSpread, d.object(forKey: "constellationSpread") as? Double ?? 1.0)
-        set(\.constellationLinkOpacity, d.object(forKey: "constellationLinkOpacity") as? Double ?? 0.20)
-        set(\.wordRevealByStyle, d.dictionary(forKey: "custom.wordRevealByStyle") as? [String: Bool] ?? [:])
-        set(\.wordArrivalByStyle, d.dictionary(forKey: "custom.wordArrivalByStyle") as? [String: String] ?? [:])
-        set(\.nextWordPreviewByStyle, d.dictionary(forKey: "custom.nextWordPreviewByStyle") as? [String: Bool] ?? [:])
+            : savedComposition.flatMap(LyricComposition.saved) ?? ShippedDefaults.lyricComposition)
+        set(\.constellationSpread, d.object(forKey: "constellationSpread") as? Double ?? ShippedDefaults.constellationSpread)
+        set(\.constellationLinkOpacity, d.object(forKey: "constellationLinkOpacity") as? Double ?? ShippedDefaults.constellationLinkOpacity)
+        set(\.wordRevealByStyle, d.dictionary(forKey: "custom.wordRevealByStyle") as? [String: Bool] ?? ShippedDefaults.wordRevealByStyle)
+        set(\.wordArrivalByStyle, d.dictionary(forKey: "custom.wordArrivalByStyle") as? [String: String] ?? ShippedDefaults.wordArrivalByStyle)
+        set(\.nextWordPreviewByStyle, d.dictionary(forKey: "custom.nextWordPreviewByStyle") as? [String: Bool] ?? ShippedDefaults.nextWordPreviewByStyle)
         set(\.nextWordPreviewLead, d.object(forKey: "custom.nextWordPreviewLead") as? Double ?? 0.45)
         set(\.wordEntranceMix, d.stringArray(forKey: "custom.wordEntranceMix")
-            ?? [WordArrival.fade.rawValue, WordArrival.lift.rawValue, WordArrival.cutoutFold.rawValue])
-        set(\.echoStrength, d.object(forKey: "echoStrength") as? Double ?? 1.0)
-        set(\.lyricScale, d.object(forKey: "lyricScale") as? Double ?? 1.0)
+            ?? ShippedDefaults.wordEntranceMix)
+        set(\.echoStrength, d.object(forKey: "echoStrength") as? Double ?? ShippedDefaults.echoStrength)
+        set(\.lyricScale, d.object(forKey: "lyricScale") as? Double ?? ShippedDefaults.lyricScale)
         set(\.showInterludes, d.object(forKey: "custom.showInterludes") as? Bool ?? true)
         set(\.thinkingOrbStyle, ThinkingOrb.normalised(d.string(forKey: ThinkingOrb.styleKey)))
         set(\.wordSymbols, d.object(forKey: Self.wordSymbolsKey) as? Bool ?? true)
@@ -650,7 +656,7 @@ final class Settings: ObservableObject {
         set(\.editorialTypography, d.bool(forKey: "custom.editorialTypography"))
         set(\.editorialAmount, d.object(forKey: "custom.editorialAmount") as? Double ?? 1)
         set(\.randomizeLyricFonts, d.bool(forKey: "custom.randomizeLyricFonts"))
-        let choice = FontChoice(rawValue: d.string(forKey: "fontChoice") ?? "") ?? .manrope
+        let choice = FontChoice(rawValue: d.string(forKey: "fontChoice") ?? "") ?? ShippedDefaults.fontChoice
         let family = d.string(forKey: "googleFontFamily") ?? ""
         let installed = d.string(forKey: Self.installedFontFamilyKey) ?? ""
         let fontChanged = choice != fontChoice || family != googleFontFamily || installed != installedFontFamily
@@ -1065,14 +1071,14 @@ final class Settings: ObservableObject {
     func resetAdvanced() {
         effectSpeed = 1.0
         patternOpacity = 0.85
-        scrimStrength = 1.0
+        scrimStrength = ShippedDefaults.scrimStrength
         vividness = 1.0
         motionBlur = 5.0
     }
 
     var advancedIsDefault: Bool {
         effectSpeed == 1.0 && patternOpacity == 0.85
-            && preferredScrimStrength == 1.0 && vividness == 1.0 && motionBlur == 5.0
+            && preferredScrimStrength == ShippedDefaults.scrimStrength && vividness == 1.0 && motionBlur == 5.0
     }
 
     /// Login items are managed by the system; if registration fails the

@@ -23,11 +23,11 @@ final class ThinkingOrbTests: XCTestCase {
     // MARK: Style
 
     @MainActor
-    func testStyleDefaultsToListeningAndPersists() {
+    func testStyleDefaultsToComposingAndPersists() {
         let defaults = LunalyrTestEnvironment.isolatedDefaults("LunalyrTests.OrbStyle")
         let settings = VersoCustom.Settings(defaults: defaults, notifications: NotificationCenter())
         XCTAssertEqual(ThinkingOrb.styleKey, "custom.thinkingOrb.style")
-        XCTAssertEqual(settings.thinkingOrbStyle, "listening")
+        XCTAssertEqual(settings.thinkingOrbStyle, "composing", "the November 2026 default")
         settings.thinkingOrbStyle = "weaving"
         XCTAssertEqual(defaults.string(forKey: "custom.thinkingOrb.style"), "weaving")
         XCTAssertEqual(VersoCustom.Settings(defaults: defaults, notifications: NotificationCenter()).thinkingOrbStyle, "weaving")

@@ -539,7 +539,7 @@ struct EchoBackdrop: View {
 final class LyricLayoutRotation: ObservableObject {
     static let shared = LyricLayoutRotation()
     static let enabledKey = "custom.rotateLayouts"
-    private static let countsKey = "custom.rotateLayoutCounts"
+    static let countsKey = "custom.rotateLayoutCounts"
     private static let cursorKey = "custom.rotateLayoutsCursor"
     static let maximumCount = 5
 
@@ -559,7 +559,7 @@ final class LyricLayoutRotation: ObservableObject {
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         cursor = defaults.integer(forKey: Self.cursorKey)
-        let saved = defaults.dictionary(forKey: Self.countsKey) as? [String: Int] ?? [:]
+        let saved = defaults.dictionary(forKey: Self.countsKey) as? [String: Int] ?? ShippedDefaults.rotateLayoutCounts
         counts = Dictionary(uniqueKeysWithValues: saved.compactMap { key, value in
             LyricComposition(rawValue: key).map { ($0, min(max(value, 0), Self.maximumCount)) }
         })

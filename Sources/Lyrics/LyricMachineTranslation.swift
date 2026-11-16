@@ -3,7 +3,7 @@ import CryptoKit
 import Foundation
 import NaturalLanguage
 
-// On-device lyric translation (macOS 15 and later, opt-in).
+// On-device lyric translation (macOS 15 and later, on by default).
 //
 // When a song's lyrics carry no translation of their own and are written in
 // a language the listener doesn't read, the lines are translated on this Mac
@@ -21,7 +21,8 @@ final class MachineTranslationOptions: ObservableObject {
         static let target = "custom.machineTranslationTarget"
     }
 
-    /// Off by default: turning it on may download language packs.
+    /// On by default: lines are translated on this Mac, and only with
+    /// language pairs already installed; a download is asked for first.
     @Published var enabled: Bool { didSet { defaults.set(enabled, forKey: Keys.enabled) } }
     /// A language identifier ("en", "zh-Hans"); empty follows the system.
     @Published var target: String { didSet { defaults.set(target, forKey: Keys.target) } }
@@ -30,7 +31,7 @@ final class MachineTranslationOptions: ObservableObject {
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        enabled = defaults.object(forKey: Keys.enabled) as? Bool ?? false
+        enabled = defaults.object(forKey: Keys.enabled) as? Bool ?? ShippedDefaults.machineTranslation
         target = defaults.string(forKey: Keys.target) ?? ""
     }
 

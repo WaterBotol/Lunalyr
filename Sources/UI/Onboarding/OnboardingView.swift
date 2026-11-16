@@ -103,6 +103,7 @@ struct OnboardingView: View {
         case .welcome: WelcomeStep(focus: title)
         case .music: MusicStep(flow: flow, focus: title)
         case .look: LookStep(flow: flow, previewDisplay: previewDisplay, focus: title)
+        case .typeface: TypefaceStep(flow: flow, focus: title)
         case .videos: VideosStep(focus: title)
         case .lyrics: LyricsStep(focus: title)
         case .extras: ExtrasStep(focus: title)
@@ -162,7 +163,7 @@ private struct OnboardingFooter: View {
 }
 
 /// Where the person is: a dot per step, the current one a lit bar. One
-/// element to VoiceOver: "Step 2 of 8".
+/// element to VoiceOver: "Step 2 of 9".
 private struct StepDots: View {
     let current: OnboardingFlow.Step
     @Environment(\.accessibilityReduceMotion) private var reduceMotion

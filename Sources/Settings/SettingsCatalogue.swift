@@ -133,6 +133,7 @@ enum SettingsCatalogue {
         "custom.looks.current": "Which Look was last applied, kept by LookStore.",
         "custom.audioCaptureConfirmed": "Remembers that system audio capture worked once.",
         "custom.screenAudioPermissionDeclined": "Remembers a declined Screen Recording prompt.",
+        "custom.defaults.ownerDefaults2026": "One-time migration that kept an existing install's old defaults.",
         "custom.desktopPlayer.pendingQueuePlaylistIDs": "Desktop player's queue state.",
         "custom.desktopPlayer.player": "Desktop player's last-used player.",
         "custom.desktopPlayer.queuePlaylistID": "Desktop player's queue state.",

@@ -12,6 +12,7 @@ final class MatchTheMusicTests: XCTestCase {
 
     func testEachNewSongTakesADifferentLayoutThanTheLast() {
         let suite = LunalyrTestEnvironment.isolatedDefaults("MatchTheMusicTests")
+        suite.set([String: Int](), forKey: LyricLayoutRotation.countsKey) // one song each, as before the 2026 defaults
         let rotation = LyricLayoutRotation(defaults: suite)
         var previous: LyricComposition?
         for (index, mood) in moods().enumerated() {
@@ -31,7 +32,9 @@ final class MatchTheMusicTests: XCTestCase {
     }
 
     func testRotationVisitsEveryLayoutOverEnoughSongs() {
-        let rotation = LyricLayoutRotation(defaults: LunalyrTestEnvironment.isolatedDefaults("MatchTheMusicTests"))
+        let suite = LunalyrTestEnvironment.isolatedDefaults("MatchTheMusicTests")
+        suite.set([String: Int](), forKey: LyricLayoutRotation.countsKey) // every layout in the mix
+        let rotation = LyricLayoutRotation(defaults: suite)
         var seen = Set<LyricComposition>()
         for index in 0..<24 { seen.insert(rotation.layout(for: "A|\(index)", mood: .neutral)) }
         XCTAssertEqual(seen, Set(LyricComposition.allCases))
@@ -159,7 +162,7 @@ final class RemovedLayoutMigrationTests: XCTestCase {
         }
         let fresh = Settings(defaults: LunalyrTestEnvironment.isolatedDefaults("RemovedLayoutMigrationTests.fresh"),
                              notifications: NotificationCenter())
-        XCTAssertEqual(fresh.lyricComposition, .constellation, "the new default")
+        XCTAssertNil(fresh.lyricComposition, "the November 2026 default: Custom Mix")
     }
 
     func testRememberedStylesLooksAndTheRotationKeepWorking() throws {
@@ -188,6 +191,7 @@ final class RememberedLayoutOutsideTheMixTests: XCTestCase {
                                 notifications: NotificationCenter())
         settings.lyricComposition = nil
         let defaults = LunalyrTestEnvironment.isolatedDefaults("RememberedLayoutOutsideTheMixTests.rotation")
+        defaults.set([String: Int](), forKey: LyricLayoutRotation.countsKey) // Echo in the mix, as before the 2026 defaults
         let rotation = LyricLayoutRotation(defaults: defaults)
         func pick(_ remembered: String?, track: String = "A|One") -> LyricComposition {
             LyricComposition.selected(settings: settings, remembered: remembered, mood: .neutral, seed: 0,

@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-// MARK: - The eight steps
+// MARK: - The nine steps (the typeface step is in OnboardingTypefaces.swift)
 //
 // Each reads its stores through `@Model`, so the snapshot harness can draw
 // it against isolated ones; the choices made here are the real settings.

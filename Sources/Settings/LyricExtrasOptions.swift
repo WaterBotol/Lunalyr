@@ -42,11 +42,11 @@ final class LyricColourOptions: ObservableObject {
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        mode = LyricColourMode.savedChoice(defaults.string(forKey: Keys.mode) ?? "") ?? .defaultMode
-        let savedSpeed = defaults.object(forKey: Keys.speed) as? Double ?? 1
+        mode = LyricColourMode.savedChoice(defaults.string(forKey: Keys.mode) ?? "") ?? ShippedDefaults.lyricColourMode
+        let savedSpeed = defaults.object(forKey: Keys.speed) as? Double ?? ShippedDefaults.lyricColourSpeed
         speed = savedSpeed.isFinite ? min(Self.speedRange.upperBound, max(Self.speedRange.lowerBound, savedSpeed)) : 1
-        strength = Self.clampedStrength(defaults.object(forKey: Keys.strength) as? Double ?? 1)
-        pastel = defaults.object(forKey: Keys.pastel) as? Bool ?? true
+        strength = Self.clampedStrength(defaults.object(forKey: Keys.strength) as? Double ?? ShippedDefaults.lyricColourStrength)
+        pastel = defaults.object(forKey: Keys.pastel) as? Bool ?? ShippedDefaults.lyricColourPastel
         customHex = Self.sanitised(defaults.stringArray(forKey: Keys.custom) ?? Self.defaultCustom)
         customColours = customHex.compactMap(Self.oklab(hex:))
     }

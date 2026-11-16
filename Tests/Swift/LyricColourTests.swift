@@ -192,13 +192,13 @@ final class LyricColourTests: XCTestCase {
         let isolated = UserDefaults(suiteName: name)!
         defer { isolated.removePersistentDomain(forName: name) }
         let options = LyricColourOptions(defaults: isolated)
-        XCTAssertEqual(options.mode, .albumDrift)
+        XCTAssertEqual(options.mode, .sungSweep, "the November 2026 default")
         XCTAssertFalse(LyricColourMode.choices.contains(.standard))
         isolated.set("static", forKey: LyricColourOptions.Keys.mode)
         XCTAssertEqual(LyricColourOptions(defaults: isolated).mode, .albumDrift)
         XCTAssertEqual(StyleMemory.Style(composition: nil, colour: "static").colourMode, .albumDrift)
         options.mode = .customGradient
-        XCTAssertEqual(options.strength, 1)
+        XCTAssertEqual(options.strength, 2, "the November 2026 default")
         options.strength = 1.6
         options.speed = 1.5
         options.setCustom(0, to: Color(.sRGB, red: 1, green: 0, blue: 0))

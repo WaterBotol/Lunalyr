@@ -613,9 +613,10 @@ final class LyricExtrasTests: XCTestCase {
         let (defaults, cleanUp) = isolated()
         defer { cleanUp() }
         let extras = LunalyrExtras(defaults: defaults)
-        XCTAssertEqual(extras.lyricCardLinesBefore, 0)
-        XCTAssertEqual(extras.lyricCardLinesAfter, 0)
-        XCTAssertNil(extras.lyricCardComposition)
+        // The November 2026 defaults.
+        XCTAssertEqual(extras.lyricCardLinesBefore, 1)
+        XCTAssertEqual(extras.lyricCardLinesAfter, 1)
+        XCTAssertEqual(extras.lyricCardComposition, .fable)
         extras.lyricCardLinesBefore = 1
         extras.lyricCardLinesAfter = 2
         extras.lyricCardComposition = .cutout

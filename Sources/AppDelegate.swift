@@ -10,7 +10,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         DesktopWallpaperController.shared.start()
         ControlPanelController.shared.start()
         FloatingLyricsController.shared.start()
-        AudioReactiveController.shared.resumeIfEnabled()
+        // System audio is on by default, and macOS asks before Lunalyr may
+        // hear it: on a first run that prompt waits until the welcome ends.
+        if Self.capturesAudioAtLaunch(hasOnboarded: Settings.shared.hasOnboarded) {
+            AudioReactiveController.shared.resumeIfEnabled()
+        }
         LunalyrExtras.shared.start()
         MusicVideoController.shared.start()
         QueueLookAhead.shared.start()
@@ -24,6 +28,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             OnboardingWindowController.shared.present(firstRun: true) { ending in
                 OnboardingWindowController.completeFirstRun(ending, models: .live)
                 HoverState.shared.start()
+                AudioReactiveController.shared.resumeIfEnabled()
             }
         } else {
             // Players macOS has not asked about yet wait until the user
@@ -44,6 +49,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// open Music, and raises the prompt out of the blue. So on a first run
     /// the hover controls start once the welcome has finished.
     static func startsHoverAtLaunch(hasOnboarded: Bool) -> Bool { hasOnboarded }
+
+    /// System audio capture, on by default for a new install, may raise
+    /// macOS's System Audio Recording prompt as soon as music plays under a
+    /// visualiser. On a first run it starts once the welcome has finished,
+    /// so the prompt never interrupts it.
+    static func capturesAudioAtLaunch(hasOnboarded: Bool) -> Bool { hasOnboarded }
 
     /// `lunalyr://` links, from a browser, Shortcuts or `open`. Unknown or
     /// malformed ones are ignored; a join is asked about before following.

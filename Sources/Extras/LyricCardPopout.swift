@@ -85,7 +85,7 @@ final class LyricCardPopoutModel: ObservableObject {
         let text: String
     }
 
-    private enum Keys {
+    enum Keys {
         static let aspect = "custom.lyricCardAspect"
         static let formats = "custom.lyricCardFormats"
         static let background = "custom.lyricCardBackgroundPath"
@@ -193,14 +193,14 @@ final class LyricCardPopoutModel: ObservableObject {
         let source = source ?? .live
         self.source = source
         let defaults = source.defaults
-        aspect = CardAspect(rawValue: defaults.string(forKey: Keys.aspect) ?? "") ?? .portrait
+        aspect = CardAspect(rawValue: defaults.string(forKey: Keys.aspect) ?? "") ?? ShippedDefaults.lyricCardAspect
         layout = source.composition()
         let saved = (defaults.stringArray(forKey: Keys.formats) ?? []).compactMap(CardFormat.init(rawValue:))
-        formats = saved.isEmpty ? [.mp4, .png] : Set(saved)
+        formats = saved.isEmpty ? ShippedDefaults.lyricCardFormats : Set(saved)
         useSong = defaults.bool(forKey: Keys.useSong)
         // The app's own window only: tests share the temporary folder with the real app.
         if source.followsTheSong { DispatchQueue.global(qos: .utility).async { SongAudioSource.discardLeftoverRecordings() } }
-        textScale = defaults.object(forKey: Keys.textScale) as? Double ?? 0.85
+        textScale = defaults.object(forKey: Keys.textScale) as? Double ?? ShippedDefaults.lyricCardTextScale
         if let path = defaults.string(forKey: Keys.background), FileManager.default.fileExists(atPath: path) {
             Task { [weak self] in
                 let loaded = await LyricCardBackground.load(URL(fileURLWithPath: path))

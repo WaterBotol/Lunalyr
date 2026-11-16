@@ -58,12 +58,14 @@ final class LyricPastelTests: XCTestCase {
         XCTAssertTrue(LyricColourOptions.pastel(true, appliesTo: .customGradient))
     }
 
-    func testTheSettingIsStoredAndOnByDefault() {
+    func testTheSettingIsStoredAndOffByDefault() {
         let name = "LyricPastelTests-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: name)!
         defer { defaults.removePersistentDomain(forName: name) }
         let options = LyricColourOptions(defaults: defaults)
-        XCTAssertTrue(options.pastel)
+        XCTAssertFalse(options.pastel, "off by default since November 2026")
+        options.pastel = true
+        XCTAssertTrue(LyricColourOptions(defaults: defaults).pastel)
         options.pastel = false
         XCTAssertFalse(LyricColourOptions(defaults: defaults).pastel)
         XCTAssertTrue(LyricStyleProfiles.keys.contains(LyricColourOptions.Keys.pastel), "kept per surface")

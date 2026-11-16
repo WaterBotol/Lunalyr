@@ -35,7 +35,7 @@ final class FloatingLyricsTests: XCTestCase {
         let options = stores().options
         XCTAssertEqual(options.surface, .desktop, "off by default: existing users see no change")
         XCTAssertFalse(options.isFloating)
-        XCTAssertEqual(options.textSize, FloatingLyricsOptions.SizePreset.medium.rawValue)
+        XCTAssertEqual(options.textSize, 93, "the November 2026 default")
         XCTAssertEqual(options.placement, .bottom)
         XCTAssertTrue(options.fadesUnderPointer)
         XCTAssertEqual(options.display, "")
@@ -300,9 +300,9 @@ final class FloatingLyricsTests: XCTestCase {
         XCTAssertEqual(s.settings.lyricComposition, .echo)
         XCTAssertEqual(s.settings.lyricScale, 1.2)
         XCTAssertTrue(s.settings.showInterludes)
-        XCTAssertEqual(s.settings.wordArrivalByStyle, [:])
+        XCTAssertEqual(s.settings.wordArrivalByStyle, ShippedDefaults.wordArrivalByStyle)
         XCTAssertEqual(s.colours.mode, .albumDrift)
-        XCTAssertEqual(s.highlights.mode, .complement)
+        XCTAssertEqual(s.highlights.mode, ShippedDefaults.lyricHighlightMode)
         XCTAssertNil(s.defaults.object(forKey: BackingVocals.settingKey), "a switch the desktop never set stays unset")
 
         // And the floating style is still there when it comes back.
@@ -324,7 +324,7 @@ final class FloatingLyricsTests: XCTestCase {
         s.settings.echoStrength = 0.4
         s.options.surface = .floating
         XCTAssertEqual(s.settings.lyricComposition, .cascade)
-        XCTAssertEqual(s.settings.echoStrength, 1.0)
+        XCTAssertEqual(s.settings.echoStrength, ShippedDefaults.echoStrength)
         s.options.surface = .desktop
         XCTAssertEqual(s.settings.lyricComposition, .hinge)
         XCTAssertEqual(s.settings.echoStrength, 0.4)

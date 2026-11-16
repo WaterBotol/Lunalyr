@@ -210,6 +210,7 @@ private enum SourceKeys {
         "custom.backingVocalStyle",
         "custom.backingVocalsLayer",
         "custom.creditsLayer",
+        "custom.defaults.ownerDefaults2026",
         "custom.desktopPlayer.pendingQueuePlaylistIDs",
         "custom.desktopPlayer.player",
         "custom.desktopPlayer.queuePlaylistID",

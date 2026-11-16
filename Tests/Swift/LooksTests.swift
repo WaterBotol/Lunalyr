@@ -109,7 +109,7 @@ final class LooksTests: XCTestCase {
         undo.undo()
         XCTAssertEqual(s.looks.liveValues, original)
         XCTAssertNil(s.looks.current)
-        XCTAssertEqual(s.settings.wordArrivalByStyle, [:])
+        XCTAssertEqual(s.settings.wordArrivalByStyle, ShippedDefaults.wordArrivalByStyle)
         undo.redo()
         XCTAssertEqual(s.looks.current, builtIn("Night drive").id)
         XCTAssertFalse(s.looks.isEdited)

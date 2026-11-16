@@ -96,10 +96,12 @@ final class MachineTranslationTests: XCTestCase {
         XCTAssertEqual(MachineTranslationPolicy.systemLanguage([]), "en")
     }
 
-    func testOptionsAreOffByDefaultAndSaved() {
+    func testOptionsAreOnByDefaultAndSaved() {
         let defaults = LunalyrTestEnvironment.isolatedDefaults("MachineTranslationTests")
         let options = MachineTranslationOptions(defaults: defaults)
-        XCTAssertFalse(options.enabled)
+        XCTAssertTrue(options.enabled, "on-device, so on by default since November 2026")
+        options.enabled = false
+        XCTAssertFalse(MachineTranslationOptions(defaults: defaults).enabled)
         XCTAssertEqual(options.target, "")
         options.enabled = true
         options.target = "de"

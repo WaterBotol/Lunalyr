@@ -158,8 +158,9 @@ final class DesktopSurfaceTests: XCTestCase {
         defer { defaults.removePersistentDomain(forName: name) }
         let options = DesktopOptions(defaults: defaults)
         XCTAssertTrue(options.showsControlsOnHover)
-        XCTAssertTrue(options.automaticTextBacking)
-        XCTAssertNil(options.manualTextBacking)
+        // The November 2026 defaults: a fixed backing, at none.
+        XCTAssertFalse(options.automaticTextBacking)
+        XCTAssertEqual(options.manualTextBacking, 0)
         options.showsControlsOnHover = false
         options.automaticTextBacking = false
         options.textBacking = 0.6
@@ -168,7 +169,7 @@ final class DesktopSurfaceTests: XCTestCase {
         XCTAssertEqual(reloaded.manualTextBacking, 0.6)
         defaults.set(Double.nan, forKey: DesktopOptions.Keys.textBacking)
         defaults.set(7.0, forKey: "unrelated")
-        XCTAssertEqual(DesktopOptions(defaults: defaults).textBacking, 0.35)
+        XCTAssertEqual(DesktopOptions(defaults: defaults).textBacking, ShippedDefaults.textBacking)
         defaults.set(3.0, forKey: DesktopOptions.Keys.textBacking)
         XCTAssertEqual(DesktopOptions(defaults: defaults).textBacking, 1)
         XCTAssertTrue([DesktopOptions.Keys.controlsOnHover, DesktopOptions.Keys.automaticTextBacking,

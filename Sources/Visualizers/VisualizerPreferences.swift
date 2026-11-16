@@ -8,8 +8,7 @@ enum VisualizerSceneColours: String, CaseIterable, Identifiable {
 }
 
 /// The visualiser engine's own preferences. Keys are prefixed `custom.` like
-/// the rest of Lunalyr's additions; every default reproduces the behaviour
-/// from before the setting existed.
+/// the rest of Lunalyr's additions; defaults are `ShippedDefaults`.
 @MainActor
 final class VisualizerPreferences: ObservableObject {
     static let shared = VisualizerPreferences()
@@ -50,11 +49,13 @@ final class VisualizerPreferences: ObservableObject {
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        punch = Self.clampedPunch(defaults.object(forKey: Key.punch) as? Double ?? 1)
-        wavefieldColours = VisualizerSceneColours(rawValue: defaults.string(forKey: Key.wavefieldColours) ?? "") ?? .album
+        punch = Self.clampedPunch(defaults.object(forKey: Key.punch) as? Double ?? ShippedDefaults.visualizerPunch)
+        wavefieldColours = VisualizerSceneColours(rawValue: defaults.string(forKey: Key.wavefieldColours) ?? "")
+            ?? ShippedDefaults.wavefieldColours
         wavecoreColours = VisualizerSceneColours(rawValue: defaults.string(forKey: Key.wavecoreColours) ?? "") ?? .album
         starTrailsColours = VisualizerSceneColours(rawValue: defaults.string(forKey: Key.starTrailsColours) ?? "") ?? .album
-        heavyScenesOnMainDisplayOnly = defaults.bool(forKey: Key.heavyScenesOnMainDisplay)
+        heavyScenesOnMainDisplayOnly = defaults.object(forKey: Key.heavyScenesOnMainDisplay) as? Bool
+            ?? ShippedDefaults.heavyScenesOnMainDisplayOnly
     }
 
     /// The colour choice for a web engine; nil when it has no choice here.
