@@ -750,6 +750,33 @@ final class Settings: ObservableObject {
         return face(for: mood).font(size: size, hero: hero)
     }
 
+    /// The face `lyricFont` (with no seed or alternate) sets, for measuring
+    /// it: its cap height, ascent and widths.
+    func lyricFace(size: CGFloat, hero: Bool, mood: TrackMood) -> CTFont {
+        let choice = drawnFontChoice, custom = activeCustomFaces
+        if choice == .manrope, let regular = AppFont.regular {
+            return CTFontCreateWithName((hero ? (AppFont.bold ?? regular) : regular) as CFString, size, nil)
+        }
+        if choice == .appleMusic { return NSFont.systemFont(ofSize: size, weight: hero ? .heavy : .bold) as CTFont }
+        if choice.takesFamily, let regular = custom.regular {
+            return CTFontCreateWithName((hero ? (custom.bold ?? regular) : regular) as CFString, size, nil)
+        }
+        return face(for: mood).ctFont(size: size, bold: hero, hero: true)
+    }
+
+    /// The face `uiFont` sets, for measuring it.
+    func uiFace(size: CGFloat, bold: Bool = false, mood: TrackMood) -> CTFont {
+        let choice = drawnFontChoice, custom = activeCustomFaces
+        if choice == .manrope, let regular = AppFont.regular {
+            return CTFontCreateWithName((bold ? (AppFont.bold ?? regular) : regular) as CFString, size, nil)
+        }
+        if choice == .appleMusic { return NSFont.systemFont(ofSize: size, weight: bold ? .bold : .medium) as CTFont }
+        if choice.takesFamily, let regular = custom.regular {
+            return CTFontCreateWithName((bold ? (custom.bold ?? regular) : regular) as CFString, size, nil)
+        }
+        return face(for: mood).ctFont(size: size, bold: bold, hero: false)
+    }
+
     func uiFont(size: CGFloat, bold: Bool = false, mood: TrackMood) -> Font {
         let choice = drawnFontChoice, custom = activeCustomFaces
         if choice == .manrope, let regular = AppFont.regular {

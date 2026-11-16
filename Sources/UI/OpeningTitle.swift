@@ -148,6 +148,9 @@ enum OpeningTitle {
     /// The title's sizes beside a cover, largest first: it takes the
     /// largest whose two lines fit beside the cover.
     static let titleSteps: [CGFloat] = [1, 0.84, 0.7, 0.58]
+    /// Between the title's last baseline and the artist's capitals, as a
+    /// share of the cover's side.
+    static let blockGap: CGFloat = 0.16
     /// The title face's ascent (its first baseline below the line's top),
     /// as a share of its size: with `capHeightShare`, where its capitals start.
     static let ascentShare: CGFloat = 0.95
@@ -160,6 +163,114 @@ enum OpeningTitle {
     /// The title face's cap height, as a share of its size, for lining the
     /// cover up with the title's capitals.
     static let capHeightShare: CGFloat = 0.7
+
+    /// How a line of the card reads in the face it is set in, measured
+    /// from the face itself, so a card in a pixel, condensed, wide, serif,
+    /// script or CJK face sets and lines up as it does in the face it was
+    /// drawn for. The card was tuned in Poppins: capitals 0.70 of the size,
+    /// lower case 0.55, its first baseline 1.05 down.
+    struct TypeMetrics: Equatable {
+        /// Multiplies the size the card gives the line, so its letters come
+        /// out as tall as Poppins' would (between 0.85 and 1.3).
+        var scale: CGFloat = 1
+        /// Where the line's ink starts, as a share of the first baseline's
+        /// depth (SwiftUI sets that baseline at the face's ascent): the
+        /// cover lines up there.
+        var capShare: CGFloat = capHeightShare / ascentShare
+        /// The ink's height above the baseline and the ascent, per point.
+        var inkTop: CGFloat = capHeightShare
+        var ascent: CGFloat = ascentShare
+        var descent: CGFloat = 0.3
+        /// Room added above and below each line, per point, so a face with
+        /// a tight line box (a pixel face's ends at its capitals) spaces
+        /// its lines as Poppins does: at least a quarter of the size above
+        /// its ink and 0.3 below its baseline.
+        var padTop: CGFloat = 0
+        var padBottom: CGFloat = 0
+
+        static let referenceCap: CGFloat = 0.70
+        static let referenceLower: CGFloat = 0.55
+        /// Poppins' average advance for a capital and a lower-case letter.
+        static let referenceCapAdvance: CGFloat = 0.67
+        static let referenceLowerAdvance: CGFloat = 0.55
+        /// Kana, Han and Hangul in Poppins' fallback rise this far.
+        static let referenceOther: CGFloat = 0.84
+
+        init() {}
+
+        init(_ text: String, font: CTFont) {
+            let size = max(1, CTFontGetSize(font))
+            ascent = max(0.3, CTFontGetAscent(font) / size)
+            descent = CTFontGetDescent(font) / size
+            let cap = Self.inkHeight("H", font: font) ?? CTFontGetCapHeight(font) / size
+            let lower = Self.inkHeight("x", font: font) ?? CTFontGetXHeight(font) / size
+            let letters = text.filter(\.isLetter)
+            let latin = letters.filter { $0.isASCII || $0.unicodeScalars.allSatisfy { (0x00C0...0x024F).contains($0.value) } }
+            if !letters.isEmpty, latin.count * 2 < letters.count {
+                // Mostly CJK, Hangul or another script: measured by its
+                // own ink, from whatever face draws it (a pixel face's
+                // fallback for kana is larger than Poppins').
+                inkTop = Self.inkHeight(text, font: font) ?? cap
+                scale = min(1.3, max(0.85, Self.referenceOther / max(0.05, inkTop)))
+            } else {
+                let upper = letters.isEmpty ? 1 : CGFloat(latin.filter(\.isUppercase).count) / CGFloat(max(1, latin.count))
+                let own = upper * cap + (1 - upper) * lower
+                let reference = upper * Self.referenceCap + (1 - upper) * Self.referenceLower
+                // A condensed face reads smaller than its height says, a
+                // wide one larger: a little of the width difference counts.
+                let advance = Self.advance(String(latin), font: font) / CGFloat(max(1, latin.count))
+                let referenceAdvance = upper * Self.referenceCapAdvance + (1 - upper) * Self.referenceLowerAdvance
+                let width = advance > 0.05 ? pow(referenceAdvance / advance, 0.35) : 1
+                scale = own > 0.05 ? min(1.3, max(0.85, reference / own * width)) : 1
+                inkTop = cap
+            }
+            padTop = max(0, inkTop + 0.25 - ascent)
+            padBottom = max(0, 0.3 - descent)
+            capShare = min(1, max(0, inkTop / (ascent + padTop)))
+        }
+
+        /// The width `text` takes, per point.
+        static func advance(_ text: String, font: CTFont) -> CGFloat {
+            let line = CTLineCreateWithAttributedString(NSAttributedString(string: text, attributes: [.font: font]))
+            return CGFloat(CTLineGetTypographicBounds(line, nil, nil, nil)) / max(1, CTFontGetSize(font))
+        }
+
+        /// How far the ink of `text` rises above its baseline, per point.
+        static func inkHeight(_ text: String, font: CTFont) -> CGFloat? {
+            let line = CTLineCreateWithAttributedString(NSAttributedString(string: text, attributes: [.font: font]))
+            let bounds = CTLineGetBoundsWithOptions(line, .useGlyphPathBounds)
+            guard bounds.height > 0, bounds.maxY > 0 else { return nil }
+            return bounds.maxY / max(1, CTFontGetSize(font))
+        }
+
+        /// Space to add between a title's lines: the same room as above
+        /// the first and below the last (`padTop`, `padBottom`), at `size`.
+        func lineSpacing(_ size: CGFloat) -> CGFloat { (padTop + padBottom) * size }
+    }
+}
+
+extension View {
+    /// A line of the card in its face's evened-out line box (`TypeMetrics`).
+    func cardLine(_ metrics: OpeningTitle.TypeMetrics, size: CGFloat) -> some View {
+        padding(.top, metrics.padTop * size).padding(.bottom, metrics.padBottom * size)
+    }
+}
+
+extension OpeningTitle {
+    /// Whether `title` set in `font` fits `width` on at most `lines` lines
+    /// without breaking a word.
+    static func titleFits(_ title: String, font: CTFont, width: CGFloat, lines: Int) -> Bool {
+        guard width > 1 else { return false }
+        let attributes: [NSAttributedString.Key: Any] = [.font: font]
+        for word in title.split(whereSeparator: \.isWhitespace) {
+            let line = CTLineCreateWithAttributedString(NSAttributedString(string: String(word), attributes: attributes))
+            if CTLineGetTypographicBounds(line, nil, nil, nil) > Double(width) + 0.5 { return false }
+        }
+        let setter = CTFramesetterCreateWithAttributedString(NSAttributedString(string: title, attributes: attributes))
+        let frame = CTFramesetterCreateFrame(setter, CFRange(location: 0, length: 0),
+                                             CGPath(rect: CGRect(x: 0, y: 0, width: width, height: 100_000), transform: nil), nil)
+        return (CTFrameGetLines(frame) as? [CTLine] ?? []).count <= lines
+    }
 
     /// The card's spacing, one scale in steps of the title's nominal size:
     /// `line` between lines that belong together (the artist and album),
@@ -782,10 +893,18 @@ struct OpeningTitleCard: View {
         // The title's size; the lines under it take shares of it. A long
         // title is set smaller, but they are not.
         let nominal = unit * (compact ? 0.72 : 0.92)
-        let titleSize = nominal * OpeningTitle.lengthScale(title)
-        let artistSize = nominal * OpeningTitle.artistShare
-        let readingSize = nominal * OpeningTitle.readingShare
-        let albumSize = nominal * OpeningTitle.albumShare
+        // Each line measured in its own face (`TypeMetrics`): sized so its
+        // letters stand as tall as the card's own face would set them, and
+        // lined up by its ink, not its line box.
+        let titleMetrics = OpeningTitle.TypeMetrics(title, font: settings.lyricFace(size: 100, hero: true, mood: mood))
+        let detailFace = settings.uiFace(size: 100, mood: mood)
+        let artistMetrics = OpeningTitle.TypeMetrics(artist, font: detailFace)
+        let titleSize = nominal * OpeningTitle.lengthScale(title) * titleMetrics.scale
+        let artistSize = nominal * OpeningTitle.artistShare * artistMetrics.scale
+        let readingMetrics = OpeningTitle.TypeMetrics(reading ?? "", font: detailFace)
+        let albumMetrics = OpeningTitle.TypeMetrics(album ?? "", font: detailFace)
+        let readingSize = nominal * OpeningTitle.readingShare * readingMetrics.scale
+        let albumSize = nominal * OpeningTitle.albumShare * albumMetrics.scale
         let showsReading = reading != nil && !compact
         // The card glows in the album's own colour: a tight halo and a wide,
         // soft bloom, arriving with the words and leaving with them.
@@ -807,6 +926,7 @@ struct OpeningTitleCard: View {
                 .foregroundStyle(type.opacity(0.78))
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
+                .cardLine(readingMetrics, size: readingSize)
                 .padding(.top, step.reading)
                 .opacity(reveal.reading)
                 .offset(y: (1 - reveal.reading) * rise * 0.5)
@@ -817,6 +937,7 @@ struct OpeningTitleCard: View {
             .foregroundStyle(type.opacity(0.92))
             .lineLimit(1)
             .minimumScaleFactor(0.6)
+            .cardLine(artistMetrics, size: artistSize)
             .opacity(reveal.artist)
         let albumText = compact ? nil : album.map { album in
             Text(album)
@@ -825,6 +946,7 @@ struct OpeningTitleCard: View {
                 .foregroundStyle(type.opacity(0.7))
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
+                .cardLine(albumMetrics, size: albumSize)
                 .padding(.top, step.line)
                 .opacity(reveal.album)
         }
@@ -835,8 +957,10 @@ struct OpeningTitleCard: View {
             // size where two lines would not fit; the artist and album with
             // the last baseline on the cover's foot. A long title never
             // makes the card larger.
-            CoverBesideWords(side: nominal * OpeningTitle.coverShare(compact: compact), gap: step.group,
-                             capShare: OpeningTitle.capHeightShare / OpeningTitle.ascentShare, maximum: width) {
+            let side = nominal * OpeningTitle.coverShare(compact: compact)
+            CoverBesideWords(side: side, gap: step.group, capShare: titleMetrics.capShare,
+                             detailsCapShare: artistText == nil ? 0 : artistMetrics.capShare,
+                             spacing: side * OpeningTitle.blockGap, maximum: width) {
                 ZStack {
                     if let cover {
                         TitleCover(still: cover, motion: animatedCover)
@@ -847,10 +971,11 @@ struct OpeningTitleCard: View {
                             .opacity(reveal.cover * coverFade)
                     }
                 }
-                FirstThatFits {
+                FirstThatFits(accepts: titleAccepts(titleSize)) {
                     ForEach(OpeningTitle.titleSteps, id: \.self) { share in
                         VStack(alignment: .leading, spacing: 0) {
-                            titleText(titleSize * share, type: type, centred: centred, reveal: reveal, rise: rise)
+                            titleText(titleSize * share, type: type, centred: centred, reveal: reveal, rise: rise,
+                                      metrics: titleMetrics)
                             readingText
                         }
                         .frame(minWidth: 0, minHeight: 0, alignment: .topLeading)
@@ -859,7 +984,7 @@ struct OpeningTitleCard: View {
                     // Last: the smallest on one line, narrowed to fit.
                     VStack(alignment: .leading, spacing: 0) {
                         titleText(titleSize * (OpeningTitle.titleSteps.last ?? 0.58), type: type, centred: centred,
-                                  reveal: reveal, rise: rise, lines: 1)
+                                  reveal: reveal, rise: rise, metrics: titleMetrics, lines: 1)
                         readingText
                     }
                     .frame(minWidth: 0, minHeight: 0, alignment: .topLeading)
@@ -876,7 +1001,18 @@ struct OpeningTitleCard: View {
         } else {
             CappedWidth(maximum: width) {
                 VStack(alignment: centred ? .center : .leading, spacing: 0) {
-                    titleText(titleSize, type: type, centred: centred, reveal: reveal, rise: rise)
+                    FirstThatFits(accepts: titleAccepts(titleSize)) {
+                        ForEach(OpeningTitle.titleSteps, id: \.self) { share in
+                            titleText(titleSize * share, type: type, centred: centred, reveal: reveal, rise: rise,
+                                      metrics: titleMetrics)
+                                .frame(minWidth: 0, minHeight: 0, alignment: .topLeading)
+                                .clipped()
+                        }
+                        titleText(titleSize * (OpeningTitle.titleSteps.last ?? 0.58), type: type, centred: centred,
+                                  reveal: reveal, rise: rise, metrics: titleMetrics, lines: 1)
+                            .frame(minWidth: 0, minHeight: 0, alignment: .topLeading)
+                            .clipped()
+                    }
                     readingText
                     if let artistText { artistText.padding(.top, step.group) }
                     albumText
@@ -888,9 +1024,11 @@ struct OpeningTitleCard: View {
 
     /// The title at `size`, on up to two lines, wiped on as it enters.
     private func titleText(_ size: CGFloat, type: Color, centred: Bool, reveal: OpeningTitle.Reveal,
-                           rise: CGFloat, lines: Int = 2) -> some View {
+                           rise: CGFloat, metrics: OpeningTitle.TypeMetrics = .init(), lines: Int = 2) -> some View {
         Text(title)
             .font(settings.lyricFont(size: size, hero: true, mood: mood))
+            .lineSpacing(metrics.lineSpacing(size))
+            .cardLine(metrics, size: size)
             .foregroundStyle(type)
             .multilineTextAlignment(centred ? .center : .leading)
             .lineLimit(lines)
@@ -899,6 +1037,21 @@ struct OpeningTitleCard: View {
             .mask { wipe(reveal.wipe) }
             .opacity(min(1, reveal.title * 1.6))
             .offset(y: (1 - reveal.title) * rise)
+    }
+
+    /// Which of the title's sizes (`titleSteps`, then the last on one
+    /// line) fit a width: on at most two lines, no word broken. A wide face
+    /// steps down until it does, before the last resort narrows it.
+    private func titleAccepts(_ titleSize: CGFloat) -> (Int, CGFloat) -> Bool {
+        let title = self.title
+        let steps = OpeningTitle.titleSteps
+        let face = settings.lyricFace(size: 100, hero: true, mood: mood)
+        return { index, width in
+            guard index < steps.count else { return true }
+            let size = titleSize * steps[index]
+            return OpeningTitle.titleFits(title, font: CTFontCreateCopyWithAttributes(face, size, nil, nil),
+                                          width: width, lines: 2)
+        }
     }
 
     /// The floating window's kept title: the cover, the title and the
@@ -925,12 +1078,14 @@ struct OpeningTitleCard: View {
             }
             HStack(alignment: .firstTextBaseline, spacing: baseSize * 0.16) {
                 Text(title)
-                    .font(settings.lyricFont(size: baseSize * OpeningTitle.rowTitle, hero: true, mood: mood))
+                    .font(settings.lyricFont(size: baseSize * OpeningTitle.rowTitle * OpeningTitle.TypeMetrics(title,
+                        font: settings.lyricFace(size: 100, hero: true, mood: mood)).scale, hero: true, mood: mood))
                     .foregroundStyle(type)
                     .layoutPriority(1)
                 if !artist.isEmpty {
                     Text(artist)
-                        .font(settings.uiFont(size: baseSize * OpeningTitle.rowArtist, mood: mood))
+                        .font(settings.uiFont(size: baseSize * OpeningTitle.rowArtist * OpeningTitle.TypeMetrics(artist,
+                            font: settings.uiFace(size: 100, mood: mood)).scale, mood: mood))
                         .foregroundStyle(type.opacity(0.78))
                         .opacity(reveal.artist)
                 }
@@ -996,10 +1151,15 @@ struct TitleCover: View {
 /// are given no room (each is clipped, so they draw nothing). Its first
 /// text baseline is the chosen one's.
 struct FirstThatFits: Layout {
+    /// Whether the subview at an index may be chosen at a width, as well as
+    /// fitting the height (the title's sizes: no word broken, two lines).
+    var accepts: ((Int, CGFloat) -> Bool)? = nil
+
     private func chosen(_ proposal: ProposedViewSize, subviews: Subviews) -> (index: Int, size: CGSize)? {
         guard !subviews.isEmpty else { return nil }
         let width = proposal.width
         for (index, subview) in subviews.enumerated() {
+            if index < subviews.count - 1, let accepts, let width, !accepts(index, width) { continue }
             let size = subview.sizeThatFits(ProposedViewSize(width: width, height: nil))
             if index == subviews.count - 1 || proposal.height.map({ size.height <= $0 + 0.5 }) ?? true {
                 return (index, CGSize(width: min(size.width, width ?? size.width), height: size.height))
@@ -1078,59 +1238,89 @@ struct OpeningTitleTypeShadow: ViewModifier {
 /// The title card's grid: a square cover of a fixed `side`, then a column
 /// `gap` to its right, together at most `maximum` wide. Subviews: the
 /// cover, the title (with its reading), the details (artist and album).
-/// The cover's top is on the title's cap height (`capShare` of its first
-/// baseline); the details sit with their last baseline on the cover's foot;
-/// the title is offered the room between, `gap` clear of the details, and
-/// steps down to fit it. Nothing in it depends on the title's length.
+///
+/// The words are one block, measured by their ink: from the title's cap
+/// height (`capShare` of its first baseline) to the details' last baseline,
+/// the details' capitals (`detailsCapShare`) `spacing` under the title's
+/// last baseline. A block about as tall as the cover runs from its top to
+/// its foot; a shorter one (a one-line title) is centred on it rather than
+/// leaving a hole in the middle; a taller one steps the title down to fit,
+/// and as a last resort runs on below the cover's foot. Nothing in it
+/// depends on the face beyond those measures.
 struct CoverBesideWords: Layout {
     let side: CGFloat
     let gap: CGFloat
     let capShare: CGFloat
+    var detailsCapShare: CGFloat = OpeningTitle.capHeightShare / OpeningTitle.ascentShare
+    var spacing: CGFloat = 0
     let maximum: CGFloat
 
-    private struct Fit {
+    /// How much shorter than the cover a block may be and still be spread
+    /// from its top to its foot, as a share of the cover's side.
+    static let stretch: CGFloat = 0.14
+
+    struct Fit {
         var column: CGFloat
         var coverTop: CGFloat
+        var titleTop: CGFloat
+        var detailsTop: CGFloat
         var titleRoom: CGFloat
         var title: CGSize
         var details: ViewDimensions?
     }
 
-    private func fit(_ proposal: ProposedViewSize, subviews: Subviews) -> Fit {
-        guard subviews.count == 3 else { return Fit(column: 0, coverTop: 0, titleRoom: 0, title: .zero, details: nil) }
+    func fit(_ proposal: ProposedViewSize, subviews: Subviews) -> Fit {
+        guard subviews.count == 3 else {
+            return Fit(column: 0, coverTop: 0, titleTop: 0, detailsTop: 0, titleRoom: 0, title: .zero, details: nil)
+        }
         let width = min(proposal.width ?? maximum, maximum)
         let column = max(width * 0.4, width - side - gap)
         let details = subviews[2].dimensions(in: ProposedViewSize(width: column, height: nil))
-        let detailsAbove = details[.lastTextBaseline]
-        var top: CGFloat = 0
-        var room = max(1, side - detailsAbove - gap)
-        var title = CGSize.zero
+        let hasDetails = details.height > 0.5
+        let detailsCap = hasDetails ? details[.firstTextBaseline] * (1 - detailsCapShare) : 0
+        // The details from their capitals to their last baseline.
+        let detailsInk = hasDetails ? details[.lastTextBaseline] - detailsCap : 0
+        let between = hasDetails ? spacing : 0
+        var room: CGFloat = side
+        var title = subviews[1].dimensions(in: ProposedViewSize(width: column, height: room))
         for _ in 0..<3 {
-            room = max(1, top + side - detailsAbove - gap)
-            let dimensions = subviews[1].dimensions(in: ProposedViewSize(width: column, height: room))
-            title = CGSize(width: dimensions.width, height: dimensions.height)
-            top = max(0, dimensions[.firstTextBaseline] * (1 - capShare))
+            let cap = title[.firstTextBaseline] * (1 - capShare)
+            let below = title.height - title[.lastTextBaseline]
+            room = max(1, cap + side - between - detailsInk + below)
+            title = subviews[1].dimensions(in: ProposedViewSize(width: column, height: room))
         }
-        return Fit(column: column, coverTop: top, titleRoom: room, title: title, details: details)
+        let titleCap = title[.firstTextBaseline] * (1 - capShare)
+        let block = title[.lastTextBaseline] - titleCap + between + detailsInk
+        // Where the block's top (the title's capitals) sits below the cover's top.
+        let inset: CGFloat = block >= side * (1 - Self.stretch) ? 0 : (side - block) / 2
+        let coverTop = max(0, titleCap - inset)
+        let titleTop = coverTop + inset - titleCap
+        var detailsTop = titleTop + title[.lastTextBaseline] + between - detailsCap
+        if inset == 0, block <= side, hasDetails {
+            // Spread: the last baseline on the cover's foot.
+            detailsTop = coverTop + side - details[.lastTextBaseline]
+        }
+        return Fit(column: column, coverTop: coverTop, titleTop: titleTop, detailsTop: detailsTop, titleRoom: room,
+                   title: CGSize(width: title.width, height: title.height), details: details)
     }
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
         let fit = fit(proposal, subviews: subviews)
         guard let details = fit.details else { return .zero }
-        let bottom = fit.coverTop + side + (details.height - details[.lastTextBaseline])
+        let bottom = max(fit.coverTop + side, fit.titleTop + fit.title.height, fit.detailsTop + details.height)
         let wordsWidth = max(fit.title.width, details.width)
-        return CGSize(width: side + gap + min(fit.column, wordsWidth), height: max(bottom, fit.title.height))
+        return CGSize(width: side + gap + min(fit.column, wordsWidth), height: bottom)
     }
 
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
         let fit = fit(proposal, subviews: subviews)
-        guard let details = fit.details else { return }
+        guard fit.details != nil else { return }
         let x = bounds.minX + side + gap
         subviews[0].place(at: CGPoint(x: bounds.minX, y: bounds.minY + fit.coverTop),
                           proposal: ProposedViewSize(width: side, height: side))
-        subviews[1].place(at: CGPoint(x: x, y: bounds.minY),
+        subviews[1].place(at: CGPoint(x: x, y: bounds.minY + fit.titleTop),
                           proposal: ProposedViewSize(width: fit.column, height: fit.titleRoom))
-        subviews[2].place(at: CGPoint(x: x, y: bounds.minY + fit.coverTop + side - details[.lastTextBaseline]),
+        subviews[2].place(at: CGPoint(x: x, y: bounds.minY + fit.detailsTop),
                           proposal: ProposedViewSize(width: fit.column, height: nil))
     }
 }

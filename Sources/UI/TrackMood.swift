@@ -79,6 +79,22 @@ enum LyricFace: Equatable {
         }
     }
 
+    /// The face `font` (`hero`: true, heavy when `bold`) or `uiFont`
+    /// (`hero`: false) sets, as a CoreText font for measuring.
+    func ctFont(size: CGFloat, bold: Bool, hero: Bool) -> CTFont {
+        let name: String
+        switch self {
+        case .sans: name = hero ? (bold ? "AvenirNextCondensed-Heavy" : "AvenirNextCondensed-Medium")
+                                : (bold ? "AvenirNextCondensed-Bold" : "AvenirNextCondensed-Medium")
+        case .serif: name = hero ? (bold ? "Charter-Black" : "Charter-Roman") : (bold ? "Charter-Bold" : "Charter-Roman")
+        case .slab: name = bold ? "Rockwell-Bold" : "Rockwell-Regular"
+        case .soft:
+            let base = NSFont.systemFont(ofSize: size, weight: bold ? (hero ? .heavy : .bold) : .medium)
+            return (base.fontDescriptor.withDesign(.rounded).flatMap { NSFont(descriptor: $0, size: size) } ?? base) as CTFont
+        }
+        return CTFontCreateWithName(name as CFString, size, nil)
+    }
+
     /// Interface text -- track title, timings, status.
     func uiFont(size: CGFloat, bold: Bool = false) -> Font {
         switch self {
