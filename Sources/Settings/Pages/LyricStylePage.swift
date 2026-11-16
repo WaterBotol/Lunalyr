@@ -144,6 +144,27 @@ struct LyricStylePage: View {
                         .help("How strong the song title stays once the singing has started. 100% keeps it fully solid.")
                         .revealRow()
                 }
+                if floating.isFloating && keepsOpeningTitle && showOpeningTitle {
+                    // The title is small on the picture and sits on the
+                    // window's own handles, so it can be placed here too.
+                    ChoiceMenu("Song title sits", selection: $rowEdge,
+                               selectedTitle: { $0 == "bottom" ? "Below the lyrics" : "Above the lyrics" }) {
+                        Text("Above the lyrics").tag("")
+                        Text("Below the lyrics").tag("bottom")
+                    }
+                    .padding(.leading, 23)
+                    .revealRow()
+                    ValueSlider("Song title across", value: $rowCentre, in: 0...1, step: 0.01,
+                                minimumLabel: "Left", maximumLabel: "Right",
+                                format: { abs($0 - 0.5) < 0.005 ? "Centre" : $0 < 0.5 ? "Left \(Int(((0.5 - $0) * 200).rounded()))%" : "Right \(Int((($0 - 0.5) * 200).rounded()))%" })
+                        .padding(.leading, 23)
+                        .help("Where the song title sits along the floating window's top or bottom.")
+                        .revealRow()
+                    ValueSlider("Song title size", value: $rowScale, in: OpeningTitle.RowPlacement.scales, step: 0.01,
+                                format: SettingsFormat.percent)
+                        .padding(.leading, 23)
+                        .revealRow()
+                }
                 Button("Reset Title Position") {
                     if floating.isFloating {
                         OpeningTitle.RowPlacement.reset()

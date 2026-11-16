@@ -481,19 +481,23 @@ struct FloatingTitleHandles: View {
                 .frame(width: frame.width, height: frame.height, alignment: .leading)
                 .offset(x: frame.minX, y: frame.minY)
                 .allowsHitTesting(false)
+            // On a small picture the row is a few points tall: grab it by a
+            // target of at least 48 x 28 round it.
+            let grab = frame.insetBy(dx: -max(0, (48 - frame.width) / 2), dy: -max(0, (28 - frame.height) / 2))
             Color.clear
-                .frame(width: frame.width, height: frame.height)
+                .frame(width: grab.width, height: grab.height)
                 .contentShape(Rectangle())
-                .offset(x: frame.minX, y: frame.minY)
+                .offset(x: grab.minX, y: grab.minY)
                 .help("Drag to move the song title along the window's top or bottom; drag its corner to resize it")
-                .gesture(move(window: window))
+                // The row sits inside the window's own box: it, not the box, takes a drag that starts on it.
+                .highPriorityGesture(move(window: window))
             SelectionHandles(size: frame.size)
                 .offset(x: frame.minX, y: frame.minY)
             Color.clear
                 .frame(width: 18, height: 18)
                 .contentShape(Rectangle())
                 .position(x: frame.maxX, y: placement.bottom ? frame.minY : frame.maxY)
-                .gesture(resize(width: frame.width))
+                .highPriorityGesture(resize(width: frame.width))
         }
         .frame(width: picture.width, height: picture.height, alignment: .topLeading)
         .coordinateSpace(name: "floatingTitlePicture")
