@@ -68,6 +68,13 @@ public sealed class MusicVideoController
     private MusicVideoAlignDrag? _alignDrag;
     private bool _alignTouched;
 
+    // Caption sync (the Mac's deb366e, 9fbdb73, 3c6c931, dcaa3c0): the cues the showing video's player passed on, by
+    // video key; the song and video pairs measured, and those whose wait for lyrics was logged.
+    private (string Video, IReadOnlyList<MusicVideoCaptionCue> Cues)? _captionCues;
+    private readonly HashSet<string> _captionMeasured = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _captionWaitLogged = new(StringComparer.Ordinal);
+    private readonly List<string> _captionLog = [];
+
     public MusicVideoController(MusicVideoResolver resolver, MusicVideoOffsets offsets,
         Func<(double Time, bool Playing)>? songClock = null, Func<MusicVideoSong, IReadOnlyList<MusicVideoLyricLine>?>? lyrics = null,
         Func<double>? uptime = null, MusicVideoFiles? files = null)
@@ -83,6 +90,18 @@ public sealed class MusicVideoController
 
     public MusicVideoOffsets Offsets { get; }
     public MusicVideoResolver Resolver => _resolver;
+
+    /// <summary>Each caption-sync log line as it is decided (<see cref="MusicVideoCaptionLog"/>; counts and offsets only).</summary>
+    public event Action<string>? CaptionLogged;
+
+    /// <summary>The latest caption-sync log lines (the last 20), for tests and diagnostics.</summary>
+    public IReadOnlyList<string> CaptionLog
+    {
+        get { lock (_gate) return [.. _captionLog]; }
+    }
+
+    /// <summary>The latest caption measurement, trusted or not.</summary>
+    public MusicVideoCaptionSync.Result? LastCaptionResult { get; private set; }
 
     /// <summary>Seconds before a lookup that failed for a passing reason is retried.</summary>
     public TimeSpan RetryDelay { get; set; } = TimeSpan.FromSeconds(45);
@@ -445,9 +464,30 @@ public sealed class MusicVideoController
         {
             if (_song is not { } song) return;
             Offsets.Nudge(delta, song.Key, ShowingVideoKeyLocked);
+            NoteUserTimingLocked();
             ResetTapsLocked();
         }
         Raise();
+    }
+
+    /// <summary>Logs the user's timing when it was set over the captions' offset.</summary>
+    private void NoteUserTimingLocked()
+    {
+        if (_song is not { } song || ShowingVideoKeyLocked is not { } video || Offsets.CaptionedOffset(song.Key, video) is not { } captions) return;
+        LogCaptionLocked(MusicVideoCaptionLog.UserLine(Offsets.Offset(song.Key, video), captions));
+    }
+
+    private void LogCaptionLocked(string line)
+    {
+        _captionLog.Add(line);
+        if (_captionLog.Count > 20) _captionLog.RemoveRange(0, _captionLog.Count - 20);
+        CaptionLogged?.Invoke(line);
+    }
+
+    /// <summary>Logs a line about captions that the player side decided (asked for, ignored, empty, none in time).</summary>
+    public void LogCaption(string line)
+    {
+        lock (_gate) LogCaptionLocked(line);
     }
 
     /// <summary>The video's moments come a quarter second sooner (it lagged the music).</summary>
@@ -456,13 +496,13 @@ public sealed class MusicVideoController
     /// <summary>The video's moments come a quarter second later (it ran ahead).</summary>
     public void VideoLater() => NudgeOffset(-FineNudge);
 
-    /// <summary>Drops the user's nudge: back to the estimate.</summary>
+    /// <summary>Drops the user's timing for the video on screen: back to the timing from captions, else the estimate.</summary>
     public void ResetOffset()
     {
         lock (_gate)
         {
             if (_song is not { } song) return;
-            Offsets.ClearManual(song.Key);
+            Offsets.ClearManual(song.Key, ShowingVideoKeyLocked);
             ResetTapsLocked();
         }
         Raise();
@@ -495,6 +535,7 @@ public sealed class MusicVideoController
     {
         MusicVideoOffsetOrigin.Manual => "Offset set by you",
         MusicVideoOffsetOrigin.Estimated => "Estimated",
+        MusicVideoOffsetOrigin.Captions => "From captions",
         _ => null,
     };
 
@@ -510,11 +551,105 @@ public sealed class MusicVideoController
     public void NoteVideoSample(double time, bool playing, MusicVideoSource source, double? at = null)
     {
         if (!double.IsFinite(time) || MusicVideoOffsets.VideoKey(source) is not { } video) return;
+        bool changed;
         lock (_gate)
         {
             if (video != ShowingVideoKeyLocked) return;
             _videoSample = (video, time, playing, at ?? _uptime());
+            changed = _captionCues?.Video == video && MeasureCaptionsLocked();
         }
+        if (changed) Raise();
+    }
+
+    // ---- From captions ----
+
+    /// <summary>
+    /// Whether the player for <paramref name="source"/> should load its captions: always, for the YouTube video showing
+    /// (even one the user timed: the measurement is kept for Reset, while the user's timing stays).
+    /// </summary>
+    public bool WantsCaptions(MusicVideoSource source)
+    {
+        lock (_gate)
+            return _song is not null && _status is MusicVideoStatus.Showing showing && showing.Source == source && source is MusicVideoSource.YouTube;
+    }
+
+    /// <summary>
+    /// The language of the song's lyrics, for the caption track to ask for: from the script they are written in (Hangul,
+    /// kana, Han); null otherwise, so the player takes the video's own track. The Mac asks NaturalLanguage, which Windows
+    /// has no counterpart of here.
+    /// </summary>
+    public string? CaptionLanguage()
+    {
+        IReadOnlyList<MusicVideoLyricLine>? lines;
+        lock (_gate) lines = _song is { } song ? _lyrics(song) : null;
+        if (lines is not { Count: > 0 }) return null;
+        int hangul = 0, kana = 0, han = 0, letters = 0;
+        foreach (var line in lines.Take(40))
+        {
+            foreach (var rune in line.Text.EnumerateRunes())
+            {
+                if (!System.Text.Rune.IsLetter(rune)) continue;
+                letters++;
+                if (rune.Value is >= 0xAC00 and <= 0xD7AF or >= 0x1100 and <= 0x11FF) hangul++;
+                else if (rune.Value is >= 0x3040 and <= 0x30FF) kana++;
+                else if (rune.Value is >= 0x4E00 and <= 0x9FFF or >= 0x3400 and <= 0x4DBF) han++;
+            }
+        }
+        if (letters == 0) return null;
+        if (hangul * 4 >= letters) return "ko";
+        if (kana > 0 && (kana + han) * 4 >= letters) return "ja";
+        if (han * 4 >= letters) return "zh";
+        return null;
+    }
+
+    /// <summary>A caption track the showing video's player loaded.</summary>
+    public void NoteCaptions(ReadOnlySpan<byte> data, MusicVideoSource source)
+    {
+        var cues = MusicVideoCaptionSync.Cues(data);
+        bool changed;
+        lock (_gate)
+        {
+            if (_status is not MusicVideoStatus.Showing showing || showing.Source != source || MusicVideoOffsets.VideoKey(source) is not { } video
+                || cues.Count == 0)
+            {
+                return;
+            }
+            _captionCues = (video, cues);
+            // New captions (a later load of the video): measured afresh. YouTube sometimes sends its automatic track
+            // without word timing, which seldom gives a trustworthy offset; the next load may do better.
+            if (_song is { } song) _captionMeasured.Remove(song.Key + "\u0001" + video);
+            changed = MeasureCaptionsLocked();
+        }
+        if (changed) Raise();
+    }
+
+    /// <summary>
+    /// Measures the offset once both the captions and the song's timed lyrics are here (whichever comes second), once per
+    /// song and video. Used only when trustworthy; then it sets the timing from captions, while the user's own timing for
+    /// this video, if any, stays in force. True when the timing in force may have changed.
+    /// </summary>
+    private bool MeasureCaptionsLocked()
+    {
+        if (_song is not { } song || ShowingVideoKeyLocked is not { } video || _captionCues is not { } captured || captured.Video != video) return false;
+        var attempt = song.Key + "\u0001" + video;
+        if (_captionMeasured.Contains(attempt)) return false;
+        if (_lyrics(song) is not { Count: > 0 } lines)
+        {
+            if (_captionWaitLogged.Add(attempt)) LogCaptionLocked(MusicVideoCaptionLog.WaitingLine);
+            return false;
+        }
+        _captionMeasured.Add(attempt);
+        var result = MusicVideoCaptionSync.Measure(captured.Cues, lines, MusicVideoTiming.OffsetMin, MusicVideoTiming.OffsetMax);
+        LastCaptionResult = result;
+        if (result.Offset is not { } offset)
+        {
+            LogCaptionLocked(MusicVideoCaptionLog.MeasuredLine(result, userOffset: null));
+            return false;
+        }
+        Offsets.SetCaptioned(offset, song.Key, video);
+        double? user = Offsets.Origin(song.Key, video) == MusicVideoOffsetOrigin.Manual ? Offsets.Offset(song.Key, video) : null;
+        LogCaptionLocked(MusicVideoCaptionLog.MeasuredLine(result, user));
+        return true;
     }
 
     /// <summary>Where the video is now: its player's last report, moved on while it plays; else where the sync keeps it.</summary>
@@ -600,6 +735,7 @@ public sealed class MusicVideoController
                     {
                         _taps.Add(MusicVideoTapSync.Offset(marked, line.Start, reaction: 0));
                         Offsets.Set(MusicVideoTapSync.Averaged(_taps) ?? 0, song.Key, video);
+                        NoteUserTimingLocked();
                         _tapState = new MusicVideoTapState.Done(CurrentOffsetLocked, _taps.Count, armed.FirstLine);
                     }
                 }
@@ -818,6 +954,7 @@ public sealed class MusicVideoController
             _alignDrag = null;
             if (!drag.Changed) return;
             Offsets.Set(drag.Offset, song.Key, ShowingVideoKeyLocked);
+            NoteUserTimingLocked();
             ResetTapsLocked();
             _alignTouched = true;
         }

@@ -250,6 +250,7 @@ public sealed record MusicVideoAlignDisplay(double VideoLength, double SongDurat
             {
                 MusicVideoOffsetOrigin.Manual => "Kept for this video",
                 MusicVideoOffsetOrigin.Estimated => "Estimated",
+                MusicVideoOffsetOrigin.Captions => "From captions",
                 _ => "No offset",
             };
         }

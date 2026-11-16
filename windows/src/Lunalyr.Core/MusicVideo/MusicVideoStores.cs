@@ -264,12 +264,17 @@ public enum MusicVideoOffsetOrigin
     Manual,
     /// <summary>Guessed from how much longer the video is than the song.</summary>
     Estimated,
+    /// <summary>
+    /// Measured from the video's captions against the song's timed lyrics (<see cref="MusicVideoCaptionSync"/>): after the
+    /// user's own timing, before the estimate (the Mac's 9fbdb73 and dcaa3c0).
+    /// </summary>
+    Captions,
 }
 
 /// <summary>
-/// How far into each song's video the song starts, per recording. Two layers, the first present wins: the user's nudge,
-/// tap or drag (kept even at 0 once set, for the video it was set on), then a guess from the video's length (kept in
-/// memory only). Offsets Lunalyr once found by itself are no longer used: the retired key is dropped when it loads.
+/// How far into each song's video the song starts, per recording. Three layers, the first present wins: the user's nudge,
+/// tap or drag (kept even at 0 once set, for the video it was set on, and saved), then the offset the video's captions
+/// gave, then a guess from the video's length (both kept in memory only). Offsets Lunalyr once found by itself are no longer used: the retired key is dropped when it loads.
 /// Thread-safe: the renderer reads the offset in force every frame.
 /// </summary>
 public sealed class MusicVideoOffsets
@@ -282,6 +287,7 @@ public sealed class MusicVideoOffsets
     private readonly Dictionary<string, double> _values;
     private readonly Dictionary<string, string> _manualVideos;
     private readonly Dictionary<string, double> _estimates = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, double> _captioned = new(StringComparer.Ordinal);
     private readonly Lock _gate = new();
 
     public MusicVideoOffsets(IMusicVideoStorage storage)
@@ -329,6 +335,8 @@ public sealed class MusicVideoOffsets
             if (_values.TryGetValue(songKey, out var manual) && ManualApplies(songKey, video))
                 return (MusicVideoTiming.ClampedOffset(manual), MusicVideoOffsetOrigin.Manual);
             if (video is null) return (0, MusicVideoOffsetOrigin.None);
+            if (_captioned.TryGetValue(EstimateKey(songKey, video), out var measured))
+                return (MusicVideoTiming.ClampedOffset(measured), MusicVideoOffsetOrigin.Captions);
             if (_estimates.TryGetValue(EstimateKey(songKey, video), out var estimate)) return (estimate, MusicVideoOffsetOrigin.Estimated);
             return (0, MusicVideoOffsetOrigin.None);
         }
@@ -384,11 +392,15 @@ public sealed class MusicVideoOffsets
         else ClearManual(songKey);
     }
 
-    /// <summary>Back to the estimate (or none).</summary>
-    public void ClearManual(string songKey)
+    /// <summary>
+    /// Forgets the user's offset: back to the timing from captions, else the estimate (or none). With
+    /// <paramref name="video"/>, only when it applies to that video (timing set on another upload of the song stays).
+    /// </summary>
+    public void ClearManual(string songKey, string? video = null)
     {
         lock (_gate)
         {
+            if (video is not null && !(_values.ContainsKey(songKey) && ManualApplies(songKey, video))) return;
             if (!_values.Remove(songKey)) return;
             _manualVideos.Remove(songKey);
             SaveLocked();
@@ -405,6 +417,28 @@ public sealed class MusicVideoOffsets
             if (value is { } v) _estimates[key] = v;
             else _estimates.Remove(key);
         }
+    }
+
+    /// <summary>The offset the video's captions gave, for this session; null drops it. The user's own timing stays in force.</summary>
+    public void SetCaptioned(double? value, string songKey, string video)
+    {
+        lock (_gate)
+        {
+            var key = EstimateKey(songKey, video);
+            if (value is { } v && double.IsFinite(v)) _captioned[key] = v;
+            else _captioned.Remove(key);
+        }
+    }
+
+    public bool HasCaptioned(string songKey, string video)
+    {
+        lock (_gate) return _captioned.ContainsKey(EstimateKey(songKey, video));
+    }
+
+    /// <summary>The offset from captions for the song and video, if any.</summary>
+    public double? CaptionedOffset(string songKey, string video)
+    {
+        lock (_gate) return _captioned.TryGetValue(EstimateKey(songKey, video), out var value) ? value : null;
     }
 
     private void SaveLocked()

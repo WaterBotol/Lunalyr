@@ -12,7 +12,7 @@ namespace Lunalyr.Core.Tests.MusicVideo;
 public sealed class MusicVideoCaptionSyncTests
 {
     /// <summary>Eight distinct lines, four seconds apart from 20 s.</summary>
-    internal static readonly MusicVideoLyricLine[] Lyrics =
+    internal static readonly MusicVideoLyricLine[] SongLines =
     [
         .. new[]
         {
@@ -126,7 +126,7 @@ public sealed class MusicVideoCaptionSyncTests
     [Fact]
     public void CleanCaptionsGiveTheOffset()
     {
-        var result = Sync.Measure(AsrCues(Lyrics, 20.6), Lyrics);
+        var result = Sync.Measure(AsrCues(SongLines, 20.6), SongLines);
         Assert.Equal(20.6, result.Offset!.Value, 0.03);
         Assert.Equal(8, result.Matches.Count);
         Assert.Equal(8, result.Agreeing);
@@ -144,7 +144,7 @@ public sealed class MusicVideoCaptionSyncTests
             [5] = "too young to think about all that install it", [6] = "only goes so far man",
         };
         double[] jitter = [0.1, -0.2, 0.15, 0, -0.1, 0.2, 0, -0.15];
-        var result = Sync.Measure(AsrCues(Lyrics, 20.6, i => jitter[i], (i, t) => heard.GetValueOrDefault(i, t)), Lyrics);
+        var result = Sync.Measure(AsrCues(SongLines, 20.6, i => jitter[i], (i, t) => heard.GetValueOrDefault(i, t)), SongLines);
         Assert.Equal(20.6, result.Offset!.Value, 0.15);
         Assert.True(result.Matches.Count >= 6);
         Assert.True(result.Spread < 0.2);
@@ -154,7 +154,7 @@ public sealed class MusicVideoCaptionSyncTests
     [Fact]
     public void TooFewMatchesGiveNoOffset()
     {
-        var result = Sync.Measure(AsrCues(Lyrics[..4], 12), Lyrics);
+        var result = Sync.Measure(AsrCues(SongLines[..4], 12), SongLines);
         Assert.Equal(4, result.Matches.Count);
         Assert.Null(result.Offset); // four lines are not enough to trust
     }
@@ -164,7 +164,7 @@ public sealed class MusicVideoCaptionSyncTests
     public void MatchesThatDisagreeGiveNoOffset()
     {
         // Each line lands somewhere else: a remix, a live cut, or chance.
-        var result = Sync.Measure(AsrCues(Lyrics, 10, i => i * 1.7), Lyrics);
+        var result = Sync.Measure(AsrCues(SongLines, 10, i => i * 1.7), SongLines);
         Assert.True(result.Matches.Count >= 5);
         Assert.Null(result.Offset);
         Assert.True(result.Agreeing < 0.6 * result.Matches.Count);
@@ -176,12 +176,12 @@ public sealed class MusicVideoCaptionSyncTests
     {
         // 5 of 8 agree (62.5 %); 3 are scattered seconds away.
         double[] jitter = [0, 0.1, -0.1, 0.05, 0, 3, -4, 6];
-        var result = Sync.Measure(AsrCues(Lyrics, 8, i => jitter[i]), Lyrics);
+        var result = Sync.Measure(AsrCues(SongLines, 8, i => jitter[i]), SongLines);
         Assert.Equal(5, result.Agreeing);
         Assert.Equal(8, result.Offset!.Value, 0.1);
         // 4 of 8 do not.
         double[] fewer = [0, 0.1, -0.1, 3.3, 5, 3, -4, 6];
-        Assert.Null(Sync.Measure(AsrCues(Lyrics, 8, i => fewer[i]), Lyrics).Offset);
+        Assert.Null(Sync.Measure(AsrCues(SongLines, 8, i => fewer[i]), SongLines).Offset);
     }
 
     // Ported from MusicVideoCaptionSyncTests.swift: testARepeatedChorusMatchesItsOwnRepeat
@@ -228,7 +228,7 @@ public sealed class MusicVideoCaptionSyncTests
     public void ThreeAgreeingOfFiveIsNotEnough()
     {
         double[] jitter = [0, 0.1, -0.1, 3, -4];
-        var result = Sync.Measure(AsrCues(Lyrics[..5], 8, i => jitter[i]), Lyrics);
+        var result = Sync.Measure(AsrCues(SongLines[..5], 8, i => jitter[i]), SongLines);
         Assert.Equal(5, result.Matches.Count);
         Assert.Equal(3, result.Agreeing);
         Assert.Null(result.Offset); // 60 % of five, but only three lines
@@ -238,15 +238,15 @@ public sealed class MusicVideoCaptionSyncTests
     [Fact]
     public void AnUploadersLineCaptionsMatchByTheirStart()
     {
-        var cues = Lyrics.Select(l => new MusicVideoCaptionCue(l.Start + 3.2, l.Start + 6.5, l.Text)).ToList();
-        var result = Sync.Measure(cues, Lyrics);
+        var cues = SongLines.Select(l => new MusicVideoCaptionCue(l.Start + 3.2, l.Start + 6.5, l.Text)).ToList();
+        var result = Sync.Measure(cues, SongLines);
         Assert.Equal(3.2, result.Offset!.Value, 9);
         Assert.Equal(0, result.Spread, 9);
     }
 
     // Ported from MusicVideoCaptionSyncTests.swift: testAnOffsetOutsideTheRangeIsNotUsed
     [Fact]
-    public void AnOffsetOutsideTheRangeIsNotUsed() => Assert.Null(Sync.Measure(AsrCues(Lyrics, 400), Lyrics).Offset);
+    public void AnOffsetOutsideTheRangeIsNotUsed() => Assert.Null(Sync.Measure(AsrCues(SongLines, 400), SongLines).Offset);
 
     // ---- Piecewise ----
 
@@ -292,9 +292,9 @@ public sealed class MusicVideoCaptionSyncTests
     [Fact]
     public void RefusalsSayWhy()
     {
-        Assert.Equal(Sync.VerdictKind.NoMatches, Sync.Measure([], Lyrics).Verdict.Kind);
-        Assert.Equal(Sync.VerdictKind.Trusted, Sync.Measure(AsrCues(Lyrics, 20.6), Lyrics).Verdict.Kind);
-        var three = Sync.Measure(AsrCues(Lyrics[..3], 20.6), Lyrics);
+        Assert.Equal(Sync.VerdictKind.NoMatches, Sync.Measure([], SongLines).Verdict.Kind);
+        Assert.Equal(Sync.VerdictKind.Trusted, Sync.Measure(AsrCues(SongLines, 20.6), SongLines).Verdict.Kind);
+        var three = Sync.Measure(AsrCues(SongLines[..3], 20.6), SongLines);
         Assert.Null(three.Offset);
         Assert.Equal(Sync.VerdictKind.TooFew, three.Verdict.Kind);
         var line = MusicVideoCaptionLog.MeasuredLine(three, userOffset: null);
