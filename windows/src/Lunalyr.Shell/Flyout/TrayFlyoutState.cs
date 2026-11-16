@@ -29,6 +29,9 @@ public sealed record FlyoutInputs
 
     public AppSettings Settings { get; init; } = new();
 
+    /// <summary>The layout Custom Mix took for the song playing (<see cref="AppController.MatchedComposition"/>), or null.</summary>
+    public string? ShowingLayout { get; init; }
+
     /// <summary>What the followed player takes from other apps.</summary>
     public PlayerCapabilities Capabilities { get; init; } = PlayerCapabilities.None;
 
@@ -125,6 +128,12 @@ public sealed record TrayFlyoutState
 
     /// <summary>The index in <see cref="Layouts"/> of the chosen layout.</summary>
     public int LayoutIndex { get; init; }
+
+    /// <summary>
+    /// What the picker's "Custom Mix" says: "Custom Mix · Hinge" once the song playing has taken a layout (the Mac's
+    /// <c>ShowingLayout</c>, 68bac63), else "Custom Mix".
+    /// </summary>
+    public string CustomMixTitle { get; init; } = FlyoutText.MatchTheMusic;
 
     // ---- Choices ----
 
@@ -229,6 +238,7 @@ public sealed record TrayFlyoutState
             CreditsOn = settings.CreditsLayer,
             Background = tile,
             LayoutIndex = Math.Max(0, layout),
+            CustomMixTitle = SettingsCopy.ShowingLayoutTitle(AppSettings.AllLayoutsKey, hasTrack ? inputs.ShowingLayout : null),
         };
     }
 }

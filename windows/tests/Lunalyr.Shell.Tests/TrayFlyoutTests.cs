@@ -256,6 +256,18 @@ public sealed class TrayFlyoutTests
         Assert.Equal(TrayFlyoutState.Layouts.Count, TrayFlyoutState.Layouts.Select(l => l.Title).Distinct().Count());
     }
 
+    // Ported from ShowingLayoutTests.swift: testCustomMixNamesTheLayoutThisSongTook (68bac63)
+    [Fact]
+    public void CustomMixNamesTheLayoutThisSongTook()
+    {
+        Assert.Equal("Custom Mix", SettingsCopy.ShowingLayoutTitle(AppSettings.AllLayoutsKey, null));
+        Assert.Equal("Custom Mix · Hinge", SettingsCopy.ShowingLayoutTitle(AppSettings.AllLayoutsKey, "hinge"));
+        Assert.Equal("Cutout", SettingsCopy.ShowingLayoutTitle("cutout", "hinge"));
+        // In the tray: only while a song is playing.
+        Assert.Equal("Custom Mix · Hinge", TrayFlyoutState.From(Inputs(Playing()) with { ShowingLayout = "hinge" }).CustomMixTitle);
+        Assert.Equal("Custom Mix", TrayFlyoutState.From(Inputs(null) with { ShowingLayout = "hinge" }).CustomMixTitle);
+    }
+
     [Fact]
     public void WallpaperTilesMapTheStoredValues()
     {

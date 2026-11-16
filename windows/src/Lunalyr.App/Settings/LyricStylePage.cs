@@ -39,7 +39,20 @@ internal static class LyricStylePage
         Section(page, "Layout");
         var layoutCard = Card("Layout", null, "",
             Combo(ctx, SettingsCopy.Layouts, s => s.LyricComposition, (s, v) => s with { LyricComposition = v }));
-        ctx.OnRefresh(s => layoutCard.Description = SettingsCopy.Layouts.FirstOrDefault(c => c.Value == s.LyricComposition)?.Detail ?? "");
+        // Under Custom Mix, which layout the song playing took (the Mac's 68bac63: "Custom Mix · Hinge"), before what it does.
+        void ShowLayout(AppSettings s)
+        {
+            var detail = SettingsCopy.Layouts.FirstOrDefault(c => c.Value == s.LyricComposition)?.Detail ?? "";
+            var showing = s.LyricComposition == Automatic && controller()?.Status.Title is not null ? controller()?.MatchedComposition : null;
+            layoutCard.Description = showing is null ? detail : $"Now {SettingsCopy.ShowingLayoutTitle(Automatic, showing)}. {detail}";
+        }
+        ctx.OnRefresh(ShowLayout);
+        if (controller() is { } playingController)
+        {
+            void Changed(object? sender, EventArgs e) => layoutCard.DispatcherQueue?.TryEnqueue(() => ShowLayout(ctx.Current));
+            playingController.StatusChanged += Changed;
+            ctx.Detached += () => playingController.StatusChanged -= Changed;
+        }
         page.Children.Add(layoutCard);
         page.Children.Add(RememberedNote(ctx, Playing, StyleAspect.Layout));
         page.Children.Add(Card("Change layout every song", "Custom Mix takes the next layout for each new song.",

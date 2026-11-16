@@ -37,6 +37,20 @@ public static class SettingsCopy
 
     public const string ReduceMotionEntrances = "Animation effects are off in Windows, so every entrance plays as a simple fade.";
 
+    /// <summary>
+    /// The layout in use, by name (the Mac's <c>ShowingLayout.title</c>, 68bac63): a chosen layout's own name; under
+    /// Custom Mix, "Custom Mix · Hinge" once the song playing has taken a layout (<paramref name="showing"/>), else
+    /// "Custom Mix".
+    /// </summary>
+    public static string ShowingLayoutTitle(string? chosen, string? showing)
+    {
+        if (chosen is not null && chosen != AppSettings.AllLayoutsKey)
+            return Layouts.FirstOrDefault(l => l.Value == chosen)?.Title ?? "Custom Mix";
+        if (showing is null || showing == AppSettings.AllLayoutsKey || Layouts.FirstOrDefault(l => l.Value == showing) is not { } shown)
+            return "Custom Mix";
+        return $"Custom Mix · {shown.Title}";
+    }
+
     /// <summary>Every layout, "Custom Mix" first, in the settings' order.</summary>
     public static IReadOnlyList<SettingsChoice> Layouts { get; } =
     [

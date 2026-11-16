@@ -325,7 +325,8 @@ public sealed partial class TrayFlyout : Window
         AutomationProperties.SetName(ModeTiles, FlyoutText.WallpaperType);
         BuildModeTiles();
 
-        foreach (var layout in TrayFlyoutState.Layouts) LayoutBox.Items.Add(layout.Title);
+        // Items, not strings: "Custom Mix" says which layout the song took ("Custom Mix · Hinge") without being replaced.
+        foreach (var layout in TrayFlyoutState.Layouts) LayoutBox.Items.Add(new ComboBoxItem { Content = layout.Title });
         AutomationProperties.SetName(LayoutBox, FlyoutText.Layout);
 
         AutomationProperties.SetName(ReadingsToggle, FlyoutText.ReadingsTitle);
@@ -360,6 +361,7 @@ public sealed partial class TrayFlyout : Window
             SongOffset = controller?.SongOffset ?? 0,
             Lyric = controller?.CurrentLyric() ?? LyricNow.None,
             PendingPlaying = _pending,
+            ShowingLayout = controller?.MatchedComposition,
         });
     }
 
@@ -394,6 +396,8 @@ public sealed partial class TrayFlyout : Window
             SearchNote.Text = state.SearchNote ?? "";
 
             foreach (var tile in _modeTiles) tile.IsChecked = state.Background == (string)tile.Tag;
+            if (LayoutBox.Items.Count > 0 && LayoutBox.Items[0] is ComboBoxItem mix && (string)mix.Content != state.CustomMixTitle)
+                mix.Content = state.CustomMixTitle;
             if (LayoutBox.SelectedIndex != state.LayoutIndex) LayoutBox.SelectedIndex = state.LayoutIndex;
 
             PauseToggle.IsChecked = state.WallpaperPaused;
