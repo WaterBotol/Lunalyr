@@ -64,8 +64,7 @@ public static class LyricSourceInfo
         LyricSourceId.AppleMusicCache => "Word or line timing from Apple Music",
         LyricSourceId.LyricsPlus => "Word and syllable timing",
         LyricSourceId.NetEase => "Word or line timing",
-        LyricSourceId.QQMusic or LyricSourceId.Kuwo => "Line timing",
-        LyricSourceId.Kugou => "Word or line timing",
+        LyricSourceId.QQMusic or LyricSourceId.Kuwo or LyricSourceId.Kugou => "Word or line timing",
         LyricSourceId.Lrclib or LyricSourceId.Musixmatch => "Word or line timing",
         LyricSourceId.LyricsOvh => "Plain text fallback",
         LyricSourceId.Amll => "Word and syllable timing",
@@ -86,7 +85,7 @@ public static class LyricSourceInfo
     public static int TimingCeiling(this LyricSourceId source) => source switch
     {
         LyricSourceId.LyricsOvh => 0,
-        LyricSourceId.Kuwo => 1, // Kuwo's line list is converted to line-level LRC.
+        // Kuwo's lrcx lyrics are word-timed; its line list is only the fallback (the Mac's 7ddb08a).
         _ => 3,
     };
 }

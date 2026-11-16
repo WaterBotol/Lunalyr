@@ -27,7 +27,7 @@ public class MacSpecParityTests
     {
         var line = L.Line(text, start, start + 3);
         var step = 3.0 / text.Length;
-        return L.Timed(line, [.. text.Select((c, i) => L.Word(c.ToString(), start + (i * step), start + ((i + 1) * step)))]);
+        return L.Timed(line, [.. text.Select((c, i) => L.Word(c.ToString(), start + ((i + L.Sung(i)) * step), start + ((i + 1) * step)))]);
     }
 
     /// <summary>A line timed word by word.</summary>

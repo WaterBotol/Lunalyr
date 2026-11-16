@@ -258,11 +258,11 @@ public sealed class LyricPriorityTests : IDisposable
             Assert.False(LyricRanking.IsSettled(Candidate(Lrclib, Timing.Mixed), [LyricsPlus], _query, options));
             // Apple Music's line timing waits for every source that can have word timing.
             var ownLines = Candidate(AppleMusicCache, Timing.Line);
-            foreach (var source in new[] { Lrclib, LyricsPlus, NetEase, QQMusic, Kugou })
+            foreach (var source in new[] { Lrclib, LyricsPlus, NetEase, QQMusic, Kugou, Kuwo })
             {
                 Assert.True(LyricRanking.CouldBeat(ownLines, source, _query, options), source.ToString());
             }
-            Assert.True(LyricRanking.IsSettled(ownLines, [Kuwo, LyricsOvh], _query, options));
+            Assert.True(LyricRanking.IsSettled(ownLines, [LyricsOvh], _query, options));
             // Another source's word timing waits for LRCLIB and Apple Music.
             var other = Candidate(NetEase, Timing.Word);
             Assert.True(LyricRanking.CouldBeat(other, Lrclib, _query, options));
@@ -466,15 +466,12 @@ public sealed class LyricPriorityTests : IDisposable
                 var report = await stub.Lookup.LookupAsync(_query, options, cancellationToken: Ct);
                 Assert.Equal(LrclibTitle, L.SourceOf(report.Result));
                 Assert.Equal(1, report.Revision);
-                // Changed for the ranking decisions of 12 Nov 2026. Only the line-only and plain-text services are
-                // stopped (no word-timed rival is in hand for them to agree with). Lyrics+ might relay Apple Music's
-                // lyrics, which rank above LRCLIB's, and the services that can give word timing could still agree
-                // against LRCLIB's timing (couldDemote): they keep answering and, here, are given up at their limit.
-                foreach (var id in new[] { Kuwo, LyricsOvh })
-                {
-                    Assert.Equal(LyricLookup.CouldNotBeat, report.States[id]);
-                }
-                foreach (var id in new[] { LyricsPlus, NetEase, QQMusic, Kugou })
+                // Changed for the ranking decisions of 12 Nov 2026. Only the plain-text service is stopped (Kuwo has
+                // lrcx word timing since the Mac's 7ddb08a). Lyrics+ might relay Apple Music's lyrics, which rank above
+                // LRCLIB's, and the services that can give word timing could still agree against LRCLIB's timing
+                // (couldDemote): they keep answering and, here, are given up at their limit.
+                Assert.Equal(LyricLookup.CouldNotBeat, report.States[LyricsOvh]);
+                foreach (var id in new[] { LyricsPlus, NetEase, QQMusic, Kugou, Kuwo })
                 {
                     Assert.Equal(LyricLookup.TimedOut, report.States[id]);
                 }
@@ -500,9 +497,9 @@ public sealed class LyricPriorityTests : IDisposable
             var first = log.Shown(1);
             Assert.Equal(LrclibTitle, L.SourceOf(first?.Result));
             // Changed for the ranking decisions of 12 Nov 2026: NetEase, which can give word timing, keeps answering in
-            // case it agrees against LRCLIB (couldDemote); the line-only Kuwo is what LRCLIB stops.
+            // case it agrees against LRCLIB (couldDemote); the plain-text lyrics.ovh is what LRCLIB stops.
             Assert.Equal(LyricLookup.Searching, first?.States[NetEase]);
-            Assert.Equal(LyricLookup.CouldNotBeat, first?.States[Kuwo]);
+            Assert.Equal(LyricLookup.CouldNotBeat, first?.States[LyricsOvh]);
             Assert.Equal(2, report.Revision);
             Assert.Equal(Music, L.SourceOf(report.Result));
             Assert.Equal("Match found · showing", report.States[AppleMusicCache]);

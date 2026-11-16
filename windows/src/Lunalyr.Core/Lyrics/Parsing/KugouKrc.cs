@@ -64,7 +64,8 @@ public static partial class KugouKrc
     [GeneratedRegex(@"^\[([0-9]+),([0-9]+)\]", RegexOptions.CultureInvariant)]
     private static partial Regex LineHead();
 
-    [GeneratedRegex(@"<([0-9]+),([0-9]+),[0-9]+>", RegexOptions.CultureInvariant)]
+    // A word may start a little before its line: <-11,116,0> (the Mac's 7ddb08a).
+    [GeneratedRegex(@"<(-?[0-9]+),([0-9]+),-?[0-9]+>", RegexOptions.CultureInvariant)]
     private static partial Regex Piece();
 
     public static string? EnhancedLrcFromText(string text)
@@ -85,20 +86,19 @@ public static partial class KugouKrc
                 output.Add(result.Append(words).ToString());
                 continue;
             }
-            var lastEnd = start / 1000;
+            // Offsets are from the line's start; the word follows its stamp. The shared writer keeps every start valid
+            // for the parser (none before its line, none running backwards), so the line stays word-timed.
+            var pieces = new List<WordTimedLrc.Word>(marks.Count);
             for (var index = 0; index < marks.Count; index++)
             {
                 var mark = marks[index];
-                var offset = TextRules.TryParseDouble(mark.Groups[1].ValueSpan, out var o) ? o : 0;
+                var offset = double.TryParse(mark.Groups[1].ValueSpan, NumberStyles.Float, CultureInfo.InvariantCulture, out var o) ? o : 0;
                 var span = TextRules.TryParseDouble(mark.Groups[2].ValueSpan, out var s) ? s : 0;
                 var textStart = mark.Index + mark.Length;
                 var textEnd = index + 1 < marks.Count ? marks[index + 1].Index : body.Length;
-                var word = body[textStart..Math.Max(textStart, textEnd)];
-                result.Append(Stamp('<', (start + offset) / 1000, '>')).Append(word);
-                lastEnd = Math.Max(lastEnd, (start + offset + span) / 1000);
+                pieces.Add(new WordTimedLrc.Word(body[textStart..Math.Max(textStart, textEnd)], start + offset, span));
             }
-            result.Append(Stamp('<', Math.Max(lastEnd, (start + length) / 1000), '>'));
-            output.Add(result.ToString());
+            if (WordTimedLrc.Line(start, length, pieces) is { } converted) output.Add(converted);
         }
         return output.Count == 0 ? null : string.Join('\n', output);
     }

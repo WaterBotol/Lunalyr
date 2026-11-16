@@ -50,6 +50,8 @@ public sealed class KugouSource(LyricHttpClient http, KugouOptions? options = nu
             hits = [.. search.RootElement.Get("data").Get("info").Items().Select(song => Hit.From(song, query)).OfType<Hit>().Where(h => h.Score > 0)];
         }
         var ordered = SourceHits.Ordered(hits, LyricSourceId.Kugou, query, h => (h.Title, h.Artist, h.Duration, h.Score));
+        // A line-only file is kept in reserve while a later one may still have KRC (the Mac's 7ddb08a).
+        var held = new HeldLine();
         foreach (var hit in ordered.Take(_options.SongsTried))
         {
             ct.ThrowIfCancellationRequested();
@@ -57,6 +59,8 @@ public sealed class KugouSource(LyricHttpClient http, KugouOptions? options = nu
             {
                 continue;
             }
+            var passes = HeldLine.Names(LyricSourceId.Kugou, hit.Title, hit.Artist, hit.Duration, query);
+            if (!held.YieldsTo(passes)) continue;
             List<(string Id, string Key)> files;
             using (var found = await GetJsonAsync(_options.LyricSearchAddress, new Dictionary<string, string>
                    {
@@ -80,21 +84,25 @@ public sealed class KugouSource(LyricHttpClient http, KugouOptions? options = nu
                         && KugouKrc.Decode(encrypted) is { } krc && LrcText.DecodeEntities(krc) is var text
                         && _probe.IsUsable(LyricFormat.Krc, text))
                     {
-                        return Lyrics(LyricFormat.Krc, text, hit);
+                        var found = Lyrics(LyricFormat.Krc, text, hit);
+                        if (HeldLine.WordTimed(found) && held.YieldsTo(passes)) return found;
+                        held.Hold(found, passes);
                     }
                 }
                 catch (LyricSourceException)
                 {
                     // The LRC download below says whether Kugou is really failing.
                 }
+                // Line LRC is fetched only until one is held; a later file may still have KRC.
+                if (held.Lyrics is not null) continue;
                 if (await DownloadAsync(id, key, "lrc", ct).ConfigureAwait(false) is { } bytes
                     && LrcText.DecodeEntities(LyricHttpClient.Utf8Text(bytes)) is var lrc && _probe.IsUsable(LyricFormat.Lrc, lrc))
                 {
-                    return Lyrics(LyricFormat.Lrc, lrc, hit);
+                    held.Hold(Lyrics(LyricFormat.Lrc, lrc, hit), passes);
                 }
             }
         }
-        return null;
+        return held.Lyrics;
     }
 
     private static RawLyrics Lyrics(LyricFormat format, string payload, Hit hit) =>

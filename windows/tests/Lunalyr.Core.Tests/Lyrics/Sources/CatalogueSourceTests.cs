@@ -27,8 +27,10 @@ public class CatalogueSourceTests
         Assert.False(found.Extras!.ContainsKey(RawLyricsExtras.TranslationLrc));
         Assert.Equal(("晴天", "周杰伦", 269.0), (found.ReportedTitle, found.ReportedArtist, found.ReportedDuration));
         Assert.Equal("晴天 周杰伦", handler.Query(0, "w"));
-        Assert.Equal("0039MnYb0qxYhV", handler.Query(1, "songmid"));
-        Assert.Equal("1", handler.Query(1, "nobase64"));
+        // The second request asks for QRC word timing by the numeric song id; with none, the line LRC is fetched.
+        Assert.Equal("c.y.qq.com/qqmusic/fcgi-bin/lyric_download.fcg", handler.Addresses[1]);
+        Assert.Equal("0039MnYb0qxYhV", handler.Query(2, "songmid"));
+        Assert.Equal("1", handler.Query(2, "nobase64"));
         Assert.All(handler.Requests, r => Assert.Equal("https://y.qq.com/", r.Headers.Referrer?.ToString()));
     }
 
@@ -120,7 +122,7 @@ public class CatalogueSourceTests
             .Set("c.y.qq.com/lyric/fcgi-bin/fcg_query_lyric_new.fcg", Reply.Fixture("qq/lyric.json"));
         var found = await new QQMusicSource(handler.Client()).FetchAsync(new LyricQuery("晴天", "周杰倫", null, 269), Ct);
         Assert.NotNull(found);
-        Assert.Equal("0039MnYb0qxYhV", handler.Query(1, "songmid"));
+        Assert.Equal("0039MnYb0qxYhV", handler.Query(2, "songmid"));
     }
 
     [Fact]
@@ -139,7 +141,9 @@ public class CatalogueSourceTests
             .Set("www.kuwo.cn/openapi/v1/www/lyric/getlyric", Reply.Fixture("kuwo/lyric.json"));
         var found = await new KuwoSource(handler.Client()).FetchAsync(Qingtian, Ct);
         Assert.NotNull(found);
-        Assert.Equal("228908", handler.Query(1, "musicId"));
+        // The second request asks for lrcx word timing; with none, the line list is fetched.
+        Assert.Equal("mlyric.kuwo.cn/mobi.s", handler.Addresses[1]);
+        Assert.Equal("228908", handler.Query(2, "musicId"));
         Assert.Equal("晴天 周杰伦", handler.Query(0, "all"));
         Assert.Equal(LyricFormat.Lrc, found.Format);
         Assert.Equal("[00:00.000]晴天 - 周杰伦 (Jay Chou)\n[00:29.260]Invented first line\n[01:00.000]Second made-up line\n[01:02.500]Third & last",

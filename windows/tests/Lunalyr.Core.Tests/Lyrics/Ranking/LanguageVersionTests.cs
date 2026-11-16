@@ -48,7 +48,7 @@ public sealed class LanguageVersionTests
                 ? row.Split(' ', StringSplitOptions.RemoveEmptyEntries)
                 : [.. row.EnumerateRunes().Select(rune => rune.ToString())];
             var step = 3.0 / tokens.Length;
-            return L.Timed(line, [.. tokens.Select((token, k) => L.Word(token, start + (k * step), start + ((k + 1) * step)))]);
+            return L.Timed(line, [.. tokens.Select((token, k) => L.Word(token, start + ((k + L.Sung(k)) * step), start + ((k + 1) * step)))]);
         }).ToList();
         return new LyricCandidate(source, L.Synced(lines, "fixture", source.Title()), title, artist, duration, 0) { MetadataReported = reported };
     }

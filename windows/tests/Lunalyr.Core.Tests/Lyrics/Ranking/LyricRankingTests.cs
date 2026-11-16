@@ -243,7 +243,7 @@ public sealed class LyricRankingTests
         Assert.False(LyricSourceInfo.TryParseRaw("QQMusic", out _));
         Assert.Equal(["appleMusicCache", "lyrimuse"], LyricSourceInfo.All.Where(s => s.IsLocal()).Select(s => s.RawValue()));
         Assert.Equal(0, LyricsOvh.TimingCeiling());
-        Assert.Equal(1, Kuwo.TimingCeiling());
+        Assert.Equal(3, Kuwo.TimingCeiling());
         Assert.Equal(3, Amll.TimingCeiling());
         Assert.True(LyricMatchModeInfo.TryParseRaw("smart", out var mode) && mode == LyricMatchMode.AccuracyFirst);
         Assert.True(LyricMatchModeInfo.TryParseRaw("priority", out mode) && mode == LyricMatchMode.SourceOrder);

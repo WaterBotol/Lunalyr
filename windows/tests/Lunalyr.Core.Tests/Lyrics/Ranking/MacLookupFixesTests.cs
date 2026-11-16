@@ -28,7 +28,7 @@ public sealed class MacLookupFixesTests
             var start = 0.808 + (i * 3.2);
             var line = L.Line($"Invented line {i + 1} of a made-up song", start, start + 3);
             return words
-                ? L.Timed(line, [.. line.Text.Split(' ').Select((w, k) => L.Word(w, start + (k * 0.4), start + (k * 0.4) + 0.35))])
+                ? L.Timed(line, [.. line.Text.Split(' ').Select((w, k) => L.Word(w, start + ((k + L.Sung(k)) * 0.4), start + (k * 0.4) + 0.35))])
                 : line;
         }).ToList();
         return new LyricCandidate(LyricSourceId.Lrclib, L.Synced(lines, LyricTimingRules.Precision(lines), "LRCLIB"), "Pleaser", "Wallows", 188, 0);
@@ -55,11 +55,12 @@ public sealed class MacLookupFixesTests
     public void ALineTimedRelayLeavesWordTimingSourcesRunning()
     {
         var relay = Relay();
-        var options = new LyricSourceSnapshot([LyricsPlus, NetEase, LyricSourceId.Lrclib, Kuwo], LyricMatchMode.AccuracyFirst);
+        var options = new LyricSourceSnapshot([LyricsPlus, NetEase, LyricSourceId.Lrclib, Kuwo, LyricsOvh], LyricMatchMode.AccuracyFirst);
         Assert.True(LyricRanking.CouldBeat(relay, NetEase, Pleaser, options));
         Assert.True(LyricRanking.CouldBeat(relay, LyricSourceId.Lrclib, Pleaser, options));
-        // A line-only source can't beat Apple's line timing.
-        Assert.False(LyricRanking.CouldBeat(relay, Kuwo, Pleaser, options));
+        // Kuwo's lrcx word timing could (the Mac's 7ddb08a); a source without timing can't beat Apple's line timing.
+        Assert.True(LyricRanking.CouldBeat(relay, Kuwo, Pleaser, options));
+        Assert.False(LyricRanking.CouldBeat(relay, LyricsOvh, Pleaser, options));
     }
 
     /// <summary>

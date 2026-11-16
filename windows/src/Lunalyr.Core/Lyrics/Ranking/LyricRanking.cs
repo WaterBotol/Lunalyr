@@ -402,6 +402,10 @@ public static class LyricRanking
             {
                 found += $" · {fault}";
             }
+            if (LyricTimingRules.TimingTier(candidate.Result) >= 2 && LyricSpreadTiming.HasEvenlySpreadWordTiming(candidate.Result))
+            {
+                found += " · word timing spread evenly over each line (ranked as line timing)";
+            }
             if (candidate.Agreement.TimingOutlier)
             {
                 found += " · timing differs from other sources";

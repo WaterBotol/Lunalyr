@@ -20,6 +20,12 @@ internal static class L
 
     public static LyricWord Word(string text, double start, double end) => new(text, start, end);
 
+    /// <summary>
+    /// An uneven nudge, in steps, for the <paramref name="index"/>th word of a made-up line, so word starts read as sung
+    /// rather than spread over the line by a tool (<see cref="LyricSpreadTiming"/>, which ranks those as line timing).
+    /// </summary>
+    public static double Sung(int index) => index % 3 == 1 ? 0.3 : 0;
+
     /// <summary>A line with its own word timing.</summary>
     public static LyricLine Timed(LyricLine line, params LyricWord[] words) => line with { Words = words, WordTimed = true };
 

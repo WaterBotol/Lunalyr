@@ -157,8 +157,16 @@ public static class LyricTimingRules
         return 0;
     }
 
-    /// <summary>The timing matches are ranked by: 2 for word-by-word or mixed timing (ranked together), 1 for line timing, 0 for plain text.</summary>
-    public static int RankedTiming(LyricResult result) => Math.Min(TimingTier(result), 2);
+    /// <summary>
+    /// The timing matches are ranked by: 2 for word-by-word or mixed timing (ranked together), 1 for line timing, 0 for
+    /// plain text. Word stamps a tool spread over each line (<see cref="LyricSpreadTiming"/>) rank as the line timing they
+    /// are (the Mac's 4c0d3ce); <c>CouldBeat</c> weighs the same tier.
+    /// </summary>
+    public static int RankedTiming(LyricResult result)
+    {
+        var tier = Math.Min(TimingTier(result), 2);
+        return tier == 2 && LyricSpreadTiming.HasEvenlySpreadWordTiming(result) ? 1 : tier;
+    }
 
     /// <summary>"Word-by-word", "Mixed timing" or "Line-synced".</summary>
     public static string Precision(IReadOnlyList<LyricLine> lines)
