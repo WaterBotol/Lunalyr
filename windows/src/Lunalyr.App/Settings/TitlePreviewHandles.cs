@@ -18,8 +18,8 @@ namespace Lunalyr.App.Settings;
 /// <c>FloatingTitleHandles</c>, 3276613 and dece022). On the desktop: drag the box to move the title card, drag its
 /// top-right corner to scale it (60–160%) from its lower-left corner; kept on screen. With the lyrics floating and the
 /// title kept on screen: drag the row along the floating window and to its top or foot (whichever half it is dropped
-/// in), drag its corner to scale it. Saved as it moves; the picture stands for the main display (or, floating, the
-/// display the window is on).
+/// in), drag its corner to scale it. Saved as it moves; the picture stands for a desktop laid out as the preview draws
+/// it (or, floating, the display the window is on).
 /// </summary>
 internal sealed class TitlePreviewHandles
 {
@@ -32,8 +32,6 @@ internal sealed class TitlePreviewHandles
     private readonly Rectangle _grip;
     private readonly TextBlock _label;
     private Drag? _drag;
-    private (double Width, double Height)? _desktop;
-    private DateTime _desktopAt;
     private FloatingLyricsOptions? _windowFor;
     private DateTime _windowAt;
     private (FloatingDisplay Geometry, FloatingRect Frame)? _window;
@@ -90,17 +88,25 @@ internal sealed class TitlePreviewHandles
     {
         if (_drag is not null) return;
         var settings = _host.Settings.Current;
-        double width = _canvas.ActualWidth, height = _canvas.ActualHeight;
-        if (!settings.OpeningTitle || width <= 0 || height <= 0)
+        var options = _host.Controller?.Floating;
+        // Floating, only a title kept on screen has a row to place.
+        if (!settings.OpeningTitle || (options is { Enabled: true } && !settings.OpeningTitleAlways))
         {
             _canvas.Visibility = Visibility.Collapsed;
             return;
         }
-        var options = _host.Controller?.Floating;
+        // Shown first: a collapsed canvas is never laid out, so it would have no size to place the box in.
+        _canvas.Visibility = Visibility.Visible;
+        double width = _canvas.ActualWidth, height = _canvas.ActualHeight;
+        if (width <= 0 || height <= 0)
+        {
+            _outline.Visibility = _grip.Visibility = _label.Visibility = Visibility.Collapsed;
+            return;
+        }
+        _outline.Visibility = _grip.Visibility = _label.Visibility = Visibility.Visible;
         if (options is { Enabled: true })
         {
-            // Floating: only a title kept on screen has a row to place.
-            if (!settings.OpeningTitleAlways || Window(options) is not { } where)
+            if (Window(options) is not { } where)
             {
                 _canvas.Visibility = Visibility.Collapsed;
                 return;
@@ -199,17 +205,13 @@ internal sealed class TitlePreviewHandles
     private void Save(Drag drag) =>
         _host.Settings.Update(s => drag.Row ? s.WithTitleRow(drag.NowRow) : s.WithTitlePlacement(drag.NowPlacement));
 
-    /// <summary>The main display in points (read again every few seconds: reading the displays isn't free).</summary>
-    private (double Width, double Height) Desktop()
-    {
-        if (_desktop is { } known && DateTime.UtcNow - _desktopAt < TimeSpan.FromSeconds(5)) return known;
-        var monitors = DesktopReader.Monitors();
-        var main = monitors.FirstOrDefault(m => m.IsPrimary) ?? monitors.FirstOrDefault();
-        var found = main is null ? (1920.0, 1080.0) : (main.Bounds.Width / main.Scale, main.Bounds.Height / main.Scale);
-        _desktop = (Math.Max(1, found.Item1), Math.Max(1, found.Item2));
-        _desktopAt = DateTime.UtcNow;
-        return _desktop.Value;
-    }
+    /// <summary>
+    /// The desktop the picture stands for, in points: the preview lays the wallpaper out as a 1080-line display
+    /// (SettingsPreviewRenderer), so the box sits on the card it draws; the place is saved as shares of the screen, so it
+    /// lands in the same place on every display.
+    /// </summary>
+    private static (double Width, double Height) Desktop() =>
+        (1080.0 * SettingsPreview.PixelWidth / SettingsPreview.PixelHeight, 1080.0);
 
     private static double BaseSize((double Width, double Height) desktop) => ViewportMetrics.For(desktop.Width, desktop.Height, 1).BaseSize;
 

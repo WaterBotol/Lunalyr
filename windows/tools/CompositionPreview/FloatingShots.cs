@@ -48,6 +48,7 @@ public static class FloatingShots
             shots.Add(new Shot($"opening-{label}", "opening", time, Dark: true));
         // Long after: only a kept title (-style keep=on) is still there, a row above the lyrics.
         shots.Add(new Shot("opening-6-late", "opening", 15.2, Dark: true));
+        shots.Add(new Shot("opening-6-late-light", "opening", 15.2));
 
         foreach (var screen in screens)
         {

@@ -492,7 +492,8 @@ internal abstract partial class LyricCompositionLayer
         }
     }
 
-    private string? _fadeTrack;
+    // Not any track's key at first (a scene without one included), so the first song is always seen as new.
+    private string? _fadeTrack = "\u0001";
     private double? _coverArrived;
 
     /// <summary>A cover that arrives after the card has begun fades in over this long, in wall seconds (the Mac's <c>coverFadeIn</c>).</summary>
