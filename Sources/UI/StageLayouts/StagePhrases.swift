@@ -116,6 +116,9 @@ enum StagePhrases {
         var runLength = 3
     }
 
+    /// The most words in a phrase of a line written without spaces.
+    static let unspacedMaxRuns = 2
+
     /// Small English words that ride with a neighbour: articles, pronouns,
     /// short prepositions, conjunctions and auxiliaries.
     static let functionWords: Set<String> = [
@@ -265,6 +268,12 @@ enum StagePhrases {
                 breaks[index] = .gap
             }
         }
+        // A word of an unspaced script (思い描いた, 想要和你) carries as much
+        // as two or three English ones, so a phrase holds fewer of them: by
+        // English counts a whole Japanese line was one phrase, one page,
+        // and Hinge's book never opened.
+        let unspaced = runs.filter { LyricRuns.writtenWithoutSpaces($0.text) }.count * 2 > count
+        let maxRuns = unspaced ? min(rules.maxRuns, Self.unspacedMaxRuns) : rules.maxRuns
         // Each stretch between hard breaks, cut to length.
         var starts: [Int] = []
         var index = 0
@@ -272,7 +281,7 @@ enum StagePhrases {
             var end = index + 1
             while end < count, breaks[end] == nil { end += 1 }
             starts.append(index)
-            for cut in lengthCuts(index..<end, function: function, groups: runGroups, gaps: gaps, maxRuns: rules.maxRuns) {
+            for cut in lengthCuts(index..<end, function: function, groups: runGroups, gaps: gaps, maxRuns: maxRuns) {
                 starts.append(cut)
                 breaks[cut] = .length
             }

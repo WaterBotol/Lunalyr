@@ -61,11 +61,10 @@ final class StageReadingRevealTests: XCTestCase {
 
     func testEachRunCarriesOnlyItsOwnReading() {
         XCTAssertEqual(stageReadings(0), ["sugite yuku", "toki no", "naka"])
-        XCTAssertEqual(stageReadings(1), ["anata o", "omoida", "su"])
+        XCTAssertEqual(stageReadings(1), ["anata o", "omoidasu"])
         XCTAssertEqual(stageReadings(2), ["monou ge ni", "nagameru", "gamen ni", "utsutta", "futari"])
-        // One phrase sung over several parts is shared out over them, not
-        // all on the first part (waratteta under 笑っ, nothing after).
-        XCTAssertEqual(stageReadings(3), ["wara", "tteta"])
+        // A word is one run (笑っていた, not 笑って|いた), so its reading is whole.
+        XCTAssertEqual(stageReadings(3), ["waratteta"])
     }
 
     func testAPhraseIsSharedOverTheWordsItIsSungAcross() {
@@ -140,11 +139,11 @@ final class StageReadingRevealTests: XCTestCase {
                 .joined(separator: " | ")
         }
         XCTAssertEqual(stage(line("mou ikkai", ["もう", "一回"])), "mou | ikkai")
-        XCTAssertEqual(stage(line("mou ikkai", ["もう", "一", "回"])), "mou ik | kai")
+        XCTAssertEqual(stage(line("mou ikkai", ["もう", "一", "回"])), "mou | ikkai")
         XCTAssertEqual(stage(line("issho ni", ["一緒", "に"])), "issho ni")
         XCTAssertEqual(stage(line("issho ni", ["一", "緒に"])), "issho ni")
         XCTAssertEqual(stage(line("gakkou", ["学", "校"])), "gakkou")
-        // Where 一 and 回 are runs of their own, each reads its own part.
-        XCTAssertEqual(stage(line("mou ikkai", ["も", "う", "一", "回"])), "mou ik | kai")
+        // 一回 is one word, one run, read whole, however it was timed.
+        XCTAssertEqual(stage(line("mou ikkai", ["も", "う", "一", "回"])), "mou | ikkai")
     }
 }

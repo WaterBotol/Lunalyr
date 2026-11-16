@@ -166,7 +166,8 @@ final class StagePhrasesTests: XCTestCase {
         assertWellFormed(p, runs)
         XCTAssertEqual(runs.map(\.text), ["\u{541B}\u{306E}", "\u{540D}\u{524D}\u{3092}", "\u{547C}\u{3093}\u{3067}",
                                           "\u{591C}\u{7A7A}\u{306B}", "\u{6D88}\u{3048}\u{305F}"])
-        XCTAssertEqual(p.phrases.map(\.runs), [0..<3, 3..<5])
+        // Unspaced words carry more each: at most two to a phrase (`unspacedMaxRuns`).
+        XCTAssertEqual(p.phrases.map(\.runs), [0..<2, 2..<3, 3..<5])
         XCTAssertFalse(p.words.contains(where: \.isFunction))
         XCTAssertFalse(p.words.contains { $0.runGroup != nil }, "Glued characters are one run, not a quick run")
         // The analysis through `StageLyricView`'s inputs gives the same.

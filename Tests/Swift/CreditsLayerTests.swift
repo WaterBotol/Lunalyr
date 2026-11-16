@@ -143,7 +143,7 @@ final class CreditsLayerTests: XCTestCase {
         let words = line.enumerated().map { LyricsFetcher.Word(text: String($1), start: Double($0) * 0.3, end: Double($0) * 0.3 + 0.28) }
         let runs = StageRun.make(words, glue: [false] + [Bool](repeating: true, count: words.count - 1))
         XCTAssertGreaterThan(runs.count, 2)
-        XCTAssertTrue(runs.allSatisfy { $0.text.count <= 3 })
+        XCTAssertTrue(runs.allSatisfy { $0.text.count <= StageRun.unspacedWordLimit })
         XCTAssertEqual(runs.map(\.text).joined(), line)
         // Syllables of one word still join.
         let syllables = ["beau", "ti", "ful"].enumerated().map { LyricsFetcher.Word(text: $1, start: Double($0), end: Double($0) + 0.9) }

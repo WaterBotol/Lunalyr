@@ -39,6 +39,7 @@ struct StageRun: Equatable, Identifiable {
     /// as a word: an unspaced Chinese, Japanese or Korean line, or a romanised
     /// one, is cut into short runs that arrive one by one.
     static func make(_ words: [LyricsFetcher.Word], glue: [Bool]) -> [StageRun] {
+        let glue = wordGlue(words, glue: glue)
         var runs: [StageRun] = []
         for (index, word) in words.enumerated() {
             let text = word.text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -57,11 +58,23 @@ struct StageRun: Equatable, Identifiable {
         return runs
     }
 
+    /// An unspaced run (Japanese, Chinese, Thai) parted at its real words
+    /// first, so a run is a word as a reader takes it in (思い 描いた 未来の
+    /// 自分には), not three characters at a time (思い描 いた未 来の自), which
+    /// cut words in half and gave Hinge's pages and the other stages
+    /// meaningless pieces.
+    static func wordGlue(_ words: [LyricsFetcher.Word], glue: [Bool]) -> [Bool] {
+        LyricRuns.splittingWords(words, glue: glue, into: .words)
+    }
+
+    /// The longest unspaced word kept as one run; a longer one is cut.
+    static let unspacedWordLimit = 6
+
     /// Whether the word `text` at `index` joins the run before it: glued to
     /// it, and the two together still short enough to read as one word.
     private static func joins(_ text: String, at index: Int, glue: [Bool], after previous: String?) -> Bool {
         guard index > 0, glue.indices.contains(index), glue[index], let previous else { return false }
-        return previous.count + text.count <= (LyricScript.keepsSyllables(text) ? 3 : 12)
+        return previous.count + text.count <= (LyricScript.keepsSyllables(text) ? unspacedWordLimit : 12)
     }
 
     /// The glue of the runs `make` builds: true where a word joins the run
@@ -70,6 +83,7 @@ struct StageRun: Equatable, Identifiable {
     /// by the line's longer runs instead, an unspaced line's whole reading sat
     /// on its first run and showed as soon as the line began.
     static func glue(_ words: [LyricsFetcher.Word], glue: [Bool]) -> [Bool] {
+        let glue = wordGlue(words, glue: glue)
         var result = [Bool](repeating: false, count: words.count)
         var last: String?
         for (index, word) in words.enumerated() {

@@ -186,7 +186,7 @@ final class ReadingSyllableRevealTests: XCTestCase {
         let stage = LyricCard.Animation(line: line, composition: .portal, mood: .neutral, seed: 0,
                                         romanized: Self.readings[1], display: .below)
         XCTAssertEqual(StageRun.make(stage.words, glue: stage.glue).map { StageLyricView.reading(of: $0, in: stage.readings) },
-                       ["anata o", "omoida", "su"])
+                       ["anata o", "omoidasu"])
         let scattered = LyricCard.Animation(line: line, composition: .scattered, mood: .neutral, seed: 0,
                                             romanized: Self.readings[1], display: .below)
         XCTAssertEqual(LyricReadingInk(tokens: scattered.words, readings: scattered.readings, font: Self.font)?.text,
