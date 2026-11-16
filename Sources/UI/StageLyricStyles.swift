@@ -316,7 +316,15 @@ struct StageLyricView: View {
         // "Add Editorial typography": about a third of the words (by the amount set) take the
         // contrasting face, as in the other layouts. The same words every time for a line.
         let alternate = settings.editorialTypography && chance(id, 60) < 0.34 && chance(id, 61) < settings.editorialAmount
-        return settings.lyricFont(size: size, hero: hero, mood: mood, seed: UInt64(abs(seed &+ id)), alternate: alternate)
+        return settings.lyricFont(size: size, hero: hero, mood: mood, seed: UInt64(abs(seed &+ id)), alternate: alternate,
+                                  text: faceText(id, alternate: alternate))
+    }
+
+    /// The run's text, when a face other than the main one may set it, so
+    /// a face without Hangul passes it over (`Settings.lyricFont`).
+    private func faceText(_ id: Int, alternate: Bool) -> String? {
+        guard alternate || settings.randomizeLyricFonts else { return nil }
+        return StageRun.make(words, glue: glue).first { $0.id == id }?.text
     }
 
     // MARK: Readings
@@ -416,7 +424,7 @@ struct StageLyricView: View {
     private func readingFont(_ size: CGFloat, id: Int) -> Font {
         let alternate = settings.editorialTypography && chance(id, 60) < 0.34 && chance(id, 61) < settings.editorialAmount
         return settings.lyricFont(size: Self.readingSize(size), hero: false, mood: mood, seed: UInt64(abs(seed &+ id)),
-                                  alternate: alternate)
+                                  alternate: alternate, text: faceText(id, alternate: alternate))
     }
 
     func sample(_ run: StageRun, of count: Int) -> LyricInkSample {

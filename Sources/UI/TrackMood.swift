@@ -38,15 +38,23 @@ enum LyricFace: Equatable {
         }
     }
 
-    /// Whether the face has its own glyphs for every letter of `text`.
-    /// Charter and Rockwell have no Hangul, kana or Han: a word in those
-    /// scripts set in them is drawn in the system's fallback for that face
-    /// (AppleMyungjo, in one thin weight, for Hangul) instead of the
-    /// fallback the lyric's own face gets, matched to its weight.
+    /// Whether the face can set `text` as itself: false when it has
+    /// Hangul it has no glyphs for. None of the four faces has Hangul, and
+    /// the system draws Hangul set in Charter or Rockwell in AppleMyungjo,
+    /// in its one thin weight, whatever weight was asked for -- a different
+    /// face beside the Hangul of the lyric's own face, which falls back
+    /// matched to its weight (Apple SD Gothic Neo Bold under Poppins Bold).
+    /// Kana and Han fall back to Songti or PingFang in a matching weight,
+    /// a real contrast, so only Hangul is checked.
     func draws(_ text: String) -> Bool {
         let covered = Self.coverage[self] ?? CFCharacterSetGetPredefined(.letter)
-        return text.unicodeScalars.allSatisfy { !$0.properties.isAlphabetic || CFCharacterSetIsLongCharacterMember(covered, $0.value) }
+        return text.unicodeScalars.allSatisfy { scalar in
+            !Self.hangul.contains { $0.contains(scalar.value) } || CFCharacterSetIsLongCharacterMember(covered, scalar.value)
+        }
     }
+
+    /// Jamo, compatibility jamo, extended jamo and syllables.
+    private static let hangul: [ClosedRange<UInt32>] = [0x1100...0x11FF, 0x3130...0x318F, 0xA960...0xA97F, 0xAC00...0xD7FF]
 
     private static let coverage: [LyricFace: CFCharacterSet] = {
         func characters(_ font: CTFont) -> CFCharacterSet { CTFontCopyCharacterSet(font) }

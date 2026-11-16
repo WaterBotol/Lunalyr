@@ -135,12 +135,34 @@ final class HangulWordTests: XCTestCase {
         }
     }
 
+    /// The stage layouts (Hinge, Mosaic, Torque, Fable...) too: every
+    /// Hangul run in the main face, the words Editorial picks included.
+    func testStageHangulRunsKeepTheMainFace() throws {
+        let settings = editorialSettings()
+        let line = try line()
+        let glue = LyricRuns.glue(line: line, words: line.words)
+        let runs = StageRun.make(line.words, glue: glue)
+        XCTAssertEqual(runs.map(\.text), ["비로소", "우리의", "세상이", "완벽해", "Oh-oh"])
+        for seed in 0..<6 {
+            let view = StageLyricView(words: line.words, glue: glue, time: 210, stageSize: CGSize(width: 1200, height: 700),
+                                      baseSize: 60, mood: .neutral, composition: .hinge, seed: seed, settings: settings)
+            let picked = runs.filter { view.chance($0.id, 60) < 0.34 && view.chance($0.id, 61) < 1 }
+            for run in runs where run.text != "Oh-oh" {
+                XCTAssertEqual(view.font(60, hero: true, id: run.id), settings.lyricFont(size: 60, hero: true, mood: .neutral),
+                               "\(run.text), seed \(seed), picked \(picked.map(\.text))")
+            }
+        }
+    }
+
     /// What the faces actually draw Hangul in: the contrasting serif's
-    /// fallback is AppleMyungjo, whatever weight is asked for.
+    /// fallback is AppleMyungjo, whatever weight is asked for. Kana and
+    /// Han fall back to Songti in a matching weight, so the contrast stays.
     func testCharterHasNoHangulOfItsOwn() {
         XCTAssertFalse(LyricFace.serif.draws("우리의"))
         XCTAssertFalse(LyricFace.slab.draws("우리의"))
         XCTAssertTrue(LyricFace.serif.draws("dream, oh-oh"))
+        XCTAssertTrue(LyricFace.serif.draws("夕焼けの"))
+        XCTAssertTrue(LyricFace.slab.draws("我们一起"))
         let charter = CTFontCreateWithName("Charter-Black" as CFString, 60, nil)
         let fallback = CTFontCreateForString(charter, "우리의" as CFString, CFRange(location: 0, length: 3))
         XCTAssertNotEqual(CTFontCopyPostScriptName(fallback) as String, "Charter-Black")
