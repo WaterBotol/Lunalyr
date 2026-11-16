@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Diagnostic: proves whether YouTube's own player, embedded in WebView2 as the Music video wallpaper embeds it,
+       loads a video's caption track and whether its /api/timedtext reply can be read from WebView2 (the Mac's caption
+       sync, 3c6c9319). Muted twice over (the mute-audio switch and IsMuted), never shown, never focused. Not part of the app or
+       the solution. -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.19041.0</TargetPlatformMinVersion>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <Platforms>x64</Platforms>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <!-- The WebView2 package also ships a WPF control this tool never uses. -->
+    <NoWarn>$(NoWarn);MSB3277</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Web.WebView2" VersionOverride="1.0.3719.77" />
+  </ItemGroup>
+</Project>
