@@ -1094,7 +1094,10 @@ struct LivelyGlyphRenderer: TextRenderer {
         var base = context
         base.opacity = 1 - 0.62 * A * L.ss(d / 0.6)
         base.draw(g.slice)
-        let cell = max(3, CGFloat(size) * 0.1)
+        // The dust is drawn once, by the word's first layer: a copy of the
+        // word (a label's overlay, a sweep) keeps only its faint ghost.
+        guard particles else { return }
+        let cell = max(3, CGFloat(size) * 0.12)
         let ink = state.glow.resolve(in: context.environment)
         let rect = g.rect.insetBy(dx: -1, dy: -1)
         let cols = Int((rect.width / cell).rounded(.up)), rows = Int((rect.height / cell).rounded(.up))
@@ -1176,16 +1179,13 @@ struct LivelyGlyphRenderer: TextRenderer {
         let bands = 10
         let rect = g.rect
         let bandH = rect.height / CGFloat(bands)
-        var any = false
-        for k in 0..<bands {
-            let q = (Double(k) + 0.5) / Double(bands)
-            let m = L.melt(t, delay: g.along * 0.25 + (1 - q) * 0.16, duration: D)
-            if abs(m) > 0.002 { any = true }
+        let melts: [Double] = (0..<bands).map { k in
+            L.melt(t, delay: g.along * 0.25 + (1 - (Double(k) + 0.5) / Double(bands)) * 0.16, duration: D)
         }
-        guard any else { context.draw(g.slice); return }
+        guard melts.contains(where: { abs($0) > 0.002 }) else { context.draw(g.slice); return }
         for k in 0..<bands {
             let q = (Double(k) + 0.5) / Double(bands)
-            let m = L.melt(t, delay: g.along * 0.25 + (1 - q) * 0.16, duration: D)
+            let m = melts[k]
             let dy = 0.24 * size * A * m * pow(1 - q, 1.3)
             let sx = 1 + 0.25 * A * m * q * q
             let dx = 0.014 * size * A * max(0, m) * sin(2 * .pi * 0.6 * t + Double(k) * 0.55 + Double(g.index))
@@ -1409,16 +1409,18 @@ struct LivelyGlyphRenderer: TextRenderer {
             let thaw = L.frostThaw(t, duration: D)
             let front = L.frostFront(t)
             guard front > -0.2, thaw < 1 else { break }
-            var sheet = word.insetBy(dx: -size * 0.3, dy: -size * 0.12)
-            sheet.size.width += size * 0.7
+            // Close round the letters, with soft edges, so on a layout with
+            // no label it reads as frost on the word rather than a box.
+            let sheet = word.insetBy(dx: -size * 0.16, dy: -size * 0.06)
             let reach = word.minX + word.width * CGFloat(front)
             let feather = size * 0.5
             if reach + feather > sheet.minX {
                 let stopAt = min(1, max(0.001, (reach + feather - sheet.minX) / sheet.width))
                 let solid = max(0, (reach - sheet.minX) / sheet.width)
                 var frosted = context
-                frosted.clip(to: Path(roundedRect: sheet, cornerRadius: size * 0.06))
-                frosted.fill(Path(sheet), with: .linearGradient(
+                frosted.addFilter(.blur(radius: size * 0.05))
+                frosted.clip(to: Path(roundedRect: sheet.insetBy(dx: -size * 0.1, dy: -size * 0.1), cornerRadius: size * 0.1))
+                frosted.fill(Path(roundedRect: sheet, cornerRadius: size * 0.12), with: .linearGradient(
                     Gradient(stops: [.init(color: ice.opacity(0.42 * A * (1 - thaw)), location: 0),
                                      .init(color: ice.opacity(0.22 * A * (1 - thaw)), location: min(solid, stopAt * 0.99)),
                                      .init(color: ice.opacity(0), location: stopAt)]),

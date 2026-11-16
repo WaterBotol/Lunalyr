@@ -408,13 +408,14 @@ extension StageLyricView {
                         maxWidth: room) {
                 word(run, tile ? ink.tileText : sample.sung, uppercase: true, size: size)
                     .font(font(size, hero: true, id: run.id))
+                    .livelyLetters()
                     .lineLimit(1).minimumScaleFactor(shrink)
                     .background { tileBackground(tile, size: size) }
                     .highlightLayer(tile)
             }
         }
         .lyricShadow(tile ? 0 : 0.3, radius: max(2, size * 0.06), y: 2)
-        .wordAction(accent(run), start: run.start, time: time, size: size, glow: sample.glow)
+        .wordAction(accent(run), start: run.start, end: run.end, time: time, size: size, glow: sample.glow)
         // Word presence, about the word's centre with its action.
         .modifier(presence(run, size: size, speed: speed, live: live && !phrasing.lineTimed))
         // The burst grows about a point a quarter in from the spine, so a big

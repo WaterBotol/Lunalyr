@@ -440,21 +440,27 @@ private struct SungText: View {
     let tint: Double
     let rightToLeft: Bool
     let ink: LyricInkSample
+    /// An action word's letters (`LivelyGlyphHook`): every layer moves them,
+    /// the first draws the particles, and a sweep's mask reaches past the
+    /// word while they move.
+    @Environment(\.lyricLivelyGlyphs) private var lively
 
     var body: some View {
+        let pad = (lively?.size ?? 0) * 2.5
         ZStack {
             if fill < 1 && !ink.sweeps {
-                Text(label).font(font).foregroundStyle(ink.rest.opacity(ink.dim))
-                Text(label).font(font).foregroundStyle(ink.rest)
-                    .mask(LyricSweepMask(progress: fill, rightToLeft: rightToLeft))
+                Text(label).font(font).foregroundStyle(ink.rest.opacity(ink.dim)).livelyLetters()
+                Text(label).font(font).foregroundStyle(ink.rest).livelyLetters(particles: false)
+                    .livelySweepMask(progress: fill, rightToLeft: rightToLeft, feather: 0.12, active: lively != nil, pad: pad)
             } else if !(ink.sweeps && tint >= 1) {
-                Text(label).font(font).foregroundStyle(ink.rest)
+                Text(label).font(font).foregroundStyle(ink.rest).livelyLetters()
             }
             if ink.sweeps && tint >= 1 {
-                Text(label).font(font).foregroundStyle(ink.sung)
+                Text(label).font(font).foregroundStyle(ink.sung).livelyLetters()
             } else if ink.sweeps && tint > 0 {
-                Text(label).font(font).foregroundStyle(ink.sung)
-                    .mask(LyricSweepMask(progress: tint, rightToLeft: rightToLeft, feather: LyricSweepMask.colourFeather))
+                Text(label).font(font).foregroundStyle(ink.sung).livelyLetters(particles: false)
+                    .livelySweepMask(progress: tint, rightToLeft: rightToLeft, feather: LyricSweepMask.colourFeather,
+                                     active: lively != nil, pad: pad)
             }
         }
         .modifier(LyricSweepUnderline(colour: ink.sweepUnderline, progress: tint, rightToLeft: rightToLeft))
@@ -488,19 +494,25 @@ private struct HeldWordText: View {
     /// tracking would switch off ligatures and make a held word read as a
     /// different typeface; a touch of overlap at the peak is not visible.
     static let glyphScale: CGFloat = 0.05
+    @Environment(\.lyricLivelyGlyphs) private var lively
 
     var body: some View {
         if #available(macOS 15.0, *), glyphMotion {
+            // While an action moves the letters, its renderer (nearer the
+            // text) takes over from the held swell.
             ZStack {
                 Text(label).font(font).foregroundStyle(ink.rest)
+                    .livelyLetters()
                     .textRenderer(HeldGlyphRenderer(progress: progress, sustain: reduceMotion ? 0 : sustain,
                         glow: glow, rightToLeft: rightToLeft, pointSize: pointSize, glowColour: ink.glow,
                         dim: ink.sweeps ? 1 : ink.dim))
                 if ink.sweeps && tint > 0 {
                     Text(label).font(font).foregroundStyle(ink.sung)
+                        .livelyLetters(particles: false)
                         .textRenderer(HeldGlyphRenderer(progress: progress, sustain: reduceMotion ? 0 : sustain,
                             glow: 0, rightToLeft: rightToLeft, pointSize: pointSize, glowColour: ink.glow, dim: 1))
-                        .mask(LyricSweepMask(progress: tint, rightToLeft: rightToLeft, feather: LyricSweepMask.colourFeather))
+                        .livelySweepMask(progress: tint, rightToLeft: rightToLeft, feather: LyricSweepMask.colourFeather,
+                                         active: lively != nil, pad: (lively?.size ?? 0) * 2.5)
                 }
             }
             .modifier(LyricSweepUnderline(colour: ink.sweepUnderline, progress: tint, rightToLeft: rightToLeft))
@@ -781,7 +793,7 @@ struct ScatteredLyricText: View {
                                symbolAction: accent?.action, presence: presence)
             .equatable()
             // An action word's motion, over its entrance and inside its slot.
-            .wordAction(accent, start: onset, time: time, size: run.metrics.size, glow: frame.ink.glow)
+            .wordAction(accent, start: onset, end: run.source.end, time: time, size: run.metrics.size, glow: frame.ink.glow)
             .modifier(WordFloat(drift: vc_idle_drift(run.seed, floatTime, idle), leave: leave,
                                 size: run.metrics.size, seed: run.seed, reduceMotion: reduceMotion,
                                 presence: presence))
@@ -1071,6 +1083,7 @@ private struct ScatteredRunInk: View, Equatable {
                 if let highlight = frame.highlight {
                     label(LyricInkSample(rest: highlight.text, sung: highlight.text, glow: .clear,
                                          reading: highlight.text, sweeps: false, dim: frame.ink.dim), glow: 0)
+                        .environment(\.lyricLivelyParticles, false)
                         .mask {
                             LyricHighlightMask(marks: highlight.marks, pointSize: size, rightToLeft: run.rightToLeft,
                                                switchAt: highlight.textSwitch)

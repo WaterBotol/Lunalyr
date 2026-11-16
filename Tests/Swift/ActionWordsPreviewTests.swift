@@ -344,4 +344,34 @@ final class ActionWordsPreviewTests: XCTestCase {
             movie.finish()
         }
     }
+
+    /// Opt-in (LUNALYR_ACTION_PREVIEW_COST=1): milliseconds to draw one
+    /// Cutout pane mid-action, per action, against Reduce Motion's glow.
+    func testMeasureActionCost() throws {
+        guard ProcessInfo.processInfo.environment["LUNALYR_ACTION_PREVIEW_COST"] == "1" else {
+            throw XCTSkip("Set TEST_RUNNER_LUNALYR_ACTION_PREVIEW_COST=1 to measure")
+        }
+        let size = CGSize(width: 619, height: 590)
+        let painter = StageLayoutVideoTests.Painter(size: size, renderer: .image)
+        defer { painter.close() }
+        func ms(_ clip: Clip, reduce: Bool) throws -> Double {
+            let onset = Self.words(clip).onset
+            var total = 0.0
+            for k in 0..<12 {
+                let t = onset + 0.3 + Double(k) * 0.07
+                let view = Self.stage(clip, look: Look(label: "", reduceMotion: reduce), time: t, size: size)
+                    .environment(\.lyricInk, LyricInk()).environment(\.colorScheme, .dark)
+                let start = Date()
+                _ = try painter.draw(view)
+                total += Date().timeIntervalSince(start)
+            }
+            return total / 12 * 1000
+        }
+        var report = "action cost (ms per pane, mid-action):\n"
+        for clip in Self.clips {
+            let still = try ms(clip, reduce: true), moving = try ms(clip, reduce: false)
+            report += String(format: "%@ %.2f vs %.2f (+%.2f)\n", clip.action.rawValue, moving, still, moving - still)
+        }
+        print(report)
+    }
 }
