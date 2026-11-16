@@ -253,7 +253,7 @@ struct LyricsStep: View {
                         .frame(width: LunalyrDesign.Onboarding.readingsClip.width,
                                height: LunalyrDesign.Onboarding.readingsClip.height)
                 }
-                OnboardingSwitchRow(title: "Show translations under lyrics", caption: OnboardingCopy.translations,
+                OnboardingSwitchRow(title: "Show translations", caption: OnboardingCopy.translations,
                                     isOn: $extras.showsTranslations)
             }
         }

@@ -129,7 +129,7 @@ struct LyricStyleProfiles {
         LyricLayoutRotation.enabledKey, BackingVocals.settingKey, BackingVocals.styleKey, LyricCreditCues.settingKey,
         OpeningTitle.settingKey, OpeningTitle.coverKey,
         // Readings and translations shown
-        RomanizationOptions.displayKey, LunalyrExtras.Keys.translations,
+        RomanizationOptions.displayKey, LunalyrExtras.Keys.translations, LunalyrExtras.Keys.translationPlacement,
         // Text and highlight colours
         LyricColourOptions.Keys.mode, LyricColourOptions.Keys.speed, LyricColourOptions.Keys.strength,
         LyricColourOptions.Keys.custom, LyricColourOptions.Keys.pastel, LyricHighlightOptions.Keys.mode, LyricHighlightOptions.Keys.custom,

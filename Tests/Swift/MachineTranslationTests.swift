@@ -240,7 +240,7 @@ final class MachineTranslationTests: XCTestCase {
         XCTAssertTrue(MachineTranslationCopy.status(.translated(source: "ja", target: "en", lines: 3), enabled: true,
                                                     showing: true, locale: english).contains("translated on this Mac from Japanese"))
         XCTAssertTrue(MachineTranslationCopy.status(.idle, enabled: true, showing: false, locale: english)
-            .contains("Show translations under lyrics"))
+            .contains("Show translations”"))
         XCTAssertTrue(MachineTranslationCopy.about.contains("never sent anywhere"))
     }
 }

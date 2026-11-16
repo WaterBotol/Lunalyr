@@ -32,6 +32,7 @@ final class LunalyrExtras: ObservableObject {
         static let wallpaperPaused = "custom.wallpaperPaused"
         static let hideWhileMirroring = "custom.hideLyricsWhileMirroring"
         static let translations = "custom.showTranslations"
+        static let translationPlacement = "custom.translationPlacement"
         static let lyricCardLinesBefore = "custom.lyricCardLinesBefore"
         static let lyricCardLinesAfter = "custom.lyricCardLinesAfter"
         static let lyricCardComposition = "custom.lyricCardComposition"
@@ -179,10 +180,16 @@ final class LunalyrExtras: ObservableObject {
     @Published var showsTranslations: Bool {
         didSet { defaults.set(showsTranslations, forKey: Keys.translations) }
     }
-    /// Rereads Show translations, part of a lyric style (`LyricStyleProfiles`).
+    /// Where a line's translation sits (`TranslationPlacement`).
+    @Published var translationPlacement: TranslationPlacement = .below {
+        didSet { defaults.set(translationPlacement.rawValue, forKey: Keys.translationPlacement) }
+    }
+    /// Rereads Show translations and their place, part of a lyric style (`LyricStyleProfiles`).
     func reloadTranslations() {
         let saved = defaults.object(forKey: Keys.translations) as? Bool ?? true
         if showsTranslations != saved { showsTranslations = saved }
+        let place = TranslationPlacement.stored(in: defaults)
+        if translationPlacement != place { translationPlacement = place }
     }
     /// A display is mirrored -- usually a projector or a shared screen.
     @Published private(set) var mirroring = false {
@@ -301,6 +308,7 @@ final class LunalyrExtras: ObservableObject {
         hidesWhileMirroring = defaults.object(forKey: Keys.hideWhileMirroring) as? Bool ?? true
         mirroringChoiceMade = defaults.object(forKey: Keys.hideWhileMirroring) != nil
         showsTranslations = defaults.object(forKey: Keys.translations) as? Bool ?? true
+        translationPlacement = TranslationPlacement.stored(in: defaults)
         visibility = LyricVisibility(visible: !defaults.bool(forKey: Keys.lyricsHidden))
         previewVisibility = visibility
     }
@@ -553,5 +561,31 @@ struct LyricVisibility {
     func presence(at wall: Double) -> Double {
         guard changedAt.isFinite else { return target }
         return from + (target - from) * vc_settle(wall - changedAt, target > from ? 0.6 : 0.45)
+    }
+}
+
+
+/// Where a line's translation sits: under or over its line, or at the
+/// foot or head of the screen (the floating window's, in floating lyrics).
+enum TranslationPlacement: String, CaseIterable, Identifiable {
+    case below, above, bottom, top
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .below: return "Under the line"
+        case .above: return "Above the line"
+        case .bottom: return "Bottom of the screen"
+        case .top: return "Top of the screen"
+        }
+    }
+
+    /// At an edge of the stage rather than with its line.
+    var atEdge: Bool { self == .bottom || self == .top }
+    /// Above the words, with its line or at the top.
+    var overWords: Bool { self == .above || self == .top }
+
+    static func stored(in defaults: UserDefaults) -> TranslationPlacement {
+        defaults.string(forKey: LunalyrExtras.Keys.translationPlacement).flatMap(Self.init(rawValue:)) ?? .below
     }
 }

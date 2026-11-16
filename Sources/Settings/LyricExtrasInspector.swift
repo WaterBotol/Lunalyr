@@ -697,7 +697,14 @@ struct TranslationSection: View {
 
     var body: some View {
         ThemedSection("Translation") {
-            Toggle("Show translations under lyrics", isOn: $extras.showsTranslations)
+            Toggle("Show translations", isOn: $extras.showsTranslations)
+            if extras.showsTranslations {
+                ChoiceMenu("Translation sits", selection: $extras.translationPlacement,
+                           selectedTitle: { $0.title }) {
+                    ForEach(TranslationPlacement.allCases) { Text($0.title).tag($0) }
+                }
+                .help("Under or over its line, or at the bottom or top of the screen (the floating window's, for floating lyrics)")
+            }
             InspectorCaption("Shown when the lyric source has a translation.", more: "Appears when the lyric source includes a translation for a line, such as bilingual LRC files. Lyrics are never sent anywhere to be translated.")
             #if canImport(Translation)
             if #available(macOS 15.0, *) { MachineTranslationControls() }

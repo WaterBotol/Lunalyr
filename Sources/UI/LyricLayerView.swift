@@ -647,6 +647,9 @@ struct LyricLayer: View {
                     live: live, previewing: true, previewSince: since)
             }
         }
+        .overlayPreferenceValue(EdgeTranslations.self) { items in
+            EdgeTranslationsView(items: items, stageSize: stageSize, mood: mood, baseSize: baseSize)
+        }
     }
 
     /// An earlier line still being sung or finishing its exit. A held one
@@ -894,7 +897,13 @@ struct LyricLayer: View {
                     ? CGSize(width: stageSize.width * 0.92, height: stageSize.height * 0.86)
                     : stageSize, userScale: rolls || composition.fillsStage ? 1 : userScale,
                     neutral: rolls || composition.fillsStage ? 1 : 0.75)
+                let place = style.translationPlacement
+                let translationFont = settings.lyricFont(size: baseSize * 0.34 * userScale, hero: false, mood: mood)
                 VStack(spacing: baseSize * 0.2) {
+                if !rolls, place == .above, let translation, !translation.isEmpty {
+                    TranslationLine(text: translation, font: translationFont, width: stageSize.width * 0.8)
+                        .opacity(pose.progress * (1 - pose.exit))
+                }
                 Group {
                     if line.wordTimed {
                         let rolling = rolls ? rollingWords(around: index, scene: scene, time: time, live: live) : nil
@@ -963,22 +972,28 @@ struct LyricLayer: View {
                 // a quieter second voice, arriving and leaving with it. A
                 // rolling stage keeps one size across lines, so there it
                 // rests over the stage's foot instead of resizing the stage.
-                if !rolls, let translation, !translation.isEmpty {
-                    TranslationLine(text: translation,
-                                    font: settings.lyricFont(size: baseSize * 0.34 * userScale, hero: false, mood: mood),
-                                    width: stageSize.width * 0.8)
+                if !rolls, place == .below, let translation, !translation.isEmpty {
+                    TranslationLine(text: translation, font: translationFont, width: stageSize.width * 0.8)
                         .opacity(pose.progress * (1 - pose.exit))
                 }
                 }
-                .overlay(alignment: .bottom) {
+                // A rolling stage keeps its band at the foot, or at the head
+                // (the words move down by it) when the translation sits over them.
+                .offset(y: rolls && place.overWords ? band : 0)
+                .overlay(alignment: rolls && place.overWords ? .top : .bottom) {
                     if rolls, let translation, !translation.isEmpty {
                         TranslationLine(text: translation,
                                         font: settings.lyricFont(size: translationSize, hero: false, mood: mood),
                                         width: stageSize.width * 0.8, lines: 2)
                             .opacity(pose.progress * (1 - pose.exit))
-                            .padding(.bottom, baseSize * 0.2)
+                            .padding(place.overWords ? .top : .bottom, baseSize * 0.2)
                     }
                 }
+                // At the screen's edge: handed to the stage (`EdgeTranslations`).
+                .preference(key: EdgeTranslations.self, value: !rolls && place.atEdge
+                    && !previewing && translation?.isEmpty == false
+                    ? [EdgeTranslations.Item(id: index, text: translation ?? "", top: place == .top,
+                                             opacity: pose.progress * (1 - pose.exit), size: baseSize * 0.34 * userScale)] : [])
                 .opacity(Self.timingHandoffPresence(after: index, in: lines, time: time))
                 .modifier(FittedLyricStage(available: fit.available, userScale: fit.userScale, neutral: fit.neutral))
                 // Set no wider than the stage, and placed, by `LyricLineStack`.
@@ -2006,6 +2021,43 @@ struct LyricLineStack: Layout {
 
     /// Tests watch what the real layout placed. Never set in the app.
     nonisolated(unsafe) static var recorder: (([Item], [CGFloat]) -> Void)?
+}
+
+/// Translations set at the screen's top or bottom edge, handed up by their
+/// lines so they arrive and leave with them.
+struct EdgeTranslations: PreferenceKey {
+    struct Item: Equatable {
+        let id: Int
+        let text: String
+        let top: Bool
+        let opacity: Double
+        let size: CGFloat
+    }
+    static let defaultValue: [Item] = []
+    static func reduce(value: inout [Item], nextValue: () -> [Item]) { value += nextValue() }
+}
+
+private struct EdgeTranslationsView: View {
+    let items: [EdgeTranslations.Item]
+    let stageSize: CGSize
+    let mood: TrackMood
+    let baseSize: CGFloat
+    @ObservedObject private var settings = Settings.shared
+
+    var body: some View {
+        // Lines overlapping in a hand-over share the place, cross-fading.
+        ZStack {
+            ForEach(items, id: \.id) { item in
+                TranslationLine(text: item.text, font: settings.lyricFont(size: item.size, hero: false, mood: mood),
+                                width: stageSize.width * 0.8, lines: 2)
+                    .opacity(item.opacity)
+                    .padding(item.top ? .top : .bottom, baseSize * 0.5)
+                    .frame(width: stageSize.width, height: stageSize.height, alignment: item.top ? .top : .bottom)
+            }
+        }
+        .frame(width: stageSize.width, height: stageSize.height)
+        .allowsHitTesting(false)
+    }
 }
 
 /// A line's translation, or a reading of the whole line: the reading

@@ -345,6 +345,7 @@ private enum SourceKeys {
         "custom.textBacking",
         "custom.textBackingAutomatic",
         "custom.thinkingOrb.style",
+        "custom.translationPlacement",
         "custom.updates.adoptedDailyChecks",
         "custom.visualizerHeavyScenesOnMainDisplay",
         "custom.visualizerPunch",

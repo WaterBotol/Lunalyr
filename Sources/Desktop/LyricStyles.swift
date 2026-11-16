@@ -337,6 +337,9 @@ final class LyricStyle {
     var showsTranslations: Bool {
         extras?.showsTranslations ?? (defaults.object(forKey: LunalyrExtras.Keys.translations) as? Bool ?? true)
     }
+    var translationPlacement: TranslationPlacement {
+        extras?.translationPlacement ?? TranslationPlacement.stored(in: defaults)
+    }
     var backingVocals: Bool { BackingVocals.isOn(in: defaults) }
     var backingStyle: LyricComposition? { BackingVocals.chosenStyle(in: defaults) }
     var creditCues: Bool { LyricCreditCues.isOn(in: defaults) }

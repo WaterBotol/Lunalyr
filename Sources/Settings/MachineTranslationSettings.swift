@@ -15,7 +15,7 @@ enum MachineTranslationCopy {
     static func status(_ state: LyricMachineTranslator.State, enabled: Bool, showing: Bool,
                        locale: Locale = .current) -> String {
         guard enabled else { return "Off. Songs show only their lyric source’s translations." }
-        let note = showing ? "" : " Turn on “Show translations under lyrics” to see them."
+        let note = showing ? "" : " Turn on “Show translations” to see them."
         switch state {
         case .idle: return "Translated on this Mac when a song needs it." + note
         case .translating(let source, _): return "Translating this song from \(name(source, locale: locale)) on this Mac…"
