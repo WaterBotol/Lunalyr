@@ -38,7 +38,12 @@ final class LyricPriorityTests: XCTestCase {
             return line
         }
         let provenance = LyricsFetcher.Provenance(precision: "fixture", source: source.title)
+        // Mixed: word-timed but for its last line, 4 of 5 -- enough to rank
+        // with word-by-word (`LyricsFetcher.fullWordTimingShare`).
         let result: LyricsFetcher.Result = timing == .plain ? .plain(["Sing along", "Hold on"], provenance)
+            : timing == .mixed ? .synced([line("Sing along", at: 1, timed: true), line("Hold me", at: 4, timed: true),
+                                          line("Hold you", at: 7, timed: true), line("Hold us", at: 10, timed: true),
+                                          line("Hold on", at: 13, timed: false)], provenance)
             : .synced([line("Sing along", at: 1, timed: timing != .line), line("Hold on", at: 4, timed: timing == .word)], provenance)
         return .init(source: source, result: result, title: title, artist: "Our Artist", duration: duration, score: 0)
     }
@@ -70,6 +75,34 @@ final class LyricPriorityTests: XCTestCase {
             XCTAssertEqual(winner([candidate(.appleMusicCache, .line), candidate(.musixmatch, .line)], options), .appleMusicCache)
             // Word timing still beats any line timing, Musixmatch's included.
             XCTAssertEqual(winner([candidate(.qqMusic, .word), candidate(.musixmatch, .line)], options), .qqMusic)
+        }
+    }
+
+    /// `lines` sung lines, the first `timed` of them word-timed.
+    private func share(_ source: LyricSourceID, timed: Int, of lines: Int) -> LyricCandidate {
+        let rows: [LyricsFetcher.Line] = (0..<lines).map { index in
+            let start = 1 + Double(index) * 3
+            var line = LyricsFetcher.makeLine(text: "Sing along now", start: start, end: start + 2.5)
+            guard index < timed else { return line }
+            line.wordTimed = true
+            line.words = ["Sing", "along", "now"].enumerated().map { offset, word in
+                .init(text: word, start: start + Double(offset) * 0.8, end: start + Double(offset) * 0.8 + 0.7)
+            }
+            return line
+        }
+        return .init(source: source, result: .synced(rows, LyricsFetcher.Provenance(precision: "fixture", source: source.title)),
+                     title: "Our Song", artist: "Our Artist", duration: 180, score: 0)
+    }
+
+    /// The owner's call (17 Nov 2026): Apple Music's Mixed timing leads
+    /// word-by-word only while most of its lines (80%) are word-timed.
+    func testThinMixedTimingLosesToFullWordTiming() {
+        for options in modes(userOrder) {
+            XCTAssertEqual(winner([share(.appleMusicCache, timed: 3, of: 10), share(.kugou, timed: 10, of: 10)], options), .kugou)
+            XCTAssertEqual(winner([share(.appleMusicCache, timed: 9, of: 10), share(.kugou, timed: 10, of: 10)], options), .appleMusicCache)
+            XCTAssertEqual(winner([share(.appleMusicCache, timed: 8, of: 10), share(.kugou, timed: 10, of: 10)], options), .appleMusicCache)
+            // Two thin ones: the leads decide, as before.
+            XCTAssertEqual(winner([share(.appleMusicCache, timed: 3, of: 10), share(.kugou, timed: 4, of: 10)], options), .appleMusicCache)
         }
     }
 

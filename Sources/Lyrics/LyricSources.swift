@@ -95,6 +95,8 @@ final class LyricSourceOptions: ObservableObject {
         /// Bump when matching, ranking or parsing changes, so automatic
         /// choices made under the old rules are looked up again. Saved
         /// explicit choices are keyed separately and are unaffected.
+        /// v18: Mixed timing with under 80% of lines word-timed ranks below
+        /// word-by-word timing (`LyricsFetcher.fullWordTimingShare`).
         /// v7: Music's own lyrics and LRCLIB lead word and mixed timing.
         /// v8: Lyrics+ keeps each syllable of an unspaced (Japanese,
         /// Chinese, Thai) line, which it had joined into one word.
@@ -116,7 +118,7 @@ final class LyricSourceOptions: ObservableObject {
         /// v17: word stamps spread evenly rank as line timing, a timeline
         /// shifted to another recording ranks lower, and the leading text
         /// timed by the line takes another match's word timing.
-        static let cachePolicy = "v17"
+        static let cachePolicy = "v18"
         /// Keys the cached online choice. Only settings that change which
         /// online result wins take part: local sources are always evaluated
         /// afresh.

@@ -623,6 +623,12 @@ final class LyricsFetcher {
         let fits = fitsVersion(a, query), otherFits = fitsVersion(b, query)
         if fits != otherFits { return fits }
         if timing != other { return timing > other }
+        // Mixed timing with few word-timed lines loses to timing that is
+        // word by word nearly throughout, whatever the source's lead.
+        if timing == 2 {
+            let full = isMostlyWordTimed(a.result), otherFull = isMostlyWordTimed(b.result)
+            if full != otherFull { return full }
+        }
         let lead = Self.lead(a, timing: timing), otherLead = Self.lead(b, timing: timing)
         if lead != otherLead { return lead < otherLead }
         if options.mode == .smart {
@@ -986,6 +992,24 @@ final class LyricsFetcher {
         let vocal = lines.filter { !$0.isInstrumental }
         return !vocal.isEmpty && vocal.allSatisfy { validWordTiming($0) } && hasWordTimingEvidence(vocal)
     }
+    /// The share of sung lines with real word timing at which Mixed timing
+    /// still ranks with word-by-word ahead of the sources' leads (the
+    /// owner's call, 17 Nov 2026): below it, a source timed word by word
+    /// nearly throughout wins, as Kugou's would over Apple's mostly line-timed lyrics.
+    static let fullWordTimingShare = 0.8
+
+    /// The share of sung lines with real word timing, 0...1.
+    static func wordTimedShare(_ lines: [Line]) -> Double {
+        let vocal = lines.filter { !$0.isInstrumental }
+        guard !vocal.isEmpty else { return 0 }
+        return Double(vocal.filter { validWordTiming($0) }.count) / Double(vocal.count)
+    }
+
+    static func isMostlyWordTimed(_ result: Result) -> Bool {
+        guard case .synced(let lines, _) = result else { return false }
+        return wordTimedShare(lines) >= fullWordTimingShare
+    }
+
     static func precision(_ lines: [Line]) -> String {
         let vocal = lines.filter { !$0.isInstrumental }
         // Real word timing must be there to show (`hasWordTimingEvidence`).
