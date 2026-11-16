@@ -60,17 +60,29 @@ struct TokenReveal: ViewModifier {
     func body(content: Content) -> some View {
         if let opacities, opacities.count + 1 == boundaries.count {
             content.mask {
-                LinearGradient(stops: Self.stops(boundaries, opacities),
-                               startPoint: rightToLeft ? .trailing : .leading,
-                               endPoint: rightToLeft ? .leading : .trailing)
+                GeometryReader { frame in
+                    LinearGradient(stops: Self.stops(boundaries, opacities,
+                                                     feather: Self.feather(width: frame.size.width)),
+                                   startPoint: rightToLeft ? .trailing : .leading,
+                                   endPoint: rightToLeft ? .leading : .trailing)
+                }
             }
         } else {
             content
         }
     }
-    private static func stops(_ boundaries: [Double], _ opacities: [Double]) -> [Gradient.Stop] {
+    /// The soft edge between two parts, as a share of the label: one point
+    /// either side of the boundary. It used to be 1.2 % of the
+    /// label, which on a long unspaced line (a whole Japanese phrase) is
+    /// 15-20 points and reached past the gap between two characters, so a
+    /// slice of the next, still hidden character showed early.
+    static let featherPoints: CGFloat = 1
+    static func feather(width: CGFloat) -> Double {
+        width > 1 ? min(0.012, Double(featherPoints / width)) : 0.012
+    }
+
+    static func stops(_ boundaries: [Double], _ opacities: [Double], feather: Double = 0.012) -> [Gradient.Stop] {
         var stops: [Gradient.Stop] = []
-        let feather = 0.012
         for (index, opacity) in opacities.enumerated() {
             let colour = Color.black.opacity(min(1, max(0, opacity)))
             let from = index == 0 ? 0 : min(1, boundaries[index] + feather)
