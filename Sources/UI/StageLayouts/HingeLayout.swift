@@ -66,6 +66,11 @@ extension StageLyricView {
         return (0..<count).map { [$0] }
     }
 
+    /// Whether a line shares its spine with a neighbour in its run.
+    static func hingeCarries(_ carry: StageCarry?) -> Bool {
+        carry?.incoming != nil || carry?.outgoing != nil
+    }
+
     /// The spine's x: the stage's centre for a spread, at the left third
     /// (right third, right-to-left) when the line is a single page.
     static func hingeSpine(width: CGFloat, single: Bool, rightToLeft: Bool) -> CGFloat {
@@ -114,8 +119,13 @@ extension StageLyricView {
     /// word is about to be sung; a line-timed spread opens from the spine at
     /// once. The last page never turns: the line leaves by closing the book
     /// (`hingeExit`). Eased in and out: a page is a big, heavy thing.
+    ///
+    /// Inside a run (`carry` with a hand-over to the next line) the last page
+    /// turns too, as the next line's first word is about to be sung
+    /// (`StageMotion.hingeHandover`): it turns over onto the next line's
+    /// first page as a page turns within a line, instead of the book closing.
     static func hingeTurns(pageStarts: [Double], lineTimed: Bool, exitStart: Double, at time: Double,
-                           speed: Double) -> [Double] {
+                           speed: Double, carry: StageCarry? = nil) -> [Double] {
         let count = pageStarts.count
         guard count > 0 else { return [] }
         let pace = 1 + (min(3, max(1, speed)) - 1) * 0.4
@@ -123,13 +133,14 @@ extension StageLyricView {
         func turning(from start: Double, span: Double) -> Double {
             hingeEaseInOut((time - start) / span)
         }
+        let handover = carry?.outgoing.map { StageMotion.hingeHandoverTurn($0, at: time) }
         if lineTimed {
             let first = pageStarts.min() ?? 0
             return (0..<count).map { k in
                 let open = hingeEaseOut((time - (first - StageMotion.lead) - StageMotion.hingeSpreadStagger * Double(k))
                                         / StageMotion.hingeSwing)
                 let onOwnSide = k == count - 1
-                if onOwnSide { return 0.5 - 0.5 * open }
+                if onOwnSide { return 0.5 - 0.5 * open + (handover ?? 0) }
                 return 0.5 + 0.5 * open
             }
         }
@@ -137,7 +148,7 @@ extension StageLyricView {
             if k + 1 < count {
                 return turning(from: pageStarts[k + 1] - StageMotion.lead - StageMotion.hingeTurnLead, span: span)
             }
-            return 0
+            return handover ?? 0
         }
     }
 
@@ -157,9 +168,16 @@ extension StageLyricView {
     /// gone in the first moments (`readFade`); the closed book is already
     /// moving off in the reading direction and, once shut, recedes quickly
     /// (`travel`, 0...1 of `StageMotion.hingeExitTravel`; `opacity`).
-    static func hingeExit(exitStart: Double, at time: Double)
+    ///
+    /// A line that hands its last page on to the next line in a run
+    /// (`carried`) does not close: once that page has landed (`exitStart`)
+    /// it fades where it lies, under the next line's book.
+    static func hingeExit(exitStart: Double, at time: Double, carried: Bool = false)
         -> (fold: Double, readFade: Double, travel: Double, opacity: Double) {
         guard time > exitStart else { return (0, 1, 0, 1) }
+        if carried {
+            return (0, 1, 0, 1 - Easing.smoothstep((time - exitStart) / StageMotion.hingeCarryFade))
+        }
         let age = time - exitStart
         let fold = hingeEaseIn(age / StageMotion.hingeClose)
         let travel = hingeEaseIn(age / (StageMotion.hingeClose + StageMotion.hingeRecede))
@@ -294,22 +312,26 @@ extension StageLyricView {
         let rtl = phrasing.rightToLeft
         let u = unit
         let width = stageSize.width, height = stageSize.height
-        let spine = Self.hingeSpine(width: width, single: pages.count == 1, rightToLeft: rtl)
+        // Inside a run every line opens on the same spine, in the middle, so
+        // a page turning over from one line lands on the spine the next
+        // line's page lies against.
+        let spine = Self.hingeSpine(width: width, single: pages.count == 1 && !Self.hingeCarries(carry),
+                                    rightToLeft: rtl)
         // The side a page is sung on, and the side it turns over to.
         let own: HingeSide = rtl ? .left : .right
         let other: HingeSide = rtl ? .right : .left
         let speed = lineSpeed
         let starts: [Double] = pages.map { page in page.map { phrasing.phrases[$0].start }.min() ?? 0 }
         let turns = Self.hingeTurns(pageStarts: starts, lineTimed: phrasing.lineTimed, exitStart: exitStart, at: time,
-                                    speed: speed)
-        let exit = Self.hingeExit(exitStart: exitStart, at: time)
+                                    speed: speed, carry: carry)
+        let exit = Self.hingeExit(exitStart: exitStart, at: time, carried: carry?.outgoing != nil)
         let begun = starts.map { phrasing.lineTimed || time >= $0 - StageMotion.lead }
         let instances = Self.hingeInstances(turns: turns, begun: begun, exit: (exit.fold, exit.readFade),
                                             reduceMotion: reduceMotion)
             .sorted { $0.z < $1.z }
         // The book moves only in the reading direction: in, still moving,
         // as the line arrives; off, accelerating, as it leaves.
-        let entry = Self.hingeEntry(firstStart: starts.min() ?? 0, at: time)
+        let entry = carry?.incoming == nil ? Self.hingeEntry(firstStart: starts.min() ?? 0, at: time) : 0
         let drift = reduceMotion ? 0 : CGFloat(entry - exit.travel) * width * StageMotion.hingeExitTravel * (rtl ? -1 : 1)
         // A turn swings the page's free edge up out of the stage, over the spine.
         let sign: Double = rtl ? -1 : 1
@@ -334,6 +356,9 @@ extension StageLyricView {
         .offset(x: drift)
         // Reduce Motion: no fold or travel; the line fades as every other does.
         .opacity(reduceMotion ? 1 - leave : exit.opacity)
+        // Inside a run this line's page lies under the last line's turning
+        // page, drawn above it, and shows as that page lifts off.
+        .opacity(carry?.incoming.map { StageMotion.hingeUncovered($0, at: time) } ?? 1)
     }
 
     /// One page: its slabs (one phrase each) stacked, flush to the spine.

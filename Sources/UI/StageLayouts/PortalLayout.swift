@@ -292,10 +292,14 @@ extension StageLyricView {
         }
         // Which way this line's trail leans, and where the pills sit. The
         // trail always climbs above the live pill, so it reads top to bottom.
-        let flipX: CGFloat = chance(nil, 1) < 0.5 ? 1 : -1
-        let reach = (0.8 + 0.5 * chance(nil, 3)) / speed.squareRoot()
-        let shiftX = (chance(nil, 4) - 0.5) * 0.24 * stageSize.width
-        let lift = stageSize.height * (0.1 + 0.08 * chance(nil, 5))
+        // Inside a run every line keeps the run's column (`portalPlacement`),
+        // so the next line's first pill lands where the live pill was as the
+        // trail climbs away, rather than the column jumping across the stage.
+        let placement = Self.portalPlacement(carry: carry) { chance(nil, $0) }
+        let flipX: CGFloat = placement.flipX
+        let reach = placement.reach / speed.squareRoot()
+        let shiftX = placement.shiftX * stageSize.width
+        let lift = stageSize.height * placement.lift
         // Portal keeps its own pictures; a listed word it has none for
         // (one the user added) carries its Word symbol in its pill.
         let icons = Self.portalIcons(all.map(\.text)) { chance($0 < 0 ? nil : $0, 6) }
@@ -350,15 +354,17 @@ extension StageLyricView {
             let base = bounds.midY + lift
             let column = Self.portalColumn(heights: shown, lifts: motion.lift, visible: visible, appear: motion.appear, gap: gap,
                                            above: base - bounds.minY, below: bounds.maxY - base)
+            // The float's phase runs on through a run, word after word.
+            let phaseBase = Double(carry?.wordsBefore ?? 0)
             return measured.indices.map { index -> CGPoint in
                 let p = CGPoint(x: alongX(ranks[index]), y: column[index])
                 let bobRate: Double = 1.2 + 0.6 * chance(index, 7)
-                let bobPhase: Double = time * bobRate + Double(index) * 1.3
+                let bobPhase: Double = time * bobRate + (phaseBase + Double(index)) * 1.3
                 // Only the live pill floats; the trail holds still to be read.
                 let floating = CGFloat(lives[index]) * float
                 let bob: CGFloat = CGFloat(sin(bobPhase)) * unit * 0.07 * floating
                 let swayRate: Double = 0.9 + 0.5 * chance(index, 8)
-                let swayPhase: Double = time * swayRate + Double(index) * 0.9
+                let swayPhase: Double = time * swayRate + (phaseBase + Double(index)) * 0.9
                 let sway: CGFloat = CGFloat(cos(swayPhase)) * unit * 0.05 * floating
                 // Each pill comes in from its own direction, between the right
                 // and below, as the line reads; never down through the trail.
@@ -378,7 +384,10 @@ extension StageLyricView {
                            leaving: leaving)
             }
         }
-        .offset(y: reduceMotion ? 0 : -stageSize.height * 0.1 * leaving)
+        // Inside a run the trail climbs away a whole pill's height, making
+        // room for the next line's first pill in the live pill's place.
+        .offset(y: reduceMotion ? 0 : -(carry?.outgoing == nil ? stageSize.height * 0.1
+                                        : max(stageSize.height * 0.1, unit * 2.4)) * leaving)
         .opacity(1 - leaving)
     }
 
@@ -436,6 +445,28 @@ extension StageLyricView {
         .scaleEffect(reduceMotion ? 1 : 1 - CGFloat(LyricHighlightTiming.exitScale * leaving))
         .blur(radius: reduceMotion ? 0 : size * scale * CGFloat(LyricHighlightTiming.exitBlur * leaving))
         .opacity(motion.appear[index] * visible * (0.85 + 0.15 * live))
+    }
+
+    /// Where a line's column stands: which way its trail leans (`flipX`), how
+    /// far it zig-zags (`reach`, before the line's pace), its sideways shift
+    /// (a share of the stage's width) and the live pill's drop below the
+    /// middle (a share of its height). A line on its own draws them from its
+    /// own seed (`chance`, by salt); inside a run, from the run's, so every
+    /// line of the run stands in the same column.
+    static func portalPlacement(carry: StageCarry?, chance: (Int) -> Double)
+        -> (flipX: CGFloat, reach: Double, shiftX: CGFloat, lift: CGFloat) {
+        func draw(_ salt: Int) -> Double {
+            if let carry { return runChance(carry.seed, salt) }
+            return chance(salt)
+        }
+        return (draw(1) < 0.5 ? 1 : -1, 0.8 + 0.5 * draw(3), CGFloat(draw(4) - 0.5) * 0.24, CGFloat(0.1 + 0.08 * draw(5)))
+    }
+
+    /// A steady 0...1 for a run's seed and a salt, as `chance` is for a line.
+    static func runChance(_ seed: Int, _ salt: Int) -> Double {
+        var value = UInt64(truncatingIfNeeded: seed.magnitude &* 2654435761 &+ 977 &* 40503 &+ UInt(salt) &* 9973)
+        value ^= value >> 13; value = value &* 0x2545F4914F6CDD1D; value ^= value >> 29
+        return Double(value % 10_000) / 10_000
     }
 
     /// Portal's line leaving, 0...1: a highlight's exit from `exitStart`.

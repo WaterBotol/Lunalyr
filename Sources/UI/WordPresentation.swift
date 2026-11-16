@@ -167,14 +167,16 @@ struct LyricPhraseTiming {
     /// From `exitStart` until the last, most staggered word has gone.
     static let exitSpan = 0.70
 
-    init(line: LyricsFetcher.Line, nextStart: Double, time: Double) {
+    /// `heldUntil`: a carrying stage line held until its hand-over to the
+    /// next line (`StageCarry.heldUntil`); it leaves no earlier than that.
+    init(line: LyricsFetcher.Line, nextStart: Double, time: Double, heldUntil: Double? = nil) {
         let duration = max(0, min(line.end, nextStart) - line.start)
         let attack = line.wordTimed ? 0.22 : min(0.32, max(0.12, duration * 0.18))
         progress = vc_settle(time - line.start, attack)
         let seed = Self.timeSeed(line.start) ^ 0x51ED_C0DE
         arrival = vc_spring_step(time - line.start,
             VCSpring(omega: 3.36 / max(0.14, attack * 1.6), zeta: 0.82 + 0.06 * vc_jitter(seed, 1)))
-        exitStart = Self.exitStart(of: line, nextStart: nextStart)
+        exitStart = Self.exitStart(of: line, nextStart: nextStart, heldUntil: heldUntil)
         exit = vc_settle(time - exitStart, Self.exitDuration)
     }
 
@@ -187,9 +189,10 @@ struct LyricPhraseTiming {
     /// A line starts to leave a quarter second before the next one, so the
     /// two are not both mostly visible in the middle of the stage -- but
     /// never before its own last word has been sung.
-    static func exitStart(of line: LyricsFetcher.Line, nextStart: Double) -> Double {
+    static func exitStart(of line: LyricsFetcher.Line, nextStart: Double, heldUntil: Double? = nil) -> Double {
         let lastWordEnd = line.words.map(\.end).max() ?? -.infinity
-        return max(lastWordEnd + 0.10, min(line.end + 0.12, nextStart - 0.25))
+        let own = max(lastWordEnd + 0.10, min(line.end + 0.12, nextStart - 0.25))
+        return max(own, heldUntil ?? -.infinity)
     }
 
     /// The longest a line still being sung keeps the stage once the next
@@ -227,8 +230,8 @@ struct LyricPhraseTiming {
 
     /// Whether an earlier line still has words on their way out.
     static func stillLeaving(_ line: LyricsFetcher.Line, nextStart: Double, time: Double,
-                             span: Double = exitSpan) -> Bool {
-        time < exitStart(of: line, nextStart: nextStart) + span
+                             span: Double = exitSpan, heldUntil: Double? = nil) -> Bool {
+        time < exitStart(of: line, nextStart: nextStart, heldUntil: heldUntil) + span
     }
 
     static func firstWordOnset(of line: LyricsFetcher.Line) -> Double? {

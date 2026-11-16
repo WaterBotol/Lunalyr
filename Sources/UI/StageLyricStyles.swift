@@ -235,6 +235,9 @@ struct StageLyricView: View {
     var firstRunOnly: Double?
     /// "Below lyrics" readings by word (see `LyricReadingPairs`).
     var readings: [TimedWordKey: String] = [:]
+    /// What the stage carries over from the line before and on into the
+    /// line after, inside a run (`StageCarry`); nil for a line on its own.
+    var carry: StageCarry? = nil
 
     /// The shared settings in the app; tests pass an isolated instance.
     @ObservedObject var settings: Settings = .shared
