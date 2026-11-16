@@ -255,7 +255,10 @@ struct SpokenTypographyView: View {
                            tile: tile, tileText: ink.tileText,
                            symbol: wordAccent?.symbol,
                            symbolOpacity: presentation.preview ? 0
-                               : WordSymbolMark.opacity(elapsed: time - token.source.start))
+                               : WordSymbolMark.opacity(elapsed: time - token.source.start),
+                           symbolElapsed: presentation.preview ? nil
+                               : WordSymbolMark.entering(elapsed: time - token.source.start),
+                           symbolAction: wordAccent?.action)
             .background {
                 if let tile {
                     CutoutTile(colour: token.tile ? labelColour : ink.tileColour, width: tile.width,
@@ -485,6 +488,9 @@ struct RollingUnit: View {
     /// frame, so the stack measures it, shown at `symbolOpacity`.
     var symbol: String? = nil
     var symbolOpacity = 0.0
+    /// PREVIEW: the symbol's entrance (`WordSymbolView.elapsed`, `.action`).
+    var symbolElapsed: Double? = nil
+    var symbolAction: WordAction? = nil
 
     /// Cutout's label, or the tile "Cutout · Highlight" presses in behind a
     /// sung word.
@@ -550,7 +556,7 @@ struct RollingUnit: View {
                     .modifier(TokenReveal(boundaries: token.boundaries, opacities: reveal, rightToLeft: token.rightToLeft))
                 if let symbol {
                     WordSymbolView(symbol: symbol, size: token.pointSize, rest: colour, sung: sung, tint: tint,
-                                   opacity: symbolOpacity)
+                                   opacity: symbolOpacity, elapsed: symbolElapsed, action: symbolAction)
                 }
             }
             // A word with a symbol keeps its own width, never wrapping to fit it.

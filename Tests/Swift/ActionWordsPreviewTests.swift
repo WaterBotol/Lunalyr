@@ -61,6 +61,16 @@ final class ActionWordsPreviewTests: XCTestCase {
         Clip(action: .electric, texts: ["this", "electric", "feeling"], hue: 0.6),
     ]
 
+    /// A symbol on each action word, so the reel shows the symbol's
+    /// entrance (today a fade; lively, a pop echoing the action).
+    static let symbols: [String: String] = [
+        "spin": "tornado", "float": "cloud.fill", "fall": "arrow.down", "shake": "hand.raised.fill",
+        "jump": "hare.fill", "grow": "leaf.fill", "shrink": "arrow.down.right.and.arrow.up.left",
+        "fade": "sparkles", "burn": "flame.fill", "frozen": "snowflake", "bleed": "drop.fill",
+        "dark": "moon.fill", "broken": "bolt.fill", "melt": "flame", "echo": "speaker.wave.2.fill",
+        "heartbeat": "heart.fill", "waves": "water.waves", "sink": "arrow.down.to.line",
+    ]
+
     static var actionList: [String: WordAction] {
         Dictionary((WordAction.defaultList + WordAction.droppedList).map { ($0.word, $0.action) },
                    uniquingKeysWith: { first, _ in first })
@@ -95,7 +105,7 @@ final class ActionWordsPreviewTests: XCTestCase {
     static func stage(_ clip: Clip, style: WordActionStyle, time: Double, size: CGSize) -> some View {
         let (words, _) = words(clip)
         let plan = WordAccentPlan.make(words: words, glue: [Bool](repeating: false, count: words.count),
-                                       symbols: nil, actions: actionList)
+                                       symbols: symbols, actions: actionList)
         return ZStack {
             StageLayoutVideoTests.backdrop(hue: clip.hue)
             LyricLineView(words: words, time: time, stageSize: size, baseSize: 72, mood: .neutral, composition: .cutout,

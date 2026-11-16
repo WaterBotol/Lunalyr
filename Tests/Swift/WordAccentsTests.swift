@@ -339,6 +339,33 @@ final class WordAccentsTests: XCTestCase {
         }
     }
 
+    /// The lively symbol entrance starts still (at its from-pose, unseen)
+    /// and is exactly at rest once done, for every action and none.
+    func testSymbolEntranceStartsAndEndsAtRest() {
+        for action in [nil] + WordAction.allCases.map(Optional.some) {
+            let start = SymbolEntrancePose.make(action, elapsed: 0)
+            let soon = SymbolEntrancePose.make(action, elapsed: 0.002)
+            XCTAssertEqual(start.dy, soon.dy, accuracy: 0.01, "\(String(describing: action))")
+            XCTAssertEqual(start.sx, soon.sx, accuracy: 0.01, "\(String(describing: action))")
+            XCTAssertEqual(start.rotation, soon.rotation, accuracy: 1, "\(String(describing: action))")
+            let late = SymbolEntrancePose.make(action, elapsed: SymbolEntrancePose.duration - 0.002)
+            XCTAssertEqual(late.dy, 0, accuracy: 0.005); XCTAssertEqual(late.dx, 0, accuracy: 0.005)
+            XCTAssertEqual(late.sx, 1, accuracy: 0.005); XCTAssertEqual(late.sy, 1, accuracy: 0.005)
+            XCTAssertEqual(late.rotation, 0, accuracy: 0.2); XCTAssertEqual(late.cool, 0, accuracy: 0.01)
+            XCTAssertEqual(SymbolEntrancePose.make(action, elapsed: SymbolEntrancePose.duration), .rest)
+            var last = start
+            for step in 1...Int(SymbolEntrancePose.duration * 240) {
+                let p = SymbolEntrancePose.make(action, elapsed: Double(step) / 240)
+                XCTAssertLessThan(abs(p.sx - last.sx), 0.06, "\(String(describing: action)) \(step)")
+                XCTAssertLessThan(abs(p.dy - last.dy), 0.06, "\(String(describing: action)) \(step)")
+                XCTAssertLessThan(abs(p.rotation - last.rotation), 8, "\(String(describing: action)) \(step)")
+                last = p
+            }
+        }
+        XCTAssertNil(WordSymbolMark.entering(elapsed: SymbolEntrancePose.duration))
+        XCTAssertNil(WordSymbolMark.entering(elapsed: -1))
+    }
+
     func testLivelyLetterCurvesAreContinuous() {
         for hold in [0.3, 1.2, 2.5] {
             for (name, D, curve) in [

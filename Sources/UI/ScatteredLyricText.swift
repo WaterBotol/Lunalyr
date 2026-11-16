@@ -776,7 +776,9 @@ struct ScatteredLyricText: View {
         // word's glyph tree is reused and only its layer moves. They also sit
         // inside the slot, so the constellation's anchors never drift.
         return ScatteredRunInk(run: run, frame: frame, arrival: arrival, tiles: tiles, settles: composition != .echo,
-                               symbol: accent?.symbol, symbolOpacity: symbolOpacity, presence: presence)
+                               symbol: accent?.symbol, symbolOpacity: symbolOpacity,
+                               symbolElapsed: frame.presentation.preview ? nil : WordSymbolMark.entering(elapsed: time - onset),
+                               symbolAction: accent?.action, presence: presence)
             .equatable()
             // An action word's motion, over its entrance and inside its slot.
             .wordAction(accent, start: onset, time: time, size: run.metrics.size, glow: frame.ink.glow)
@@ -1022,6 +1024,10 @@ private struct ScatteredRunInk: View, Equatable {
     /// frame so the slot measures it, and shown at `symbolOpacity`.
     var symbol: String? = nil
     var symbolOpacity = 0.0
+    /// PREVIEW: the symbol's entrance (`WordSymbolView.elapsed`, `.action`);
+    /// nil once settled, so a settled word stays equal.
+    var symbolElapsed: Double? = nil
+    var symbolAction: WordAction? = nil
     /// Word presence (`WordPresence`), already 1 under Reduce Motion.
     var presence = 1.0
     @Environment(\.lyricReduceMotion) private var reduceMotion
@@ -1029,6 +1035,7 @@ private struct ScatteredRunInk: View, Equatable {
         lhs.run == rhs.run && lhs.frame == rhs.frame && lhs.arrival == rhs.arrival && lhs.tiles == rhs.tiles
             && lhs.settles == rhs.settles
             && lhs.symbol == rhs.symbol && lhs.symbolOpacity == rhs.symbolOpacity && lhs.presence == rhs.presence
+            && lhs.symbolElapsed == rhs.symbolElapsed && lhs.symbolAction == rhs.symbolAction
     }
     var body: some View {
         let size = run.metrics.size
@@ -1039,7 +1046,8 @@ private struct ScatteredRunInk: View, Equatable {
                     word(tiled: tiled).highlightLayer(tiles)
                     if let symbol {
                         WordSymbolView(symbol: symbol, size: size, rest: frame.ink.rest, sung: frame.ink.sung,
-                                       tint: frame.ink.sweeps ? frame.tint : 0, opacity: symbolOpacity)
+                                       tint: frame.ink.sweeps ? frame.tint : 0, opacity: symbolOpacity,
+                                       elapsed: symbolElapsed, action: symbolAction)
                     }
                 }
                 // Word and symbol at their own size: a slot proposed only

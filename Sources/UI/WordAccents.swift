@@ -520,6 +520,13 @@ enum WordSymbolMark {
     /// Seconds the symbol takes to fade in from the word's onset.
     static let fadeIn = 0.3
 
+    /// PREVIEW: the onset-relative time a symbol's entrance needs, while it
+    /// is still coming in (nil before its onset is known or once settled),
+    /// so a settled symbol's view stays equal frame to frame.
+    static func entering(elapsed: Double) -> Double? {
+        elapsed > -0.1 && elapsed < SymbolEntrancePose.duration ? elapsed : nil
+    }
+
     /// How much of the symbol shows, `elapsed` seconds after its word's
     /// onset: nothing before it (a faint preview of the word shows none).
     static func opacity(elapsed: Double) -> Double {
@@ -550,14 +557,33 @@ struct WordSymbolView: View, Equatable {
     let sung: Color
     var tint: Double = 0
     var opacity: Double = 1
+    /// PREVIEW: seconds since the word's onset while the symbol is still
+    /// coming in (nil once it has settled, or for a preview), and the
+    /// word's action: in the lively style it pops in (`SymbolEntrancePose`).
+    var elapsed: Double? = nil
+    var action: WordAction? = nil
+    @Environment(\.lyricWordActionStyle) private var style
+    @Environment(\.lyricReduceMotion) private var reduceMotion
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.symbol == rhs.symbol && lhs.size == rhs.size && lhs.rest == rhs.rest && lhs.sung == rhs.sung
+            && lhs.tint == rhs.tint && lhs.opacity == rhs.opacity && lhs.elapsed == rhs.elapsed && lhs.action == rhs.action
+    }
 
     var body: some View {
-        ZStack {
+        let glyph = ZStack {
             Text(Image(systemName: symbol)).font(WordSymbolMark.font(size)).foregroundStyle(rest)
                 .opacity(1 - tint)
             if tint > 0 {
                 Text(Image(systemName: symbol)).font(WordSymbolMark.font(size)).foregroundStyle(sung)
                     .opacity(tint)
+            }
+        }
+        Group {
+            if case .lively = style, !reduceMotion, let elapsed, elapsed < SymbolEntrancePose.duration {
+                glyph.modifier(SymbolEntranceEffect(action: action, elapsed: elapsed, size: size))
+            } else {
+                glyph
             }
         }
         .opacity(opacity)
