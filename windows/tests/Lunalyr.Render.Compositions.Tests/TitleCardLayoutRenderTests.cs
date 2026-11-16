@@ -128,6 +128,77 @@ public sealed class TitleCardLayoutRenderTests : IDisposable
             Assert.True(Math.Abs(height - mean) <= mean * 0.15, $"{name}: title cap height {height} vs {mean}");
     }
 
+    /// <summary>The leftmost column with white type in it, in the card's lower half of the screen.</summary>
+    private int WordsLeft(SceneSnapshot scene, double time, double wall)
+    {
+        using var layer = new EditorialFactory(IcuWordBreaker.TryCreate(), _logger).Create();
+        layer.CreateResources(_stage.Dc, _stage.DWrite, new Vector2(Width, Height), 1);
+        _stage.Render([layer], scene, time, wall, 1);
+        var pixels = _stage.Pixels();
+        for (var x = 0; x < Width / 2; x++)
+            for (var y = Height / 2; y < Height; y++)
+            {
+                var i = (y * Width + x) * 4;
+                if (pixels[i] > 150 && pixels[i + 1] > 150 && pixels[i + 2] > 150) return x;
+            }
+        return -1;
+    }
+
+    private static SceneSnapshot Song(CoverArt? cover, bool pending) => new()
+    {
+        Title = "Human Nature", Artist = "WALLOWS", Album = "Rare Hymns", TrackKey = "human-nature", Cover = cover, CoverPending = pending,
+        ReduceMotion = true, Palette = PaletteMapper.Fallback,
+        Style = LyricStyle.Default with { OpeningTitle = true, OpeningTitleCover = true, Credits = false, Interludes = false },
+    };
+
+    // The Mac's 297b2f2: while the cover is read its place is kept, so the words don't move when it comes; after a while
+    // the words take the room.
+    [Fact]
+    public void ThePendingCoversPlaceIsKeptSoTheWordsDontMove()
+    {
+        var withCover = WordsLeft(Song(Flat, pending: false), 5, 105);
+        var pending = WordsLeft(Song(null, pending: true), 5, 105);
+        var none = WordsLeft(Song(null, pending: false), 5, 105);
+        Assert.InRange(pending, withCover - 2, withCover + 2);
+        Assert.True(none < withCover - 50, $"no cover: the words start at the card's edge ({none} vs {withCover})");
+        // Still being read after the card has been up for CoverWait: the words take the room.
+        var late = WordsLeft(Song(null, pending: true), Core.Compositions.OpeningTitle.CoverWait + 1, 110);
+        Assert.InRange(late, none - 2, none + 2);
+    }
+
+    // The Mac's 297b2f2 (OpeningTitleMemory.coverFade): a cover that comes after the card fades in; one there from the
+    // start comes in with the card.
+    [Fact]
+    public void ACoverThatArrivesLateFadesIn()
+    {
+        int Magenta(byte[] pixels)
+        {
+            var count = 0;
+            for (var y = Height / 2; y < Height; y++)
+                for (var x = 0; x < Width / 2; x += 2)
+                {
+                    var i = (y * Width + x) * 4;
+                    if (pixels[i + 2] > 180 && pixels[i + 1] < 76 && pixels[i] > 180) count++;
+                }
+            return count;
+        }
+        using var layer = new EditorialFactory(IcuWordBreaker.TryCreate(), _logger).Create();
+        layer.CreateResources(_stage.Dc, _stage.DWrite, new Vector2(Width, Height), 1);
+        _stage.Render([layer], Song(null, pending: true), 4, 104, 1);
+        // Arrives at wall 104.5: barely there at first, whole after the fade.
+        _stage.Render([layer], Song(Flat, pending: false), 4.5, 104.5, 1);
+        var first = Magenta(_stage.Pixels());
+        _stage.Render([layer], Song(Flat, pending: false), 5, 105.5, 1);
+        var whole = Magenta(_stage.Pixels());
+        Assert.True(whole > 1000, $"{whole}");
+        Assert.True(first < whole / 4, $"{first} then {whole}");
+        // There from the start: whole at once.
+        using var fresh = new EditorialFactory(IcuWordBreaker.TryCreate(), _logger).Create();
+        fresh.CreateResources(_stage.Dc, _stage.DWrite, new Vector2(Width, Height), 1);
+        _stage.Render([fresh], Song(Flat, pending: false), 5, 200, 1);
+        Assert.InRange(Magenta(_stage.Pixels()), whole - 50, whole + 50);
+    }
+
     // Ported from OpeningTitleFaceTests.swift: testATwoLineTitleSpansTheCover
     [Fact]
     public void ATwoLineTitleSpansTheCover()

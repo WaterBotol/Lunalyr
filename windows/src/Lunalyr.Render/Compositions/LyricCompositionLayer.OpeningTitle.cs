@@ -207,12 +207,13 @@ internal abstract partial class LyricCompositionLayer
         var floating = FloatingStage;
         if (floating && phase.Kept)
         {
-            DrawRow(dc, scene, phase);
+            DrawRow(dc, scene, phase, frame.WallSeconds);
             return;
         }
         var compact = floating || phase.Size == OpeningSize.Compact;
-        var card = Card(dc, scene, compact);
+        var card = Card(dc, scene, compact, phase.Age);
         if (card is null) return;
+        var coverFade = CoverFade(scene, frame.WallSeconds);
 
         var reduce = ReduceMotion;
         var reveal = OpeningReveal.At(phase.Age, compact ? OpeningSize.Compact : phase.Size, reduce);
@@ -241,13 +242,13 @@ internal abstract partial class LyricCompositionLayer
         }
 
         // The cover: rounded, shadowed, growing a little from its lower left corner as it arrives.
-        if (card.Cover && _coverBrush is not null && _coverSource is { } art && reveal.Cover * opacity > 0.002)
+        if (card.Cover && _coverBrush is not null && _coverSource is { } art && reveal.Cover * opacity * coverFade > 0.002)
         {
             var side = (float)card.Side;
             var grow = reduce ? 1f : (float)(0.9 + 0.1 * reveal.Cover);
             var world = Matrix3x2.CreateTranslation(0, -side) * Matrix3x2.CreateScale(grow)
                 * Matrix3x2.CreateTranslation(card.Left, card.Top + (float)card.CoverTop + side + lift);
-            var alpha = (float)(reveal.Cover * opacity);
+            var alpha = (float)(reveal.Cover * opacity * coverFade);
             // The album-colour glow round the cover, then its shadow.
             card.CoverGlow?.DrawShadow(dc, Matrix3x2.CreateTranslation(side / 2, side / 2) * world, alpha, 1);
             card.CoverShadow?.DrawShadow(dc, Matrix3x2.CreateTranslation(side / 2, side / 2) * world, alpha, 1);
@@ -300,9 +301,10 @@ internal abstract partial class LyricCompositionLayer
     /// The floating window's kept title (the Mac's <c>OpeningTitleCard.titleRow</c>): the cover, the title and the artist
     /// on one line at the window's top, settling down from beyond its edge as it enters, quieter once it rests.
     /// </summary>
-    private void DrawRow(ID2D1DeviceContext dc, SceneSnapshot scene, in OpeningPhase phase)
+    private void DrawRow(ID2D1DeviceContext dc, SceneSnapshot scene, in OpeningPhase phase, double wall)
     {
-        if (Card(dc, scene, compact: true, row: true) is not { } card) return;
+        if (Card(dc, scene, compact: true, phase.Age, row: true) is not { } card) return;
+        var coverFade = CoverFade(scene, wall);
         var reduce = ReduceMotion;
         var reveal = OpeningReveal.At(phase.Age, OpeningSize.Compact, reduce);
         var leaving = Easing.Smoothstep(phase.Exit);
@@ -313,11 +315,11 @@ internal abstract partial class LyricCompositionLayer
         var dy = reduce ? 0f : (float)((card.Key.RowPlace.Bottom ? 1 : -1) * (1 - arrival + leaving) * card.Unit * 0.18);
         var top = card.Top + dy;
 
-        if (card.Cover && _coverBrush is not null && _coverSource is { } art && reveal.Cover * alpha > 0.002)
+        if (card.Cover && _coverBrush is not null && _coverSource is { } art && reveal.Cover * alpha * coverFade > 0.002)
         {
             var side = (float)card.Side;
             var world = Matrix3x2.CreateTranslation(card.Left, top + (float)card.CoverTop);
-            var coverAlpha = (float)(reveal.Cover * alpha);
+            var coverAlpha = (float)(reveal.Cover * alpha * coverFade);
             card.CoverShadow?.DrawShadow(dc, Matrix3x2.CreateTranslation(side / 2, side / 2) * world, coverAlpha, 1);
             var fill = side / Math.Min(art.Width, art.Height);
             _coverBrush.Transform = Matrix3x2.CreateScale(fill)
@@ -490,19 +492,54 @@ internal abstract partial class LyricCompositionLayer
         }
     }
 
+    private string? _fadeTrack;
+    private double? _coverArrived;
+
+    /// <summary>A cover that arrives after the card has begun fades in over this long, in wall seconds (the Mac's <c>coverFadeIn</c>).</summary>
+    internal const double CoverFadeIn = 0.45;
+
+    /// <summary>
+    /// 0…1: how far the song's cover has faded in at wall time <paramref name="wall"/> (the Mac's
+    /// <c>OpeningTitleMemory.coverFade</c>, 297b2f2). A cover already here when the song was first seen needs no fade of
+    /// its own (the card's entrance brings it); one that arrives later fades in. Called after <see cref="Card"/>.
+    /// </summary>
+    private double CoverFade(SceneSnapshot scene, double wall)
+    {
+        var has = _coverSource is not null && _coverBrush is not null;
+        if (scene.TrackKey != _fadeTrack)
+        {
+            _fadeTrack = scene.TrackKey;
+            _coverArrived = has ? double.NegativeInfinity : null;
+        }
+        if (!has)
+        {
+            _coverArrived = null;
+            return 0;
+        }
+        _coverArrived ??= wall;
+        var fade = Easing.Smoothstep(Math.Clamp((wall - _coverArrived.Value) / CoverFadeIn, 0, 1));
+        if (fade < 1) IsAnimating = true;
+        return fade;
+    }
+
     /// <summary>The card for the scene as it is now: set (laid out and baked) once, again only when what it shows changes.</summary>
-    private OpeningCard? Card(ID2D1DeviceContext dc, SceneSnapshot scene, bool compact, bool row = false)
+    /// <param name="age">How long the card has been up: a cover still being read keeps its place for <see cref="OpeningTitle.CoverWait"/>.</param>
+    private OpeningCard? Card(ID2D1DeviceContext dc, SceneSnapshot scene, bool compact, double age, bool row = false)
     {
         var art = scene.Style.OpeningTitleCover && scene.Cover is { } cover && OpeningTitle.ShowsCover(true, cover.Width, cover.Height)
             ? cover : null;
         SyncCover(dc, art);
+        // The cover's place: its picture once it is here, kept empty while it is read (so the words don't move when it
+        // comes), none when the song has none (the Mac's 297b2f2).
+        var slot = (art is not null && _coverBrush is not null)
+                   || (scene.Style.OpeningTitleCover && scene.CoverPending && OpeningTitle.ReservesCover(age));
         var dark = IsDarkInk(SettledInk.Base.Rest);
         // The album line is worked out once per song, not every frame (it normalises both names).
         if (!ReferenceEquals(scene.Album, _albumOf.Album) || !ReferenceEquals(scene.Title, _albumOf.Title))
             _albumOf = (scene.Album, scene.Title, OpeningTitle.AlbumLine(scene.Album, scene.Title));
         var key = new CardKey(scene.Title ?? "", scene.Artist ?? "", _albumOf.Line,
                               string.IsNullOrWhiteSpace(scene.TitleReading) ? null : scene.TitleReading.Trim(), compact,
-                              art is not null && _coverBrush is not null, FloatingStage, scene.Style.FontFamily, SurfaceSize, Scale, BaseSize, dark,
+                              slot, FloatingStage, scene.Style.FontFamily, SurfaceSize, Scale, BaseSize, dark,
                               SettledInk.Dot is { } dot ? LyricInks.Vector(dot) : TextColour, row,
                               scene.Style.OpeningTitlePlacement, scene.Style.OpeningTitleRow);
         if (_card is { } current && current.Key == key) return current;

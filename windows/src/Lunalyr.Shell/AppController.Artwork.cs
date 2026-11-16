@@ -67,10 +67,12 @@ public sealed partial class AppController
                     cts = new CancellationTokenSource();
                     _artworkCts = cts;
                 }
+                SetCoverPendingLocked(cts is not null);
             }
             else if (session is null)
             {
                 SetPaletteLocked(PaletteMapper.Fallback, null, null);
+                SetCoverPendingLocked(false);
                 publish = true;
             }
             else
@@ -85,6 +87,7 @@ public sealed partial class AppController
                 }
                 cts = new CancellationTokenSource();
                 _artworkCts = cts;
+                publish |= SetCoverPendingLocked(true);
             }
         }
 
@@ -100,6 +103,20 @@ public sealed partial class AppController
         _artworkCts = null;
         _artworkKey = null;
     }
+
+    /// <summary>
+    /// The playing song's cover is being read: the opening title keeps the cover's place, empty, so its words don't move
+    /// when it comes (the Mac's 297b2f2). Must hold _gate; true when it changed.
+    /// </summary>
+    private bool SetCoverPendingLocked(bool pending)
+    {
+        if (_coverPending == pending) return false;
+        _coverPending = pending;
+        _scene = _scene with { CoverPending = pending };
+        return true;
+    }
+
+    private bool _coverPending;
 
     // Must hold _gate.
     private void SetPaletteLocked(Palette palette, byte[]? cover, CoverArt? art)
@@ -226,12 +243,19 @@ public sealed partial class AppController
         }
         finally
         {
+            var ended = false;
             lock (_gate)
             {
-                if (ReferenceEquals(_artworkCts, cts)) _artworkCts = null;
+                if (ReferenceEquals(_artworkCts, cts))
+                {
+                    _artworkCts = null;
+                    // Read, or none to read: the card no longer keeps a place for it.
+                    ended = !_disposed && SetCoverPendingLocked(false);
+                }
             }
 
             cts.Dispose();
+            if (ended) PublishScene();
         }
     }
 

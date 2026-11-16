@@ -633,6 +633,7 @@ public sealed partial class AppController : IAsyncDisposable
                 Album = track.AlbumTitle.Length > 0 ? track.AlbumTitle : null,
                 TrackKey = track.TrackKey,
                 Cover = _cover,
+                CoverPending = _coverPending,
                 // Looking the same song up again keeps its title's reading.
                 TitleReading = _scene.Title == track.Title ? _scene.TitleReading : null,
             };

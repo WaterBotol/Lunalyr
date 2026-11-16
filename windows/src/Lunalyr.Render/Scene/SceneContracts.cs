@@ -123,6 +123,12 @@ public sealed record SceneSnapshot
     /// none or it is not read yet. Never the previous song's.
     /// </summary>
     public Lunalyr.Core.Colour.CoverArt? Cover { get; init; }
+
+    /// <summary>
+    /// The song's cover is still being read: the opening title keeps its place, empty, for a while, so its words don't
+    /// move when it comes (the Mac's 297b2f2).
+    /// </summary>
+    public bool CoverPending { get; init; }
 }
 
 /// <summary>Settings shared by the lyric compositions. Each composition reads what applies to it.</summary>

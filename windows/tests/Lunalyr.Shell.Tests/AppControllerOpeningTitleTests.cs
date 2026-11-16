@@ -107,6 +107,28 @@ public sealed class AppControllerOpeningTitleTests : IAsyncDisposable
         Assert.NotNull(controller.Scene.Cover);
     }
 
+    // The Mac's 297b2f2: while the song's own cover is read, the card keeps its place; once read (or none is shared), not.
+    [Fact]
+    public async Task TheCoversPlaceIsKeptOnlyWhileItIsRead()
+    {
+        _lyrics.Answer("Song A", TestLyrics.Found(TestLyrics.Synced("LRCLIB", "Line")));
+        _lyrics.Answer("Song B", TestLyrics.Found(TestLyrics.Synced("LRCLIB", "Line")));
+        var session = Playing("Song A", RedCover);
+        _source.Add(session);
+        var controller = Controller();
+        controller.Start();
+        await controller.WhenIdleAsync();
+        Assert.NotNull(controller.Scene.Cover);
+        Assert.False(controller.Scene.CoverPending);
+        Assert.Contains(_renderer.Scenes, scene => scene.Title == "Song A" && scene.CoverPending && scene.Cover is null);
+
+        // A song that shares no cover: kept for it only while it is looked for.
+        NextTrack(session, "Song B", cover: null);
+        await controller.WhenIdleAsync();
+        Assert.Null(controller.Scene.Cover);
+        Assert.False(controller.Scene.CoverPending);
+    }
+
     [Fact]
     public async Task ATitleInAnotherScriptGetsItsReadingCapitalised()
     {
