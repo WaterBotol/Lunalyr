@@ -315,6 +315,30 @@ final class WordAccentsTests: XCTestCase {
         }
     }
 
+    /// Spin's whirlwind and glow are at rest on every frame near the end,
+    /// however the frame falls (a speed measured across the end once read
+    /// the settled 720° as a jump and flashed the whole funnel for a frame).
+    func testSpinWhirlwindIsAtRestAtTheEnd() {
+        for hold in [0.3, 0.6, 1.2, 2.5] {
+            let D = LivelyAction.duration(.spin, hold: hold)
+            let A = LivelyAction.intensity(amount: LivelyAction.wild, hold: hold)
+            for k in 0...400 {
+                let t = D - 0.02 + Double(k) * 0.00005
+                let pose = LivelyPose.make(.spin, t: t, duration: D, intensity: A, hold: hold)
+                XCTAssertLessThan(pose.twister, 0.02, "hold \(hold) t \(t)")
+                XCTAssertLessThan(pose.glow, 0.05, "hold \(hold) t \(t)")
+                XCTAssertLessThan(LivelyAction.spinSpeed(t, A: A, hold: hold, duration: D), 0.02, "hold \(hold) t \(t)")
+            }
+            var last = 0.0
+            for step in 0...Int(D * 2000) {
+                let t = Double(step) / 2000
+                let twister = LivelyPose.make(.spin, t: t, duration: D, intensity: A, hold: hold).twister
+                XCTAssertLessThan(abs(twister - last), 0.05, "hold \(hold) t \(t)")
+                last = twister
+            }
+        }
+    }
+
     func testLivelyLetterCurvesAreContinuous() {
         for hold in [0.3, 1.2, 2.5] {
             for (name, D, curve) in [

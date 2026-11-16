@@ -154,10 +154,14 @@ enum LivelyAction {
     /// Spin: the turn in degrees. A wind-up the other way, then one or two
     /// whole turns (eased in and out, at most ~1200°/s, so the word reads
     /// as it goes round), swinging ~18° past, back a little, and settling.
+    /// Continuous for all t: 0 before the onset, the whole turns (which
+    /// draw as rest) from `D` on, so a difference across either end is the
+    /// real motion, never a jump of 360° or 720°.
     static func spinAngle(_ t: Double, A: Double, hold: Double, duration D: Double) -> Double {
-        guard t > 0, t < D else { return 0 }
         let turns: Double = hold >= 0.9 && A > 0.35 ? 2 : 1
         let target = 360 * turns
+        guard t > 0 else { return 0 }
+        guard t < D else { return target }
         let start = 0.16, time = turns == 2 ? 1.15 : 0.85
         var x = clamp01((t - start) / time)
         x = x * x * x * (x * (6 * x - 15) + 10)
