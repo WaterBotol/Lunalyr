@@ -52,20 +52,34 @@ private struct OptionalGlow: ViewModifier {
 }
 
 /// Inside a glued run, each token appears at its own onset: its share of
-/// the label (by character) takes the token's own opacity.
+/// the label (where its letters fall, `LyricRuns.boundaries`) takes the
+/// token's own opacity.
 struct TokenReveal: ViewModifier {
     let boundaries: [Double]
     let opacities: [Double]?
     let rightToLeft: Bool
     func body(content: Content) -> some View {
         if let opacities, opacities.count + 1 == boundaries.count {
+            // The mask reaches well past the label on every side, carrying
+            // its end parts' opacity: a face whose letters stand taller than
+            // its line box (kana under a pixel face) or a letter that moves
+            // must not lose its top or edge to the label's frame.
+            let reach = LyricSweepMask.overreach
+            let first = Color.black.opacity(min(1, max(0, opacities.first ?? 1)))
+            let last = Color.black.opacity(min(1, max(0, opacities.last ?? 1)))
             content.mask {
-                GeometryReader { frame in
-                    LinearGradient(stops: Self.stops(boundaries, opacities,
-                                                     feather: Self.feather(width: frame.size.width)),
-                                   startPoint: rightToLeft ? .trailing : .leading,
-                                   endPoint: rightToLeft ? .leading : .trailing)
+                HStack(spacing: 0) {
+                    (rightToLeft ? last : first).frame(width: reach)
+                    GeometryReader { frame in
+                        LinearGradient(stops: Self.stops(boundaries, opacities,
+                                                         feather: Self.feather(width: frame.size.width)),
+                                       startPoint: rightToLeft ? .trailing : .leading,
+                                       endPoint: rightToLeft ? .leading : .trailing)
+                    }
+                    (rightToLeft ? first : last).frame(width: reach)
                 }
+                .padding(.horizontal, -reach)
+                .padding(.vertical, -reach)
             }
         } else {
             content

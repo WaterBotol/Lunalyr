@@ -750,6 +750,21 @@ final class Settings: ObservableObject {
         return face(for: mood).font(size: size, hero: hero)
     }
 
+    /// The face `lyricFont` sets with these same arguments, for measuring
+    /// where each part of a glued run falls (`LyricRuns.boundaries`).
+    func lyricMeasureFace(size: CGFloat, hero: Bool, mood: TrackMood, seed: UInt64? = nil,
+                          alternate: Bool = false, text: String? = nil) -> CTFont {
+        if randomizeLyricFonts, let seed {
+            let faces: [LyricFace] = [.sans, .serif, .slab, .soft]
+            let face = faces[Int(seed % UInt64(faces.count))]
+            if text.map(face.draws) ?? true { return face.ctFont(size: size, bold: hero, hero: true) }
+        } else if alternate {
+            let face = renderedFace(for: mood).contrasting
+            if text.map(face.draws) ?? true { return face.ctFont(size: size, bold: hero, hero: true) }
+        }
+        return lyricFace(size: size, hero: hero, mood: mood)
+    }
+
     /// The face `lyricFont` (with no seed or alternate) sets, for measuring
     /// it: its cap height, ascent and widths.
     func lyricFace(size: CGFloat, hero: Bool, mood: TrackMood) -> CTFont {

@@ -45,4 +45,31 @@ final class TokenRevealEdgeTests: XCTestCase {
         XCTAssertEqual(TokenReveal.feather(width: 40), 0.012, accuracy: 1e-9)
         XCTAssertEqual(TokenReveal.feather(width: 1000), 0.001, accuracy: 1e-9)
     }
+
+    /// A mixed run's edges fall where its letters do, not by character
+    /// count: "HAPPY" is wider per letter than the kana in a condensed face
+    /// is narrower, and by count the edge before メ cut through メ.
+    func testAMixedRunsEdgesFallBetweenItsCharacters() {
+        let font = CTFontCreateWithName("AvenirNextCondensed-Heavy" as CFString, 60, nil)
+        let labels = ["HAPPY", "な", "イ", "メ", "ー", "ジ"]
+        let measured = LyricRuns.boundaries(labels: labels, font: font)
+        let counted = LyricRuns.boundaries(labels: labels, font: nil)
+        XCTAssertEqual(measured.count, labels.count + 1)
+        XCTAssertEqual(measured.first, 0); XCTAssertEqual(measured.last, 1)
+        let line = CTLineCreateWithAttributedString(NSAttributedString(string: labels.joined(),
+            attributes: [NSAttributedString.Key(kCTFontAttributeName as String): font]))
+        let width = CTLineGetTypographicBounds(line, nil, nil, nil)
+        // The edge before メ is where メ starts.
+        let me = Double(CTLineGetOffsetForStringIndex(line, "HAPPYなイ".utf16.count, nil)) / width
+        XCTAssertEqual(measured[3], me, accuracy: 1e-6)
+        XCTAssertGreaterThan(abs(counted[3] - me), 0.02, "by count the edge sits inside a character")
+        XCTAssertEqual(zip(measured, measured.dropFirst()).allSatisfy { $0 <= $1 }, true)
+    }
+
+    func testRightToLeftAndSingleTokensKeepTheCharacterShare() {
+        let font = CTFontCreateWithName("GeezaPro" as CFString, 40, nil)
+        XCTAssertEqual(LyricRuns.boundaries(labels: ["سلا", "م"], font: font),
+                       LyricRuns.boundaries(labels: ["سلا", "م"], font: nil))
+        XCTAssertEqual(LyricRuns.boundaries(labels: ["word"], font: font), [0, 1])
+    }
 }

@@ -191,12 +191,11 @@ enum ScatteredTypography {
             }
             let label = range.count > 1
                 ? labels.joined().trimmingCharacters(in: .whitespaces) : labels.first ?? ""
-            let total = Double(max(1, labels.reduce(0) { $0 + $1.count }))
-            var boundaries: [Double] = [0], running = 0.0
-            for text in labels {
-                running += Double(text.count)
-                boundaries.append(min(1, running / total))
-            }
+            let boundaries = range.count > 1
+                ? LyricRuns.boundaries(labels: labels, font: settings.lyricMeasureFace(size: metrics.size,
+                    hero: metrics.isHero || metrics.isFocal, mood: key.mood, seed: seed,
+                    alternate: metrics.alternateFace, text: source.text))
+                : LyricRuns.boundaries(labels: labels, font: nil)
             // Each token's share of the run's reading, so the reading can
             // fill in as the run is sung (`LyricReadingInk.shares`).
             runs.append(Run(index: runIndex, tokens: range, label: label, font: font, metrics: metrics,
@@ -474,7 +473,11 @@ enum SpokenTypography {
                 },
                 slot: Word.slot(ordinal: key.ordinals[word.presentationID] ?? index),
                 parts: key.parts[word.presentationID] ?? [],
-                boundaries: key.parts[word.presentationID].map(LyricRuns.boundaries) ?? [],
+                boundaries: key.parts[word.presentationID].map { parts in
+                    LyricRuns.boundaries(parts, font: parts.count > 1
+                        ? settings.lyricMeasureFace(size: pointSize, hero: heavy, mood: key.mood, seed: seed,
+                                                    alternate: alternate, text: word.text) : nil)
+                } ?? [],
                 turnLimit: RollingStack.turnLimit(text: word.text, reading: reading, pointSize: pointSize, tile: tile))
         }
     }

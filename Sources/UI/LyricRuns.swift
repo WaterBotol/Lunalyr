@@ -1,3 +1,4 @@
+import CoreText
 import Foundation
 import NaturalLanguage
 
@@ -306,14 +307,46 @@ enum LyricRuns {
 
     /// Where each token begins and ends along the run's text, 0...1 by
     /// character, so a token's reveal falls on its own letters.
-    static func boundaries(_ tokens: [LyricsFetcher.Word]) -> [Double] {
-        let counts = tokens.map { Double($0.text.trimmingCharacters(in: .whitespacesAndNewlines).count) }
+    static func boundaries(_ tokens: [LyricsFetcher.Word], font: CTFont? = nil) -> [Double] {
+        boundaries(labels: tokens.map(\.text), font: font)
+    }
+
+    /// Where each token of a glued run ends along the drawn label, 0...1.
+    /// With the face it is set in, by where its letters actually fall: a
+    /// mixed run ("HAPPYなイメージ") has letters of very different widths,
+    /// and a share by character count put the edge through the middle of a
+    /// character, showing half of one still to come. Without a face, or for
+    /// right-to-left text, by character.
+    static func boundaries(labels: [String], font: CTFont?) -> [Double] {
+        let texts = labels.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        if let font, texts.count > 1, let measured = measuredBoundaries(texts, font: font) {
+            return measured
+        }
+        let counts = texts.map { Double($0.count) }
         let total = max(1, counts.reduce(0, +))
         var result: [Double] = [0], running = 0.0
         for count in counts {
             running += count
             result.append(min(1, running / total))
         }
+        return result
+    }
+
+    private static func measuredBoundaries(_ texts: [String], font: CTFont) -> [Double]? {
+        let joined = texts.joined()
+        guard !LyricScript.isRightToLeft(joined) else { return nil }
+        let line = CTLineCreateWithAttributedString(
+            NSAttributedString(string: joined, attributes: [NSAttributedString.Key(kCTFontAttributeName as String): font]))
+        let width = CTLineGetTypographicBounds(line, nil, nil, nil)
+        guard width > 0.5 else { return nil }
+        var result: [Double] = [0], index = 0
+        for text in texts.dropLast() {
+            index += text.utf16.count
+            let offset = Double(CTLineGetOffsetForStringIndex(line, index, nil)) / width
+            guard offset >= result[result.count - 1] - 1e-6 else { return nil }
+            result.append(min(1, max(0, offset)))
+        }
+        result.append(1)
         return result
     }
 }
