@@ -214,6 +214,12 @@ public sealed record LyricStyle
     /// <summary>"Title strength": how strong a kept title stays once it has rested, 0.3–1 (the Mac's <c>custom.openingTitleStrength</c>).</summary>
     public double OpeningTitleStrength { get; init; } = Lunalyr.Core.Compositions.OpeningTitle.RestOpacity;
 
+    /// <summary>Where the title card sits on the desktop and how large (the Mac's <c>custom.openingTitleLeft/Lift/Scale</c>).</summary>
+    public Lunalyr.Core.Compositions.OpeningTitlePlacement OpeningTitlePlacement { get; init; } = Lunalyr.Core.Compositions.OpeningTitlePlacement.Standard;
+
+    /// <summary>Where the floating window's title row sits (the Mac's <c>custom.floatingTitleCentre/Edge/Scale</c>).</summary>
+    public Lunalyr.Core.Compositions.OpeningTitleRow OpeningTitleRow { get; init; } = Lunalyr.Core.Compositions.OpeningTitleRow.Standard;
+
     // ---- Milestone 5: the Scattered family's own settings, the custom mix and an entrance per layout ----
 
     /// <summary>How far the constellations throw their words apart, 0.4–1.8 (the Mac's "Spread", <c>constellationSpread</c>).</summary>

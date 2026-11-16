@@ -32,14 +32,17 @@ internal sealed class SettingsPreview : IDisposable
     private readonly ManualResetEventSlim _wake = new(false);
     private readonly TextBlock _note;
     private readonly FloatingPreviewHandles _handles;
+    private readonly TitlePreviewHandles _titles;
+    private readonly bool _titleHandles;
     private readonly Thread _thread;
     private volatile bool _active;
     private volatile bool _disposed;
     private volatile bool _visible = true;
     private int _pending;
 
-    private SettingsPreview(AppHost host, DispatcherQueue dispatcher, Func<bool> windowVisible, double width)
+    private SettingsPreview(AppHost host, DispatcherQueue dispatcher, Func<bool> windowVisible, double width, bool titleHandles)
     {
+        _titleHandles = titleHandles;
         _host = host;
         _dispatcher = dispatcher;
         _windowVisible = windowVisible;
@@ -54,9 +57,12 @@ internal sealed class SettingsPreview : IDisposable
         var stack = new StackPanel { Spacing = 8, HorizontalAlignment = HorizontalAlignment.Center };
         // The floating lyrics' outline and handles, over the picture while the lyrics float.
         _handles = new FloatingPreviewHandles(host);
+        // The song title's box, over them: dragged to move and resize the title card or the floating title row.
+        _titles = new TitlePreviewHandles(host);
         var picture = new Grid();
         picture.Children.Add(image);
         picture.Children.Add(_handles.Overlay);
+        if (titleHandles) picture.Children.Add(_titles.Overlay);
         var clip = new Border { CornerRadius = new CornerRadius(6), Child = picture, HorizontalAlignment = HorizontalAlignment.Center };
         stack.Children.Add(clip);
         stack.Children.Add(_note);
@@ -73,12 +79,16 @@ internal sealed class SettingsPreview : IDisposable
 
     public UIElement View { get; }
 
-    /// <summary>A preview, or null when this build can't draw one. <paramref name="width"/>: how wide it shows, in DIPs (the welcome's is smaller).</summary>
-    public static SettingsPreview? TryCreate(AppHost host, DispatcherQueue dispatcher, Func<bool> windowVisible, double width = PixelWidth)
+    /// <summary>
+    /// A preview, or null when this build can't draw one. <paramref name="width"/>: how wide it shows, in DIPs (the
+    /// welcome's is smaller). <paramref name="titleHandles"/>: the song title's box can be dragged on it (Lyric style's).
+    /// </summary>
+    public static SettingsPreview? TryCreate(AppHost host, DispatcherQueue dispatcher, Func<bool> windowVisible, double width = PixelWidth,
+                                             bool titleHandles = true)
     {
         try
         {
-            return new SettingsPreview(host, dispatcher, windowVisible, width);
+            return new SettingsPreview(host, dispatcher, windowVisible, width, titleHandles);
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
@@ -178,6 +188,7 @@ internal sealed class SettingsPreview : IDisposable
                 _bitmap.Invalidate();
                 if (_note.Text != note) _note.Text = note;
                 _handles.Refresh();
+                if (_titleHandles) _titles.Refresh();
             }
             finally
             {

@@ -547,6 +547,92 @@ public class OpeningTitleTests
         }
     }
 
+    // ---- Moved and resized on the Settings picture (the Mac's 3276613, dece022) ----
+
+    // Ported from OpeningTitleTests.swift: testAPlacedCardStaysOnEveryScreen
+    [Fact]
+    public void A_placed_card_stays_on_every_screen()
+    {
+        (double, double)[] corners = [(-1, -1), (0.99, 0.99), (0.5, 2), (3, 0.1)];
+        foreach (var (w, h) in new[] { (1512.0, 982.0), (1024.0, 640.0), (900.0, 1600.0), (5120.0, 1440.0) })
+        {
+            var baseSize = ViewportMetrics.For(w, h, 1).BaseSize;
+            foreach (var corner in corners)
+                foreach (var scale in new[] { 0.6, 1, 1.6, 9 })
+                {
+                    var box = T.Box(w, h, baseSize, 1, new OpeningTitlePlacement(corner, scale));
+                    Assert.True(box.X >= 0 && box.Y >= 0 && box.X + box.Width <= w && box.Y + box.Height <= h, $"{w}x{h} {corner} {scale}");
+                }
+        }
+    }
+
+    // Ported from OpeningTitleTests.swift: testThePlacementIsSavedAsSharesOfTheScreen (the saving is in the Shell tests)
+    [Fact]
+    public void The_placement_is_shares_of_the_screen()
+    {
+        Assert.True(OpeningTitlePlacement.From(null, null, 1).IsStandard);
+        Assert.True(OpeningTitlePlacement.From(0.3, null, 1).IsStandard); // one share alone is no corner
+        // The same share of a different screen.
+        var small = T.Box(1000, 600, 40, 1, new OpeningTitlePlacement((0.3, 0.5), 1));
+        Assert.Equal(300, small.X, 3);
+        Assert.Equal(300, 600 - (small.Y + small.Height), 3);
+        Assert.Equal(1.6, OpeningTitlePlacement.From(0.6, 0.5, 40).Scale);
+    }
+
+    // Ported from OpeningTitleTests.swift: testDraggingTheBoxMovesAndResizesTheCard
+    [Fact]
+    public void Dragging_the_box_moves_and_resizes_the_card()
+    {
+        const double w = 1512, h = 982;
+        var baseSize = ViewportMetrics.For(w, h, 1).BaseSize;
+        var standard = OpeningTitlePlacement.Standard;
+        var box = T.Box(w, h, baseSize, 1, standard);
+        var moved = T.Dragged(box, standard, 300, -200, false, w, h, baseSize);
+        var after = T.Box(w, h, baseSize, 1, moved);
+        Assert.Equal(box.X + 300, after.X, 0.5);
+        Assert.Equal(box.Y - 200, after.Y, 0.5);
+        // Far off the screen: kept on it.
+        var flung = T.Box(w, h, baseSize, 1, T.Dragged(box, standard, 9_000, 9_000, false, w, h, baseSize));
+        Assert.True(flung.X + flung.Width <= w && flung.Y + flung.Height <= h);
+        // The top-right corner out and up: larger, from the same lower-left corner.
+        var grown = T.Dragged(box, standard, 100, -40, true, w, h, baseSize);
+        Assert.True(grown.Scale > 1);
+        var grownBox = T.Box(w, h, baseSize, 1, grown);
+        Assert.Equal(box.X, grownBox.X, 0.5);
+        Assert.Equal(box.Y + box.Height, grownBox.Y + grownBox.Height, 0.5);
+        Assert.Equal(0.6, T.Dragged(box, standard, -2_000, 2_000, true, w, h, baseSize).Scale);
+    }
+
+    // Ported from OpeningTitleTests.swift: testTheLyricsMakeRoomOnTheRowsSide
+    [Fact]
+    public void The_lyrics_make_room_on_the_rows_side()
+    {
+        var standard = ViewportMetrics.ForText(836, 202, 1, 44, titleRow: true);
+        var large = ViewportMetrics.ForText(836, 202, 1, 44, titleRow: true, rowScale: 1.5, rowAtBottom: true);
+        Assert.True(large.TitleBand > standard.TitleBand); // a larger row takes a deeper band
+        Assert.True(large.Stage.Height < standard.Stage.Height);
+        Assert.True(large.TitleBand > 44 * (T.RowMargin + T.RowCover * 1.5)); // the row fits within its band
+        Assert.True(large.CentreShift < 0 && standard.CentreShift > 0); // the lyrics move away from the row's side
+    }
+
+    // Ported from OpeningTitleTests.swift: testDraggingTheRowOnThePicture
+    [Fact]
+    public void Dragging_the_row_on_the_picture()
+    {
+        var window = (100.0, 200.0, 400.0, 100.0);
+        var moved = T.RowMoved(OpeningTitleRow.Standard, 100, 280, window);
+        Assert.Equal(0.75, moved.Centre, 9);
+        Assert.True(moved.Bottom); // dropped in the window's lower half: its foot
+        var back = T.RowMoved(moved, -900, 210, window);
+        Assert.Equal(0, back.Centre);
+        Assert.False(back.Bottom);
+        Assert.Equal(1.3, T.RowResized(OpeningTitleRow.Standard, 100, 30).Scale, 9);
+        Assert.Equal(0.6, T.RowResized(OpeningTitleRow.Standard, 100, -90).Scale);
+        // As stored: clamped, and only "bottom" is the foot.
+        Assert.Equal(new OpeningTitleRow(1, true, 1.6), OpeningTitleRow.From(4, "bottom", 9));
+        Assert.True(OpeningTitleRow.From(0.5, "top", 1).IsStandard);
+    }
+
     // The Mac's pace: a card that stays with no exit due is only looked at, never kept on a running clock.
     [Fact]
     public void A_kept_card_at_rest_does_not_keep_the_clock_running()

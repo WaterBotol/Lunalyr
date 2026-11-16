@@ -54,6 +54,19 @@ internal static class LyricStylePage
                 Slider(ctx, Core.Compositions.OpeningTitle.StrengthMin, Core.Compositions.OpeningTitle.StrengthMax, 0.01, SettingsCopy.Percent,
                     s => s.OpeningTitleStrength, (s, v) => s with { OpeningTitleStrength = Math.Round(v, 2) }))
             .ShowWhen(ctx, s => s.OpeningTitle && s.OpeningTitleAlways)));
+        // The Mac's 3276613 and dece022: the title is dragged on the picture above; this puts it back, on the surface shown.
+        var resetTitle = Button("Reset Title Position", () => ctx.Update(s => s.IsFloating
+            ? s.WithTitleRow(Core.Compositions.OpeningTitleRow.Standard)
+            : s.WithTitlePlacement(Core.Compositions.OpeningTitlePlacement.Standard)));
+        var resetTitleCard = Indented(Card("Song title position", null, null, resetTitle));
+        ctx.OnRefresh(s =>
+        {
+            var help = s.IsFloating ? LyricStyleCopy.ResetTitleFloating : LyricStyleCopy.ResetTitleDesktop;
+            resetTitleCard.Description = help;
+            AutomationProperties.SetHelpText(resetTitle, help);
+            resetTitle.IsEnabled = s.OpeningTitle && (s.IsFloating ? !s.TitleRow().IsStandard : !s.TitlePlacement().IsStandard);
+        });
+        page.Children.Add(resetTitleCard);
 
         // Advanced layout
         page.Children.Add(Advanced(Expander("Layouts in the rotation",

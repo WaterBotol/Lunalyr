@@ -380,6 +380,11 @@ raw values. The file also has `schemaVersion` (1). Unknown or out-of-range value
 | `openingTitleCover` | `true` | "Show the album cover" beside the opening title | `custom.openingTitleCover` |
 | `openingTitleAlways` | `false` | "Keep the song title on screen": the card stays for the whole song (a row above the floating lyrics); shared by both surfaces | `custom.openingTitleAlways` |
 | `openingTitleStrength` | `0.55` | "Title strength": how strong the kept title stays once it rests, 0.3–1 | `custom.openingTitleStrength` |
+| `openingTitleLeft`, `openingTitleLift` | unset | the title card's lower-left corner as shares of the screen, dragged on the Settings picture (unset: low on the left; written only once moved) | `custom.openingTitleLeft`, `custom.openingTitleLift` |
+| `openingTitleScale` | `1` | the title card's scale, 0.6–1.6, dragged by its corner | `custom.openingTitleScale` |
+| `floatingTitleCentre` | `0.5` | the floating title row's centre across the window | `custom.floatingTitleCentre` |
+| `floatingTitleEdge` | unset | `"bottom"`: the floating title row at the window's foot (unset: the top) | `custom.floatingTitleEdge` |
+| `floatingTitleScale` | `1` | the floating title row's scale, 0.6–1.6 | `custom.floatingTitleScale` |
 | `showInterludes` | `true` | three dots during instrumental breaks | `custom.showInterludes` |
 | `lyricHighlightMode` | `"complement"` | `complement`, `album`, `custom` (highlight tiles) | `custom.lyricHighlightMode` |
 | `lyricHighlightCustom` | `"#FF92A3"` | `#RRGGBB` | `custom.lyricHighlightCustom` |

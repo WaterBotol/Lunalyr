@@ -61,6 +61,55 @@ public sealed partial record AppSettings
     /// <summary>"Title strength": how strong the kept title stays once it has rested, 30–100% (Mac <c>custom.openingTitleStrength</c>, e30fbb2).</summary>
     public double OpeningTitleStrength { get; init; } = Core.Compositions.OpeningTitle.RestOpacity;
 
+    /// <summary>
+    /// Where the title card sits on the desktop, as dragged on the Settings picture (Mac <c>custom.openingTitleLeft</c>,
+    /// <c>custom.openingTitleLift</c>, <c>custom.openingTitleScale</c>, 3276613): its lower-left corner as shares of the
+    /// screen (unset: low on the left) and its scale, 60–160%.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public double? OpeningTitleLeft { get; init; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public double? OpeningTitleLift { get; init; }
+
+    public double OpeningTitleScale { get; init; } = 1;
+
+    /// <summary>
+    /// Where the floating window's title row sits, as dragged on the Settings picture (Mac <c>custom.floatingTitleCentre</c>,
+    /// <c>custom.floatingTitleEdge</c>, <c>custom.floatingTitleScale</c>, dece022): its centre across the window, "bottom"
+    /// for the window's foot (unset: the top), and its scale, 60–160%.
+    /// </summary>
+    public double FloatingTitleCentre { get; init; } = 0.5;
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? FloatingTitleEdge { get; init; }
+
+    public double FloatingTitleScale { get; init; } = 1;
+
+    /// <summary>The title card's place on the desktop, as stored.</summary>
+    public Core.Compositions.OpeningTitlePlacement TitlePlacement() =>
+        Core.Compositions.OpeningTitlePlacement.From(OpeningTitleLeft, OpeningTitleLift, OpeningTitleScale);
+
+    /// <summary>The floating title row's place, as stored.</summary>
+    public Core.Compositions.OpeningTitleRow TitleRow() =>
+        Core.Compositions.OpeningTitleRow.From(FloatingTitleCentre, FloatingTitleEdge, FloatingTitleScale);
+
+    /// <summary>With the title card's place set (the standard place clears it, as the Mac removes its keys).</summary>
+    public AppSettings WithTitlePlacement(Core.Compositions.OpeningTitlePlacement placement) => this with
+    {
+        OpeningTitleLeft = placement.Corner?.Left,
+        OpeningTitleLift = placement.Corner?.Lift,
+        OpeningTitleScale = Core.Compositions.OpeningTitle.CardScale(placement.Scale),
+    };
+
+    /// <summary>With the floating title row's place set.</summary>
+    public AppSettings WithTitleRow(Core.Compositions.OpeningTitleRow row) => this with
+    {
+        FloatingTitleCentre = Math.Clamp(row.Centre, 0, 1),
+        FloatingTitleEdge = row.Bottom ? "bottom" : null,
+        FloatingTitleScale = Core.Compositions.OpeningTitle.RowScale(row.Scale),
+    };
+
     /// <summary>Three dots during instrumental breaks (Mac <c>custom.showInterludes</c>).</summary>
     public bool ShowInterludes { get; init; } = true;
 
@@ -235,7 +284,7 @@ public sealed partial record AppSettings
             RotateLayoutsCursor = Math.Max(0, RotateLayoutsCursor),
             Player = Core.NowPlaying.PlayerChoice.Normalize(Player),
             OpeningTitleStrength = Core.Compositions.OpeningTitle.KeptStrength(OpeningTitleStrength),
-        }).NormalizedWindowSettings().NormalizedLyricTools().NormalizedWallpaper().NormalizedFloating()
+        }).WithTitlePlacement(TitlePlacement()).WithTitleRow(TitleRow()).NormalizedWindowSettings().NormalizedLyricTools().NormalizedWallpaper().NormalizedFloating()
             .NormalizedDiscord().NormalizedLyricExtras();
     }
 
@@ -276,6 +325,8 @@ public sealed partial record AppSettings
         OpeningTitleCover = OpeningTitleCover,
         OpeningTitleKeep = OpeningTitleAlways,
         OpeningTitleStrength = Core.Compositions.OpeningTitle.KeptStrength(OpeningTitleStrength),
+        OpeningTitlePlacement = TitlePlacement(),
+        OpeningTitleRow = TitleRow(),
         Interludes = ShowInterludes,
         OrbStyle = ThinkingOrbStyle ?? "listening",
         HighlightMode = LyricHighlightMode,

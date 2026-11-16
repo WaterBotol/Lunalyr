@@ -428,7 +428,8 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
         // The floating window keeps room for the kept song title's row (the Mac's d849c49).
         Metrics = scene.Style.FloatingTextSize is { } textSize
             ? ViewportMetrics.ForText(SurfaceSize.X, SurfaceSize.Y, Scale, textSize, scene.Style.SizeFraction,
-                                      titleRow: scene.Style is { OpeningTitle: true, OpeningTitleKeep: true })
+                                      titleRow: scene.Style is { OpeningTitle: true, OpeningTitleKeep: true },
+                                      rowScale: scene.Style.OpeningTitleRow.Scale, rowAtBottom: scene.Style.OpeningTitleRow.Bottom)
             : ViewportMetrics.For(SurfaceSize.X, SurfaceSize.Y, Scale, scene.Style.SizeFraction);
         // Each word's entrance comes from the choice (a mix picks per word); "Cutout · Highlight" adds a tile and the
         // words still enter as the layout has them enter.

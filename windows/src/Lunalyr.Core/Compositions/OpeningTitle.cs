@@ -160,6 +160,59 @@ public static class OpeningTitle
     /// <summary>The card's scale, kept between 60% and 160%.</summary>
     public static double CardScale(double scale) => double.IsFinite(scale) ? Math.Clamp(scale, 0.6, 1.6) : 1;
 
+    /// <summary>The card's box where <paramref name="placement"/> puts it.</summary>
+    public static (double X, double Y, double Width, double Height) Box(double width, double height, double baseSize, double points,
+                                                                       OpeningTitlePlacement placement) =>
+        Box(width, height, baseSize, points, placement.Corner, placement.Scale);
+
+    /// <summary>The placement that puts the card's box at <paramref name="box"/> on a desktop <paramref name="width"/> × <paramref name="height"/>.</summary>
+    public static OpeningTitlePlacement PlacementFor((double X, double Y, double Width, double Height) box, double width, double height,
+                                                     double scale) =>
+        new((box.X / Math.Max(1, width), (height - (box.Y + box.Height)) / Math.Max(1, height)), CardScale(scale));
+
+    /// <summary>
+    /// The placement after the card's box <paramref name="box"/> (desktop points, origin top left) has been dragged on the
+    /// Settings picture by (<paramref name="dx"/>, <paramref name="dy"/>): moved, kept on screen as the card itself is,
+    /// or (<paramref name="resizing"/>, its top-right corner) scaled from its lower-left corner along its diagonal (the
+    /// Mac's <c>TitleCardHandles.dragged</c>, 3276613).
+    /// </summary>
+    public static OpeningTitlePlacement Dragged((double X, double Y, double Width, double Height) box, OpeningTitlePlacement placement,
+                                                double dx, double dy, bool resizing, double width, double height, double baseSize,
+                                                double points = 1)
+    {
+        if (resizing)
+        {
+            double diagonalX = box.Width, diagonalY = -box.Height;
+            var length = diagonalX * diagonalX + diagonalY * diagonalY;
+            if (!(length > 1)) return placement;
+            var along = ((diagonalX + dx) * diagonalX + (diagonalY + dy) * diagonalY) / length;
+            // The lower-left corner stays put.
+            return PlacementFor(box, width, height, placement.Scale * Math.Max(0.1, along));
+        }
+        var moved = (box.X + dx, box.Y + dy, box.Width, box.Height);
+        var wanted = PlacementFor(moved, width, height, placement.Scale);
+        var kept = Box(width, height, baseSize, points, wanted);
+        return PlacementFor(kept, width, height, placement.Scale);
+    }
+
+    /// <summary>
+    /// The floating title row's placement after a drag on the Settings picture that has reached
+    /// <paramref name="locationY"/> having moved <paramref name="translationX"/> across, from <paramref name="start"/>,
+    /// in the window's box on the picture: along the window, and at its foot when dropped in its lower half (the Mac's
+    /// <c>FloatingTitleHandles.moved</c>, dece022).
+    /// </summary>
+    public static OpeningTitleRow RowMoved(OpeningTitleRow start, double translationX, double locationY,
+                                           (double X, double Y, double Width, double Height) window) =>
+        start with
+        {
+            Centre = Math.Clamp(start.Centre + translationX / Math.Max(1, window.Width), 0, 1),
+            Bottom = locationY > window.Y + window.Height / 2,
+        };
+
+    /// <summary>The row's placement after the corner of a row <paramref name="width"/> wide moved by <paramref name="dx"/>.</summary>
+    public static OpeningTitleRow RowResized(OpeningTitleRow start, double width, double dx) =>
+        start with { Scale = RowScale(start.Scale * Math.Max(0.1, (width + dx) / Math.Max(1, width))) };
+
     // Timing (seconds of song time).
 
     /// <summary>The beat after the song starts before the card does.</summary>
@@ -427,6 +480,36 @@ public static class OpeningTitle
     }
 
     private static readonly string[] Suffixes = [" - Single", " - EP", " – Single", " – EP"];
+}
+
+/// <summary>
+/// Where the card sits on the desktop and how large, as set by dragging it on the Settings picture (the Mac's
+/// <c>OpeningTitle.Placement</c>, <c>custom.openingTitleLeft/Lift/Scale</c>): its lower-left corner as shares of the
+/// screen, so it lands in the same place on every display, and a scale. No corner: the default place, low on the left.
+/// </summary>
+public readonly record struct OpeningTitlePlacement((double Left, double Lift)? Corner = null, double Scale = 1)
+{
+    public static OpeningTitlePlacement Standard => new(null, 1);
+    public bool IsStandard => Corner is null && Math.Abs(Scale - 1) < 0.001;
+
+    /// <summary>As stored: a corner only when both shares are numbers; the scale kept in range.</summary>
+    public static OpeningTitlePlacement From(double? left, double? lift, double scale) =>
+        new(left is { } l && lift is { } t && double.IsFinite(l) && double.IsFinite(t) ? (l, t) : null, OpeningTitle.CardScale(scale));
+}
+
+/// <summary>
+/// Where the floating window's title row sits (the Mac's <c>OpeningTitle.RowPlacement</c>,
+/// <c>custom.floatingTitleCentre/Edge/Scale</c>): across the window (its centre, a share of the window's width), at the
+/// window's top or foot (the lyrics make room on that side), and a scale.
+/// </summary>
+public readonly record struct OpeningTitleRow(double Centre = 0.5, bool Bottom = false, double Scale = 1)
+{
+    public static OpeningTitleRow Standard => new(0.5, false, 1);
+    public bool IsStandard => Math.Abs(Centre - 0.5) < 0.001 && !Bottom && Math.Abs(Scale - 1) < 0.001;
+
+    /// <summary>As stored: the centre within the window, the edge "bottom" or the top, the scale in range.</summary>
+    public static OpeningTitleRow From(double centre, string? edge, double scale) =>
+        new(double.IsFinite(centre) ? Math.Clamp(centre, 0, 1) : 0.5, edge == "bottom", OpeningTitle.RowScale(scale));
 }
 
 /// <summary>A block of the title card as set (pixels, down from its top): its size, baselines and where its ink starts.</summary>

@@ -57,7 +57,9 @@ public sealed class AppSettingsTests
             "schemaVersion", "lyricComposition", "wordArrival", "lyricScale", "fontChoice", "fontFamily", "romanizationDisplay",
             "romanizationLanguage", "romanizationTones", "romanizationSaved", "backgroundMode", "wallpaperPaused", "animationRate",
             "pauseWhenCovered", "pauseOnBatterySaver", "pauseWhenFullScreen", "lyricOffset", "repairQQGaps", "songOffsets",
-            "lyricSourceOrder", "lyricSources", "lyricMatchMode", "lyrimuseFolder", "artistAliases", "creditsLayer", "openingTitle", "openingTitleCover", "openingTitleAlways", "openingTitleStrength", "showInterludes", "thinkingOrbStyle",
+            "lyricSourceOrder", "lyricSources", "lyricMatchMode", "lyrimuseFolder", "artistAliases", "creditsLayer", "openingTitle", "openingTitleCover", "openingTitleAlways", "openingTitleStrength",
+            // The title's place (openingTitleLeft/Lift and floatingTitleEdge are written only once it is moved)
+            "openingTitleScale", "floatingTitleCentre", "floatingTitleScale", "showInterludes", "thinkingOrbStyle",
             "lyricHighlightMode", "lyricHighlightCustom", "rotateLayouts", "rotateLayoutCounts", "rotateLayoutsCursor",
             "constellationSpread", "constellationLinkOpacity", "echoStrength", "wordEntranceMix", "wordArrivalByStyle", "appTheme",
             "showControlsOnHover", "desktopPlayerTimeMode", "player",
@@ -194,6 +196,42 @@ public sealed class AppSettingsTests
         Assert.Equal(ReadingPlacement.Instead, new AppSettings { RomanizationDisplay = "replace" }.Style().Readings);
         Assert.Equal("Bahnschrift", new AppSettings { FontChoice = "installed", FontFamily = "Bahnschrift" }.Style().FontFamily);
         Assert.Equal(LyricStyle.Default.FontFamily, new AppSettings { FontChoice = "installed" }.Style().FontFamily);
+    }
+}
+
+/// <summary>The title's place as saved (the Mac's testThePlacementIsSavedAsSharesOfTheScreen and testTheRowPlacementIsSavedAndClamped).</summary>
+public sealed class TitlePlacementSettingsTests
+{
+    private static AppSettings RoundTrip(AppSettings settings) =>
+        JsonSerializer.Deserialize(JsonSerializer.Serialize(settings, AppSettingsJsonContext.Default.AppSettings),
+                                   AppSettingsJsonContext.Default.AppSettings)!.Normalized();
+
+    [Fact]
+    public void ThePlacementIsSavedAsSharesOfTheScreenAndReset()
+    {
+        var settings = new AppSettings();
+        Assert.True(settings.TitlePlacement().IsStandard);
+        Assert.True(settings.TitleRow().IsStandard);
+        var placed = new Lunalyr.Core.Compositions.OpeningTitlePlacement((0.6, 0.5), 1.3);
+        var row = new Lunalyr.Core.Compositions.OpeningTitleRow(0.2, true, 1.3);
+        var saved = RoundTrip(settings.WithTitlePlacement(placed).WithTitleRow(row));
+        Assert.Equal(placed, saved.TitlePlacement());
+        Assert.Equal(row, saved.TitleRow());
+        Assert.Equal(placed, saved.Style().OpeningTitlePlacement);
+        Assert.Equal(row, saved.Style().OpeningTitleRow);
+        // Out of range: kept in range.
+        var wild = RoundTrip(settings with { OpeningTitleScale = 40, FloatingTitleScale = 9, FloatingTitleCentre = -3 });
+        Assert.Equal(1.6, wild.TitlePlacement().Scale);
+        Assert.Equal(1.6, wild.TitleRow().Scale);
+        Assert.Equal(0, wild.TitleRow().Centre);
+        // Reset: the standard place, with nothing of the corner or edge left in the file.
+        var reset = saved.WithTitlePlacement(Lunalyr.Core.Compositions.OpeningTitlePlacement.Standard)
+                         .WithTitleRow(Lunalyr.Core.Compositions.OpeningTitleRow.Standard);
+        Assert.True(reset.TitlePlacement().IsStandard);
+        Assert.True(reset.TitleRow().IsStandard);
+        var json = JsonSerializer.Serialize(reset, AppSettingsJsonContext.Default.AppSettings);
+        Assert.DoesNotContain("openingTitleLeft", json);
+        Assert.DoesNotContain("floatingTitleEdge", json);
     }
 }
 

@@ -180,7 +180,7 @@ internal sealed partial class OnboardingWindow
         panel.Children.Add(Header(OnboardingStep.Look, OnboardingCopy.LookTitle, null, bottom: 12));
 
         var column = new StackPanel { Spacing = 10, Width = LookColumn, HorizontalAlignment = HorizontalAlignment.Center };
-        _preview ??= SettingsPreview.TryCreate(_host, DispatcherQueue, () => AppWindow.IsVisible, width: PreviewWidth);
+        _preview ??= SettingsPreview.TryCreate(_host, DispatcherQueue, () => AppWindow.IsVisible, width: PreviewWidth, titleHandles: false);
         if (_preview is { View: Border view })
         {
             view.Margin = new Thickness(0);

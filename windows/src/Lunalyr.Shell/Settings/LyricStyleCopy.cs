@@ -49,6 +49,13 @@ public static class LyricStyleCopy
     /// <summary>Under "Title strength" (the Mac's help text, e30fbb2).</summary>
     public const string TitleStrength = "How strong the song title stays once the singing has started. 100% keeps it fully solid.";
 
+    /// <summary>Under "Reset Title Position" on the desktop and in the floating lyrics (the Mac's help texts, 3276613 and dece022).</summary>
+    public const string ResetTitleDesktop =
+        "Drag the song title on the picture to move it, or its corner to resize it. This puts it back low on the left at its usual size.";
+
+    public const string ResetTitleFloating =
+        "Drag the song title on the picture to move it along the floating window’s top or bottom, or its corner to resize it. This puts it back at the top, centred, at its usual size.";
+
     public const string BackingLeadsLayout = "The lead’s layout";
 
     /// <summary>"Backing vocals animate like": the lead's layout, then the layouts backing words can take.</summary>
