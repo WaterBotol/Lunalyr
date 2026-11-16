@@ -86,7 +86,14 @@ final class LyricReviewFixesTests: XCTestCase {
         let run = layout.runs[1]
         XCTAssertTrue(run.isGlued)
         XCTAssertEqual(run.label.lowercased(), "beautiful")
-        XCTAssertEqual(run.boundaries, [0, 4.0 / 9, 6.0 / 9, 1])
+        // Where each syllable's letters fall in the face (measured, so not
+        // exactly by character count), in order from 0 to 1.
+        XCTAssertEqual(run.boundaries.count, 4)
+        XCTAssertEqual(run.boundaries.first, 0); XCTAssertEqual(run.boundaries.last, 1)
+        for (measured, counted) in zip(run.boundaries, [0, 4.0 / 9, 6.0 / 9, 1]) {
+            XCTAssertEqual(measured, counted, accuracy: 0.1)
+        }
+        XCTAssertEqual(run.boundaries, run.boundaries.sorted())
         let tokens = layout.words[run.tokens]
         XCTAssertTrue(tokens.allSatisfy { $0.metrics == tokens.first?.metrics }, "one size, rotation and baseline offset")
         XCTAssertTrue(tokens.allSatisfy { $0.order == tokens.first?.order }, "the run leaves as one word")
