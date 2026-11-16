@@ -11,6 +11,7 @@ struct WordAccentsSection: View {
     static let symbolsList = "Word symbol list"
     static let actionsToggle = "Animate listed action words"
     static let actionsList = "Action word list"
+    static let strength = "Action word strength"
 
     var body: some View {
         InspectorSection(Self.title) {
@@ -19,7 +20,14 @@ struct WordAccentsSection: View {
                 .help("When a listed word is sung, a small symbol appears beside it in the word’s colour. English lyrics only.")
             Toggle(Self.actionsToggle, isOn: $s.actionWords)
                 .toggleStyle(StudioCheckboxStyle())
-                .help("When a listed action word is sung, it moves once: spin turns, fall dips, shake shakes. With Reduce Motion it only glows.")
+                .help("When a listed action word is sung, it moves once: spin whirls round, fall dips, burn glows like embers. A song's repeats of the same word move more gently every other time. With Reduce Motion it only glows.")
+            if s.actionWords {
+                ChoiceMenu(Self.strength, selection: $s.actionWordStrength, selectedTitle: { (strength: ActionWordStrength) -> String in strength.title }) {
+                    ForEach(ActionWordStrength.allCases) { Text($0.title).tag($0) }
+                }
+                .help("How big the action words' motions are. Wild is the boldest.")
+                .revealRow()
+            }
             if s.wordSymbols || s.actionWords {
                 MoreOptions {
                     if s.wordSymbols {
@@ -43,20 +51,35 @@ struct WordAccentsSection: View {
                                            editor: { value in
                                                Picker("Action", selection: value) {
                                                    ForEach(WordAction.allCases) { Text($0.title).tag($0.rawValue) }
+                                                   // A saved value no longer offered (or a former
+                                                   // name) shows as it is, so the row still reads.
+                                                   if WordAction(rawValue: value.wrappedValue) == nil {
+                                                       Text(WordAction(listValue: value.wrappedValue)?.title
+                                                            ?? value.wrappedValue).tag(value.wrappedValue)
+                                                   }
                                                }
                                                .labelsHidden()
                                            },
-                                           commit: { s.actionWordList = $0 }, reset: { s.actionWordList = nil })
+                                           commit: { s.actionWordList = $0 }, reset: { s.actionWordList = nil },
+                                           key: Self.actionKey)
                         }
                         .revealRow()
-                        InspectorCaption("One action word a line.",
-                                         more: "Only the first listed action word in a line moves, once, as it is sung. With Reduce Motion it glows instead.")
+                        InspectorCaption("One action word a line, in English and other common languages.",
+                                         more: "Only the first action word in a line moves, once, as it is sung; repeats of a word later in the song move gently every other time. Besides this list, common words in Spanish, Portuguese, French, German, Italian, Indonesian, Tagalog, Vietnamese, Japanese, Korean and Chinese move too. Words you add here, in any language, come first. With Reduce Motion it glows instead.")
                             .revealRow()
                     }
                 }
                 .revealRow()
             }
         }
+    }
+
+    /// An action word as its list keeps it: English as matched, any other
+    /// language folded (accents and case), CJK as written.
+    static func actionKey(_ word: String) -> String? {
+        if let english = LyricWordIcons.englishKey(word) { return english }
+        let folded = ActionLexicon.fold(word)
+        return folded.isEmpty ? nil : folded
     }
 
     /// The default order first, then the user's own words A to Z.
@@ -93,12 +116,16 @@ struct WordListEditor: View {
     let editor: (Binding<String>) -> AnyView
     let commit: ([String: String]) -> Void
     let reset: () -> Void
+    /// A new word as the list keeps it (nil: not accepted).
+    let key: (String) -> String?
     @State private var newWord = ""
 
     init<Preview: View, Editor: View>(entries: [Entry], isDefault: Bool, valueLabel: String, newValue: String,
                                       @ViewBuilder preview: @escaping (String) -> Preview,
                                       @ViewBuilder editor: @escaping (Binding<String>) -> Editor,
-                                      commit: @escaping ([String: String]) -> Void, reset: @escaping () -> Void) {
+                                      commit: @escaping ([String: String]) -> Void, reset: @escaping () -> Void,
+                                      key: @escaping (String) -> String? = { (word: String) -> String? in
+                                          LyricWordIcons.englishKey(word) }) {
         self.entries = entries
         self.isDefault = isDefault
         self.valueLabel = valueLabel
@@ -107,6 +134,7 @@ struct WordListEditor: View {
         self.editor = { AnyView(editor($0)) }
         self.commit = commit
         self.reset = reset
+        self.key = key
     }
 
     var body: some View {
@@ -131,7 +159,7 @@ struct WordListEditor: View {
                     .textFieldStyle(.roundedBorder)
                     .onSubmit(add)
                 Button("Add", action: add)
-                    .disabled(LyricWordIcons.englishKey(newWord) == nil)
+                    .disabled(key(newWord) == nil)
             }
             Button("Restore Defaults", action: reset)
                 .disabled(isDefault)
@@ -151,7 +179,7 @@ struct WordListEditor: View {
 
     /// A new word is kept as it will be matched: lowercased, letters only.
     private func add() {
-        guard let word = LyricWordIcons.englishKey(newWord) else { return }
+        guard let word = key(newWord) else { return }
         var list = current()
         if list[word] == nil { list[word] = newValue }
         commit(list)

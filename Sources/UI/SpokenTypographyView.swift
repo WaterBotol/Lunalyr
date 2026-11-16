@@ -255,7 +255,10 @@ struct SpokenTypographyView: View {
                            tile: tile, tileText: ink.tileText,
                            symbol: wordAccent?.symbol,
                            symbolOpacity: presentation.preview ? 0
-                               : WordSymbolMark.opacity(elapsed: time - token.source.start))
+                               : WordSymbolMark.opacity(elapsed: time - token.source.start),
+                           symbolElapsed: presentation.preview ? nil
+                               : WordSymbolMark.entering(elapsed: time - token.source.start),
+                           symbolAction: wordAccent?.action)
             .background {
                 if let tile {
                     CutoutTile(colour: token.tile ? labelColour : ink.tileColour, width: tile.width,
@@ -288,7 +291,7 @@ struct SpokenTypographyView: View {
             .rotationEffect(.degrees(state.drawAngle))
             // An action word's motion: outside the stage fit, which measures
             // where the stack placed the word, never where it moves to.
-            .wordAction(wordAccent, start: token.source.start, time: time, size: token.pointSize, glow: colours.glow)
+            .wordAction(wordAccent, start: token.source.start, end: token.source.end, time: time, size: token.pointSize, glow: colours.glow)
             .blur(radius: state.pose.blur)
             .lyricShadow(0.25, radius: 7, y: 2)
             .layoutValue(key: RollingSlotKey.self, value: state.slot)
@@ -487,6 +490,9 @@ struct RollingUnit: View {
     /// frame, so the stack measures it, shown at `symbolOpacity`.
     var symbol: String? = nil
     var symbolOpacity = 0.0
+    /// PREVIEW: the symbol's entrance (`WordSymbolView.elapsed`, `.action`).
+    var symbolElapsed: Double? = nil
+    var symbolAction: WordAction? = nil
 
     /// Cutout's label, or the tile "Cutout · Highlight" presses in behind a
     /// sung word.
@@ -535,6 +541,7 @@ struct RollingUnit: View {
                 .overlay {
                     content(colour: tileText, sung: tileText, tint: 0,
                             reading: tileText.opacity(LyricHighlight.readingOpacity))
+                        .environment(\.lyricLivelyParticles, false)
                         .mask { TileMask(tile: tile, rightToLeft: token.rightToLeft) }
                 }
         } else {
@@ -551,7 +558,7 @@ struct RollingUnit: View {
                     .modifier(TokenReveal(boundaries: token.boundaries, opacities: reveal, rightToLeft: token.rightToLeft))
                 if let symbol {
                     WordSymbolView(symbol: symbol, size: token.pointSize, rest: colour, sung: sung, tint: tint,
-                                   opacity: symbolOpacity)
+                                   opacity: symbolOpacity, elapsed: symbolElapsed, action: symbolAction)
                 }
             }
             // A word with a symbol keeps its own width, never wrapping to fit it.
@@ -767,17 +774,22 @@ private struct RollingWordText: View {
     let sung: Color
     let tint: Double
     let rightToLeft: Bool
+    /// PREVIEW: a lively action word's letters (`LivelyGlyphHook`).
+    @Environment(\.lyricLivelyGlyphs) private var lively
 
     var body: some View {
         ZStack {
             if tint < 1 {
                 Text(text).font(font).foregroundStyle(colour)
                     .lineLimit(1).fixedSize(horizontal: true, vertical: true)
+                    .modifier(LivelyGlyphHook(particles: true))
             }
             if tint > 0 {
                 Text(text).font(font).foregroundStyle(sung)
                     .lineLimit(1).fixedSize(horizontal: true, vertical: true)
-                    .mask(LyricSweepMask(progress: tint, rightToLeft: rightToLeft, feather: LyricSweepMask.colourFeather))
+                    .modifier(LivelyGlyphHook(particles: tint >= 1))
+                    .livelySweepMask(progress: tint, rightToLeft: rightToLeft, feather: LyricSweepMask.colourFeather,
+                                     active: lively != nil, pad: (lively?.size ?? 0) * 2.5)
             }
         }
     }

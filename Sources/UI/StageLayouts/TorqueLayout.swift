@@ -131,20 +131,22 @@ extension StageLyricView {
                     ZStack {
                         ForEach((1...steps).reversed(), id: \.self) { step in
                             let share = CGFloat(step) / CGFloat(steps)
+                            // The edge follows the letters; the particles are the face's.
                             word(run, liveColour, size: size)
+                                .livelyLetters(particles: false)
                                 .colorMultiply(Color(white: 0.5 - 0.22 * Double(share)))
                                 .offset(x: side * depth * share * 0.55, y: depth * share)
                         }
                     }
                 }
                 ZStack {
-                    if live < 0.999 { word(run, restColour, size: size) }
-                    if live > 0.001 { word(run, liveColour, size: size).opacity(live) }
+                    if live < 0.999 { word(run, restColour, size: size).livelyLetters() }
+                    if live > 0.001 { word(run, liveColour, size: size).livelyLetters(particles: live >= 0.999).opacity(live) }
                 }
                 .background { tileBackground(tile, size: size) }
                 .highlightLayer(tile)
             }
-            .wordAction(accent(run), start: run.start, time: time, size: size, glow: sample.glow)
+            .wordAction(accent(run), start: run.start, end: run.end, time: time, size: size, glow: sample.glow)
             // Word presence, about the word and its thick edge, with its action.
             .modifier(presence(run, size: size, speed: 1, live: !plan.lineTimed))
             .font(font(size, hero: true, id: run.id))

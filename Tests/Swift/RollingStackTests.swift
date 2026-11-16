@@ -647,4 +647,66 @@ final class RollingStackTests: XCTestCase {
             XCTAssertGreaterThanOrEqual(worst, 0.9)
         }
     }
+
+    /// The scale a word is drawn at (its pose, presence hold and the stage's
+    /// fit where the stack places it) never jumps between frames at 120 Hz,
+    /// across a whole Cutout line with a held word.
+    @MainActor
+    func testDrawnScaleNeverJumpsAcrossALine() throws {
+        let texts = ["feel", "it", "grow", "inside", "me"]
+        var words: [LyricsFetcher.Word] = []
+        var time = 10.0
+        for text in texts {
+            let length = text == "grow" ? 1.2 : 0.3
+            words.append(LyricsFetcher.Word(text: text, start: time, end: time + length))
+            time += length + (text == "grow" ? 0.05 : 0.04)
+        }
+        let stage = CGSize(width: 619, height: 590)
+        let baseSize: CGFloat = 72
+        for composition in [LyricComposition.cutout, .spoken] {
+            for reduce in [false, true] {
+                let prepared = SpokenTypography.prepare(.init(words: words, baseSize: baseSize, mood: .neutral,
+                    composition: composition, fontIdentity: LyricFontIdentity(settings: .shared)), settings: .shared)
+                let sizes = try prepared.map { token -> CGSize in
+                    let renderer = ImageRenderer(content: RollingUnit(token: token))
+                    renderer.scale = 1
+                    return try XCTUnwrap(renderer.nsImage).size
+                }
+                var last: [Int: Double] = [:]
+                for step in 0...Int(4.0 * 120) {
+                    let time = 9.6 + Double(step) / 120
+                    let cursor = SpokenTypographyView.cursor(prepared, time: time, intensity: 0, reduceMotion: reduce)
+                    let position = reduce ? cursor.rounded() : cursor
+                    let next = words.firstIndex { $0.start > time }
+                    var units: [(index: Int, size: CGSize, slot: RollingStack.Slot, draw: Double)] = []
+                    for token in prepared {
+                        let rank = position - 1 - Double(token.index)
+                        guard rank >= -2, rank <= 5.2 else { continue }
+                        let state = RollingTokenState.make(token, next: next, rank: rank, time: time,
+                            composition: composition, baseSize: baseSize, stageWidth: stage.width, intensity: 0,
+                            reduceMotion: reduce, arrival: .fade,
+                            eligibleSince: token.index > 0 ? prepared[token.index - 1].source.start : -.infinity)
+                        units.append((token.index, sizes[token.index], state.slot, state.drawScale))
+                    }
+                    let anchor = CGPoint(x: stage.width / 2, y: stage.height * 0.59)
+                    let centres = RollingStack.centres(sizes: units.map(\.size), slots: units.map(\.slot),
+                                                       anchor: anchor, gap: baseSize * 0.35)
+                    var seen: [Int: Double] = [:]
+                    for (unit, centre) in zip(units, centres) {
+                        let fit = Double(RollingStack.fit(size: unit.size, slot: unit.slot, centre: centre, stage: stage,
+                                                          margin: max(baseSize * 0.22, stage.width * 0.05)))
+                        let drawn = unit.draw * fit
+                        if let before = last[unit.index], unit.slot.shown > 0.05, !reduce {
+                            // A brisk entrance spring moves up to ~0.065 a frame;
+                            // a snap (the ~1.25× one-frame zoom) would be 0.25.
+                            XCTAssertLessThan(abs(drawn - before), 0.08,
+                                "\(composition) word \(unit.index) at \(time): \(before) -> \(drawn)")
+                        }
+                        seen[unit.index] = drawn
+                    }
+                    last = seen
+                }
+            }
+        }
+    }
 }

@@ -412,8 +412,8 @@ extension StageLyricView {
                         liveColour: liveColour.opacity(LyricHighlight.readingOpacity), live: live,
                         maxWidth: stageSize.width * 0.7 / scale, shadow: false) {
                 ZStack {
-                    if live < 0.999 { word(run, restColour) }
-                    if live > 0.001 { word(run, liveColour).opacity(live) }
+                    if live < 0.999 { word(run, restColour).livelyLetters() }
+                    if live > 0.001 { word(run, liveColour).livelyLetters(particles: live >= 0.999).opacity(live) }
                 }
                 .font(font(size, hero: true, id: index))
                 .lineLimit(1).minimumScaleFactor(0.35).frame(maxWidth: stageSize.width * 0.7 / scale)
@@ -422,7 +422,7 @@ extension StageLyricView {
         }
         .padding(.horizontal, size * 0.5).padding(.vertical, size * 0.26)
         .background { portalBackground(pill, size: size, live: live, eased: eased, burst: burst, tile: tile, outlined: outlined, salt: index) }
-        .wordAction(accent(run), start: run.start, time: time, size: size, glow: sample.glow)
+        .wordAction(accent(run), start: run.start, end: run.end, time: time, size: size, glow: sample.glow)
         .scaleEffect(scale)
         .lyricShadow(outlined ? 0 : 0.2 * live, radius: 9, y: 4)
         // It squashes as it lands, then settles.

@@ -278,8 +278,13 @@ final class Settings: ObservableObject {
     }
     static let wordSymbolsKey = "custom.wordSymbols.enabled"
     static let wordSymbolListKey = "custom.wordSymbols.words"
+    /// "Action word strength": how big the motions are (Subtle, Middle, Wild).
+    @Published var actionWordStrength: ActionWordStrength {
+        didSet { store(actionWordStrength.rawValue, Self.actionWordStrengthKey) }
+    }
     static let actionWordsKey = "custom.actionWords.enabled"
     static let actionWordListKey = "custom.actionWords.words"
+    static let actionWordStrengthKey = "custom.actionWords.strength"
 
     /// Both lists as the renderer matches them: keys folded (`englishKey`),
     /// symbols this Mac cannot draw and unknown actions dropped, nil while
@@ -302,8 +307,14 @@ final class Settings: ObservableObject {
             symbols[key] = name
         }
         var actions: [String: WordAction] = [:]
+        // Keys: English words as `englishKey`, others folded
+        // (`ActionLexicon.fold`). Values by raw value, title or former name
+        // (`WordAction(listValue:)`); a word whose action is no longer
+        // offered is skipped, and the saved list itself is left alone.
         for (word, raw) in effectiveActionWordList {
-            guard let key = LyricWordIcons.englishKey(word), let action = WordAction(rawValue: raw) else { continue }
+            guard let action = WordAction(listValue: raw) else { continue }
+            let key = LyricWordIcons.englishKey(word) ?? ActionLexicon.fold(word)
+            guard !key.isEmpty else { continue }
             actions[key] = action
         }
         Self.accentListsGeneration &+= 1
@@ -536,6 +547,7 @@ final class Settings: ObservableObject {
         wordSymbolList = d.dictionary(forKey: Self.wordSymbolListKey) as? [String: String]
         actionWords = d.object(forKey: Self.actionWordsKey) as? Bool ?? true
         actionWordList = d.dictionary(forKey: Self.actionWordListKey) as? [String: String]
+        actionWordStrength = ActionWordStrength(rawValue: d.string(forKey: Self.actionWordStrengthKey) ?? "") ?? .wild
         animationRate = AnimationRate(rawValue: d.integer(forKey: "custom.animationRate")) ?? .balanced
         pauseWhenCovered = d.object(forKey: "custom.pauseWhenCovered") as? Bool ?? true
         hasOnboarded = d.bool(forKey: "hasOnboarded")
@@ -634,6 +646,7 @@ final class Settings: ObservableObject {
         set(\.thinkingOrbStyle, ThinkingOrb.normalised(d.string(forKey: ThinkingOrb.styleKey)))
         set(\.wordSymbols, d.object(forKey: Self.wordSymbolsKey) as? Bool ?? true)
         set(\.actionWords, d.object(forKey: Self.actionWordsKey) as? Bool ?? true)
+        set(\.actionWordStrength, ActionWordStrength(rawValue: d.string(forKey: Self.actionWordStrengthKey) ?? "") ?? .wild)
         set(\.editorialTypography, d.bool(forKey: "custom.editorialTypography"))
         set(\.editorialAmount, d.object(forKey: "custom.editorialAmount") as? Double ?? 1)
         set(\.randomizeLyricFonts, d.bool(forKey: "custom.randomizeLyricFonts"))

@@ -302,7 +302,8 @@ struct StageLyricView: View {
     func symbol(_ run: StageRun, size: CGFloat, colour: Color) -> some View {
         if composition != .portal, let symbol = accent(run)?.symbol {
             WordSymbolView(symbol: symbol, size: size, rest: colour, sung: colour,
-                           opacity: WordSymbolMark.opacity(elapsed: time - run.start))
+                           opacity: WordSymbolMark.opacity(elapsed: time - run.start),
+                           elapsed: WordSymbolMark.entering(elapsed: time - run.start), action: accent(run)?.action)
         }
     }
 
