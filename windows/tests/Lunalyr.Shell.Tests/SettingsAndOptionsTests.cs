@@ -84,7 +84,7 @@ public sealed class AppSettingsTests
             // Windows' Animation effects: followed or not, and the notice saying why nothing moves
             "motionFollowsWindows", "motionNoticeShown", "reduceFlicker",
             // Word symbols and action words (the Mac's custom.wordSymbols.* and custom.actionWords.*)
-            "wordSymbolsEnabled", "wordSymbolsWords", "actionWordsEnabled", "actionWordsWords",
+            "wordSymbolsEnabled", "wordSymbolsWords", "actionWordsEnabled", "actionWordsWords", "actionWordsStrength",
             // The last of the Lyric style page: backing vocals, typography, colour, word reveal and remembered styles
             "backingVocalsLayer", "backingVocalStyle", "editorialTypography", "editorialAmount", "randomizeLyricFonts",
             "lyricColourMode", "lyricColourSpeed", "lyricColourStrength", "lyricColourCustom", "wordRevealByStyle",

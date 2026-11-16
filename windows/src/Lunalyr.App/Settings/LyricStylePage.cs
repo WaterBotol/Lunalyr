@@ -189,6 +189,13 @@ internal static class LyricStylePage
             Toggle(ctx, s => s.WordSymbolsEnabled, (s, v) => s with { WordSymbolsEnabled = v })));
         page.Children.Add(Card("Animate action words", "Spin, fall, freeze… move as they are sung.", "",
             Toggle(ctx, s => s.ActionWordsEnabled, (s, v) => s with { ActionWordsEnabled = v })));
+        // The Mac's "Action word strength" (16 Nov 2026), under its switch and hidden while it is off.
+        SettingsChoice[] actionStrengths =
+            [.. Enum.GetValues<ActionWordStrength>().Select(strength => new SettingsChoice(strength.RawValue(), strength.Title()))];
+        page.Children.Add(Indented(Card("Action word strength", "How big their motion is.", "",
+                Combo(ctx, actionStrengths, s => ActionWordStrengths.Parse(s.ActionWordsStrength).RawValue(),
+                    (s, v) => s with { ActionWordsStrength = v }, width: 180)))
+            .ShowWhen(ctx, s => s.ActionWordsEnabled));
 
         // Advanced word motion
         page.Children.Add(Advanced(Card("Faint next-word preview", LyricStyleCopy.NextWordPreview, "",

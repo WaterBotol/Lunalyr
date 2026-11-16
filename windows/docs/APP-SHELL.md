@@ -320,6 +320,9 @@ raw values. The file also has `schemaVersion` (1). Unknown or out-of-range value
 | `constellationSpread` | `1.0` | 0.4–1.8: "Spread", how far the constellations throw their words apart | `constellationSpread` |
 | `constellationLinkOpacity` | `0.2` | 0–0.6: "Links", the constellations' hairlines (0 draws none) | `constellationLinkOpacity` |
 | `echoStrength` | `1.0` | 0–1.8: "Repeats", how present Echo's repeats are (0 draws none) | `echoStrength` |
+| `wordSymbolsEnabled`, `actionWordsEnabled` | `true` | "Symbols beside listed words", "Animate action words" | `custom.wordSymbols.enabled`, `custom.actionWords.enabled` |
+| `wordSymbolsWords`, `actionWordsWords` | absent | the edited lists (word → symbol / action); absent is the default list. Shared by both surfaces | `custom.wordSymbols.words`, `custom.actionWords.words` |
+| `actionWordsStrength` | `"wild"` | "Action word strength": `subtle` (0.2), `middle` (0.5), `wild` (1.0); shown under Animate action words while it is on; unknown reads as `wild` | `custom.actionWords.strength` |
 | `lyricScale` | `1.0` | 0.5–2 | `lyricScale` |
 | `fontChoice` | `"system"` | `system` (Segoe UI Variable), `installed` | `fontChoice` (Mac fonts aren't on Windows) |
 | `fontFamily` | `""` | an installed family | `googleFontFamily` |
@@ -645,7 +648,8 @@ their own style. Details, checks and what wasn't seen live: [milestones/M7.md](m
   to Floating starts from the desktop's style with `lyricScale` 1 (Floating has its own text size). Style keys:
   `fontChoice`, `fontFamily`, `lyricComposition`, `constellationSpread`, `constellationLinkOpacity`,
   `wordRevealByStyle`, `wordArrival`, `wordArrivalByStyle`, `nextWordPreviewByStyle`, `nextWordPreviewLead`,
-  `wordEntranceMix`, `echoStrength`, `lyricScale`, `showInterludes`, `editorialTypography`, `editorialAmount`,
+  `wordEntranceMix`, `echoStrength`, `lyricScale`, `showInterludes`, `thinkingOrbStyle`, `wordSymbolsEnabled`,
+  `actionWordsEnabled`, `actionWordsStrength`, `editorialTypography`, `editorialAmount`,
   `randomizeLyricFonts`, `rotateLayouts`, `backingVocalsLayer`, `backingVocalStyle`, `creditsLayer`, `openingTitle`,
   `openingTitleCover`, `romanizationDisplay`, `lyricColourMode`, `lyricColourSpeed`, `lyricColourStrength`,
   `lyricColourCustom`, `lyricHighlightMode`, `lyricHighlightCustom` (the Mac's list where Windows has the setting;

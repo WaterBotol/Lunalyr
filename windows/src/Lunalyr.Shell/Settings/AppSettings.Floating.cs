@@ -196,7 +196,7 @@ public static class LyricStyleProfiles
         "fontChoice", "fontFamily", "lyricComposition", "constellationSpread", "constellationLinkOpacity",
         "wordRevealByStyle", "wordArrival", "wordArrivalByStyle", "nextWordPreviewByStyle", "nextWordPreviewLead",
         "wordEntranceMix", "echoStrength", "lyricScale", "showInterludes", "thinkingOrbStyle", "wordSymbolsEnabled", "actionWordsEnabled",
-        "editorialTypography", "editorialAmount", "randomizeLyricFonts",
+        "actionWordsStrength", "editorialTypography", "editorialAmount", "randomizeLyricFonts",
         // Layout rotation, backing vocals, credits, the opening title
         "rotateLayouts", "backingVocalsLayer", "backingVocalStyle", "creditsLayer", "openingTitle", "openingTitleCover",
         // Readings and translations shown (the Mac's FloatingLyrics.swift lists Show translations right after them)

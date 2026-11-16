@@ -174,6 +174,12 @@ public sealed record LyricStyle
     /// <summary>"Animate listed action words" (the Mac's cba108f): a short motion on a listed action word as it is sung.</summary>
     public bool ActionWords { get; init; } = true;
 
+    /// <summary>
+    /// "Action word strength" as an amount (the Mac's custom.actionWords.strength): 0.2 Subtle, 0.5 Middle, 1 Wild.
+    /// The redone action words (the Mac's 16 Nov 2026 work) scale their motion by it.
+    /// </summary>
+    public double ActionStrength { get; init; } = 1.0;
+
     /// <summary>The word symbol and action word lists (shared by both surfaces).</summary>
     public Lunalyr.Core.Compositions.WordAccentLists WordLists { get; init; } = Lunalyr.Core.Compositions.WordAccentLists.Defaults;
 

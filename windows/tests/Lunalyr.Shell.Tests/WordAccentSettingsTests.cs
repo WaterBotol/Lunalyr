@@ -48,6 +48,42 @@ public class WordAccentSettingsTests
         Assert.DoesNotContain("actionWordsWords", LyricStyleProfiles.Keys);
     }
 
+    // The Mac's custom.actionWords.strength (16 Nov 2026): subtle 0.2, middle 0.5, wild 1.0, wild by default.
+    [Theory]
+    [InlineData("subtle", 0.2)]
+    [InlineData("middle", 0.5)]
+    [InlineData("wild", 1.0)]
+    public void Action_word_strength_reaches_the_renderer_as_the_Macs_amount(string stored, double amount)
+    {
+        var settings = new AppSettings { ActionWordsStrength = stored }.Normalized();
+        Assert.Equal(stored, settings.ActionWordsStrength);
+        Assert.Equal(amount, settings.Style().ActionStrength);
+    }
+
+    [Fact]
+    public void Action_word_strength_is_wild_by_default_and_an_unknown_value_reads_as_wild()
+    {
+        Assert.Equal("wild", new AppSettings().ActionWordsStrength);
+        Assert.Equal(1.0, new AppSettings().Style().ActionStrength);
+        var unknown = new AppSettings { ActionWordsStrength = "explosive" }.Normalized();
+        Assert.Equal("wild", unknown.ActionWordsStrength);
+        Assert.Equal(1.0, new AppSettings { ActionWordsStrength = "Subtle" }.Style().ActionStrength);
+    }
+
+    [Fact]
+    public void Action_word_strength_round_trips_and_belongs_to_each_surface()
+    {
+        var json = JsonSerializer.Serialize(new AppSettings { ActionWordsStrength = "middle" }, AppSettingsJsonContext.Default.AppSettings);
+        Assert.Equal("middle", JsonDocument.Parse(json).RootElement.GetProperty("actionWordsStrength").GetString());
+        Assert.Equal("middle", JsonSerializer.Deserialize(json, AppSettingsJsonContext.Default.AppSettings)!.Normalized().ActionWordsStrength);
+        Assert.Contains("actionWordsStrength", LyricStyleProfiles.Keys);
+
+        var floating = new AppSettings { ActionWordsStrength = "subtle" }.WithLyricsSurface(LyricsSurface.Floating);
+        Assert.Equal("subtle", floating.ActionWordsStrength);
+        var changed = (floating with { ActionWordsStrength = "middle" }).WithLyricsSurface(LyricsSurface.Desktop);
+        Assert.Equal("subtle", changed.ActionWordsStrength);
+    }
+
     [Fact]
     public void Lists_round_trip_and_restoring_defaults_stores_none()
     {

@@ -49,6 +49,12 @@ public sealed partial record AppSettings
     /// <summary>The action word list (Mac <c>custom.actionWords.words</c>): word → action. Null is the default list.</summary>
     public IReadOnlyDictionary<string, string>? ActionWordsWords { get; init; }
 
+    /// <summary>
+    /// "Action word strength" (Mac <c>custom.actionWords.strength</c>): "subtle", "middle" or "wild", per surface.
+    /// Unknown values read as wild.
+    /// </summary>
+    public string ActionWordsStrength { get; init; } = ActionWordStrengths.Default.RawValue();
+
     private static (IReadOnlyDictionary<string, string>? Symbols, IReadOnlyDictionary<string, string>? Actions, WordAccentLists Lists) _wordLists =
         (null, null, WordAccentLists.Defaults);
 
@@ -224,6 +230,7 @@ public sealed partial record AppSettings
             WordRevealByStyle = KnownLayouts(WordRevealByStyle),
             NextWordPreviewByStyle = KnownLayouts(NextWordPreviewByStyle),
             NextWordPreviewLead = double.IsFinite(lead) ? Math.Clamp(lead, PreviewLeadMin, PreviewLeadMax) : DefaultPreviewLead,
+            ActionWordsStrength = ActionWordStrengths.Parse(ActionWordsStrength).RawValue(),
             StyleMemorySongs = Stored(StyleMemorySongs),
             StyleMemoryArtists = Stored(StyleMemoryArtists),
         };
@@ -274,6 +281,7 @@ public sealed partial record AppSettings
             PreviewLead = lead,
             WordSymbols = WordSymbolsEnabled,
             ActionWords = ActionWordsEnabled,
+            ActionStrength = ActionWordStrengths.Parse(ActionWordsStrength).Amount(),
             WordLists = WordLists(),
         };
     }
