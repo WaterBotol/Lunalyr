@@ -401,11 +401,13 @@ extension RollingTokenState {
     /// over its share of the word (see `TokenReveal`). A run of Chinese or
     /// Japanese with no spaces rolls as one word, which appeared whole at
     /// its first character and then showed nothing of what was being sung.
-    /// Nil for a single token.
+    /// Nil for a single token, and for a Korean word, which shows whole
+    /// (`LyricRuns.revealsByPart`).
     @MainActor
     static func partReveal(_ token: SpokenTypography.Word, time: Double, composition: LyricComposition,
                            runOpacity: Double, intensity: Double, reduceMotion: Bool) -> [Double]? {
-        guard token.parts.count > 1, token.boundaries.count == token.parts.count + 1 else { return nil }
+        guard token.parts.count > 1, token.boundaries.count == token.parts.count + 1,
+              LyricRuns.revealsByPart(token.source.text) else { return nil }
         let next = token.parts.firstIndex { $0.start > time }
         return token.parts.enumerated().map { offset, part in
             guard offset > 0 else { return 1 }

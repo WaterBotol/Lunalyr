@@ -73,6 +73,22 @@ enum LyricRuns {
     /// Thai, Lao, Myanmar and Khmer.
     private static let spaceless: [ClosedRange<UInt32>] = [0x0E00...0x0EFF, 0x1000...0x109F, 0x1780...0x17FF]
 
+    /// Whether a glued run shows its tokens one by one as they are sung
+    /// rather than whole from its first. A run of a script written without
+    /// spaces can hold several words and appeared whole at its first
+    /// character, so it still arrives character by character, as a Latin
+    /// word's syllables do. A Korean word is one word however its syllable
+    /// blocks are timed: Apple Music times 우리의 as 우 리 의, and a block at
+    /// a time left a held 우 alone in focus for over a second, meaning
+    /// nothing. It shows whole, and its blocks' timing carries the sweep.
+    static func revealsByPart(_ text: String) -> Bool {
+        writtenWithoutSpaces(text) || !text.unicodeScalars.contains { scalar in
+            hangul.contains { $0.contains(scalar.value) }
+        }
+    }
+    /// Jamo, compatibility jamo, extended jamo and syllables.
+    private static let hangul: [ClosedRange<UInt32>] = [0x1100...0x11FF, 0x3130...0x318F, 0xA960...0xA97F, 0xAC00...0xD7FF]
+
     /// Glue for a rolling stage -- Spoken, Cascade and Cutout -- which sets
     /// a line one word at a time: `glue(line:words:)` with each unspaced
     /// run parted into its words (`splittingWords`, `.words`). Kept whole, a

@@ -704,13 +704,20 @@ final class Settings: ObservableObject {
     }
 
     /// Lyric type, preferring a downloaded Google font when one is active.
+    /// `text`, when given, is the word set in it: a random or contrasting
+    /// face that has no glyphs for its letters (Charter has no Hangul) is
+    /// passed over for the main face, so that word's script falls back to
+    /// the same face and weight as every other word's.
     func lyricFont(size: CGFloat, hero: Bool, mood: TrackMood, seed: UInt64? = nil,
-                   alternate: Bool = false) -> Font {
+                   alternate: Bool = false, text: String? = nil) -> Font {
         if randomizeLyricFonts, let seed {
             let faces: [LyricFace] = [.sans, .serif, .slab, .soft]
-            return faces[Int(seed % UInt64(faces.count))].font(size: size, hero: hero)
+            let face = faces[Int(seed % UInt64(faces.count))]
+            if text.map(face.draws) ?? true { return face.font(size: size, hero: hero) }
+        } else if alternate {
+            let face = renderedFace(for: mood).contrasting
+            if text.map(face.draws) ?? true { return face.font(size: size, hero: hero) }
         }
-        if alternate { return renderedFace(for: mood).contrasting.font(size: size, hero: hero) }
         let choice = drawnFontChoice, custom = activeCustomFaces
         // Manrope is the shipped default, fetched and registered like any
         // other Google family.

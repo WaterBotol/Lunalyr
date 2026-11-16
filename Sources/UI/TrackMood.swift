@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// A read of a track's "vibe", used to pick typography, the generative
@@ -36,6 +37,28 @@ enum LyricFace: Equatable {
             return .system(size: size, weight: hero ? .heavy : .medium, design: .rounded)
         }
     }
+
+    /// Whether the face has its own glyphs for every letter of `text`.
+    /// Charter and Rockwell have no Hangul, kana or Han: a word in those
+    /// scripts set in them is drawn in the system's fallback for that face
+    /// (AppleMyungjo, in one thin weight, for Hangul) instead of the
+    /// fallback the lyric's own face gets, matched to its weight.
+    func draws(_ text: String) -> Bool {
+        let covered = Self.coverage[self] ?? CFCharacterSetGetPredefined(.letter)
+        return text.unicodeScalars.allSatisfy { !$0.properties.isAlphabetic || CFCharacterSetIsLongCharacterMember(covered, $0.value) }
+    }
+
+    private static let coverage: [LyricFace: CFCharacterSet] = {
+        func characters(_ font: CTFont) -> CFCharacterSet { CTFontCopyCharacterSet(font) }
+        let rounded = NSFont.systemFont(ofSize: 12, weight: .medium).fontDescriptor.withDesign(.rounded)
+            .flatMap { NSFont(descriptor: $0, size: 12) } ?? NSFont.systemFont(ofSize: 12, weight: .medium)
+        return [
+            .sans: characters(CTFontCreateWithName("AvenirNextCondensed-Medium" as CFString, 12, nil)),
+            .serif: characters(CTFontCreateWithName("Charter-Roman" as CFString, 12, nil)),
+            .slab: characters(CTFontCreateWithName("Rockwell-Regular" as CFString, 12, nil)),
+            .soft: characters(rounded as CTFont),
+        ]
+    }()
 
     /// The face's opposite number, for compositions that deliberately set
     /// two voices against each other in a single line.

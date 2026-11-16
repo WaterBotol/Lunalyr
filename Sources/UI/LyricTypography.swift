@@ -164,10 +164,10 @@ enum ScatteredTypography {
                                   focal: focal, count: ranges.count, key: key)
             let seed = source.presentationID.visualSeed
             let font = settings.lyricFont(size: metrics.size, hero: metrics.isHero || metrics.isFocal, mood: key.mood,
-                seed: seed, alternate: metrics.alternateFace)
+                seed: seed, alternate: metrics.alternateFace, text: source.text)
             // Readings are secondary: smaller, regular weight, same face.
             let readingFont = settings.lyricFont(size: metrics.size * 0.56, hero: false, mood: key.mood,
-                seed: seed, alternate: metrics.alternateFace)
+                seed: seed, alternate: metrics.alternateFace, text: source.text)
             let order = ranges.count > 1 ? Double(runIndex) / span : 0.5
             let runCadence = runIndex + 1 < ranges.count
                 ? max(0.05, sources[runIndex + 1].start - source.start) : max(source.end - source.start, 0.12)
@@ -458,10 +458,11 @@ enum SpokenTypography {
                     ? (key.following ?? 0) - word.start : OrganicMotion.cadence(of: key.words, at: index),
                 rightToLeft: LyricScript.isRightToLeft(word.text), hero: hero, pointSize: pointSize,
                 tile: tile,
-                font: settings.lyricFont(size: pointSize, hero: heavy, mood: key.mood, seed: seed, alternate: alternate),
+                font: settings.lyricFont(size: pointSize, hero: heavy, mood: key.mood, seed: seed, alternate: alternate,
+                                         text: word.text),
                 reading: reading.map { text in
                     let font = settings.lyricFont(size: pointSize * 0.56, hero: false, mood: key.mood,
-                                                  seed: seed, alternate: alternate)
+                                                  seed: seed, alternate: alternate, text: word.text)
                     // A glued run's reading, kept by its tokens' shares so it
                     // fills in as they are sung; the same text either way.
                     if let tokens = key.parts[word.presentationID],
