@@ -204,26 +204,48 @@ enum WordAction: String, CaseIterable, Identifiable {
 
     /// "Action words"' default list, as decided for both apps.
     static let defaultList: [(word: String, action: WordAction)] = [
-        ("spin", .spin),
-        ("levitate", .float), ("float", .float), ("fly", .float), ("flying", .float),
-        ("fall", .dip), ("falling", .dip), ("drop", .dip),
-        ("shake", .shake), ("tremble", .shake), ("shiver", .shake),
-        ("bounce", .hop), ("jump", .hop),
-        ("grow", .grow), ("rise", .grow), ("rising", .grow),
-        ("shrink", .shrink),
-        ("fade", .dissolve), ("disappear", .dissolve), ("vanish", .dissolve),
-        ("burn", .flicker), ("fire", .flicker),
-        ("freeze", .frost), ("frozen", .frost), ("froze", .frost), ("cold", .frost), ("ice", .frost), ("icy", .frost),
         // Plurals, -ing and -ed fold through `englishForms` (bleeds,
-        // melting, echoes, shattered, drowning); irregular forms are listed.
-        ("bleed", .bleed), ("bled", .bleed), ("blood", .bleed),
-        ("dark", .dark), ("darker", .dark), ("darkness", .dark), ("shadow", .dark),
-        ("break", .shatter), ("broken", .shatter), ("shatter", .shatter), ("crack", .shatter),
-        ("melt", .melt),
-        ("echo", .echo),
-        ("heartbeat", .pulse), ("pulse", .pulse), ("beat", .pulse),
-        ("wave", .wave), ("ocean", .wave), ("sea", .wave), ("tide", .wave),
-        ("sink", .sink), ("drown", .sink),
+        // melting, echoes, shattered, drowning, spinning); irregular forms
+        // are listed. Vivid words the motion shows, not everyday ones
+        // ("love", "go", "away", "down", "turn", and the very common
+        // "night", "heart", "high" and "rain", are left out: measured on
+        // a few hundred songs, they made action words constant).
+        ("spin", .spin), ("twirl", .spin), ("whirl", .spin), ("whirlwind", .spin), ("spiral", .spin),
+        ("tornado", .spin), ("dizzy", .spin), ("carousel", .spin), ("revolve", .spin),
+        ("levitate", .float), ("float", .float), ("fly", .float), ("flying", .float), ("flew", .float),
+        ("soar", .float), ("drift", .float), ("heaven", .float), ("clouds", .float), ("weightless", .float),
+        ("wings", .float), ("higher", .float),
+        ("fall", .dip), ("falling", .dip), ("fell", .dip), ("drop", .dip), ("dive", .dip), ("tumble", .dip),
+        ("gravity", .dip), ("plunge", .dip),
+        ("shake", .shake), ("shook", .shake), ("tremble", .shake), ("shiver", .shake), ("nervous", .shake),
+        ("quake", .shake), ("earthquake", .shake), ("scared", .shake), ("rattle", .shake),
+        ("bounce", .hop), ("jump", .hop), ("leap", .hop), ("hop", .hop), ("dance", .hop), ("dancing", .hop),
+        ("grow", .grow), ("grew", .grow), ("rise", .grow), ("rising", .grow), ("bigger", .grow),
+        ("bloom", .grow), ("blossom", .grow), ("swell", .grow),
+        ("shrink", .shrink), ("smaller", .shrink), ("tiny", .shrink),
+        ("fade", .dissolve), ("disappear", .dissolve), ("vanish", .dissolve), ("gone", .dissolve),
+        ("dust", .dissolve), ("ghost", .dissolve), ("forget", .dissolve), ("forgotten", .dissolve),
+        ("erase", .dissolve), ("evaporate", .dissolve), ("dissolve", .dissolve),
+        ("burn", .flicker), ("burnt", .flicker), ("fire", .flicker), ("flame", .flicker), ("blaze", .flicker),
+        ("ignite", .flicker), ("spark", .flicker), ("embers", .flicker), ("smoke", .flicker), ("heat", .flicker),
+        ("freeze", .frost), ("frozen", .frost), ("froze", .frost), ("cold", .frost), ("colder", .frost),
+        ("ice", .frost), ("icy", .frost), ("winter", .frost), ("snow", .frost), ("numb", .frost), ("chill", .frost),
+        ("frost", .frost),
+        ("bleed", .bleed), ("bled", .bleed), ("blood", .bleed), ("bloody", .bleed), ("wound", .bleed), ("scar", .bleed),
+        ("veins", .bleed),
+        ("dark", .dark), ("darker", .dark), ("darkest", .dark), ("darkness", .dark), ("shadow", .dark),
+        ("midnight", .dark), ("black", .dark), ("blackout", .dark), ("void", .dark),
+        ("break", .shatter), ("broke", .shatter), ("broken", .shatter), ("shatter", .shatter), ("crack", .shatter),
+        ("pieces", .shatter), ("crash", .shatter), ("smash", .shatter), ("heartbreak", .shatter),
+        ("apart", .shatter),
+        ("melt", .melt), ("drip", .melt), ("meltdown", .melt), ("thaw", .melt), ("liquid", .melt), ("wax", .melt),
+        ("echo", .echo), ("repeat", .echo), ("resonate", .echo), ("voices", .echo), ("calling", .echo),
+        ("heartbeat", .pulse), ("pulse", .pulse), ("beat", .pulse), ("alive", .pulse),
+        ("pounding", .pulse), ("racing", .pulse), ("drum", .pulse), ("drums", .pulse), ("rhythm", .pulse),
+        ("wave", .wave), ("ocean", .wave), ("sea", .wave), ("tide", .wave), ("river", .wave), ("surf", .wave),
+        ("shore", .wave), ("flood", .wave), ("sway", .wave), ("water", .wave),
+        ("sink", .sink), ("sank", .sink), ("sunk", .sink), ("drown", .sink), ("deep", .sink), ("deeper", .sink),
+        ("underwater", .sink), ("abyss", .sink), ("anchor", .sink), ("quicksand", .sink),
     ]
 
     static let defaults: [String: String] =

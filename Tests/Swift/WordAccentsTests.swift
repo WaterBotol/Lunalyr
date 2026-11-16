@@ -346,6 +346,28 @@ final class WordAccentsTests: XCTestCase {
         }
     }
 
+    /// The default list reaches the vivid words songs use, and leaves the
+    /// everyday ones still (invented lines).
+    func testTheDefaultListCatchesVividWordsOnly() {
+        let hits: [(String, WordAction)] = [
+            ("we twirl till dawn", .spin), ("I soar above it", .float), ("we dive in", .dip),
+            ("so nervous tonight", .shake), ("let's dance again", .hop), ("watch it bloom", .grow),
+            ("it's all gone now", .dissolve), ("strike a flame", .flicker), ("cold as winter snow", .frost),
+            ("an open wound", .bleed), ("lost in the midnight", .dark), ("in a million pieces", .shatter),
+            ("the candle drips", .melt), ("I hear the voices", .echo), ("I'm alive again", .pulse),
+            ("down by the river", .wave), ("in the deep end", .sink),
+            ("bailando toda la noche", .hop), ("on danse encore", .hop), ("wir tanzen", .hop), ("一起跳舞", .hop),
+            ("踊り続ける", .hop), ("춤을 춰", .hop), ("눈이 내리는 하늘", .float),
+        ]
+        for (line, action) in hits {
+            XCTAssertEqual(actionIn(line), action, line)
+        }
+        for line in ["all night long", "you have my heart", "dancing in the rain".replacingOccurrences(of: "dancing", with: "walking"),
+                     "so high", "a rose for you", "a glass of wine", "just let it go", "멈춤 없이", "坐火车回家"] {
+            XCTAssertNil(actionIn(line), line)
+        }
+    }
+
     func testTheUsersOwnListComesFirst() {
         let user: [String: WordAction] = ["caer": .spin, "fly": .hop, "飛": .sink]
         let script = ActionLexicon.Script("caer")

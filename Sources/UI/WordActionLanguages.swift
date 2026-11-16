@@ -126,7 +126,11 @@ enum ActionLexicon {
         words(.echo, ["eco", "ecos"]),
         words(.pulse, ["latido", "latidos", "latir"]),
         words(.wave, ["olas", "mar", "oceano", "marea"]),
-        words(.sink, ["hundir", "hundo", "hunde", "hundiendo", "hundirme"]),
+        words(.sink, ["hundir", "hundo", "hunde", "hundiendo", "hundirme", "profundo", "profunda"]),
+        words(.hop, ["bailar", "baila", "bailas", "bailo", "bailando", "bailamos", "baile", "perreo"]),
+        words(.float, ["cielo", "alas"]),
+        words(.dissolve, ["olvidar", "olvido", "olvida", "olvidame", "olvidarte"]),
+        words(.frost, ["nieve"]),
     ], stems: [
         ("tembl", .shake), ("tiembl", .shake), ("sacud", .shake),
         ("crece", .grow), ("crezc", .grow), ("creci", .grow),
@@ -147,6 +151,10 @@ enum ActionLexicon {
         words(.echo, ["eco"]),
         words(.wave, ["onda", "ondas", "mar", "oceano"]),
         words(.grow, ["crescer", "cresce", "cresceu", "cresco", "crescendo"]),
+        words(.hop, ["dancar", "danca", "dancando", "danco", "rebola", "rebolar"]),
+        words(.float, ["ceu", "asas"]),
+        words(.dissolve, ["esquecer", "esqueci", "esquece", "sumir", "sumiu"]),
+        words(.frost, ["neve"]),
     ], stems: [
         ("flutu", .float), ("encolh", .shrink), ("desapare", .dissolve),
         ("queim", .flicker), ("congel", .frost), ("sangr", .bleed), ("escur", .dark),
@@ -163,6 +171,11 @@ enum ActionLexicon {
         words(.shatter, ["casse", "casser", "cassee", "eclats", "brisee", "briser"]),
         words(.melt, ["fondre", "fondu", "fondent"]),
         words(.grow, ["grandir", "grandis", "grandit", "grandissent", "grandissant"]),
+        words(.hop, ["danse", "danser", "dansons", "dansent", "dansez"]),
+        words(.float, ["ciel", "ailes"]),
+        words(.dissolve, ["oublier", "oublie", "oublies", "oubliee"]),
+        words(.frost, ["neige"]),
+        words(.sink, ["profond", "profonde"]),
         words(.wave, ["mer", "houle"]),
         words(.sink, ["noie", "noyer", "noyee", "sombrer", "sombrent"]),
     ], stems: [
@@ -180,6 +193,11 @@ enum ActionLexicon {
         words(.shatter, ["gebrochen", "zerbrochen"]),
         words(.echo, ["widerhall"]),
         words(.shake, ["beben", "bebt", "bebte", "bebten"]),
+        words(.hop, ["tanzen", "tanz", "tanzt", "tanze", "tanzte"]),
+        words(.float, ["himmel", "flugel", "luftballons", "luftballon"]),
+        words(.dissolve, ["vergessen", "vergiss", "vergess", "vergesse"]),
+        words(.frost, ["schnee"]),
+        words(.sink, ["tief", "tiefer", "tiefe"]),
         words(.wave, ["welle", "wellen", "meer", "ozean"]),
         words(.sink, ["sinken", "sinkt", "versinken", "versinkt", "versank"]),
     ], stems: [
@@ -205,6 +223,11 @@ enum ActionLexicon {
         words(.pulse, ["battito", "battiti"]),
         words(.wave, ["onda", "mare", "oceano"]),
         words(.grow, ["crescere", "cresce", "cresci", "cresco", "cresciuto"]),
+        words(.hop, ["ballare", "balla", "ballo", "ballando", "balliamo"]),
+        words(.float, ["cielo", "ali"]),
+        words(.dissolve, ["dimenticare", "dimentico", "dimentica", "dimenticato"]),
+        words(.frost, ["neve"]),
+        words(.sink, ["profondo", "profonda"]),
     ], stems: [ ("svani", .dissolve), ("scompar", .dissolve), ("bruci", .flicker), ("congel", .frost),
         ("oscur", .dark), ("spezz", .shatter), ("sciogl", .melt), ("sciolt", .melt),
         ("affond", .sink), ("annega", .sink),
@@ -302,7 +325,11 @@ enum ActionLexicon {
         words(.echo, ["響", "こだま", "木霊"]),
         words(.pulse, ["鼓動"]),
         words(.wave, ["波", "海"]),
-        words(.sink, ["沈", "溺れ"]),
+        words(.sink, ["沈", "溺れ", "深い", "深く"]),
+        words(.hop, ["踊", "ダンス"]),
+        words(.float, ["翼"]),
+        words(.frost, ["雪"]),
+        words(.dissolve, ["忘れ"]),
     ], exclude: ["影響", "暗記", "暗号", "落ち着", "回答", "今回", "一回", "毎回", "前回", "海外", "暗恋", "暗戀", "沈黙"])
 
     static let chinese = Contained("zh", [
@@ -323,8 +350,13 @@ enum ActionLexicon {
         words(.echo, ["回声", "回聲", "回音"]),
         words(.pulse, ["心跳"]),
         words(.wave, ["海浪", "波浪", "浪花", "海"]),
-        words(.sink, ["沉没", "沉沒", "下沉", "沉入", "淹没", "淹沒"]),
-    ], exclude: ["暗恋", "暗戀", "跳舞", "飞机", "飛機", "海报", "海報"])
+        words(.sink, ["沉没", "沉沒", "下沉", "沉入", "淹没", "淹沒", "深海"]),
+        words(.hop, ["跳舞", "舞"]),
+        words(.float, ["翅膀", "天空"]),
+        words(.frost, ["雪"]),
+        words(.dissolve, ["忘记", "忘記"]),
+        words(.flicker, ["火"]),
+    ], exclude: ["暗恋", "暗戀", "飞机", "飛機", "海报", "海報", "火车", "火車", "雪碧"])
 
     static let korean = Contained("ko", [
         words(.spin, ["빙빙", "회전"]),
@@ -344,6 +376,10 @@ enum ActionLexicon {
         words(.echo, ["메아리"]),
         words(.pulse, ["두근", "심장 소리"]),
         words(.wave, ["파도", "바다"]),
-        words(.sink, ["가라앉", "잠겨"]),
-    ], exclude: ["커피"])
+        words(.sink, ["가라앉", "잠겨", "깊은", "깊이"]),
+        words(.hop, ["춤", "댄스"]),
+        words(.float, ["날개", "하늘"]),
+        words(.dissolve, ["잊어", "잊혀", "잊지"]),
+        words(.flicker, ["뜨거운"]),
+    ], exclude: ["커피", "멈춤"])
 }
