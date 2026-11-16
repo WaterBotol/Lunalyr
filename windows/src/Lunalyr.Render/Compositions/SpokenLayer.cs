@@ -268,6 +268,8 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger, Composit
             var action = unit.Action is { } act
                 ? ActionPose(new RunAccent(null, act, unit.Gentle), token.Source.Start, token.Source.End, time)
                 : LivelyPose.Identity;
+            var restWorld = world;
+            var unitBox = new Vector2((float)unit.Size.Width, (float)unit.Size.Height);
             Matrix4x4? turned = null;
             if (!action.IsIdentity)
             {
@@ -294,6 +296,8 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger, Composit
             // itself (the Mac's LyricReadingInk.shareOpacities with RollingTokenState.partReveal).
             var readingShares = unit.ReadingSlices is { } slices ? slices.Opacities(time, reveal, reduce) : default;
             var readingBoundaries = readingShares.IsEmpty ? default : unit.ReadingSlices!.Boundaries.AsSpan();
+            var actionElapsed = time - token.Source.Start;
+            DrawLivelyAround(dc, restWorld, Vector2.Zero, unitBox, action, actionElapsed, token.PointSize, unit.RestColour, (float)opacity, front: false);
             if (turned is { } depth)
             {
                 // Mid-spin: the word, its symbol and its reading turn as one (no tile, sweep or blur while it turns).
@@ -306,6 +310,7 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger, Composit
                     if (unit.Reading is { } spun)
                         StageLayer.DrawInk(dc, spun, depth, unit.ReadingOffset, opacity, 0, 1, readingBoundaries, readingShares);
                 }
+                DrawLivelyAround(dc, restWorld, Vector2.Zero, unitBox, action, actionElapsed, token.PointSize, unit.RestColour, (float)opacity, front: true);
                 continue;
             }
             var labelWorld = Matrix3x2.CreateTranslation(unit.LabelOffset) * world;
@@ -325,18 +330,32 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger, Composit
                 var tileRect = tile.IsVisible ? RollingLabel.HighlightRect(unit.Size.Width, unit.Size.Height, Scale) : default;
                 if (tile.IsVisible) DrawTileRect(dc, world, tileRect, tile, token.RightToLeft, opacity);
                 var actionGlow = LivelyWord.Glow(action, unit.RestColour, token.PointSize);
-                unit.Label.Draw(dc, labelWorld, scale, (float)opacity, blur,
-                                actionGlow.Visible ? actionGlow with { Radius = actionGlow.Radius * scale } : GlowSpec.None,
-                                1, reveal.IsEmpty ? default : AsSpan(token.Boundaries), reveal, token.RightToLeft, clip);
+                var glowShown = actionGlow.Visible ? actionGlow with { Radius = actionGlow.Radius * scale } : GlowSpec.None;
+                // An action word's letters move on their own while its action runs (the Mac's per-glyph pass).
+                var lettersDrawn = false;
+                if (unit.Action is { } livelyAction && !tile.IsVisible && !clip.IsSet && Revealed(reveal) && !state.Presentation.Preview)
+                {
+                    var basis = unit.Sung is not null
+                        ? Vector4.Lerp(unit.RestColour, unit.SungColour, (float)Math.Clamp(SungSweep.Progress(token, time), 0, 1))
+                        : unit.RestColour;
+                    var cue = unit.Sung is not null || action.Tints ? LivelyWord.Tinted(action, basis with { W = 1 }, 1) : default;
+                    lettersDrawn = DrawLively(dc, unit.Label, labelWorld, scale, new RunAccent(null, livelyAction, unit.Gentle),
+                                              token.Source.Start, token.Source.End, time, token.PointSize, basis, unit.RestColour,
+                                              action, (float)opacity, 1, glowShown, cue);
+                }
+                if (!lettersDrawn)
+                    unit.Label.Draw(dc, labelWorld, scale, (float)opacity, blur, glowShown,
+                                    1, reveal.IsEmpty ? default : AsSpan(token.Boundaries), reveal, token.RightToLeft, clip);
                 // "Sung sweep": the sung colour fills the word from its leading edge as it is sung (the Mac's RollingUnit tint).
-                if (unit.Sung is { } sung && !tile.IsVisible && !clip.IsSet && SungSweep.Progress(token, time) is var tint and > 0)
+                if (unit.Sung is { } sung && !tile.IsVisible && !clip.IsSet && !lettersDrawn && SungSweep.Progress(token, time) is var tint and > 0)
                 {
                     var (from, to) = SungSweep.Span(unit.Label.Box.X, tint, token.RightToLeft);
                     sung.DrawBetween(dc, labelWorld, scale, (float)opacity, blur, (float)from, (float)to,
                                      reveal.IsEmpty ? default : AsSpan(token.Boundaries), reveal, token.RightToLeft);
                 }
                 if (unit.Symbol is not null || action.Tints)
-                    DrawAccent(dc, token, unit, labelWorld, world, scale, opacity, blur, action, time, state.Presentation.Preview, clip);
+                    DrawAccent(dc, token, unit, labelWorld, world, scale, opacity, blur, action, time, state.Presentation.Preview, clip,
+                               lettersDrawn);
                 var readingWorld = Matrix3x2.CreateTranslation(unit.ReadingOffset) * world;
                 var reading = state.Presentation.Preview ? null : unit.Reading;
                 reading?.Draw(dc, readingWorld, scale, (float)opacity, blur, GlowSpec.None, 1, readingBoundaries, readingShares, clip: clip);
@@ -350,6 +369,7 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger, Composit
                                          readingBoundaries, readingShares);
                 }
             }
+            DrawLivelyAround(dc, restWorld, Vector2.Zero, unitBox, action, actionElapsed, token.PointSize, unit.RestColour, (float)opacity, front: true);
             if (LyricSwipe.Shows(motion, progress, reduce)) DrawSwipe(dc, world, unit.Size, progress, token.Direction, motion, alpha);
         }
     }
@@ -451,12 +471,12 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger, Composit
     /// </summary>
     private static void DrawAccent(ID2D1DeviceContext dc, RollingWord token, SpokenUnit unit, in Matrix3x2 labelWorld,
                                    in Matrix3x2 world, float scale, double opacity, float blur, in LivelyPose action,
-                                   double time, bool preview, InkClip clip)
+                                   double time, bool preview, InkClip clip, bool lettersDrawn = false)
     {
         var sweep = unit.SymbolSung is not null || action.Tints ? Math.Clamp(SungSweep.Progress(token, time), 0, 1) : 0;
         var basis = Vector4.Lerp(unit.RestColour, unit.SungColour, (float)sweep);
         var cue = LivelyWord.Tinted(action, basis with { W = 1 }, 1);
-        if (action.Tints) unit.Label.DrawTinted(dc, labelWorld, cue with { W = (float)opacity }, clip);
+        if (action.Tints && !lettersDrawn) unit.Label.DrawTinted(dc, labelWorld, cue with { W = (float)opacity }, clip);
         if (unit.Symbol is not { } symbol || preview) return;
         var shown = opacity * WordActionMotion.SymbolOpacity(time - token.Source.Start);
         if (!(shown > 0.002)) return;

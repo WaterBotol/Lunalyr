@@ -40,14 +40,22 @@ internal static class LivelyWord
     /// about (centre, anchor), the spin's turn about the upright axis in perspective (0.5 of the width, the Mac's
     /// <c>rotation3DEffect</c>; its back never shows), the tilt about the centre, then the offset.
     /// </summary>
-    public static Matrix4x4 Transform(in LivelyPose pose, double size, Vector2 centre, SizeD box)
+    /// <param name="flat">The turn drawn flat (the width scaled by its cosine), for what is drawn only through flat
+    /// transforms, such as Portal's pill.</param>
+    public static Matrix4x4 Transform(in LivelyPose pose, double size, Vector2 centre, SizeD box, bool flat = false)
     {
         if (pose.IsIdentity) return Matrix4x4.Identity;
         var anchor = new Vector2(centre.X, centre.Y + (float)((pose.AnchorY - 0.5) * box.Height));
         var m = Matrix4x4.CreateTranslation(-anchor.X, -anchor.Y, 0)
             * Matrix4x4.CreateScale((float)pose.Sx, (float)pose.Sy, 1)
             * Matrix4x4.CreateTranslation(anchor.X, anchor.Y, 0);
-        if (pose.Turn != 0)
+        if (pose.Turn != 0 && flat)
+        {
+            m *= Matrix4x4.CreateTranslation(-centre.X, -centre.Y, 0)
+                * Matrix4x4.CreateScale((float)Math.Cos(pose.ShownTurn * Math.PI / 180), 1, 1)
+                * Matrix4x4.CreateTranslation(centre.X, centre.Y, 0);
+        }
+        else if (pose.Turn != 0)
         {
             // The Mac's perspective is 0.5 of the word's width (measured 16 Nov 2026); TurnY takes the larger side,
             // which for a word is its width.
@@ -60,6 +68,14 @@ internal static class LivelyWord
         if (pose.Dx != 0 || pose.Dy != 0) m *= Matrix4x4.CreateTranslation((float)(pose.Dx * size), (float)(pose.Dy * size), 0);
         return m;
     }
+
+    /// <summary>
+    /// The frame round the word that its whirlwind and vignette are drawn in (the Mac draws them outside the word's scale
+    /// and turn): the pose's tilt about <paramref name="centre"/>, then its travel in ems of <paramref name="size"/>.
+    /// </summary>
+    public static Matrix3x2 Frame(in LivelyPose pose, double size, Vector2 centre) =>
+        Matrix3x2.CreateRotation((float)(pose.Tilt * Math.PI / 180), centre)
+        * Matrix3x2.CreateTranslation((float)(pose.Dx * size), (float)(pose.Dy * size));
 
     /// <summary>The pose's glow in the word's own <paramref name="ink"/>: its opacity, and its radius for a word of <paramref name="size"/>.</summary>
     public static GlowSpec Glow(in LivelyPose pose, Vector4 ink, double size) =>

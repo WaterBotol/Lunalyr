@@ -57,6 +57,12 @@ internal sealed class Ink : IDisposable
         }
     }
 
+    /// <summary>
+    /// Where each letter sits (a one-line text's clusters, left to right), for an action word's per-letter pass; null
+    /// for a tile, a symbol or a text on several lines.
+    /// </summary>
+    public InkLetters? Letters { get; set; }
+
     /// <summary>The kit baking it, until it is baked.</summary>
     internal TextKit? Kit { get; private set; }
 
@@ -328,6 +334,64 @@ internal sealed class Ink : IDisposable
             dc.DrawImage(_tintOut!, new Vector2(slice.Left, slice.Top), slice, InterpolationMode.Linear, CompositeMode.SourceOver);
         }
     }
+
+    /// <summary>
+    /// Draws one rectangle of the text (<paramref name="left"/>…<paramref name="bottom"/> in layout pixels from the centre
+    /// of the layout box; an infinite side reaches the bitmap's edge) through <paramref name="world"/>: its soft shadow,
+    /// the text at <paramref name="opacity"/>, and <paramref name="tint"/> (straight alpha) laid over it. An action word's
+    /// letters, bands and cells are drawn this way (the Mac's per-glyph pass), each through its own transform.
+    /// </summary>
+    public void DrawRegion(ID2D1DeviceContext dc, in Matrix3x2 world, float left, float top, float right, float bottom,
+                           float opacity, float shadowOpacity = 0, Vector4 tint = default)
+    {
+        if (!(right > left) || !(bottom > top)) return;
+        if (!(opacity > 0.002f) && !(tint.W > 0.004f)) return;
+        if (!Bake()) return;
+        if (HasSoft && shadowOpacity * opacity > 0.004f)
+        {
+            var soft = Region(left, top, right, bottom, SoftCentre, SoftRaster, SoftWidth, SoftHeight);
+            if (soft.Right > soft.Left && soft.Bottom > soft.Top)
+            {
+                dc.Transform = Matrix3x2.CreateTranslation(-SoftCentre) * Matrix3x2.CreateScale(1 / SoftRaster) * world;
+                dc.DrawBitmap(_soft, soft, opacity * shadowOpacity, InterpolationMode.Linear, soft, null);
+            }
+        }
+        var rect = Region(left, top, right, bottom, Centre, Raster, PixelWidth, PixelHeight);
+        if (!(rect.Right > rect.Left) || !(rect.Bottom > rect.Top)) return;
+        dc.Transform = Matrix3x2.CreateTranslation(-Centre) * Matrix3x2.CreateScale(1 / Raster) * world;
+        if (opacity > 0.002f) dc.DrawBitmap(Text, rect, Math.Min(1, opacity), InterpolationMode.Linear, rect, null);
+        if (tint.W > 0.004f)
+        {
+            if (_tint is null)
+            {
+                _tint = new Vortice.Direct2D1.Effects.Shadow(_owner) { Optimization = ShadowOptimization.Speed, BlurStandardDeviation = 0 };
+                _tint.SetInput(0, Text, true);
+                _tintOut = _tint.Output;
+            }
+            _tint.Color = new Vector4(tint.X, tint.Y, tint.Z, Math.Clamp(tint.W, 0, 1));
+            dc.DrawImage(_tintOut!, new Vector2(rect.Left, rect.Top), rect, InterpolationMode.Linear, CompositeMode.SourceOver);
+        }
+    }
+
+    /// <summary>Only the glow around the text (as <see cref="Draw"/> would draw it), for a word drawn letter by letter.</summary>
+    public void DrawGlow(ID2D1DeviceContext dc, in Matrix3x2 world, float worldScale, float opacity, GlowSpec glow)
+    {
+        if (!glow.Visible || !(opacity > 0.002f) || !(worldScale > 0.0001f) || !Bake()) return;
+        if (_glow is null)
+        {
+            _glow = new Vortice.Direct2D1.Effects.Shadow(_owner) { Optimization = ShadowOptimization.Balanced };
+            _glow.SetInput(0, Text, true);
+            _glowOut = _glow.Output;
+        }
+        _glow.BlurStandardDeviation = MathF.Max(0.1f, glow.Radius * 0.5f * Raster / worldScale);
+        _glow.Color = new Vector4(glow.Colour.X, glow.Colour.Y, glow.Colour.Z, Math.Clamp(glow.Colour.W * opacity, 0, 1));
+        dc.Transform = Matrix3x2.CreateTranslation(-Centre) * Matrix3x2.CreateScale(1 / Raster) * world;
+        dc.DrawImage(_glowOut!, InterpolationMode.Linear, CompositeMode.SourceOver);
+    }
+
+    private static RawRectF Region(float left, float top, float right, float bottom, Vector2 centre, float raster, int width, int height) =>
+        new(Math.Clamp(centre.X + left * raster, 0, width), Math.Clamp(centre.Y + top * raster, 0, height),
+            Math.Clamp(centre.X + right * raster, 0, width), Math.Clamp(centre.Y + bottom * raster, 0, height));
 
     /// <summary><paramref name="rect"/> (bitmap pixels) cut to the clip's stretch across the text.</summary>
     private RawRectF Clipped(RawRectF rect, InkClip clip, Vector2 centre, float raster)

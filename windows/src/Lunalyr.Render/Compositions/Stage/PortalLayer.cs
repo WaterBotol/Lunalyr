@@ -102,7 +102,11 @@ internal sealed class PortalLayer(IWordBreaker breaker, Logger? logger) : StageL
             var outlined = StageShared.Chance(seed, run.Id, 12) < 0.25;
             var live = outlined ? tile : tileText;
             // Third: the sung colour, for the trail's reached words in Sung sweep.
-            var spec = WithReading(new WordSpec(size, [Colour(sample.Rest, 0.85), live, Colour(sample.Sung, 0.85)]) { MaxWidth = Stage.Width * 0.7, Raster = 1.2f },
+            // The action word moves its pill (its symbol lives in the pill's disc, so none beside the word).
+            var spec = WithReading(new WordSpec(size, [Colour(sample.Rest, 0.85), live, Colour(sample.Sung, 0.85)])
+                                   {
+                                       MaxWidth = Stage.Width * 0.7, Raster = 1.2f, Accent = Accent(source, i) with { Symbol = null },
+                                   },
                                    source.Readings[i], size, [Colour(sample.Reading), Faded(live, LyricHighlight.ReadingOpacity)],
                                    shadow: false, maxWidth: Stage.Width * 0.7);
             words[i] = Bake(run, run.Text, spec);
@@ -299,6 +303,11 @@ internal sealed class PortalLayer(IWordBreaker breaker, Logger? logger) : StageL
             * Matrix3x2.CreateScale(reduce ? 1 : (float)(0.9 + 0.1 * Math.Min(a, 1.05)))
             * Matrix3x2.CreateRotation(Radians(line.Tilts[id]))
             * Matrix3x2.CreateTranslation((float)centre.X, (float)centre.Y) * group;
+        // An action word moves its whole pill, icon and word together (the Mac's wordAction on the pill, 16 Nov 2026);
+        // a pill drawn flat narrows with a spin's turn rather than turning in depth.
+        var acting = word.Action is { } act ? ActionPose(new RunAccent(null, act, word.Gentle), run.Start, run.End, time) : LivelyPose.Identity;
+        if (!acting.IsIdentity)
+            pill = Homography.Flat(LivelyWord.Transform(acting, size, Vector2.Zero, new SizeD(w, h), flat: true)) * pill;
         // The slant: a capsule leaned by a sixth of its height.
         var body = shape == PortalShape.Slant ? Matrix3x2.CreateSkew(-MathF.Atan(flip ? -0.18f : 0.18f), 0) * pill : pill;
         var radius = Math.Max(0, Math.Min(PortalGeometry.Radius(shape, size), Math.Min(h / 2, w / 2)));
@@ -350,12 +359,13 @@ internal sealed class PortalLayer(IWordBreaker breaker, Logger? logger) : StageL
         if (live < 0.999)
         {
             // In Sung sweep a reached word off the pill keeps its sung colour (the Mac's next/tester-fixes).
-            DrawLabel(dc, line, word, run, SungTint(line, run, time, 0) > 0.5 ? 2 : 0, time, unit, opacity, blur);
+            DrawLabel(dc, line, word, run, SungTint(line, run, time, 0) > 0.5 ? 2 : 0, time, unit, opacity, blur,
+                      poseInUnit: true, particles: true);
             DrawReading(dc, line, word, run, 0, time, unit, opacity, blur);
         }
         if (live > 0.001)
         {
-            DrawLabel(dc, line, word, run, 1, time, unit, live * opacity, blur);
+            DrawLabel(dc, line, word, run, 1, time, unit, live * opacity, blur, poseInUnit: true, particles: live >= 0.999);
             DrawReading(dc, line, word, run, 1, time, unit, live * opacity, blur);
         }
     }

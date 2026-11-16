@@ -823,9 +823,15 @@ internal abstract class StageLayer(CompositionKind kind, IWordBreaker breaker, L
     }
 
     /// <summary>Draws a stage word's label (colour <paramref name="colour"/>) with its syllables arriving as sung.</summary>
+    /// <param name="poseInUnit">The layout moved the word's whole piece by its action already (Portal's pill): the
+    /// letters and their particles still move, the word is not moved again.</param>
+    /// <param name="particles">Whether this layer draws the action's particles and whirlwind (one layer of a word drawn
+    /// in several); by default every colour but the live overlay (1).</param>
     protected void DrawLabel(ID2D1DeviceContext dc, StageLine line, StageWord word, StageRun run, int colour, double time,
-                             in Matrix4x4 unit, double opacity, float blur = 0, float shadow = 1, Vector2 nudge = default)
+                             in Matrix4x4 unit, double opacity, float blur = 0, float shadow = 1, Vector2 nudge = default,
+                             bool poseInUnit = false, bool? particles = null)
     {
+        var particleLayer = particles ?? colour != 1;
         var parts = word.Boundaries is null ? default : line.PartOpacities(run, time);
         if (word.Action is null && word.Symbols.Length == 0 && (ReduceMotion || !(StyleShown.WordPresence > 1)))
         {
@@ -835,21 +841,42 @@ internal abstract class StageLayer(CompositionKind kind, IWordBreaker breaker, L
         }
         // An action word's motion about the word's centre (scale with the spin's turn, then the offset in ems), and
         // its colour cue laid over it; the symbol beside it moves with it and fades in from the word's onset.
-        var moved = Acting(word, run, time, unit, nudge, out var pose);
+        var moved = Acting(word, run, time, unit, nudge, out var pose, out var rest, poseInUnit);
         var shown = opacity * pose.Opacity;
         if (!ReduceMotion && StyleShown.WordPresence > 1) blur = Math.Max(blur, Points(PresenceOf(run, time).Blur));
         // An action's glow (and Reduce Motion's cue): a shadow in the word's own colour.
         var tone = word.Colours[Math.Min(colour, word.Colours.Length - 1)];
         var glow = LivelyWord.Glow(pose, tone, word.FontSize);
-        DrawInk(dc, word.Labels[colour], moved, word.LabelOffset + nudge, shown, blur, shadow, word.Boundaries, parts,
-                word.RightToLeft, glow);
-        if (pose.Tints) DrawCue(dc, word.Labels[colour], word.Colours[Math.Min(colour, word.Colours.Length - 1)], pose, moved, word.LabelOffset + nudge, shown);
+        // An action word's letters move on their own while its action runs (the Mac's per-glyph pass), once every part of
+        // it is there and while it is drawn flat; the particles come with its first colour only.
+        var lettersDrawn = false;
+        var around = Homography.IsAffine(rest) && particleLayer;
+        var wordCentre = (word.Symbols.Length > 0 ? word.Pivot : word.LabelOffset) + nudge;
+        var wordBox = word.Labels[colour].Box;
+        if (around) DrawLivelyAround(dc, Homography.Flat(rest), wordCentre, wordBox, pose, time - run.Start, word.FontSize, tone, (float)shown, front: false);
+        var labelWorld = Matrix4x4.CreateTranslation(word.LabelOffset.X + nudge.X, word.LabelOffset.Y + nudge.Y, 0) * moved;
+        if (word.Action is { } livelyAction && Homography.IsAffine(labelWorld) && Revealed(parts))
+        {
+            var flat = Homography.Flat(labelWorld);
+            var worldScale = MathF.Sqrt(MathF.Abs(flat.GetDeterminant()));
+            var cue = pose.Tints ? LivelyWord.Tinted(pose, tone with { W = 1 }, 1) : default;
+            lettersDrawn = DrawLively(dc, word.Labels[colour], flat, worldScale, new RunAccent(null, livelyAction, word.Gentle),
+                                      run.Start, run.End, time, word.FontSize, tone, tone, pose, (float)shown, shadow,
+                                      glow.Visible ? glow with { Radius = glow.Radius * worldScale } : GlowSpec.None, cue, particleLayer);
+        }
+        if (!lettersDrawn)
+        {
+            DrawInk(dc, word.Labels[colour], moved, word.LabelOffset + nudge, shown, blur, shadow, word.Boundaries, parts,
+                    word.RightToLeft, glow);
+            if (pose.Tints) DrawCue(dc, word.Labels[colour], word.Colours[Math.Min(colour, word.Colours.Length - 1)], pose, moved, word.LabelOffset + nudge, shown);
+        }
         if (word.Symbols.Length > colour)
         {
             var symbol = shown * WordActionMotion.SymbolOpacity(time - run.Start);
             DrawInk(dc, word.Symbols[colour], moved, word.SymbolOffset + nudge, symbol, blur, shadow, glow: glow);
             if (pose.Tints) DrawCue(dc, word.Symbols[colour], word.Colours[Math.Min(colour, word.Colours.Length - 1)], pose, moved, word.SymbolOffset + nudge, symbol);
         }
+        if (around) DrawLivelyAround(dc, Homography.Flat(rest), wordCentre, wordBox, pose, time - run.Start, word.FontSize, tone, (float)shown, front: true);
     }
 
     /// <summary>
@@ -858,9 +885,18 @@ internal abstract class StageLayer(CompositionKind kind, IWordBreaker breaker, L
     /// in perspective, the tilt, then the travel in ems of its size; word presence about the same centre after it.
     /// Unchanged when the word takes no action or its motion is over.
     /// </summary>
-    protected Matrix4x4 Acting(StageWord word, StageRun run, double time, in Matrix4x4 unit, Vector2 nudge, out LivelyPose pose)
+    protected Matrix4x4 Acting(StageWord word, StageRun run, double time, in Matrix4x4 unit, Vector2 nudge, out LivelyPose pose) =>
+        Acting(word, run, time, unit, nudge, out pose, out _);
+
+    /// <summary>As <see cref="Acting(StageWord, StageRun, double, in Matrix4x4, Vector2, out LivelyPose)"/>, with
+    /// <paramref name="rest"/> the word's frame before its action (word presence and the unit).</summary>
+    private Matrix4x4 Acting(StageWord word, StageRun run, double time, in Matrix4x4 unit, Vector2 nudge, out LivelyPose pose,
+                             out Matrix4x4 rest, bool poseInUnit = false)
     {
         pose = word.Action is { } action ? ActionPose(new RunAccent(null, action, word.Gentle), run.Start, run.End, time) : LivelyPose.Identity;
+        rest = unit;
+        // A layout that moves the word's whole piece itself (Portal's pill) has the pose in the unit already.
+        if (poseInUnit) return unit;
         // Word presence (Mac queue item 5): a rise and grow as the word arrives, a swell while it is sung, a drift up
         // as the line leaves. None under Reduce Motion.
         var (presenceDy, presenceScale, _) = ReduceMotion ? (0.0, 1.0, 0.0) : PresenceOf(run, time);
@@ -872,7 +908,8 @@ internal abstract class StageLayer(CompositionKind kind, IWordBreaker breaker, L
         var presence = presenceDy == 0 && presenceScale == 1 ? Matrix4x4.Identity
             : Matrix4x4.CreateTranslation(-centre.X, -centre.Y, 0) * Matrix4x4.CreateScale((float)presenceScale, (float)presenceScale, 1)
               * Matrix4x4.CreateTranslation(centre.X, centre.Y + (float)(presenceDy * size), 0);
-        return lively * presence * unit;
+        rest = presence * unit;
+        return lively * rest;
     }
 
     /// <summary>The line being drawn: how far it has left (0 while it stays).</summary>

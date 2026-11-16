@@ -122,6 +122,7 @@ var fixtures = new Dictionary<string, Func<SceneSnapshot>>
     ["credits"] = () => ExtrasFixtures.Credits(),
     ["highlight"] = () => ExtrasFixtures.Highlight(),
     ["accents"] = () => Fixtures.Accents(),
+    ["actions"] = () => Fixtures.Actions(),
     // The stage layouts' review lines (StageFixtures.cs): fast word runs, and long lines with a pause and pictures.
     ["fast"] = () => StageFixtures.Fast(style),
     ["long"] = () => StageFixtures.Long(style),

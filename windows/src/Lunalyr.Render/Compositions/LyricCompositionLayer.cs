@@ -144,6 +144,46 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
         Sheet is { } sheet && StyleShown is { ActionWords: true } style && row >= 0 && row < sheet.Lines.Count
         && ActionRepeats.Of(sheet.Lines, style.WordLists, Breaker, style.BackingVocals).Contains(row);
 
+    private readonly LivelyLetters _lively = new();
+
+    /// <summary>
+    /// Spin's whirlwind and dark's vignette round a word (behind it, or the whirlwind's near half in front), in the frame
+    /// <paramref name="baseWorld"/> places the word's unit in before its pose (unit layout pixels → device).
+    /// </summary>
+    protected void DrawLivelyAround(ID2D1DeviceContext dc, in Matrix3x2 baseWorld, Vector2 centre, Vector2 box, in LivelyPose pose,
+                                    double elapsed, double size, Vector4 glowInk, float opacity, bool front)
+    {
+        if (!(pose.Twister > 0.005) && !(pose.Vignette > 0.005)) return;
+        _lively.DrawAround(dc, LivelyWord.Frame(pose, size, centre) * baseWorld, centre, box, pose, elapsed, size,
+                           new Vector4(glowInk.X, glowInk.Y, glowInk.Z, 1), opacity, front);
+    }
+
+    /// <summary>Whether every token of a run has arrived (no per-token opacities, or all of them full).</summary>
+    protected static bool Revealed(ReadOnlySpan<double> tokenOpacities)
+    {
+        foreach (var opacity in tokenOpacities)
+            if (opacity < 0.98) return false;
+        return true;
+    }
+
+    /// <summary>
+    /// Draws <paramref name="label"/> letter by letter, with its particles, while <paramref name="accent"/>'s action runs
+    /// (the Mac's per-glyph pass, 16 Nov 2026); false when nothing is running (Reduce Motion, before or after the
+    /// motion, or a label without letters), and the caller draws the label whole. <paramref name="world"/> maps the
+    /// label's layout pixels (from its centre) to the device, the pose already in it; <paramref name="cue"/> is the colour
+    /// laid over every letter (the pose's tint, a sweep's colour), none at alpha 0.
+    /// </summary>
+    protected bool DrawLively(ID2D1DeviceContext dc, Ink label, in Matrix3x2 world, float worldScale, in RunAccent accent,
+                              double onset, double end, double time, double size, Vector4 basis, Vector4 glowInk,
+                              in LivelyPose pose, float opacity, float shadow, GlowSpec glow, Vector4 cue, bool particles = true)
+    {
+        if (label.Letters is null) return false;
+        if (LivelyState.For(accent, time - onset, end - onset, StyleShown.ActionStrength, ReduceMotion, size,
+                            new Vector4(glowInk.X, glowInk.Y, glowInk.Z, 1), pose.Dy) is not { } state)
+            return false;
+        return _lively.Draw(dc, label, world, worldScale, state, opacity, shadow, basis with { W = 1 }, cue, glow, particles);
+    }
+
     /// <summary>The whole-word pose of <paramref name="accent"/>'s action at <paramref name="time"/> for a word sung from <paramref name="onset"/> to <paramref name="end"/>.</summary>
     protected LivelyPose ActionPose(in RunAccent accent, double onset, double end, double time) =>
         accent.Action is null ? LivelyPose.Identity
@@ -241,6 +281,7 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
         ReleaseOrb();
         _paint?.Dispose();
         _paint = null;
+        _lively.Dispose();
         _roundCaps?.Dispose();
         _roundCaps = null;
         _unitSquare?.Dispose();
@@ -1068,9 +1109,8 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
                 : LivelyPose.Identity;
             var lively = action.IsIdentity ? Matrix4x4.Identity : LivelyWord.Transform(action, size, Vector2.Zero, ink.Unit);
             var turning = !Homography.IsAffine(lively);
-            var local =
-                (turning ? Matrix3x2.Identity : Homography.Flat(lively))
-                * Matrix3x2.CreateRotation(Radians(run.Metrics.Rotation))
+            var restLocal =
+                Matrix3x2.CreateRotation(Radians(run.Metrics.Rotation))
                 * (ink.Symbol is null ? Matrix3x2.CreateScale((float)swellCap)
                     : Matrix3x2.CreateScale((float)swellCap, new Vector2(ink.LabelOffset.X, 0)))
                 * Matrix3x2.CreateRotation(Radians(reduce ? 0 : frame.DriftAngle * presence.Hold))
@@ -1081,9 +1121,14 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
                 * Matrix3x2.CreateTranslation((float)((drift.X + lateral * travel * presence.Out) * size), (float)((drift.Y - 0.26 * travel * presence.Out) * size))
                 * Matrix3x2.CreateTranslation((float)(origin.X + ink.Centre.X), (float)(origin.Y + ink.Centre.Y + run.Metrics.WaveOffset))
                 * block;
+            var local = turning ? restLocal : Homography.Flat(lively) * restLocal;
+            var onset = tokens[run.TokenStart].Source.Start;
+            var unitBox = new Vector2((float)ink.Unit.Width, (float)ink.Unit.Height);
+            var glowInk = new Vector4(ink.Glow.X, ink.Glow.Y, ink.Glow.Z, 1);
             var heldUp = 1 + plan.HeldY[r] * holding;
             var scale = contentScale * swell * swellCap * heldUp * transform.Scale * floatScale * Math.Sqrt(Math.Abs(action.Sx * action.Sy));
             visibility *= action.Opacity;
+            DrawLivelyAround(dc, restLocal, Vector2.Zero, unitBox, action, time - onset, size, glowInk, (float)visibility, front: false);
             if (turning)
             {
                 // Mid-spin: the word, its symbol and its reading turn as one, in perspective (no tile, sweep or blur).
@@ -1098,6 +1143,7 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
                 if (ink.Reading is { } spunReading)
                     StageLayer.DrawInk(dc, spunReading, depth, ink.ReadingOffset,
                                        visibility * frame.ReadingOpacity(plan.TokenOpacities.AsSpan(run.TokenStart, run.TokenCount)));
+                DrawLivelyAround(dc, restLocal, Vector2.Zero, unitBox, action, time - onset, size, glowInk, (float)visibility, front: true);
                 continue;
             }
             var blur = Combine(Points(motion.Blur(presentation.Progress, reduce) * presence.In), Points(2.4 * travel * presence.Out)) * (float)scale;
@@ -1145,10 +1191,25 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
                 visibility = 1;
             }
             if (tiles) DrawRunTiles(dc, segments!, ink.Label, labelWorld, size, run.RightToLeft, time, visibility, overlay: false, carried);
-            ink.Label.Draw(dc, labelWorld, (float)scale, (float)visibility, blur, glow, shadow,
-                           run.Boundaries, tokenOpacities, run.RightToLeft, clip);
+            // An action word's letters move on their own while its action runs (the Mac's per-glyph pass): once every
+            // token of it is there, off a tile and unclipped. A sweep's colour then tints the whole word as it fills.
+            var lettersDrawn = false;
+            if (ink.Action is { } livelyAction && !tiles && !clip.IsSet && Revealed(tokenOpacities))
+            {
+                var basis = ink.Sung is not null
+                    ? Vector4.Lerp(ink.RestColour, ink.SungColour, (float)Math.Clamp(SungSweep.Progress(run, tokens, time), 0, 1))
+                    : ink.RestColour;
+                var cue = ink.Sung is not null || action.Tints ? LivelyWord.Tinted(action, basis with { W = 1 }, 1) : default;
+                lettersDrawn = DrawLively(dc, ink.Label, labelWorld, (float)scale, new RunAccent(null, livelyAction, ink.Gentle),
+                                          tokens[run.TokenStart].Source.Start,
+                                          tokens[run.TokenStart + Math.Max(0, run.TokenCount - 1)].Source.End, time, size, basis,
+                                          new Vector4(ink.Glow.X, ink.Glow.Y, ink.Glow.Z, 1), action, (float)visibility, shadow, glow, cue);
+            }
+            if (!lettersDrawn)
+                ink.Label.Draw(dc, labelWorld, (float)scale, (float)visibility, blur, glow, shadow,
+                               run.Boundaries, tokenOpacities, run.RightToLeft, clip);
             // "Sung sweep": the sung colour fills the word from its leading edge as it is sung (the Mac's SungText).
-            if (ink.Sung is { } sung && !tiles && !clip.IsSet)
+            if (ink.Sung is { } sung && !tiles && !clip.IsSet && !lettersDrawn)
             {
                 var tint = SungSweep.Progress(run, tokens, time);
                 if (tint > 0)
@@ -1165,7 +1226,8 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
                 visibility = drawnVisibility;
             }
             if (ink.HasAccent)
-                DrawAccent(dc, run, tokens, ink, labelWorld, local, scale, visibility, blur, glow, shadow, action, time, clip);
+                DrawAccent(dc, run, tokens, ink, labelWorld, local, scale, visibility, blur, glow, shadow, action, time, clip, lettersDrawn);
+            DrawLivelyAround(dc, restLocal, Vector2.Zero, unitBox, action, time - onset, size, glowInk, (float)visibility, front: true);
             if (ink.Reading is { } reading)
             {
                 var runTokens = plan.TokenOpacities.AsSpan(run.TokenStart, run.TokenCount);
@@ -1199,11 +1261,12 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
     /// </summary>
     private static void DrawAccent(ID2D1DeviceContext dc, EditorialRun run, IReadOnlyList<EditorialToken> tokens, RunInk ink,
                                    in Matrix3x2 labelWorld, in Matrix3x2 local, double scale, double visibility, float blur,
-                                   GlowSpec glow, float shadow, in LivelyPose action, double time, InkClip clip)
+                                   GlowSpec glow, float shadow, in LivelyPose action, double time, InkClip clip,
+                                   bool lettersDrawn = false)
     {
         var onset = tokens[run.TokenStart].Source.Start;
         var sweep = ink.SymbolSung is not null || action.Tints ? SungSweep.Progress(run, tokens, time) : 0;
-        if (action.Tints)
+        if (action.Tints && !lettersDrawn)
         {
             var (r, g, b) = action.Multiply;
             var basis = Vector4.Lerp(ink.RestColour, ink.SungColour, (float)Math.Clamp(sweep, 0, 1));

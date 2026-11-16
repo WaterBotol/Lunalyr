@@ -249,7 +249,9 @@ internal sealed class TextKit : IDisposable
             Origin = new Vector2(pad - metrics.Left, pad - metrics.Top),
             SoftShift = new Vector2(-metrics.Left, -metrics.Top),
         };
-        return Queue(job, box, pad);
+        var ink = Queue(job, box, pad);
+        ink.Letters = InkLetters.Measure(layout, metrics, box);
+        return ink;
     }
 
     /// <summary>

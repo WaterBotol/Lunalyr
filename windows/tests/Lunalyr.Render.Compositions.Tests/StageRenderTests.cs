@@ -406,11 +406,14 @@ public sealed class StageRenderTests : IDisposable
     {
         var line = Japanese;
         var time = line.Words.Max(w => w.Start) + 0.9;
-        using var off = Layer(id);
-        using var stranger = Layer(id);
-        var none = Frame(off, Scene(line, "kimino namaewo yonde yozorani kieta", ReadingPlacement.Off), time);
+        // Pixel for pixel, so on WARP: 消え is an action word now (dissolve), and its dust's many small draws are where a
+        // hardware GPU shared with other tests now and then rasterises a pixel differently (see SpreadSetupRenderTests).
+        using var warp = new Offscreen(Width, Height, warp: true);
+        using var off = Layer(id, warp);
+        using var stranger = Layer(id, warp);
+        var none = Frame(off, Scene(line, "kimino namaewo yonde yozorani kieta", ReadingPlacement.Off), time, warp);
         var other = Scene(line) with { Readings = new Dictionary<int, string> { [5] = "ame" } };
-        Assert.Equal(none, Frame(stranger, other, time));
+        Assert.Equal(none, Frame(stranger, other, time, warp));
     }
 
     // Ported from StageReadingTests.swift: testReadingsStayOnScreen

@@ -84,6 +84,30 @@ public static class Fixtures
         return Scene("Word Accents", Parse(LyricFormat.Ttml, payload, 30), style: style);
     }
 
+    /// <summary>
+    /// One line per action word (the Mac's 16 Nov 2026 eighteen), every 4 s from 10 s: two short words, then the action
+    /// word at +0.8 s, held 1.2 s. Mid-action shots: <c>actions@&lt;10 + 4·k + 0.8 + t&gt;</c> for action k.
+    /// </summary>
+    public static SceneSnapshot Actions(LyricStyle? style = null)
+    {
+        (string Lead, string Word)[] lines =
+        [
+            ("watch me", "spin"), ("we can", "float"), ("I will", "fall"), ("I just", "shake"), ("we all", "jump"),
+            ("watch it", "grow"), ("I will", "shrink"), ("it will", "fade"), ("we will", "burn"), ("so very", "cold"),
+            ("I will", "bleed"), ("into the", "dark"), ("it will", "break"), ("I will", "melt"), ("hear the", "echo"),
+            ("feel my", "heartbeat"), ("ride the", "wave"), ("I will", "sink"),
+        ];
+        var sung = new List<Sung[]>();
+        for (var k = 0; k < lines.Length; k++)
+        {
+            var start = 10.0 + 4 * k;
+            var lead = lines[k].Lead.Split(' ');
+            sung.Add([new(lead[0], start, start + 0.35), new(lead[1], start + 0.4, start + 0.75), new(lines[k].Word, start + 0.8, start + 2.0)]);
+        }
+        var payload = Ttml("en", [.. sung]);
+        return Scene("Action Words", Parse(LyricFormat.Ttml, payload, 90), style: style);
+    }
+
     /// <summary>Two unspaced Japanese lines timed by word, with readings.</summary>
     public static SceneSnapshot Japanese(LyricStyle? style = null)
     {
