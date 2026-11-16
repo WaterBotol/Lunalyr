@@ -261,8 +261,11 @@ extension LyricStyleProfiles {
     /// typeface step uses it, so the floating lyrics match the desktop's.
     static func setTypeface(_ choice: Settings.FontChoice, settings: Settings, defaults: UserDefaults) {
         settings.selectFontChoice(choice)
-        for surface in LyricsSurface.allCases {
-            let key = storeKey(surface)
+        // The kept styles, and every monitor's own (`MonitorLookSlots`).
+        let monitorKeys = defaults.dictionaryRepresentation().keys.filter {
+            $0.hasPrefix("custom.look.") && ($0.hasSuffix(".desktop") || $0.hasSuffix(".floating"))
+        }
+        for key in LyricsSurface.allCases.map(storeKey) + monitorKeys.sorted() {
             guard var style = defaults.dictionary(forKey: key) else { continue }
             style["fontChoice"] = choice.rawValue
             defaults.set(style, forKey: key)
