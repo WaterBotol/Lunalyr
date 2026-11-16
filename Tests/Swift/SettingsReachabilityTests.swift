@@ -198,6 +198,7 @@ final class SettingsReachabilityTests: XCTestCase {
 private enum SourceKeys {
     static let sourceCustomKeys: [String] = [
         "custom.actionWords.enabled",
+        "custom.actionWords.strength",
         "custom.actionWords.words",
         "custom.albumGradientWallpaper",
         "custom.animationRate",

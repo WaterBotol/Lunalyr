@@ -140,12 +140,9 @@ enum WordAction: String, CaseIterable, Identifiable {
     case dissolve
     /// A warm flickering glow.
     case flicker
-    /// A cool, paler frost tint.
+    /// Frost spreads over the word ("Freeze"; stored as "frost").
     case frost
-    // PREVIEW (next/action-words-preview): new actions. Today's motion
-    // (`WordActionPose.make`) leaves them still; only the lively style
-    // (`LivelyAction`) moves them.
-    /// Ink runs down from the letters in thin drips.
+    /// Red soaks into the letters and runs from them.
     case bleed
     /// A shadow swallows the word from one edge, then light returns.
     case dark
@@ -161,15 +158,26 @@ enum WordAction: String, CaseIterable, Identifiable {
     case wave
     /// Sinks below the line with a few bubbles.
     case sink
-    // Brainstorm candidates rendered for the preview but not listed by default.
-    case explode, scream, whisper, ghost, glow, electric
 
     var id: String { rawValue }
 
-    /// The actions today's app has (the rest are preview-only).
-    static let today: [WordAction] = [.spin, .float, .dip, .shake, .hop, .grow, .shrink, .dissolve, .flicker, .frost]
-    /// Brainstorm actions previewed but dropped from the default list.
-    static let dropped: [WordAction] = [.explode, .scream, .whisper, .ghost, .glow, .electric]
+    /// An action as a word list stores it: its raw value, or (for a list
+    /// saved by hand or by an older build) its title or a former name.
+    /// Unknown names, and actions no longer offered (explode, scream,
+    /// whisper, ghost, glow, electric), give nil, so the word is ignored
+    /// rather than the list rewritten.
+    init?(listValue: String) {
+        let name = listValue.trimmingCharacters(in: .whitespaces).lowercased()
+        if let action = WordAction(rawValue: name) { self = action; return }
+        let aliases: [String: WordAction] = [
+            "freeze": .frost, "ice": .frost, "warm flicker": .flicker, "burn": .flicker, "fire": .flicker,
+            "heartbeat": .pulse, "fade": .dissolve, "vanish": .dissolve, "fall": .dip, "jump": .hop,
+            "bounce": .hop, "drown": .sink, "break": .shatter, "blood": .bleed, "darkness": .dark,
+            "turn": .spin, "rotate": .spin, "fly": .float, "tremble": .shake, "ocean": .wave,
+        ]
+        guard let action = aliases[name] else { return nil }
+        self = action
+    }
 
     var title: String {
         switch self {
@@ -181,7 +189,7 @@ enum WordAction: String, CaseIterable, Identifiable {
         case .grow: return "Grow"
         case .shrink: return "Shrink"
         case .dissolve: return "Dissolve"
-        case .flicker: return "Warm flicker"
+        case .flicker: return "Burn"
         case .frost: return "Freeze"
         case .bleed: return "Bleed"
         case .dark: return "Dark"
@@ -191,22 +199,6 @@ enum WordAction: String, CaseIterable, Identifiable {
         case .pulse: return "Heartbeat"
         case .wave: return "Wave"
         case .sink: return "Sink"
-        case .explode: return "Explode"
-        case .scream: return "Scream"
-        case .whisper: return "Whisper"
-        case .ghost: return "Ghost"
-        case .glow: return "Glow"
-        case .electric: return "Electric"
-        }
-    }
-
-    /// Seconds, from the word's onset.
-    var duration: Double {
-        switch self {
-        case .shake: return 0.6
-        case .dip, .hop: return 0.7
-        case .spin, .grow, .shrink: return 0.8
-        default: return 0.9
         }
     }
 
@@ -222,9 +214,8 @@ enum WordAction: String, CaseIterable, Identifiable {
         ("fade", .dissolve), ("disappear", .dissolve), ("vanish", .dissolve),
         ("burn", .flicker), ("fire", .flicker),
         ("freeze", .frost), ("frozen", .frost), ("froze", .frost), ("cold", .frost), ("ice", .frost), ("icy", .frost),
-        // PREVIEW: the new actions. Plurals, -ing and -ed fold through
-        // `englishForms` (bleeds, melting, echoes, shattered, drowning);
-        // irregular forms are listed.
+        // Plurals, -ing and -ed fold through `englishForms` (bleeds,
+        // melting, echoes, shattered, drowning); irregular forms are listed.
         ("bleed", .bleed), ("bled", .bleed), ("blood", .bleed),
         ("dark", .dark), ("darker", .dark), ("darkness", .dark), ("shadow", .dark),
         ("break", .shatter), ("broken", .shatter), ("shatter", .shatter), ("crack", .shatter),
@@ -235,16 +226,6 @@ enum WordAction: String, CaseIterable, Identifiable {
         ("sink", .sink), ("drown", .sink),
     ]
 
-    /// PREVIEW: the dropped brainstorm actions' words, for the renders only.
-    static let droppedList: [(word: String, action: WordAction)] = [
-        ("explode", .explode), ("explosion", .explode), ("boom", .explode), ("bang", .explode),
-        ("scream", .scream), ("shout", .scream), ("yell", .scream), ("loud", .scream),
-        ("whisper", .whisper), ("quiet", .whisper), ("softly", .whisper),
-        ("ghost", .ghost), ("haunt", .ghost),
-        ("glow", .glow), ("shine", .glow), ("bright", .glow), ("light", .glow),
-        ("electric", .electric), ("shock", .electric), ("spark", .electric),
-    ]
-
     static let defaults: [String: String] =
         Dictionary(defaultList.map { ($0.word, $0.action.rawValue) }, uniquingKeysWith: { first, _ in first })
 }
@@ -253,6 +234,9 @@ enum WordAction: String, CaseIterable, Identifiable {
 struct WordAccent: Equatable {
     var symbol: String?
     var action: WordAction?
+    /// A repeat of an action word already heard in the song (every second
+    /// repeat): it moves gently rather than in full (`WordAccentPlan.repeats`).
+    var gentle = false
 }
 
 /// The accents of one or more lines, by the key of each run's first token
@@ -283,11 +267,13 @@ struct WordAccentPlan: Equatable {
     /// `englishKey` words to SF Symbol names and `WordAction` raw values;
     /// nil turns that feature off.
     static func make(words: [LyricsFetcher.Word], glue: [Bool],
-                     symbols: [String: String]?, actions: [String: WordAction]?) -> WordAccentPlan {
-        guard symbols?.isEmpty == false || actions?.isEmpty == false else { return .none }
+                     symbols: [String: String]?, actions: [String: WordAction]?,
+                     gentle: Bool = false) -> WordAccentPlan {
+        guard symbols?.isEmpty == false || actions != nil else { return .none }
         var plan = WordAccentPlan()
         var shownSymbols = 0, moved = 0
         var seen = Set<String>()  // symbols shown
+        let script = actions == nil ? ActionLexicon.Script() : ActionLexicon.Script(words.map(\.text).joined(separator: " "))
         for range in LyricRuns.ranges(glue, count: words.count) {
             let text = words[range].map(\.text).joined()
             guard let first = words[range].first(where: { LyricRuns.isVisible($0.text) }) else { continue }
@@ -298,8 +284,10 @@ struct WordAccentPlan: Equatable {
                 accent.symbol = found.value
                 shownSymbols += 1
             }
-            if let actions, moved < maxActionsPerLine, let found = LyricWordIcons.match(text, in: actions) {
-                accent.action = found.value
+            if let actions, moved < maxActionsPerLine,
+               let found = ActionLexicon.match(text, user: actions, script: script) {
+                accent.action = found.action
+                accent.gentle = gentle
                 moved += 1
             }
             if accent != WordAccent() {
@@ -314,6 +302,54 @@ struct WordAccentPlan: Equatable {
         return plan
     }
 
+    /// The word key of the line's action word, if any (the same matching
+    /// as `make`, so the two always agree).
+    static func actionKey(words: [LyricsFetcher.Word], glue: [Bool], actions: [String: WordAction]) -> String? {
+        let script = ActionLexicon.Script(words.map(\.text).joined(separator: " "))
+        for range in LyricRuns.ranges(glue, count: words.count) {
+            let text = words[range].map(\.text).joined()
+            guard words[range].contains(where: { LyricRuns.isVisible($0.text) }) else { continue }
+            if let found = ActionLexicon.match(text, user: actions, script: script) { return found.key }
+        }
+        return nil
+    }
+
+    /// Which lines of a song move gently: an action word acts in full the
+    /// first time it is sung, and its later repeats alternate gentle and
+    /// full (2nd gentle, 3rd full, 4th gentle, ...), so a chorus does not
+    /// tire. A pure function of the song's lines and the lists, so seeking,
+    /// layout changes and memo evictions always agree; kept per song.
+    @MainActor
+    static func gentleLines(_ lines: [LyricsFetcher.Line], fingerprint: Int, settings: Settings = .shared,
+                            liftsBacking: Bool = BackingVocals.isOn) -> Set<Int> {
+        guard let actions = settings.wordAccentLists.actions else { return [] }
+        let key = RepeatKey(fingerprint: fingerprint, version: settings.wordAccentLists.version, lifts: liftsBacking)
+        if let cached = repeatMemo[key] { return cached }
+        var heard: [String: Int] = [:]
+        var gentle = Set<Int>()
+        for (index, line) in lines.enumerated() where !line.words.isEmpty {
+            var words = line.words
+            var glue = LyricRuns.rollingGlue(line: line, words: words)
+            if liftsBacking {
+                let split = BackingVocals.split(words, glue: glue)
+                words = split.main; glue = split.mainGlue
+            }
+            guard let found = actionKey(words: words, glue: glue, actions: actions) else { continue }
+            let count = heard[found, default: 0]
+            if !count.isMultiple(of: 2) { gentle.insert(index) }
+            heard[found] = count + 1
+        }
+        if repeatMemo.count > 8 { repeatMemo.removeAll(keepingCapacity: true) }
+        repeatMemo[key] = gentle
+        return gentle
+    }
+    private struct RepeatKey: Hashable {
+        let fingerprint: Int
+        let version: Int
+        let lifts: Bool
+    }
+    @MainActor private static var repeatMemo: [RepeatKey: Set<Int>] = [:]
+
     /// The plan for one line with the app's lists, kept for the line so a
     /// frame never matches the words again. Bracketed backing vocals, which
     /// `LyricLineView` lifts out and draws without accents, are left out
@@ -321,15 +357,16 @@ struct WordAccentPlan: Equatable {
     /// symbol or action.
     @MainActor
     static func line(_ words: [LyricsFetcher.Word], glue: [Bool], settings: Settings = .shared,
-                     liftsBacking: Bool = BackingVocals.isOn) -> WordAccentPlan {
+                     liftsBacking: Bool = BackingVocals.isOn, gentle: Bool = false) -> WordAccentPlan {
         let lists = settings.wordAccentLists
         guard lists.symbols != nil || lists.actions != nil else { return .none }
-        let key = MemoKey(words: words.map(\.presentationID), glue: glue, version: lists.version, lifts: liftsBacking)
+        let key = MemoKey(words: words.map(\.presentationID), glue: glue, version: lists.version, lifts: liftsBacking,
+                          gentle: gentle)
         if let cached = memo[key] { return cached }
         if memo.count > 96 { memo.removeAll(keepingCapacity: true) }
         let lead = liftsBacking ? BackingVocals.split(words, glue: glue) : nil
         let plan = make(words: lead?.main ?? words, glue: lead?.mainGlue ?? glue,
-                        symbols: lists.symbols, actions: lists.actions)
+                        symbols: lists.symbols, actions: lists.actions, gentle: gentle)
         memo[key] = plan
         return plan
     }
@@ -354,6 +391,7 @@ struct WordAccentPlan: Equatable {
         let version: Int
         var lifts = false
         var window = false
+        var gentle = false
     }
     @MainActor private static var memo: [MemoKey: WordAccentPlan] = [:]
 
@@ -372,91 +410,9 @@ struct WordAccentPlan: Equatable {
 
 // MARK: - Motion
 
-/// One frame of an action word's motion, relative to where its layout has
-/// the word: travel in ems of the word's type size, a turn about its
-/// upright axis in degrees, and the colour cues. Exactly `identity`
-/// before the onset and from `duration` on, so a word is never left
-/// displaced, scaled, faded or tinted.
-struct WordActionPose: Equatable {
-    var dx = 0.0
-    var dy = 0.0
-    var turn = 0.0
-    var scale = 1.0
-    var opacity = 1.0
-    /// 0...1: a glow in the word's own glow ink.
-    var glow = 0.0
-    /// 0...1: the word's ink multiplied warmer (orange) or cooler (blue).
-    /// Multiplying never lightens, so dark lyrics keep their contrast.
-    var warm = 0.0
-    var cool = 0.0
-
-    static let identity = WordActionPose()
-    var isIdentity: Bool { self == .identity }
-
-    /// Rises over the first `rise` of 0...1 and falls over the last `fall`.
-    static func bump(_ p: Double, rise: Double, fall: Double) -> Double {
-        Easing.smoothstep(p / rise) * (1 - Easing.smoothstep((p - (1 - fall)) / fall))
-    }
-
-    /// The pose `elapsed` seconds after the word's onset. Under Reduce
-    /// Motion nothing moves, scales or fades: the word only glows in its
-    /// own ink (warmer or cooler for the colour actions) and settles back.
-    static func make(_ action: WordAction, elapsed: Double, reduceMotion: Bool) -> WordActionPose {
-        let duration = action.duration
-        // PREVIEW: the new actions have no motion today.
-        guard elapsed > 0, elapsed < duration, WordAction.today.contains(action) else { return .identity }
-        let p = elapsed / duration
-        var pose = WordActionPose()
-        if reduceMotion {
-            let cue = bump(p, rise: 0.2, fall: 0.5)
-            switch action {
-            case .flicker: pose.warm = 0.5 * cue; pose.glow = 0.5 * cue
-            case .frost: pose.cool = 0.5 * cue
-            default: pose.glow = 0.6 * cue
-            }
-            return pose
-        }
-        switch action {
-        case .spin:
-            // Smootherstep, so the turn starts and ends at rest.
-            pose.turn = 360 * (p * p * p * (p * (p * 6 - 15) + 10))
-        case .float:
-            let lift = bump(p, rise: 0.35, fall: 0.3)
-            pose.dy = -0.22 * lift - 0.02 * sin(2 * .pi * 2 * p) * lift
-        case .dip:
-            pose.dy = 0.16 * bump(p, rise: 0.3, fall: 0.55)
-        case .shake:
-            pose.dx = 0.045 * sin(2 * .pi * 5 * p) * (1 - p) * Easing.smoothstep(p / 0.08)
-        case .hop:
-            pose.dy = p < 0.6 ? -0.24 * sin(.pi * p / 0.6) : -0.06 * sin(.pi * (p - 0.6) / 0.4)
-        case .grow:
-            pose.scale = 1 + 0.16 * bump(p, rise: 0.35, fall: 0.4)
-        case .shrink:
-            pose.scale = 1 - 0.16 * bump(p, rise: 0.35, fall: 0.4)
-        case .dissolve:
-            pose.opacity = 1 - 0.7 * bump(p, rise: 0.3, fall: 0.45)
-        case .flicker:
-            let heat = bump(p, rise: 0.15, fall: 0.35)
-            pose.warm = 0.6 * heat
-            pose.glow = heat * (0.6 + 0.4 * abs(sin(2 * .pi * 6 * p)))
-            pose.opacity = 1 - 0.12 * heat * abs(sin(2 * .pi * 7.3 * p))
-        case .frost:
-            pose.cool = 0.7 * bump(p, rise: 0.25, fall: 0.4)
-        default:
-            break
-        }
-        return pose
-    }
-
-    /// The colour a word's ink is multiplied by.
-    var multiply: Color {
-        Color(red: 1 - 0.35 * cool, green: 1 - 0.25 * warm - 0.12 * cool, blue: 1 - 0.55 * warm)
-    }
-}
-
-/// Draws an action word's motion on top of its layout's own. Render-only
-/// transforms: the word's measured place, and so the line's fitting, never
-/// change.
+/// Draws an action word's motion on top of its layout's own
+/// (`LivelyActionEffect`). Render-only transforms: the word's measured
+/// place, and so the line's fitting, never change.
 struct WordActionEffect: ViewModifier {
     let action: WordAction
     /// Seconds since the word's onset.
@@ -465,33 +421,17 @@ struct WordActionEffect: ViewModifier {
     let size: CGFloat
     /// The word's own glow ink.
     var glow: Color = .white
-    @Environment(\.lyricReduceMotion) private var reduceMotion
-
-    /// PREVIEW: seconds the word is held (end − onset), so the lively style
-    /// can scale with it.
+    /// Seconds the word is held (end − onset); the motion grows with it.
     var hold: Double? = nil
-    @Environment(\.lyricWordActionStyle) private var style
+    /// A chorus repeat (`WordAccent.gentle`): moves gently.
+    var gentle = false
+    @Environment(\.lyricReduceMotion) private var reduceMotion
+    @Environment(\.lyricActionStrength) private var strength
 
     func body(content: Content) -> some View {
-        if case .lively(let amount) = style {
-            content.modifier(LivelyActionEffect(action: action, elapsed: elapsed,
-                                                hold: hold ?? 0.6,
-                                                amount: amount, size: size, glow: glow, reduceMotion: reduceMotion))
-        } else {
-            today(content)
-        }
-    }
-
-    private func today(_ content: Content) -> some View {
-        let pose = WordActionPose.make(action, elapsed: elapsed, reduceMotion: reduceMotion)
-        return content
-            .colorMultiply(pose.multiply)
-            .shadow(color: glow.opacity(0.75 * pose.glow), radius: max(1, size * 0.22 * CGFloat(pose.glow)))
-            // The turn about the upright axis as a flat 2D squeeze (cos of
-            // the angle across): no 3D layer, and never wider than the word.
-            .scaleEffect(x: CGFloat(pose.scale * cos(pose.turn * .pi / 180)), y: CGFloat(pose.scale))
-            .offset(x: CGFloat(pose.dx) * size, y: CGFloat(pose.dy) * size)
-            .opacity(pose.opacity)
+        content.modifier(LivelyActionEffect(action: action, elapsed: elapsed, hold: hold ?? 0.6,
+                                            amount: strength * (gentle ? LivelyAction.gentleShare : 1),
+                                            size: size, glow: glow, reduceMotion: reduceMotion, gentle: gentle))
     }
 }
 
@@ -502,7 +442,7 @@ extension View {
                     glow: Color = .white) -> some View {
         if let action = accent?.action {
             modifier(WordActionEffect(action: action, elapsed: time - start, size: size, glow: glow,
-                                      hold: end.map { $0 - start }))
+                                      hold: end.map { $0 - start }, gentle: accent?.gentle ?? false))
         } else {
             self
         }
@@ -520,7 +460,7 @@ enum WordSymbolMark {
     /// Seconds the symbol takes to fade in from the word's onset.
     static let fadeIn = 0.3
 
-    /// PREVIEW: the onset-relative time a symbol's entrance needs, while it
+    /// The onset-relative time a symbol's entrance needs, while it
     /// is still coming in (nil before its onset is known or once settled),
     /// so a settled symbol's view stays equal frame to frame.
     static func entering(elapsed: Double) -> Double? {
@@ -542,8 +482,8 @@ enum WordSymbolMark {
     /// symbol is there, clear, from the line's first frame, so the word's
     /// width never changes as it fades in.
     static func inline(_ symbol: String, size: CGFloat, colour: Color, opacity: Double) -> Text {
-        Text(" ").font(.system(size: max(4, size * gap * 2.2)))
-            + Text(Image(systemName: symbol)).font(font(size)).foregroundStyle(colour.opacity(opacity))
+        (Text(" ").font(.system(size: max(4, size * gap * 2.2)))
+            + Text(Image(systemName: symbol)).font(font(size)).foregroundStyle(colour.opacity(opacity))).livelyStill()
     }
 }
 
@@ -557,12 +497,11 @@ struct WordSymbolView: View, Equatable {
     let sung: Color
     var tint: Double = 0
     var opacity: Double = 1
-    /// PREVIEW: seconds since the word's onset while the symbol is still
-    /// coming in (nil once it has settled, or for a preview), and the
-    /// word's action: in the lively style it pops in (`SymbolEntrancePose`).
+    /// Seconds since the word's onset while the symbol is still coming in
+    /// (nil once it has settled, or for a preview), and the word's action:
+    /// it pops in (`SymbolEntrancePose`); under Reduce Motion it only fades.
     var elapsed: Double? = nil
     var action: WordAction? = nil
-    @Environment(\.lyricWordActionStyle) private var style
     @Environment(\.lyricReduceMotion) private var reduceMotion
 
     static func == (lhs: Self, rhs: Self) -> Bool {
@@ -580,7 +519,7 @@ struct WordSymbolView: View, Equatable {
             }
         }
         Group {
-            if case .lively = style, !reduceMotion, let elapsed, elapsed < SymbolEntrancePose.duration {
+            if !reduceMotion, let elapsed, elapsed < SymbolEntrancePose.duration {
                 glyph.modifier(SymbolEntranceEffect(action: action, elapsed: elapsed, size: size))
             } else {
                 glyph

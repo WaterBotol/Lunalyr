@@ -1,40 +1,54 @@
 import SwiftUI
 
-// MARK: - PREVIEW: lively action words (next/action-words-preview)
-//
-// A bolder, more playful take on the action words, drawn only where the
-// environment asks for it (`lyricWordActionStyle = .lively`); the app's
-// default stays `.today`, so nothing ships by this file alone.
+// MARK: - Action words: the motion
 //
 // Two parts:
 // - a whole-word pose (`LivelyPose`): turn, scale, tilt, travel, tint, glow,
-//   applied around the word like today's `WordActionEffect`;
+//   applied around the word (`LivelyActionEffect`);
 // - a per-letter pass (`LivelyGlyphRenderer`, a `TextRenderer`, macOS 15+)
 //   that the layout's own word `Text` picks up from the environment
-//   (`lyricLivelyGlyphs`): letter-by-letter hops, shivers, dust, shards,
-//   drips, crystals, bubbles and sparkles, using the real glyph bounds.
+//   (`lyricLivelyGlyphs`, through `LivelyGlyphHook`): letter-by-letter hops,
+//   shivers, dust, shards, drips, crystals, bubbles and sparkles, using the
+//   real glyph bounds. macOS 14 draws the whole-word part only.
 //
 // Every effect is identity before the onset and from `duration` on. The
 // duration grows with how long the word is held, and so may outlast the
-// word's end by up to ~0.8 s; the amount (`Subtle ↔ Wild`, 0...1) and the
-// hold scale the size of every motion (`LivelyAction.intensity`).
+// word's end by up to ~1 s; the strength ("Action word strength": Subtle,
+// Middle, Wild) and the hold scale the size of every motion
+// (`LivelyAction.intensity`). Under Reduce Motion a word only glows
+// (`LivelyAction.reduceMotionCue`).
 
-/// Which action-word motion is drawn.
-enum WordActionStyle: Equatable {
-    /// Today's (`WordActionPose`).
-    case today
-    /// The lively preview, at an amount 0 (subtle) ... 1 (wild).
-    case lively(amount: Double)
+/// "Action word strength".
+enum ActionWordStrength: String, CaseIterable, Identifiable {
+    case subtle, middle, wild
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .subtle: return "Subtle"
+        case .middle: return "Middle"
+        case .wild: return "Wild"
+        }
+    }
+    /// The motion's amount, 0...1.
+    var amount: Double {
+        switch self {
+        case .subtle: return LivelyAction.subtle
+        case .middle: return LivelyAction.middle
+        case .wild: return LivelyAction.wild
+        }
+    }
 }
 
-private struct WordActionStyleKey: EnvironmentKey { static let defaultValue = WordActionStyle.today }
+private struct ActionStrengthKey: EnvironmentKey { static let defaultValue = LivelyAction.defaultAmount }
 private struct LivelyGlyphsKey: EnvironmentKey { static let defaultValue: LivelyGlyphs? = nil }
 private struct LivelyParticlesKey: EnvironmentKey { static let defaultValue = true }
 
 extension EnvironmentValues {
-    var lyricWordActionStyle: WordActionStyle {
-        get { self[WordActionStyleKey.self] }
-        set { self[WordActionStyleKey.self] = newValue }
+    /// "Action word strength" as an amount, 0...1 (set once at the lyric
+    /// layer's root; Wild by default).
+    var lyricActionStrength: Double {
+        get { self[ActionStrengthKey.self] }
+        set { self[ActionStrengthKey.self] = newValue }
     }
     /// The per-letter part of an action in progress, for the word's `Text`.
     var lyricLivelyGlyphs: LivelyGlyphs? {
@@ -52,6 +66,8 @@ enum LivelyAction {
     /// Wild.
     static let defaultAmount = 1.0
     static let subtle = 0.2, middle = 0.5, wild = 1.0
+    /// A chorus repeat moves at this share of the strength (`WordAccent.gentle`).
+    static let gentleShare = 0.35
 
     /// 0...1: the amount, scaled from 0.6× for a quickly sung word up to 1×
     /// for one held 1.2 s or longer.
@@ -83,12 +99,6 @@ enum LivelyAction {
         case .pulse: return max(1.0, h + 0.5)
         case .wave: return max(1.3, h + 0.6)
         case .sink: return max(2.2, h + 1.1)
-        case .explode: return 1.5
-        case .scream: return max(1.0, h + 0.4)
-        case .whisper: return max(1.3, h + 0.6)
-        case .ghost: return max(1.5, h + 0.6)
-        case .glow: return max(1.2, h + 0.5)
-        case .electric: return max(1.0, h + 0.4)
         }
     }
 
@@ -423,48 +433,31 @@ struct LivelyPose: Equatable {
             pose.dy = 0.62 * A * d
             pose.tilt = 2.5 * A * sin(2 * .pi * 0.7 * t) * L.clamp01(d)
             pose.cool = 0.3 * L.clamp01(d)
-        case .explode:
-            pose.glow = 1.2 * exp(-pow((t - 0.08) / 0.08, 2))
-        case .scream:
-            let k = L.ss(t / 0.07)
-            let r = L.ss((t - (D - 0.4)) / 0.4)
-            let s = k * (1 - r) * (0.85 + 0.15 * exp(-t / 0.15))
-            pose.sx = 1 + 0.7 * A * s
-            pose.sy = pose.sx
-            pose.dx = 0.03 * A * sin(2 * .pi * 17 * t) * s
-            pose.glow = 1.1 * s
-        case .whisper:
-            let w = L.envelope(t, attack: 0.35, release: 0.5, duration: D)
-            pose.sx = 1 - 0.35 * A * w
-            pose.sy = pose.sx
-            pose.opacity = 1 - 0.6 * A * w
-            pose.dy = -0.05 * A * w
-        case .ghost:
-            let g = L.envelope(t, attack: 0.35, release: 0.5, duration: D)
-            pose.opacity = 1 - 0.55 * A * g
-            pose.dx = 0.35 * A * g * sin(.pi * L.clamp01(t / D))
-            pose.dy = -0.1 * A * g
-            pose.cool = 0.4 * g
-        case .glow:
-            let e = L.envelope(t, attack: 0.25, release: 0.45, duration: D)
-            pose.glow = 1.6 * e
-            pose.bloom = A * e
-            pose.sx = 1 + 0.06 * A * e
-            pose.sy = pose.sx
-        case .electric:
-            let e = L.envelope(t, attack: 0.05, release: 0.3, duration: D)
-            let frame = Int(t * 30)
-            pose.dx = 0.05 * A * e * (L.rnd(7, frame, 1) * 2 - 1)
-            pose.dy = 0.04 * A * e * (L.rnd(7, frame, 2) * 2 - 1)
-            let flash = L.rnd(7, Int(t * 15), 3) > 0.7 ? 1.0 : 0.0
-            pose.glow = e * (0.3 + 1.3 * flash)
-            pose.cool = e * 0.35 * flash
         }
         return pose
     }
 }
 
 extension LivelyAction {
+    /// Reduce Motion's cue for an action: only a glow and an ink tint, rising
+    /// over the first fifth and fading over the last half of `duration`.
+    static func reduceMotionCue(_ action: WordAction, elapsed: Double, duration: Double,
+                                gentle: Bool = false) -> LivelyPose {
+        guard elapsed > 0, elapsed < duration else { return .identity }
+        let p = elapsed / duration
+        let cue = ss(p / 0.2) * (1 - ss((p - 0.5) / 0.5)) * (gentle ? 0.5 : 1)
+        var pose = LivelyPose()
+        pose.glow = 0.6 * cue
+        switch action {
+        case .flicker: pose.warm = 0.5 * cue
+        case .frost: pose.cool = 0.5 * cue
+        case .bleed: pose.red = 0.4 * cue
+        case .dark: pose.dim = 0.25 * cue
+        default: break
+        }
+        return pose
+    }
+
     /// Shrink: how far it has pulled in (0 at rest): a little swell first,
     /// a spring in, a tremble while squeezed, a pop back out past full size.
     static func shrink(_ t: Double, A: Double, duration D: Double) -> Double {
@@ -585,6 +578,8 @@ struct LivelyActionEffect: ViewModifier {
     let size: CGFloat
     var glow: Color = .white
     let reduceMotion: Bool
+    /// A chorus repeat: under Reduce Motion its glow is fainter too.
+    var gentle = false
 
     func body(content: Content) -> some View {
         let duration = LivelyAction.duration(action, hold: hold)
@@ -592,15 +587,13 @@ struct LivelyActionEffect: ViewModifier {
         if !active {
             content
         } else if reduceMotion {
-            // Reduce Motion: today's cue (a glow in the word's own ink,
-            // warmer or cooler for the colour actions), stretched over the
-            // lively duration; nothing moves, scales, turns or fades.
-            let cue = WordActionPose.bump(elapsed / duration, rise: 0.2, fall: 0.5)
+            // Reduce Motion: a glow in the word's own ink (warmer, cooler
+            // or redder for the colour actions); nothing moves, scales,
+            // turns or fades.
+            let cue = LivelyAction.reduceMotionCue(action, elapsed: elapsed, duration: duration, gentle: gentle)
             content
-                .colorMultiply(LivelyPose(warm: action == .flicker ? 0.5 * cue : 0,
-                                          cool: action == .frost ? 0.5 * cue : 0,
-                                          red: action == .bleed ? 0.4 * cue : 0).multiply)
-                .shadow(color: glow.opacity(0.75 * 0.6 * cue), radius: max(1, size * 0.13 * CGFloat(cue)))
+                .colorMultiply(cue.multiply)
+                .shadow(color: glow.opacity(min(0.9, 0.75 * cue.glow)), radius: max(1, size * 0.22 * CGFloat(cue.glow)))
         } else {
             let intensity = LivelyAction.intensity(amount: amount, hold: hold)
             let pose = LivelyPose.make(action, t: elapsed, duration: duration, intensity: intensity, hold: hold)
@@ -771,9 +764,11 @@ struct LivelyGlyphHook: ViewModifier {
     var particles = true
     @Environment(\.lyricLivelyGlyphs) private var glyphs
     @Environment(\.lyricLivelyParticles) private var particlesAllowed
+    /// For the opt-in renders only: draw as macOS 14 does (whole word only).
+    nonisolated(unsafe) static var disabledForPreview = false
 
     func body(content: Content) -> some View {
-        if #available(macOS 15.0, *), let glyphs {
+        if #available(macOS 15.0, *), let glyphs, !Self.disabledForPreview {
             content.textRenderer(LivelyGlyphRenderer(state: glyphs, particles: particles && particlesAllowed))
         } else {
             content
@@ -781,7 +776,26 @@ struct LivelyGlyphHook: ViewModifier {
     }
 }
 
+/// Marks text an action word's letters leave alone (a symbol set inline
+/// after the word): drawn in place, and not counted as a letter.
+@available(macOS 15.0, *)
+struct LivelyStill: TextAttribute {}
+
+extension Text {
+    /// This text stays still under an action word's per-letter pass.
+    func livelyStill() -> Text {
+        if #available(macOS 15.0, *) { return customAttribute(LivelyStill()) }
+        return self
+    }
+}
+
 extension View {
+    /// Lets an action in progress move this word's letters (macOS 15+);
+    /// `particles` on only one layer of a word drawn in several.
+    func livelyLetters(particles: Bool = true) -> some View {
+        modifier(LivelyGlyphHook(particles: particles))
+    }
+
     /// A sweep mask that, while an action moves the letters, reaches past
     /// the word on every side (sung on the leading side, unsung beyond).
     @ViewBuilder
@@ -824,8 +838,10 @@ struct LivelyGlyphRenderer: TextRenderer {
         var glyphs: [Glyph] = []
         var minX = CGFloat.infinity, maxX = -CGFloat.infinity
         var index = 0
+        var still: [Text.Layout.Run] = []
         for line in layout {
             for run in line {
+                if run[LivelyStill.self] != nil { still.append(run); continue }
                 for slice in run {
                     let bounds = slice.typographicBounds
                     let rect = bounds.rect
@@ -839,6 +855,7 @@ struct LivelyGlyphRenderer: TextRenderer {
             for line in layout { context.draw(line) }
             return
         }
+        for run in still { context.draw(run) }
         let width = maxX - minX
         glyphs = glyphs.map {
             Glyph(slice: $0.slice, rect: $0.rect, baseline: $0.baseline, index: $0.index,
@@ -924,10 +941,6 @@ struct LivelyGlyphRenderer: TextRenderer {
             let s = L.shrink(t - 0.03 * abs(g.along - 0.5), A: A, duration: D) / 0.46
             transform(dx: Double(word.midX - g.rect.midX) * 0.14 * s, anchor: mid, into: &c)
             plain()
-        case .whisper:
-            let w = L.envelope(t, attack: 0.35, release: 0.5, duration: D)
-            transform(dx: Double(g.rect.midX - word.midX) * 0.3 * A * w, anchor: mid, into: &c)
-            plain()
         case .dissolve:
             dust(g, size: size, in: c)
         case .flicker:
@@ -995,31 +1008,6 @@ struct LivelyGlyphRenderer: TextRenderer {
             plain()
         case .sink:
             sinkGlyph(g, size: size, in: c)
-        case .explode:
-            let e = L.easeOutCubic(t / 0.3) * (1 - L.ss((t - (D - 0.65)) / 0.55))
-            var dir = CGVector(dx: g.rect.midX - word.midX, dy: g.rect.midY - word.midY - CGFloat(size) * 0.3)
-            let len = max(0.001, sqrt(dir.dx * dir.dx + dir.dy * dir.dy))
-            dir = CGVector(dx: dir.dx / len, dy: dir.dy / len)
-            let reach = size * (0.6 + 0.5 * L.rnd(state.seed, g.index, 1)) * A * e
-            c.opacity = 1 - 0.3 * e
-            transform(dx: Double(dir.dx) * reach, dy: Double(dir.dy) * reach + 0.1 * size * e * e,
-                      sx: 1 - 0.2 * e, sy: 1 - 0.2 * e, deg: (L.rnd(state.seed, g.index, 2) - 0.5) * 120 * A * e,
-                      anchor: mid, into: &c)
-            plain()
-        case .ghost:
-            let gh = L.envelope(t, attack: 0.35, release: 0.5, duration: D)
-            var copy = c
-            copy.opacity = 0.3 * gh
-            transform(dx: -0.32 * A * gh * size, dy: 0.04 * size * gh, anchor: mid, into: &copy)
-            copy.draw(g.slice)
-            plain()
-        case .electric:
-            let e = L.envelope(t, attack: 0.05, release: 0.3, duration: D)
-            let frame = Int(t * 30)
-            transform(dx: 0.05 * A * e * (L.rnd(state.seed, frame, g.index * 2) * 2 - 1) * size,
-                      dy: 0.05 * A * e * (L.rnd(state.seed, frame, g.index * 2 + 1) * 2 - 1) * size,
-                      anchor: mid, into: &c)
-            plain()
         default:
             plain()
         }
@@ -1622,44 +1610,6 @@ struct LivelyGlyphRenderer: TextRenderer {
                                with: .color(.white.opacity(0.8 * (a > 0.85 ? (1 - a) / 0.15 : 1) * d)),
                                lineWidth: max(1, size * 0.016))
             }
-        case .scream:
-            for k in 0..<2 {
-                let a = (t - Double(k) * 0.12) / 0.6
-                guard a > 0, a < 1 else { continue }
-                let grow = CGFloat(0.1 + 1.0 * a)
-                let rect = word.insetBy(dx: -word.width * grow * 0.5, dy: -word.height * grow * 0.6)
-                context.stroke(Path(ellipseIn: rect), with: .color(state.glow.opacity(0.8 * (1 - a) * A)),
-                               lineWidth: max(1, size * 0.05 * CGFloat(1 - a)))
-            }
-        case .glow:
-            let e = L.envelope(t, attack: 0.25, release: 0.45, duration: D)
-            var rays = Path()
-            let centre = CGPoint(x: word.midX, y: word.midY)
-            for k in 0..<12 {
-                let a = Double(k) / 12 * 2 * .pi + t * 0.6
-                let inner = max(word.width, word.height) * 0.55
-                let outer = inner + size * CGFloat(0.4 + 0.5 * L.rnd(seed, k, 1)) * CGFloat(e * A)
-                rays.move(to: CGPoint(x: centre.x + inner * CGFloat(cos(a)), y: centre.y + inner * 0.45 * CGFloat(sin(a))))
-                rays.addLine(to: CGPoint(x: centre.x + outer * CGFloat(cos(a)), y: centre.y + outer * 0.45 * CGFloat(sin(a))))
-            }
-            context.stroke(rays, with: .color(state.glow.opacity(0.4 * e)), lineWidth: max(1, size * 0.03))
-        case .electric:
-            let e = L.envelope(t, attack: 0.05, release: 0.3, duration: D)
-            let tick = Int(t * 15)
-            guard L.rnd(seed, tick, 5) > 0.35 else { break }
-            var sparks = Path()
-            for k in 0..<3 {
-                var p = CGPoint(x: word.minX + word.width * CGFloat(L.rnd(seed, tick, 10 + k)),
-                                y: word.minY + word.height * CGFloat(L.rnd(seed, tick, 20 + k)))
-                sparks.move(to: p)
-                for s in 0..<5 {
-                    p.x += size * CGFloat(0.18 * (L.rnd(seed, tick * 7 + k, 30 + s) - 0.3))
-                    p.y += size * CGFloat(0.22 * (L.rnd(seed, tick * 7 + k, 40 + s) - 0.5))
-                    sparks.addLine(to: p)
-                }
-            }
-            context.stroke(sparks, with: .color(Color(red: 0.75, green: 0.95, blue: 1).opacity(0.95 * e)),
-                           lineWidth: max(1, size * 0.022))
         default:
             break
         }
@@ -1699,8 +1649,7 @@ struct LivelyGlyphRenderer: TextRenderer {
 
 // MARK: - Symbol entrance
 
-/// PREVIEW: in the lively style, a word's symbol pops in rather than only
-/// fading: a springy scale-up with a little overshoot, a wobble and a rise,
+/// A word's symbol pops in rather than only fading: a springy scale-up with a little overshoot, a wobble and a rise,
 /// settling still. An action word's symbol echoes its action (spinning in,
 /// dripping in, frosting in, ...). Reduce Motion keeps today's fade.
 struct SymbolEntrancePose: Equatable {

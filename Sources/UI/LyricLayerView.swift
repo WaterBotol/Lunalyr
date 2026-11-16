@@ -895,6 +895,7 @@ struct LyricLayer: View {
                             bottomInset: band, following: rolling?.following, ordinals: rolling?.ordinals ?? [:],
                             rollingLineEnds: rolling?.lineEnds ?? [:], parts: rolling?.parts ?? [:],
                             accents: wordAccents(index, words: words, glue: glue, rolling: rolling, scene: scene))
+                            .environment(\.lyricActionStrength, settings.actionWordStrength.amount)
                         let swell: CGFloat = still ? 1 : 0.965 + 0.035 * pose.arrival - 0.012 * pose.exit
                         // A line leaving lifts away as the next one rises
                         // into the same place, rather than sitting under it.
@@ -1066,13 +1067,18 @@ struct LyricLayer: View {
         let lists = settings.wordAccentLists
         guard lists.symbols != nil || lists.actions != nil else { return .none }
         guard readingOptions.display != .replace || scene.romanized[index] == nil else { return .none }
-        guard let rolling else { return WordAccentPlan.line(words, glue: glue, settings: settings) }
+        // A song's repeats of an action word move gently every other time.
+        let gentle = lists.actions == nil ? []
+            : WordAccentPlan.gentleLines(scene.lines, fingerprint: scene.fingerprint, settings: settings)
+        guard let rolling else {
+            return WordAccentPlan.line(words, glue: glue, settings: settings, gentle: gentle.contains(index))
+        }
         return WordAccentPlan.kept(rolling.words.map(\.presentationID), settings: settings) {
             var plan = WordAccentPlan()
             for row in LyricPhraseTiming.rollingRange(around: index, lines: scene.lines) {
                 let line = scene.lines[row]
                 plan.merge(WordAccentPlan.line(line.words, glue: LyricRuns.rollingGlue(line: line, words: line.words),
-                                               settings: settings))
+                                               settings: settings, gentle: gentle.contains(row)))
             }
             return plan.rekeyed(for: rolling.words, parts: rolling.parts)
         }

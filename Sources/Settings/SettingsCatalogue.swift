@@ -366,6 +366,8 @@ enum SettingsCatalogue {
                   keys: ["custom.wordSymbols.enabled"], keywords: ["emoji", "symbol", "icon", "word symbols"]),
             .init(.animation, "Word symbols and actions", "Animate listed action words", .toggle,
                   keys: ["custom.actionWords.enabled"], keywords: ["action", "animation", "spin", "motion"]),
+            .init(.animation, "Word symbols and actions", "Action word strength", .choice,
+                  keys: ["custom.actionWords.strength"], keywords: ["action", "strength", "subtle", "wild", "intensity"]),
             .init(.animation, "Word symbols and actions", "Word symbol list", .textField,
                   keys: ["custom.wordSymbols.words"], keywords: ["emoji", "symbol", "icon", "word list"]),
             .init(.animation, "Word symbols and actions", "Action word list", .textField,

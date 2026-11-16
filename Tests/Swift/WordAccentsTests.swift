@@ -92,7 +92,7 @@ final class WordAccentsTests: XCTestCase {
         XCTAssertEqual(WordAction.defaults.count, WordAction.defaultList.count, "no word twice")
         XCTAssertEqual(WordAction.defaults["spin"], "spin")
         XCTAssertEqual(WordAction.defaults["cold"], "frost")
-        XCTAssertEqual(Set(WordAction.defaultList.map(\.action)), Set(WordAction.allCases).subtracting(WordAction.dropped), "every action is used")
+        XCTAssertEqual(Set(WordAction.defaultList.map(\.action)), Set(WordAction.allCases), "every action is used")
     }
 
     // MARK: Caps
@@ -162,58 +162,171 @@ final class WordAccentsTests: XCTestCase {
 
     // MARK: Motion
 
-    func testEveryActionReturnsExactlyToRest() {
-        for action in WordAction.today {
-            XCTAssertTrue((0.6...0.9).contains(action.duration), "\(action)")
-            for reduce in [false, true] {
-                for elapsed in [-1, -0.001, 0, action.duration, action.duration + 0.001, 5] {
-                    XCTAssertEqual(WordActionPose.make(action, elapsed: elapsed, reduceMotion: reduce), .identity,
-                                   "\(action) at \(elapsed)")
-                }
-                XCTAssertFalse(WordActionPose.make(action, elapsed: action.duration * 0.45, reduceMotion: reduce).isIdentity,
-                               "\(action) does something mid-way")
+    func testReduceMotionIsAGlowOnly() {
+        for action in WordAction.allCases {
+            let duration = LivelyAction.duration(action, hold: 1.2)
+            for elapsed in [-1, -0.001, 0, duration, duration + 0.001, 5] {
+                XCTAssertEqual(LivelyAction.reduceMotionCue(action, elapsed: elapsed, duration: duration), .identity,
+                               "\(action) at \(elapsed)")
             }
-            // Never more than a nudge: the line's fit holds.
-            for step in 0...90 {
-                let pose = WordActionPose.make(action, elapsed: Double(step) / 100, reduceMotion: false)
-                XCTAssertLessThanOrEqual(abs(pose.dx), 0.25, "\(action)")
-                XCTAssertLessThanOrEqual(abs(pose.dy), 0.25, "\(action)")
-                XCTAssertLessThanOrEqual(abs(pose.scale - 1), 0.2, "\(action)")
-                XCTAssertGreaterThanOrEqual(pose.opacity, 0.25, "\(action)")
-            }
-        }
-    }
-
-    func testReduceMotionIsAColourCueOnly() {
-        for action in WordAction.today {
-            for step in 0...90 {
-                let pose = WordActionPose.make(action, elapsed: Double(step) / 100, reduceMotion: true)
+            for step in 0...100 {
+                let pose = LivelyAction.reduceMotionCue(action, elapsed: duration * Double(step) / 100, duration: duration)
                 XCTAssertEqual(pose.dx, 0); XCTAssertEqual(pose.dy, 0); XCTAssertEqual(pose.turn, 0)
-                XCTAssertEqual(pose.scale, 1); XCTAssertEqual(pose.opacity, 1)
-            }
-            let mid = WordActionPose.make(action, elapsed: action.duration * 0.4, reduceMotion: true)
-            XCTAssertGreaterThan(mid.glow + mid.warm + mid.cool, 0.1, "\(action) still gives a cue")
-        }
-    }
-
-    func testSpinIsOneWholeTurn() {
-        let late = WordActionPose.make(.spin, elapsed: WordAction.spin.duration - 0.001, reduceMotion: false)
-        XCTAssertEqual(late.turn, 360, accuracy: 0.01)
-        XCTAssertEqual(WordActionPose.make(.spin, elapsed: WordAction.spin.duration / 2, reduceMotion: false).turn, 180,
-                       accuracy: 0.01)
-    }
-
-    func testTintsNeverLighten() {
-        for action in WordAction.today {
-            for step in 0...90 {
-                let pose = WordActionPose.make(action, elapsed: Double(step) / 100, reduceMotion: step.isMultiple(of: 2))
+                XCTAssertEqual(pose.tilt, 0); XCTAssertEqual(pose.sx, 1); XCTAssertEqual(pose.sy, 1)
+                XCTAssertEqual(pose.opacity, 1); XCTAssertEqual(pose.twister, 0); XCTAssertEqual(pose.vignette, 0)
                 let rgb = NSColor(pose.multiply).usingColorSpace(.sRGB)!
                 for channel in [rgb.redComponent, rgb.greenComponent, rgb.blueComponent] {
-                    XCTAssertLessThanOrEqual(channel, 1.0001, "\(action)")
+                    XCTAssertLessThanOrEqual(channel, 1.0001, "\(action): multiplying never lightens")
                     XCTAssertGreaterThanOrEqual(channel, 0.4, "\(action)")
                 }
             }
+            let mid = LivelyAction.reduceMotionCue(action, elapsed: duration * 0.4, duration: duration)
+            XCTAssertGreaterThan(mid.glow, 0.3, "\(action) still gives a cue")
+            let quiet = LivelyAction.reduceMotionCue(action, elapsed: duration * 0.4, duration: duration, gentle: true)
+            XCTAssertLessThan(quiet.glow, mid.glow, "\(action): a chorus repeat glows less")
         }
+    }
+
+    /// Under Reduce Motion the symbol only fades: no pop, turn or travel.
+    func testReduceMotionSymbolOnlyFades() {
+        XCTAssertEqual(WordSymbolMark.opacity(elapsed: 0.15), Easing.smoothstep(0.5))
+        // The entrance is only drawn without Reduce Motion (`WordSymbolView`);
+        // its pose is never consulted otherwise, and it is at rest once done.
+        XCTAssertEqual(SymbolEntrancePose.make(.spin, elapsed: SymbolEntrancePose.duration), .rest)
+    }
+
+    func testStrengthSetsTheAmount() {
+        XCTAssertEqual(ActionWordStrength.allCases.map(\.amount), [LivelyAction.subtle, LivelyAction.middle, LivelyAction.wild])
+        XCTAssertEqual(ActionWordStrength.allCases.map(\.title), ["Subtle", "Middle", "Wild"])
+        let defaults = LunalyrTestEnvironment.isolatedDefaults("LunalyrTests.WordAccents.Strength")
+        let settings = Settings(defaults: defaults, notifications: NotificationCenter())
+        XCTAssertEqual(settings.actionWordStrength, .wild, "Wild by default")
+        settings.actionWordStrength = .subtle
+        XCTAssertEqual(defaults.string(forKey: Settings.actionWordStrengthKey), "subtle")
+        XCTAssertEqual(Settings(defaults: defaults, notifications: NotificationCenter()).actionWordStrength, .subtle)
+        XCTAssertEqual(Settings.actionWordStrengthKey, "custom.actionWords.strength")
+        // Wild moves more than Subtle.
+        let wild = LivelyPose.make(.hop, t: 0.35, duration: 1.55, intensity: LivelyAction.intensity(amount: 1, hold: 1.2), hold: 1.2)
+        let subtle = LivelyPose.make(.hop, t: 0.35, duration: 1.55, intensity: LivelyAction.intensity(amount: 0.2, hold: 1.2), hold: 1.2)
+        XCTAssertGreaterThan(abs(wild.dy), 3 * abs(subtle.dy))
+    }
+
+    // MARK: Saved lists
+
+    func testSavedListsReadOldNamesAndSkipDroppedActions() {
+        XCTAssertEqual(WordAction(listValue: "frost"), .frost)
+        XCTAssertEqual(WordAction(listValue: "Freeze"), .frost)
+        XCTAssertEqual(WordAction(listValue: " warm flicker "), .flicker)
+        XCTAssertEqual(WordAction(listValue: "Heartbeat"), .pulse)
+        XCTAssertEqual(WordAction(listValue: "dissolve"), .dissolve)
+        for gone in ["scream", "explode", "glow", "whisper", "ghost", "electric", "", "nonsense"] {
+            XCTAssertNil(WordAction(listValue: gone), gone)
+        }
+        let defaults = LunalyrTestEnvironment.isolatedDefaults("LunalyrTests.WordAccents.Saved")
+        defaults.set(["scream": "scream", "chill": "Freeze", "spin": "spin", "Girar": "spin", "飛ぶ": "float"],
+                     forKey: Settings.actionWordListKey)
+        let settings = Settings(defaults: defaults, notifications: NotificationCenter())
+        let actions = settings.wordAccentLists.actions
+        XCTAssertNil(actions?["scream"], "a dropped action is skipped")
+        XCTAssertEqual(actions?["chill"], .frost, "an old name still works")
+        XCTAssertEqual(actions?["girar"], .spin, "a non-English word is kept, folded")
+        XCTAssertEqual(actions?["飛ぶ"], .float)
+        XCTAssertEqual((defaults.dictionary(forKey: Settings.actionWordListKey) as? [String: String])?["scream"], "scream",
+                       "the saved list itself is left alone")
+    }
+
+    // MARK: Chorus repeats
+
+    func testRepeatsAlternateFullAndGentle() {
+        let defaults = LunalyrTestEnvironment.isolatedDefaults("LunalyrTests.WordAccents.Repeats")
+        let settings = Settings(defaults: defaults, notifications: NotificationCenter())
+        func line(_ texts: [String], at start: Double) -> LyricsFetcher.Line {
+            let words = texts.enumerated().map {
+                LyricsFetcher.Word(text: $1, start: start + Double($0) * 0.4, end: start + Double($0) * 0.4 + 0.3)
+            }
+            return LyricsFetcher.Line(start: start, end: start + 3, text: texts.joined(separator: " "), words: words,
+                                      isInstrumental: false, wordTimed: true)
+        }
+        let lines = [
+            line(["we", "spin", "around"], at: 0), line(["then", "we", "fall"], at: 4),
+            line(["we", "spin", "again"], at: 8), line(["no", "action", "here"], at: 12),
+            line(["spinning", "spinning"], at: 16), line(["and", "we", "spin"], at: 20), line(["we", "fall"], at: 24),
+        ]
+        let gentle = WordAccentPlan.gentleLines(lines, fingerprint: 4242, settings: settings, liftsBacking: false)
+        // spin: 1st full, 2nd gentle, 3rd full, 4th gentle; fall: 1st full, 2nd gentle.
+        XCTAssertEqual(gentle, [2, 5, 6])
+        XCTAssertEqual(WordAccentPlan.gentleLines(lines, fingerprint: 4242, settings: settings, liftsBacking: false), gentle,
+                       "the same answer however often it is asked")
+        let words = lines[2].words
+        let plan = WordAccentPlan.line(words, glue: [], settings: settings, liftsBacking: false, gentle: true)
+        XCTAssertEqual(plan[words[1].presentationID]?.action, .spin)
+        XCTAssertEqual(plan[words[1].presentationID]?.gentle, true, "a gentle repeat still takes the line's one action")
+        XCTAssertEqual(WordAccentPlan.line(words, glue: [], settings: settings, liftsBacking: false)[words[1].presentationID]?.gentle,
+                       false)
+    }
+
+    // MARK: Other languages
+
+    private func actionIn(_ line: String) -> WordAction? {
+        let texts = line.split(separator: " ").map(String.init)
+        let words = Self.line(texts)
+        let plan = WordAccentPlan.make(words: words, glue: [], symbols: nil, actions: Self.actions)
+        return words.compactMap { plan[$0.presentationID]?.action }.first
+    }
+
+    func testOtherLanguagesMatchTheirOwnWords() {
+        let hits: [(String, WordAction)] = [
+            // Spanish
+            ("y vuelvo a caer en tus brazos", .dip), ("el mundo gira sin parar", .spin), ("me quema tu fuego", .flicker),
+            ("tiemblo cuando me miras", .shake), ("la sangre en mis venas", .bleed), ("me hundo en tu mirada", .sink),
+            // Portuguese
+            ("eu vou cair de novo", .dip), ("o mar levou meu coração", .wave), ("tudo vai desaparecer", .dissolve),
+            // French
+            ("je tombe encore pour toi", .dip), ("mon cœur brûle", .flicker), ("dans l'obscurité", .dark),
+            // German
+            ("ich falle durch die Nacht", .dip), ("alles dreht sich", .spin), ("wir brennen heute Nacht", .flicker),
+            ("mein Herz zerbricht", .shatter), ("es schmilzt dahin", .melt),
+            // Italian
+            ("io volo via da te", .float), ("cado ancora", .dip), ("il mare ci porta via", .wave),
+            // Indonesian, Tagalog
+            ("aku jatuh cinta", .dip), ("hatiku hancur", .shatter), ("nahulog ang loob ko", .dip), ("dugo sa puso", .bleed),
+            // Vietnamese
+            ("nước mắt rơi", .dip), ("em như sóng biển", .wave),
+            // Japanese
+            ("空を飛んで行く", .float), ("闇の中で", .dark), ("胸が燃えている", .flicker), ("涙が落ちる", .dip),
+            // Korean
+            ("어둠 속에서", .dark), ("눈물이 떨어져", .dip), ("파도처럼", .wave), ("피가 흘러", .bleed),
+            // Chinese (simplified and traditional)
+            ("我的心跳", .pulse), ("一起飞翔", .float), ("在黑暗中", .dark), ("心碎了", .shatter), ("我們一起飛", .float),
+        ]
+        for (line, action) in hits {
+            XCTAssertEqual(actionIn(line), action, line)
+        }
+    }
+
+    func testOtherLanguagesAvoidNearMisses() {
+        let misses = [
+            // English words a stem must not catch.
+            "a hundred salty tombs", "spring is here again", "it was grandiose", "a disparate crowd",
+            "I sang it loud", "that romp was fun", "a vague idea",
+            // Words that look like a listed one but mean something else.
+            "vuelve a casa", "me gustó, gefallen hat es mir", "tremendo día",
+            // Korean 날 (day / me) and Japanese 今回 (this time), Chinese 浪漫 (romance), 暗恋 (a crush), 沉默 (silence).
+            "그날 밤", "날 사랑해", "今回だけ", "浪漫的晚上", "我暗恋你", "沉默的人", "影響される",
+            // Vietnamese words only on a Vietnamese line: English "run" and "bay" stay still.
+            "we run to the bay",
+        ]
+        for line in misses {
+            XCTAssertNil(actionIn(line), line)
+        }
+    }
+
+    func testTheUsersOwnListComesFirst() {
+        let user: [String: WordAction] = ["caer": .spin, "fly": .hop, "飛": .sink]
+        let script = ActionLexicon.Script("caer")
+        XCTAssertEqual(ActionLexicon.match("caer", user: user, script: script)?.action, .spin)
+        XCTAssertEqual(ActionLexicon.match("flying", user: user, script: script)?.action, .hop)
+        XCTAssertEqual(ActionLexicon.match("飛んで", user: user, script: ActionLexicon.Script("飛んで"))?.action, .sink)
     }
 
     func testSymbolFadesInFromTheOnset() {
@@ -279,7 +392,7 @@ final class WordAccentsTests: XCTestCase {
     /// Every kept lively action starts and ends at rest and moves without
     /// a jump between frames at 240 Hz, for quick and long-held words.
     func testLivelyMotionIsContinuousAndReturnsToRest() {
-        let kept = WordAction.allCases.filter { !WordAction.dropped.contains($0) }
+        let kept = WordAction.allCases
         for action in kept {
             for hold in [0.3, 0.6, 1.2, 2.5] {
                 let D = LivelyAction.duration(action, hold: hold)

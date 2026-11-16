@@ -5,23 +5,23 @@ import SwiftUI
 import XCTest
 @testable import VersoCustom
 
-/// PREVIEW renders of the lively action words, written only when
+/// Opt-in renders of the action words, written only when
 /// LUNALYR_ACTION_PREVIEW is set (pass TEST_RUNNER_LUNALYR_ACTION_PREVIEW=1);
 /// skipped otherwise.
 ///
-/// For each action: `action-<name>.mp4`, a Cutout line (the user's layout,
-/// drawn through `LyricLineView`) with the action word held 1.2 s, today's
-/// effect on the left and the lively one at the default amount on the
-/// right; `intensity.mp4` (Subtle / Middle / Wild for a few actions);
-/// `all-actions.mp4` (every kept action back to back); a keyframe PNG per
-/// action; dropped brainstorm actions under `dropped/`. 1280×720, 60 fps
-/// (the app draws at the display's rate), H.264, no audio track. Nothing is
-/// played.
+/// For each action: `action-<name>.mp4`, a Cutout line (drawn through
+/// `LyricLineView`) with the action word held 1.2 s, Reduce Motion's glow on
+/// the left and the motion at Wild on the right; `intensity.mp4` (Subtle /
+/// Middle / Wild for a few actions); `all-actions.mp4` (every action back to
+/// back); a keyframe PNG per action. 1280×720, 60 fps (the app draws at the
+/// display's rate), H.264, no audio track. Nothing is played.
 ///
-/// Optional: LUNALYR_ACTION_PREVIEW_DIR (output folder),
-/// LUNALYR_ACTION_PREVIEW_ONLY ("hop,spin"), LUNALYR_ACTION_PREVIEW_SHEET=1
-/// (contact sheets only, no video: quick to iterate on),
-/// LUNALYR_ACTION_PREVIEW_KEEP_DROPPED=1 (leave `dropped/` as it is).
+/// Optional: LUNALYR_ACTION_PREVIEW_DIR (output folder; a temporary folder
+/// by default), LUNALYR_ACTION_PREVIEW_ONLY ("hop,spin"),
+/// LUNALYR_ACTION_PREVIEW_SHEET=1 (contact sheets only, no video),
+/// LUNALYR_ACTION_PREVIEW_LAYOUTS=1 (a contact sheet per layout for a few
+/// actions, under `layouts/`), LUNALYR_ACTION_PREVIEW_NO_LETTERS=1 (the
+/// whole-word part only, as macOS 14 draws it).
 @MainActor
 final class ActionWordsPreviewTests: XCTestCase {
     static let canvas = CGSize(width: 1280, height: 720)
@@ -53,16 +53,10 @@ final class ActionWordsPreviewTests: XCTestCase {
         Clip(action: .pulse, texts: ["feel", "my", "heartbeat", "race"], hue: 0.97),
         Clip(action: .wave, texts: ["we", "ride", "the", "waves", "tonight"], hue: 0.53),
         Clip(action: .sink, texts: ["I", "sink", "beneath", "the", "tide"], hue: 0.58),
-        Clip(action: .explode, texts: ["watch", "it", "all", "explode"], hue: 0.06),
-        Clip(action: .scream, texts: ["I", "scream", "your", "name"], hue: 0.0),
-        Clip(action: .whisper, texts: ["you", "whisper", "in", "my", "ear"], hue: 0.75),
-        Clip(action: .ghost, texts: ["a", "ghost", "inside", "my", "room"], hue: 0.68),
-        Clip(action: .glow, texts: ["you", "glow", "like", "summer"], hue: 0.14),
-        Clip(action: .electric, texts: ["this", "electric", "feeling"], hue: 0.6),
     ]
 
     /// A symbol on each action word, so the reel shows the symbol's
-    /// entrance (today a fade; lively, a pop echoing the action).
+    /// entrance (a fade under Reduce Motion; otherwise a pop echoing the action).
     static let symbols: [String: String] = [
         "spin": "tornado", "float": "cloud.fill", "fall": "arrow.down", "shake": "hand.raised.fill",
         "jump": "hare.fill", "grow": "leaf.fill", "shrink": "arrow.down.right.and.arrow.up.left",
@@ -72,7 +66,7 @@ final class ActionWordsPreviewTests: XCTestCase {
     ]
 
     static var actionList: [String: WordAction] {
-        Dictionary((WordAction.defaultList + WordAction.droppedList).map { ($0.word, $0.action) },
+        Dictionary(WordAction.defaultList.map { ($0.word, $0.action) },
                    uniquingKeysWith: { first, _ in first })
     }
 
@@ -102,13 +96,21 @@ final class ActionWordsPreviewTests: XCTestCase {
 
     // MARK: Drawing
 
-    static func stage(_ clip: Clip, style: WordActionStyle, time: Double, size: CGSize) -> some View {
+    /// One pane's look: its label, strength, Reduce Motion and layout.
+    struct Look {
+        var label: String
+        var strength = LivelyAction.wild
+        var reduceMotion = false
+        var composition = LyricComposition.cutout
+    }
+
+    static func stage(_ clip: Clip, look: Look, time: Double, size: CGSize) -> some View {
         let (words, _) = words(clip)
         let plan = WordAccentPlan.make(words: words, glue: [Bool](repeating: false, count: words.count),
                                        symbols: symbols, actions: actionList)
         return ZStack {
             StageLayoutVideoTests.backdrop(hue: clip.hue)
-            LyricLineView(words: words, time: time, stageSize: size, baseSize: 72, mood: .neutral, composition: .cutout,
+            LyricLineView(words: words, time: time, stageSize: size, baseSize: 72, mood: .neutral, composition: look.composition,
                           seed: 3, accent: Color(hue: (clip.hue + 0.5).truncatingRemainder(dividingBy: 1), saturation: 0.55,
                                                  brightness: 0.75),
                           lineEnd: (words.last?.end ?? time) + 0.3, accents: plan)
@@ -116,7 +118,8 @@ final class ActionWordsPreviewTests: XCTestCase {
         }
         .frame(width: size.width, height: size.height)
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .environment(\.lyricWordActionStyle, style)
+        .environment(\.lyricActionStrength, look.strength)
+        .environment(\.lyricReduceMotion, look.reduceMotion)
     }
 
     static func label(_ text: String, emphasis: Bool = false) -> some View {
@@ -125,7 +128,7 @@ final class ActionWordsPreviewTests: XCTestCase {
             .foregroundStyle(.white.opacity(emphasis ? 0.92 : 0.6))
     }
 
-    static func panes(_ clip: Clip, styles: [(String, WordActionStyle)], time: Double, onset: Double) -> some View {
+    static func panes(_ clip: Clip, styles: [Look], time: Double, onset: Double) -> some View {
         let gap: CGFloat = 14
         let width = (canvas.width - gap * CGFloat(styles.count + 1)) / CGFloat(styles.count)
         let size = CGSize(width: width.rounded(.down), height: 590)
@@ -136,7 +139,7 @@ final class ActionWordsPreviewTests: XCTestCase {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(alignment: .firstTextBaseline) {
                     Text(clip.action.title).font(.system(size: 28, weight: .bold, design: .rounded)).foregroundStyle(.white)
-                    label("“\(word)” held \(String(format: "%.1f", hold)) s  ·  Cutout")
+                    label("“\(word)” held \(String(format: "%.1f", hold)) s  ·  \(styles.first?.composition.title ?? "")")
                     Spacer()
                     label(String(format: "%.2f s", max(0, time - onset)))
                         .monospacedDigit()
@@ -145,8 +148,8 @@ final class ActionWordsPreviewTests: XCTestCase {
                 HStack(spacing: gap) {
                     ForEach(styles.indices, id: \.self) { index in
                         VStack(spacing: 8) {
-                            stage(clip, style: styles[index].1, time: time, size: size)
-                            label(styles[index].0, emphasis: index > 0)
+                            stage(clip, look: styles[index], time: time, size: size)
+                            label(styles[index].label, emphasis: index > 0)
                         }
                     }
                 }
@@ -156,22 +159,20 @@ final class ActionWordsPreviewTests: XCTestCase {
         }
         .frame(width: canvas.width, height: canvas.height)
         .environment(\.lyricInk, LyricInk())
-        .environment(\.lyricReduceMotion, false)
         .environment(\.colorScheme, .dark)
     }
 
-    static func sideBySide(_ clip: Clip, time: Double, onset: Double) -> some View {
-        let left = WordAction.today.contains(clip.action) ? "Today" : "Today: none"
-        let right = LivelyAction.defaultAmount >= LivelyAction.wild ? "New · Wild"
-            : String(format: "New · amount %.2f", LivelyAction.defaultAmount)
-        return panes(clip, styles: [(left, .today), (right, .lively(amount: LivelyAction.defaultAmount))],
-                     time: time, onset: onset)
+    static func sideBySide(_ clip: Clip, time: Double, onset: Double,
+                           composition: LyricComposition = .cutout) -> some View {
+        panes(clip, styles: [Look(label: "Reduce Motion", reduceMotion: true, composition: composition),
+                             Look(label: "Wild", composition: composition)],
+              time: time, onset: onset)
     }
 
     static func intensity(_ clip: Clip, time: Double, onset: Double) -> some View {
-        panes(clip, styles: [("Subtle", .lively(amount: LivelyAction.subtle)),
-                             ("Middle", .lively(amount: LivelyAction.middle)),
-                             ("Wild", .lively(amount: LivelyAction.wild))], time: time, onset: onset)
+        panes(clip, styles: [Look(label: "Subtle", strength: LivelyAction.subtle),
+                             Look(label: "Middle", strength: LivelyAction.middle),
+                             Look(label: "Wild")], time: time, onset: onset)
     }
 
     // MARK: Video
@@ -239,14 +240,16 @@ final class ActionWordsPreviewTests: XCTestCase {
             throw XCTSkip("Set TEST_RUNNER_LUNALYR_ACTION_PREVIEW=1 to write the action-word preview")
         }
         let dir = environment["LUNALYR_ACTION_PREVIEW_DIR"].flatMap { $0.isEmpty ? nil : $0 }
-            ?? "/Users/tommy/Documents/Codex/2026-11-04/take-over-development-of-lunalyr-https/work/action-words-preview"
+            ?? (NSTemporaryDirectory() as NSString).appendingPathComponent("lunalyr-action-words")
+        LivelyGlyphHook.disabledForPreview = environment["LUNALYR_ACTION_PREVIEW_NO_LETTERS"] == "1"
+        defer { LivelyGlyphHook.disabledForPreview = false }
         let only = environment["LUNALYR_ACTION_PREVIEW_ONLY"].map { Set($0.lowercased().split(separator: ",").map(String.init)) }
             .flatMap { $0.isEmpty ? nil : $0 }
         let sheetsOnly = environment["LUNALYR_ACTION_PREVIEW_SHEET"] == "1"
-        let keepDropped = environment["LUNALYR_ACTION_PREVIEW_KEEP_DROPPED"] == "1"
+        let layouts = environment["LUNALYR_ACTION_PREVIEW_LAYOUTS"] == "1"
         let fileManager = FileManager.default
         try fileManager.createDirectory(atPath: dir + "/keyframes", withIntermediateDirectories: true)
-        try fileManager.createDirectory(atPath: dir + "/dropped", withIntermediateDirectories: true)
+        try fileManager.createDirectory(atPath: dir + "/layouts", withIntermediateDirectories: true)
         try fileManager.createDirectory(atPath: dir + "/sheets", withIntermediateDirectories: true)
         // ImageRenderer, not a window snapshot: the snapshot (cacheDisplay)
         // missed a word's draw scale until its entrance mask came off, so
@@ -258,10 +261,26 @@ final class ActionWordsPreviewTests: XCTestCase {
             let rep = try painter.draw(view)
             return (rep, try XCTUnwrap(rep.cgImage))
         }
-        let chosen = Self.clips.filter {
-            (only == nil || only!.contains($0.action.rawValue)) && !(keepDropped && WordAction.dropped.contains($0.action))
-        }
+        let chosen = Self.clips.filter { only == nil || only!.contains($0.action.rawValue) }
         XCTAssertFalse(chosen.isEmpty)
+
+        if layouts {
+            // Every layout, a few actions: a row per action, a column per moment.
+            let actions: [WordAction] = [.spin, .hop, .bleed, .frost, .sink, .dark]
+            let moments = [0.15, 0.35, 0.6, 0.9]
+            for composition in LyricComposition.allCases {
+                var rows: [[NSBitmapImageRep]] = []
+                for clip in Self.clips where actions.contains(clip.action) {
+                    let onset = Self.words(clip).onset
+                    rows.append(try moments.map {
+                        try image(Self.sideBySide(clip, time: onset + $0, onset: onset, composition: composition)).0
+                    })
+                }
+                try StageLayoutVideoTests.writePNG(try StageLayoutVideoTests.sheet(rows, cell: CGSize(width: 480, height: 270)),
+                                                   to: "\(dir)/layouts/\(composition.rawValue).png")
+            }
+            return
+        }
 
         if sheetsOnly {
             for clip in chosen {
@@ -279,11 +298,9 @@ final class ActionWordsPreviewTests: XCTestCase {
             return
         }
 
-        let kept = chosen.filter { !WordAction.dropped.contains($0.action) }
         let reel = only == nil ? try Movie(path: dir + "/all-actions.mp4", size: Self.canvas) : nil
         for clip in chosen {
-            let dropped = WordAction.dropped.contains(clip.action)
-            let path = dropped ? "\(dir)/dropped/action-\(clip.action.rawValue).mp4" : "\(dir)/action-\(clip.action.rawValue).mp4"
+            let path = "\(dir)/action-\(clip.action.rawValue).mp4"
             let movie = try Movie(path: path, size: Self.canvas)
             let span = Self.span(clip)
             let onset = Self.words(clip).onset
@@ -294,7 +311,7 @@ final class ActionWordsPreviewTests: XCTestCase {
                     let time = span.lowerBound + Double(index) / Self.fps
                     let (rep, cg) = try image(Self.sideBySide(clip, time: time, onset: onset))
                     try movie.append(cg)
-                    if !dropped, kept.contains(where: { $0.action == clip.action }) { try reel?.append(cg) }
+                    try reel?.append(cg)
                     if index == keyIndex {
                         try StageLayoutVideoTests.writePNG(rep, to: "\(dir)/keyframes/\(clip.action.rawValue).png")
                     }

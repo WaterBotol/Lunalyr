@@ -11,6 +11,7 @@ struct WordAccentsSection: View {
     static let symbolsList = "Word symbol list"
     static let actionsToggle = "Animate listed action words"
     static let actionsList = "Action word list"
+    static let strength = "Action word strength"
 
     var body: some View {
         InspectorSection(Self.title) {
@@ -19,7 +20,14 @@ struct WordAccentsSection: View {
                 .help("When a listed word is sung, a small symbol appears beside it in the word’s colour. English lyrics only.")
             Toggle(Self.actionsToggle, isOn: $s.actionWords)
                 .toggleStyle(StudioCheckboxStyle())
-                .help("When a listed action word is sung, it moves once: spin turns, fall dips, shake shakes. With Reduce Motion it only glows.")
+                .help("When a listed action word is sung, it moves once: spin whirls round, fall dips, burn glows like embers. A song's repeats of the same word move more gently every other time. With Reduce Motion it only glows.")
+            if s.actionWords {
+                ChoiceMenu(Self.strength, selection: $s.actionWordStrength, selectedTitle: { (strength: ActionWordStrength) -> String in strength.title }) {
+                    ForEach(ActionWordStrength.allCases) { Text($0.title).tag($0) }
+                }
+                .help("How big the action words' motions are. Wild is the boldest.")
+                .revealRow()
+            }
             if s.wordSymbols || s.actionWords {
                 MoreOptions {
                     if s.wordSymbols {
@@ -43,14 +51,20 @@ struct WordAccentsSection: View {
                                            editor: { value in
                                                Picker("Action", selection: value) {
                                                    ForEach(WordAction.allCases) { Text($0.title).tag($0.rawValue) }
+                                                   // A saved value no longer offered (or a former
+                                                   // name) shows as it is, so the row still reads.
+                                                   if WordAction(rawValue: value.wrappedValue) == nil {
+                                                       Text(WordAction(listValue: value.wrappedValue)?.title
+                                                            ?? value.wrappedValue).tag(value.wrappedValue)
+                                                   }
                                                }
                                                .labelsHidden()
                                            },
                                            commit: { s.actionWordList = $0 }, reset: { s.actionWordList = nil })
                         }
                         .revealRow()
-                        InspectorCaption("One action word a line.",
-                                         more: "Only the first listed action word in a line moves, once, as it is sung. With Reduce Motion it glows instead.")
+                        InspectorCaption("One action word a line, in English and other common languages.",
+                                         more: "Only the first action word in a line moves, once, as it is sung; repeats of a word later in the song move gently every other time. Besides this list, common words in Spanish, Portuguese, French, German, Italian, Indonesian, Tagalog, Vietnamese, Japanese, Korean and Chinese move too. Words you add here, in any language, come first. With Reduce Motion it glows instead.")
                             .revealRow()
                     }
                 }
