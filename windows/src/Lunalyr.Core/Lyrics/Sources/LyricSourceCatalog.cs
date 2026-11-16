@@ -22,6 +22,14 @@ public static class LyricSourceCatalog
         Resting(new QQMusicSource(http, probe: probe), http),
         Resting(new KugouSource(http, probe: probe), http),
         Resting(new KuwoSource(http, probe: probe), http),
+        // Added on 16 Nov 2026 (the Mac's dc56f8a); Soda Music is off until switched on.
+        Resting(new SodaMusicSource(http, probe), http),
+        Resting(new PetitLyricsSource(http, probe), http),
+        Resting(new DeezerSource(http, probe), http),
+        Resting(new MiguSource(http, probe), http),
+        Resting(new VibeSource(http, probe), http),
+        Resting(new GenieSource(http, probe), http),
+        Resting(new LyricFindSource(http, probe), http),
         Resting(new LyricsOvhSource(http), http),
     ];
 

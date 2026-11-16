@@ -92,6 +92,13 @@ public enum LyricSourceId
     LyricsOvh,
     Amll,
     Musixmatch,
+    SodaMusic,
+    PetitLyrics,
+    Deezer,
+    Migu,
+    Vibe,
+    Genie,
+    LyricFind,
 }
 
 /// <summary>What a lyric lookup is for. Helpers (normalising, similarity, recording key) live in the ranking code.</summary>

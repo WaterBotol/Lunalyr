@@ -141,7 +141,7 @@ public sealed class LyricRankingQualityTests
     [Fact]
     public void SpreadWordTimingLosesToGenuineAndCouldBeatAgrees()
     {
-        LyricSourceId[] order = [Lrclib, QQMusic, Musixmatch];
+        LyricSourceId[] order = [Lrclib, QQMusic, Musixmatch, Vibe];
         var real = Lines(LyricRankingFixtures.QrcLatin);
         var fake = Candidate(Lrclib, Spread(real, equal: false));
         var genuine = Candidate(QQMusic, real);

@@ -74,7 +74,16 @@ public sealed class LyricServiceEndToEndTests : IDisposable
         .Set("apic-appmobile.musixmatch.com/ws/1.1/token.get",
              Reply.Text(200, """{"message":{"header":{"status_code":200},"body":{"user_token":"2511abcdef0123456789"}}}"""))
         .Set("apic-appmobile.musixmatch.com/ws/1.1/macro.subtitles.get",
-             Reply.Text(200, """{"message":{"header":{"status_code":200},"body":{"macro_calls":{"matcher.track.get":{"message":{"header":{"status_code":404},"body":[]}}}}}}"""));
+             Reply.Text(200, """{"message":{"header":{"status_code":200},"body":{"macro_calls":{"matcher.track.get":{"message":{"header":{"status_code":404},"body":[]}}}}}}"""))
+        // The sources added on 16 Nov 2026: searches that find nothing.
+        .Set("api.qishui.com/luna/search/track", Reply.Text(200, """{"result_groups":[]}"""))
+        .Set("p1.petitlyrics.com/api/GetPetitLyricsData.php", Reply.Text(200, "<response><status>00000000</status><songs></songs></response>"))
+        .Set("auth.deezer.com/login/anonymous", Reply.Text(200, """{"jwt":"head.eyJleHAiOjQxMDI0NDQ4MDB9.sig"}"""))
+        .Set("pipe.deezer.com/api", Reply.Text(200, """{"data":{"search":{"results":{"tracks":{"edges":[]}}}}}"""))
+        .Set("pd.musicapp.migu.cn/MIGUM2.0/v1.0/content/search_all.do", Reply.Text(200, """{"code":"000000","songResultData":{"result":[]}}"""))
+        .Set("apis.naver.com/vibeWeb/musicapiweb/v4/search/track", Reply.Text(200, """{"response":{"result":{"tracks":[]}}}"""))
+        .Set("app.genie.co.kr/search/category/songs.json", Reply.Text(200, """{"searchResult":{"result":{"songs":{"items":[]}}}}"""))
+        .Set("music.youtube.com/youtubei/v1/search", Reply.Text(200, "{}"));
 
     private LyricService Service(FixtureHandler handler, ILyricSource? apple = null, bool online = true, IArtistAliasSearch? aliases = null,
         string? cacheFolder = null, LyricLookupTiming? timing = null, string storefront = "us") =>
@@ -435,7 +444,9 @@ public sealed class LyricServiceEndToEndTests : IDisposable
         Assert.False(report.Offline);
         Assert.True(report.IsComplete);
         Assert.Equal(0, report.Revision);
-        foreach (var id in new[] { Lrclib, LyricsPlus, NetEase, QQMusic, Kugou, Kuwo, Amll, LyricSourceId.Musixmatch })
+        foreach (var id in new[] { Lrclib, LyricsPlus, NetEase, QQMusic, Kugou, Kuwo, Amll, LyricSourceId.Musixmatch, LyricSourceId.SodaMusic,
+                                   LyricSourceId.PetitLyrics, LyricSourceId.Deezer, LyricSourceId.Migu, LyricSourceId.Vibe, LyricSourceId.Genie,
+                                   LyricSourceId.LyricFind })
         {
             Assert.Equal(LyricLookup.NoUsableMatch, report.States[id]);
         }

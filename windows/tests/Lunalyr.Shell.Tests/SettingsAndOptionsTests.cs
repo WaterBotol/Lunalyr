@@ -25,9 +25,9 @@ public sealed class AppSettingsTests
     [Fact]
     public void TheDefaultSourcesAreTheMacsFreshInstall()
     {
-        // The Mac switches on everything but the local folder and Music's own lyrics, in its recommended order.
+        // The Mac switches on everything but the local folder, Music's own lyrics and Soda Music, in its recommended order.
         var snapshot = new AppSettings().SourceSnapshot();
-        Assert.Equal(LyricSourceSnapshot.RecommendedOrder.Where(s => s is not (LyricSourceId.AppleMusicCache or LyricSourceId.Lyrimuse)),
+        Assert.Equal(LyricSourceSnapshot.RecommendedOrder.Where(s => s is not (LyricSourceId.AppleMusicCache or LyricSourceId.Lyrimuse or LyricSourceId.SodaMusic)),
             snapshot.Enabled);
         Assert.Equal(LyricMatchMode.AccuracyFirst, snapshot.Mode);
     }
@@ -265,6 +265,27 @@ public sealed class AddedLyricSourceTests
         Assert.DoesNotContain("musixmatch", RoundTrip(off).LyricSources);
         // A fresh install has it on.
         Assert.Contains("musixmatch", new AppSettings().Normalized().LyricSources);
+    }
+
+    // Ported from MoreLyricsProvidersTests.swift: testStoredChoicesTakeNewSourcesOnceAndKeepThemOffWhenTurnedOff
+    [Fact]
+    public void StoredChoicesTakeNewSourcesOnceAndKeepThemOffWhenTurnedOff()
+    {
+        string[] added = ["petitLyrics", "deezer", "migu", "vibe", "genie", "lyricFind"];
+        // Someone who saved their sources before these existed (Musixmatch already seen).
+        var before = new AppSettings { LyricSources = ["lrclib", "netEase", "amll"], LyricSourcesSeen = ["musixmatch"] };
+        var first = RoundTrip(before);
+        Assert.Subset(first.LyricSources.ToHashSet(), added.Concat(["lrclib", "netEase", "amll"]).ToHashSet());
+        Assert.DoesNotContain("sodaMusic", first.LyricSources);
+        Assert.DoesNotContain("musixmatch", first.LyricSources);
+        Assert.Equal(first.LyricSources, RoundTrip(first).LyricSources);
+        // Turned off later, it stays off.
+        var off = RoundTrip(SettingsCopy.SetSourceEnabled(first, "deezer", false));
+        Assert.DoesNotContain("deezer", off.LyricSources);
+        Assert.DoesNotContain("deezer", RoundTrip(off).LyricSources);
+        // A fresh install has every online source on but Soda Music.
+        var fresh = new AppSettings().Normalized().LyricSources.ToHashSet();
+        Assert.Equal(LyricSourceInfo.All.Where(s => !s.IsLocal() && s != LyricSourceId.SodaMusic).Select(s => s.RawValue()).ToHashSet(), fresh);
     }
 }
 

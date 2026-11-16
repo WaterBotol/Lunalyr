@@ -92,7 +92,8 @@ public sealed record LyricSourceSnapshot(
     [
         LyricSourceId.AppleMusicCache, LyricSourceId.Lyrimuse, LyricSourceId.Musixmatch, LyricSourceId.LyricsPlus, LyricSourceId.Amll,
         LyricSourceId.NetEase, LyricSourceId.Lrclib, LyricSourceId.QQMusic, LyricSourceId.Kugou, LyricSourceId.Kuwo,
-        LyricSourceId.LyricsOvh,
+        LyricSourceId.SodaMusic, LyricSourceId.PetitLyrics, LyricSourceId.Deezer, LyricSourceId.Migu, LyricSourceId.Vibe,
+        LyricSourceId.Genie, LyricSourceId.LyricFind, LyricSourceId.LyricsOvh,
     ];
 
     /// <summary>
@@ -102,16 +103,31 @@ public sealed record LyricSourceSnapshot(
     public static IReadOnlyDictionary<LyricSourceId, LyricSourceId> PlacedAfter { get; } = new Dictionary<LyricSourceId, LyricSourceId>
     {
         [LyricSourceId.Musixmatch] = LyricSourceId.Lyrimuse,
+        [LyricSourceId.SodaMusic] = LyricSourceId.Kuwo,
+        [LyricSourceId.PetitLyrics] = LyricSourceId.SodaMusic,
+        [LyricSourceId.Deezer] = LyricSourceId.PetitLyrics,
+        [LyricSourceId.Migu] = LyricSourceId.Deezer,
+        [LyricSourceId.Vibe] = LyricSourceId.Migu,
+        [LyricSourceId.Genie] = LyricSourceId.Vibe,
+        [LyricSourceId.LyricFind] = LyricSourceId.Genie,
     };
 
-    /// <summary>Listed but off until switched on (the Mac's <c>offByDefault</c>).</summary>
-    public static IReadOnlySet<LyricSourceId> OffByDefault { get; } = new HashSet<LyricSourceId>();
+    /// <summary>
+    /// Listed but off until switched on (the Mac's <c>offByDefault</c>): Soda Music's search answered nothing to new
+    /// queries when it was added (16 Nov 2026).
+    /// </summary>
+    public static IReadOnlySet<LyricSourceId> OffByDefault { get; } = new HashSet<LyricSourceId> { LyricSourceId.SodaMusic };
 
     /// <summary>
     /// Sources added after people saved their choices: each starts switched on once, for everyone, and is then
     /// remembered as seen, so switching it off again sticks (the Mac's <c>switchedOnOnce</c> and <c>addedLater</c>).
+    /// Soda Music is not among them: it stays off until switched on.
     /// </summary>
-    public static IReadOnlyList<LyricSourceId> AddedLater { get; } = [LyricSourceId.Musixmatch];
+    public static IReadOnlyList<LyricSourceId> AddedLater { get; } =
+    [
+        LyricSourceId.Musixmatch, LyricSourceId.PetitLyrics, LyricSourceId.Deezer, LyricSourceId.Migu, LyricSourceId.Vibe,
+        LyricSourceId.Genie, LyricSourceId.LyricFind,
+    ];
 
     /// <summary>
     /// The order to show for a saved one (by raw value; null: never saved): every source once, a newer source after the

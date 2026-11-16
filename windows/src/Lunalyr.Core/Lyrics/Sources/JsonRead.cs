@@ -55,4 +55,6 @@ internal static class JsonRead
         element is { ValueKind: JsonValueKind.Array } array ? array.EnumerateArray() : [];
 
     public static IEnumerable<JsonElement> Items(this JsonElement element, string name) => element.Get(name).Items();
+
+    public static IEnumerable<JsonElement> Items(this JsonElement? element, string name) => element.Get(name).Items();
 }

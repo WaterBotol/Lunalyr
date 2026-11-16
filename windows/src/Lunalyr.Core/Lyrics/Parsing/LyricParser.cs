@@ -136,6 +136,7 @@ public static class LyricParser
         LyricSourceId.Kuwo => "Kuwo Music",
         LyricSourceId.LyricsOvh => "lyrics.ovh",
         LyricSourceId.Amll => "AMLL TTML DB",
-        _ => source.ToString(),
+        // Musixmatch and the sources added on 16 Nov 2026 label their lyrics with their titles, as the Mac's do.
+        _ => source.Title(),
     };
 }

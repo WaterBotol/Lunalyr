@@ -23,6 +23,13 @@ public static class LyricSourceInfo
         LyricSourceId.LyricsOvh => "lyricsOVH",
         LyricSourceId.Amll => "amll",
         LyricSourceId.Musixmatch => "musixmatch",
+        LyricSourceId.SodaMusic => "sodaMusic",
+        LyricSourceId.PetitLyrics => "petitLyrics",
+        LyricSourceId.Deezer => "deezer",
+        LyricSourceId.Migu => "migu",
+        LyricSourceId.Vibe => "vibe",
+        LyricSourceId.Genie => "genie",
+        LyricSourceId.LyricFind => "lyricFind",
         _ => throw new ArgumentOutOfRangeException(nameof(source), source, null),
     };
 
@@ -55,6 +62,13 @@ public static class LyricSourceInfo
         LyricSourceId.Amll => "AMLL TTML DB",
         LyricSourceId.Lyrimuse => "Lyrimuse local files",
         LyricSourceId.Musixmatch => "Musixmatch",
+        LyricSourceId.SodaMusic => "Soda Music",
+        LyricSourceId.PetitLyrics => "PetitLyrics",
+        LyricSourceId.Deezer => "Deezer",
+        LyricSourceId.Migu => "Migu Music",
+        LyricSourceId.Vibe => "VIBE",
+        LyricSourceId.Genie => "Genie Music",
+        LyricSourceId.LyricFind => "LyricFind (YouTube Music)",
         _ => throw new ArgumentOutOfRangeException(nameof(source), source, null),
     };
 
@@ -66,6 +80,9 @@ public static class LyricSourceInfo
         LyricSourceId.NetEase => "Word or line timing",
         LyricSourceId.QQMusic or LyricSourceId.Kuwo or LyricSourceId.Kugou => "Word or line timing",
         LyricSourceId.Lrclib or LyricSourceId.Musixmatch => "Word or line timing",
+        LyricSourceId.SodaMusic or LyricSourceId.Deezer or LyricSourceId.Migu => "Word or line timing",
+        LyricSourceId.PetitLyrics => "Word timing",
+        LyricSourceId.Vibe or LyricSourceId.Genie or LyricSourceId.LyricFind => "Line timing",
         LyricSourceId.LyricsOvh => "Plain text fallback",
         LyricSourceId.Amll => "Word and syllable timing",
         LyricSourceId.Lyrimuse => "LRC, TTML or YRC files, with readings and translations",
@@ -85,6 +102,8 @@ public static class LyricSourceInfo
     public static int TimingCeiling(this LyricSourceId source) => source switch
     {
         LyricSourceId.LyricsOvh => 0,
+        // These services time lines only (the Mac's dc56f8a).
+        LyricSourceId.Vibe or LyricSourceId.Genie or LyricSourceId.LyricFind => 1,
         // Kuwo's lrcx lyrics are word-timed; its line list is only the fallback (the Mac's 7ddb08a).
         _ => 3,
     };

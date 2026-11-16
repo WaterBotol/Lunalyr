@@ -42,7 +42,8 @@ public sealed partial class OriginalTitles
     public static IReadOnlySet<LyricSourceId> Sources { get; } = new HashSet<LyricSourceId>
     {
         LyricSourceId.Lrclib, LyricSourceId.NetEase, LyricSourceId.QQMusic, LyricSourceId.Kugou, LyricSourceId.Kuwo,
-        LyricSourceId.LyricsPlus, LyricSourceId.Amll,
+        LyricSourceId.LyricsPlus, LyricSourceId.Amll, LyricSourceId.SodaMusic, LyricSourceId.PetitLyrics, LyricSourceId.Deezer,
+        LyricSourceId.Migu, LyricSourceId.Vibe, LyricSourceId.Genie, LyricSourceId.LyricFind,
     };
 
     public static readonly TimeSpan Lifetime = TimeSpan.FromDays(30);

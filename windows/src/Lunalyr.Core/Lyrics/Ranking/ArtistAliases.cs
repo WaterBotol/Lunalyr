@@ -52,8 +52,9 @@ public interface IArtistAliasSearch
 }
 
 /// <summary>
-/// An artist's names in other scripts ("米津玄師" for "Kenshi Yonezu"), from MusicBrainz, so the Chinese catalogues
-/// (NetEase, QQ, Kugou, Kuwo), which often index only the native name, can be searched again under it. Asked only
+/// An artist's names in other scripts ("米津玄師" for "Kenshi Yonezu"), from MusicBrainz, so the East Asian catalogues
+/// (NetEase, QQ, Kugou, Kuwo, Soda, Migu, PetitLyrics, VIBE, Genie), which often index only the native name, can be
+/// searched again under it. Asked only
 /// when such a source found nothing, or only another artist, under the library's name. One request per artist, at
 /// most one a second, and every answer, empty ones too, is kept on disk for 30 days. Thread-safe. Ported from the
 /// Mac's <c>ArtistAliases</c> (Lunalyr's own code).
@@ -62,7 +63,11 @@ public sealed class ArtistAliases
 {
     /// <summary>The sources searched again under another name.</summary>
     public static IReadOnlySet<LyricSourceId> Catalogues { get; } =
-        new HashSet<LyricSourceId> { LyricSourceId.NetEase, LyricSourceId.QQMusic, LyricSourceId.Kugou, LyricSourceId.Kuwo };
+        new HashSet<LyricSourceId>
+        {
+            LyricSourceId.NetEase, LyricSourceId.QQMusic, LyricSourceId.Kugou, LyricSourceId.Kuwo, LyricSourceId.SodaMusic,
+            LyricSourceId.Migu, LyricSourceId.PetitLyrics, LyricSourceId.Vibe, LyricSourceId.Genie,
+        };
 
     public static readonly TimeSpan Lifetime = TimeSpan.FromDays(30);
     public const int MaxEntries = 2000;

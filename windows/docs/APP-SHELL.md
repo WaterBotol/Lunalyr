@@ -371,8 +371,8 @@ raw values. The file also has `schemaVersion` (1). Unknown or out-of-range value
 | `repairQQGaps` | `true` | "Treat long pauses as instrumental" | `custom.repairQQGaps` |
 | `songOffsets` | `{}` | hashed key → seconds (same keys as the Mac) | `custom.songOffsets` |
 | `lyricSourceOrder` | recommended order | source raw values | `custom.lyricSourceOrder` |
-| `lyricSources` | all but `lyrimuse` and `appleMusicCache` | source raw values | `custom.lyricSources` |
-| `lyricSourcesSeen` | unset | sources added later (`musixmatch`) already switched on once, so one switched off again stays off; a new source joins a saved order after the one it is placed after | `custom.lyricSourcesSeen` |
+| `lyricSources` | all but `lyrimuse`, `appleMusicCache` and `sodaMusic` | source raw values | `custom.lyricSources` |
+| `lyricSourcesSeen` | unset | sources added later (`musixmatch`, `petitLyrics`, `deezer`, `migu`, `vibe`, `genie`, `lyricFind`; not `sodaMusic`, which stays off until switched on) already switched on once, so one switched off again stays off; a new source joins a saved order after the one it is placed after | `custom.lyricSourcesSeen` |
 | `lyricMatchMode` | `"smart"` | `smart` (Accuracy first), `priority` (Source order) | `custom.lyricMatchMode` |
 | `lyrimuseFolder` | `""` | the local lyric folder | `custom.lyrimuseFolder` |
 | `artistAliases` | `true` | "Search under other names": artists' native names (MusicBrainz) and songs' original titles (Apple’s catalogue) when the listed names find nothing usable (Timing › Sources) | `custom.artistAliases` |

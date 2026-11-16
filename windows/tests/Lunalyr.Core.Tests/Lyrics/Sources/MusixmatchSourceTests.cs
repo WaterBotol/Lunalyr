@@ -235,10 +235,11 @@ public sealed class MusixmatchSourceTests : IDisposable
         Assert.Equal([LyricSourceId.AppleMusicCache, LyricSourceId.Lyrimuse, LyricSourceId.Musixmatch], LyricSourceSnapshot.RecommendedOrder.Take(3));
         Assert.Equal(LyricSourceInfo.All.ToHashSet(), order.ToHashSet());
 
-        // Someone who switched sources off before Musixmatch existed gets it on, once.
+        // Someone who switched sources off before Musixmatch existed gets it on, once (with the sources added on 16 Nov
+        // 2026 but Soda Music, which starts off).
         var (first, seen) = LyricSourceSnapshot.WithAddedSources(["lrclib", "amll"], null);
-        Assert.Equal(["amll", "lrclib", "musixmatch"], first);
-        Assert.Equal(["musixmatch"], seen);
+        Assert.Equal(["amll", "deezer", "genie", "lrclib", "lyricFind", "migu", "musixmatch", "petitLyrics", "vibe"], first);
+        Assert.Equal(["deezer", "genie", "lyricFind", "migu", "musixmatch", "petitLyrics", "vibe"], seen);
         var (later, _) = LyricSourceSnapshot.WithAddedSources(["lrclib", "amll"], seen);
         Assert.Equal(["amll", "lrclib"], later); // switching it off again sticks
         Assert.Equal(3, LyricSourceId.Musixmatch.TimingCeiling());
