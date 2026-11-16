@@ -67,7 +67,7 @@ final class LyricHighlightOptions: ObservableObject {
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        mode = LyricHighlightMode(rawValue: defaults.string(forKey: Keys.mode) ?? "") ?? .complement
+        mode = LyricHighlightMode(rawValue: defaults.string(forKey: Keys.mode) ?? "") ?? ShippedDefaults.lyricHighlightMode
         let saved = defaults.string(forKey: Keys.custom).flatMap { Self.oklab(hex: $0) == nil ? nil : $0.uppercased() }
         customHex = saved ?? Self.defaultCustom
         customColour = Self.oklab(hex: saved ?? Self.defaultCustom) ?? Self.fallback

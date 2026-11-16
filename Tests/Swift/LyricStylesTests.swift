@@ -104,7 +104,7 @@ final class LyricStylesTests: XCTestCase {
         s.settings.echoStrength = 0.3
         let floating = s.styles.style(for: .floating).settings
         XCTAssertEqual(floating.lyricComposition, .torque)
-        XCTAssertEqual(floating.echoStrength, 1)
+        XCTAssertEqual(floating.echoStrength, ShippedDefaults.echoStrength)
         XCTAssertEqual(s.styles.style(for: .desktop).settings.lyricComposition, .hinge)
     }
 

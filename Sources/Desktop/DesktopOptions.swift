@@ -41,9 +41,9 @@ final class DesktopOptions: ObservableObject {
         self.defaults = defaults
         showsControlsOnHover = defaults.object(forKey: Keys.controlsOnHover) as? Bool ?? true
         shadesMenuBar = defaults.object(forKey: Keys.menuBarShade) as? Bool ?? true
-        automaticTextBacking = defaults.object(forKey: Keys.automaticTextBacking) as? Bool ?? true
-        let stored = defaults.object(forKey: Keys.textBacking) as? Double ?? 0.35
-        textBacking = stored.isFinite ? min(1, max(0, stored)) : 0.35
+        automaticTextBacking = defaults.object(forKey: Keys.automaticTextBacking) as? Bool ?? ShippedDefaults.automaticTextBacking
+        let stored = defaults.object(forKey: Keys.textBacking) as? Double ?? ShippedDefaults.textBacking
+        textBacking = stored.isFinite ? min(1, max(0, stored)) : ShippedDefaults.textBacking
     }
 
     /// The manual setting, or nil when the backdrop decides.

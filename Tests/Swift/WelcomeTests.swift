@@ -60,16 +60,16 @@ final class WelcomeTests: XCTestCase {
             visited.append(flow.step)
         }
         XCTAssertEqual(visited, OnboardingFlow.Step.allCases)
-        XCTAssertEqual(visited, [.welcome, .music, .look, .videos, .lyrics, .extras, .menuBar, .done])
-        XCTAssertEqual(visited.map(\.title), ["Welcome", "Your music", "Pick a look", "Music videos", "Lyrics & readings",
+        XCTAssertEqual(visited, [.welcome, .music, .look, .typeface, .videos, .lyrics, .extras, .menuBar, .done])
+        XCTAssertEqual(visited.map(\.title), ["Welcome", "Your music", "Pick a look", "Pick a typeface", "Music videos", "Lyrics & readings",
                                               "Extras", "The menu bar", "Done"])
         flow.advance()
         XCTAssertEqual(flow.step, .done, "Continue stops at the end")
         flow.back()
         XCTAssertEqual(flow.step, .menuBar)
         XCTAssertTrue(flow.canGoBack)
-        XCTAssertEqual(OnboardingFlow.Step.music.position, "Step 2 of 8")
-        XCTAssertEqual(OnboardingFlow.Step.done.position, "Step 8 of 8")
+        XCTAssertEqual(OnboardingFlow.Step.music.position, "Step 2 of 9")
+        XCTAssertEqual(OnboardingFlow.Step.done.position, "Step 9 of 9")
     }
 
     /// The access step starts following the players without asking, so
@@ -400,6 +400,85 @@ final class WelcomeTests: XCTestCase {
         XCTAssertEqual(side * WelcomeGlass.tileShare / window.height, 0.5, accuracy: 0.01)
     }
 
+
+    // MARK: The typeface step
+
+    /// A few faces that need no download, SF Pro first and chosen on a new
+    /// install; Manrope only once it has loaded.
+    @MainActor
+    func testTheTypefaceStepOffersFacesThatNeedNoDownload() {
+        XCTAssertEqual(OnboardingTypefaces.offered(manropeLoaded: false), [.appleMusic, .sans, .serif, .slab, .soft])
+        XCTAssertEqual(OnboardingTypefaces.offered(manropeLoaded: true),
+                       [.appleMusic, .manrope, .sans, .serif, .slab, .soft])
+        for loaded in [false, true] {
+            let offered = OnboardingTypefaces.offered(manropeLoaded: loaded)
+            XCTAssertTrue((4...6).contains(offered.count))
+            XCTAssertFalse(offered.contains(where: \.takesFamily), "Google Fonts and installed fonts stay in Settings")
+            XCTAssertFalse(offered.contains(.auto))
+        }
+        let rig = OnboardingRig()
+        defer { rig.tearDown() }
+        XCTAssertEqual(rig.models.settings.fontChoice, .appleMusic, "the default is preselected")
+        XCTAssertEqual(OnboardingCopy.typefaceLater, "You can change this later in Settings › Look › Text.")
+        XCTAssertEqual(OnboardingFlow.Step.typeface.title, "Pick a typeface")
+    }
+
+    /// The choice is both styles' typeface: the one being edited, and the
+    /// kept Floating style, which the parked stores then draw.
+    @MainActor
+    func testTheTypefaceStepSetsBothLyricStyles() {
+        let rig = OnboardingRig()
+        defer { rig.tearDown() }
+        let defaults = rig.defaults
+        DefaultsMigration.run(defaults) // a new install: its Floating style is kept
+        let settings = rig.models.settings
+        let styles = LyricStyles(defaults: defaults, edited: LyricStyle(
+            settings: settings, colours: rig.models.colours, highlights: rig.models.highlightColours, defaults: defaults),
+            notifications: NotificationCenter())
+        var reloads = 0
+        let flow = OnboardingFlow(models: rig.models, firstRun: true, step: .typeface, styleDefaults: defaults,
+                                  reloadStyles: { reloads += 1; styles.reloadParked() })
+        flow.chooseTypeface(.serif)
+        XCTAssertEqual(settings.fontChoice, .serif)
+        XCTAssertEqual(defaults.string(forKey: "fontChoice"), "serif")
+        XCTAssertEqual(LyricStyleProfiles(defaults: defaults).saved(.floating)?["fontChoice"] as? String, "serif")
+        XCTAssertEqual(styles.style(for: .floating).settings.fontChoice, .serif)
+        XCTAssertEqual(styles.style(for: .desktop).settings.fontChoice, .serif)
+        XCTAssertEqual(reloads, 1)
+        flow.chooseTypeface(.slab)
+        XCTAssertEqual(styles.style(for: .floating).settings.fontChoice, .slab)
+        // With the Floating style being edited, the Desktop one is kept: it
+        // takes the choice too.
+        let options = FloatingLyricsOptions(defaults: defaults) {
+            settings.reloadLyricStyle(); styles.followEditing()
+        }
+        options.surface = .floating
+        flow.chooseTypeface(.soft)
+        XCTAssertEqual(styles.style(for: .floating).settings.fontChoice, .soft)
+        XCTAssertEqual(styles.style(for: .desktop).settings.fontChoice, .soft)
+        options.surface = .desktop
+        XCTAssertEqual(settings.fontChoice, .soft)
+    }
+
+    /// An install whose Floating style was never kept starts it from the
+    /// Desktop's, so it takes the choice from there.
+    @MainActor
+    func testTheTypefaceStepReachesAFloatingStyleNotYetKept() {
+        let rig = OnboardingRig()
+        defer { rig.tearDown() }
+        let defaults = rig.defaults
+        defaults.set(true, forKey: "hasOnboarded")
+        DefaultsMigration.run(defaults)
+        let styles = LyricStyles(defaults: defaults, edited: LyricStyle(
+            settings: rig.models.settings, colours: rig.models.colours, highlights: rig.models.highlightColours,
+            defaults: defaults), notifications: NotificationCenter())
+        let flow = OnboardingFlow(models: rig.models, firstRun: false, step: .typeface, styleDefaults: defaults,
+                                  reloadStyles: { styles.reloadParked() })
+        XCTAssertEqual(styles.style(for: .floating).settings.fontChoice, .manrope, "the old default, kept")
+        flow.chooseTypeface(.sans)
+        XCTAssertNil(LyricStyleProfiles(defaults: defaults).saved(.floating))
+        XCTAssertEqual(styles.style(for: .floating).settings.fontChoice, .sans)
+    }
 }
 
 /// Isolated stores around players that haven't been followed yet, as at

@@ -421,7 +421,7 @@ final class OpeningTitleTests: XCTestCase {
         XCTAssertEqual(OpeningTitle.rest(kept, at: ordinary.leave - 0.1), 0, accuracy: 1e-9)
         XCTAssertEqual(OpeningTitle.rest(kept, at: ordinary.leave + OpeningTitle.restEase), 1, accuracy: 1e-9)
         let phase = try XCTUnwrap(OpeningTitle.phase(kept, at: 60))
-        XCTAssertEqual(phase.opacity, OpeningTitle.restOpacity, accuracy: 1e-9)
+        XCTAssertEqual(phase.opacity, OpeningTitle.keptStrength(), accuracy: 1e-9)
         XCTAssertFalse(phase.moving, "held at rest, nothing on it changes")
         XCTAssertTrue(phase.kept)
     }
@@ -510,10 +510,12 @@ final class OpeningTitleTests: XCTestCase {
 
     // MARK: Moved and resized on the Settings picture
 
-    func testTheDefaultPlaceIsUnchanged() {
+    /// The place worked out from the screen, which installs from before
+    /// the November 2026 defaults keep.
+    func testTheWorkedOutPlaceIsUnchanged() {
         for size in [CGSize(width: 1512, height: 982), CGSize(width: 1280, height: 800), CGSize(width: 2560, height: 1440)] {
             let base = LyricViewportMetrics(size: size).baseSize
-            let box = OpeningTitle.box(in: size, baseSize: base, placement: .standard)
+            let box = OpeningTitle.box(in: size, baseSize: base, placement: .init(corner: nil, scale: 1))
             XCTAssertEqual(box.minX, max(40, size.width * 0.058), accuracy: 0.001)
             XCTAssertEqual(size.height - box.maxY, max(96, size.height * 0.13), accuracy: 0.001)
             XCTAssertEqual(box.width, size.width * 0.46, accuracy: 0.001)
@@ -697,8 +699,8 @@ final class OpeningTitleTests: XCTestCase {
         UserDefaults.standard.removeObject(forKey: OpeningTitle.strengthKey)
         let kept = try XCTUnwrap(OpeningTitle.schedule(words: .timed(firstLine: 14), keep: true))
         let rested = kept.restsFrom + OpeningTitle.restEase + 1
-        XCTAssertEqual(try XCTUnwrap(OpeningTitle.phase(kept, at: rested)).opacity, OpeningTitle.restOpacity, accuracy: 1e-9,
-                       "55% by default, as before")
+        XCTAssertEqual(try XCTUnwrap(OpeningTitle.phase(kept, at: rested)).opacity, 1, accuracy: 1e-9,
+                       "solid by default since November 2026")
         for (set, expected) in [(1.0, 1.0), (0.3, 0.3), (0.8, 0.8), (0.05, 0.3), (4.0, 1.0)] {
             UserDefaults.standard.set(set, forKey: OpeningTitle.strengthKey)
             XCTAssertEqual(try XCTUnwrap(OpeningTitle.phase(kept, at: rested)).opacity, expected, accuracy: 1e-9, "\(set)")

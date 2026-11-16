@@ -35,10 +35,12 @@ enum BackingVocals {
     /// Cascade and Cutout), which would take over the stage.
     static let choices: [LyricComposition] = [.scattered, .constellation, .echo]
 
-    /// The saved choice, or nil to follow the lead's layout.
+    /// The saved choice, or nil to follow the lead's layout (stored as "").
+    /// Nothing saved is `ShippedDefaults.backingVocalStyle`.
     static var chosenStyle: LyricComposition? { chosenStyle(in: .standard) }
     static func chosenStyle(in defaults: UserDefaults) -> LyricComposition? {
-        defaults.string(forKey: styleKey).flatMap(LyricComposition.saved).flatMap { choices.contains($0) ? $0 : nil }
+        LyricComposition.saved(defaults.string(forKey: styleKey) ?? ShippedDefaults.backingVocalStyle.rawValue)
+            .flatMap { choices.contains($0) ? $0 : nil }
     }
 
     /// What a group animates in: the choice, else the lead's own layout,

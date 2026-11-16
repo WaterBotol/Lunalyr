@@ -3,7 +3,7 @@ import Combine
 
 // MARK: - Onboarding: the steps and what moving between them does
 //
-// Eight steps, one window (`OnboardingWindowController`). The flow is a plain
+// Nine steps, one window (`OnboardingWindowController`). The flow is a plain
 // model, so the order of things -- and above all when macOS may ask about a
 // player -- can be tested without a window:
 //
@@ -30,7 +30,7 @@ enum OnboardingEnding: Equatable {
 @MainActor
 final class OnboardingFlow: ObservableObject {
     enum Step: Int, CaseIterable, Identifiable, Comparable {
-        case welcome, music, look, videos, lyrics, extras, menuBar, done
+        case welcome, music, look, typeface, videos, lyrics, extras, menuBar, done
 
         var id: Int { rawValue }
 
@@ -40,6 +40,7 @@ final class OnboardingFlow: ObservableObject {
             case .welcome: return "Welcome"
             case .music: return "Your music"
             case .look: return "Pick a look"
+            case .typeface: return "Pick a typeface"
             case .videos: return "Music videos"
             case .lyrics: return "Lyrics & readings"
             case .extras: return "Extras"
@@ -48,7 +49,7 @@ final class OnboardingFlow: ObservableObject {
             }
         }
 
-        /// "Step 2 of 8": the step dots, to VoiceOver.
+        /// "Step 2 of 9": the step dots, to VoiceOver.
         var position: String { "Step \(rawValue + 1) of \(Self.allCases.count)" }
 
         static func < (lhs: Step, rhs: Step) -> Bool { lhs.rawValue < rhs.rawValue }
@@ -71,12 +72,31 @@ final class OnboardingFlow: ObservableObject {
     /// Closes the window, saying how it ended.
     var onFinish: (OnboardingEnding) -> Void
 
+    /// Where the lyric styles are kept, for the typeface step; the app's
+    /// preferences, or a test's suite.
+    private let styleDefaults: UserDefaults
+    /// Rereads the style not being edited after the typeface step wrote it.
+    private let reloadStyles: @MainActor () -> Void
+
     init(models: LunalyrModels, firstRun: Bool, step: Step = .welcome,
+         styleDefaults: UserDefaults = .standard,
+         reloadStyles: @escaping @MainActor () -> Void = { LyricStyles.shared.reloadParked() },
          onFinish: @escaping (OnboardingEnding) -> Void = { _ in }) {
         self.models = models
         self.firstRun = firstRun
         self.step = step
+        self.styleDefaults = styleDefaults
+        self.reloadStyles = reloadStyles
         self.onFinish = onFinish
+    }
+
+    // MARK: Typeface
+
+    /// The typeface step's choice: both lyric styles, Desktop and Floating,
+    /// take it (`LyricStyleProfiles.setTypeface`).
+    func chooseTypeface(_ choice: Settings.FontChoice) {
+        LyricStyleProfiles.setTypeface(choice, settings: models.settings, defaults: styleDefaults)
+        reloadStyles()
     }
 
     var canGoBack: Bool { step != .welcome }
@@ -188,6 +208,10 @@ enum OnboardingCopy {
     }
     /// How many more layouts Settings has than the look step shows.
     static func moreLayouts(_ count: Int) -> String { "\(count) more in Settings, with Automatic." }
+
+    static let typefaceTitle = "Pick a typeface"
+    static let typeface = "The lyrics are set large and bold in it, on the desktop and in the floating lyrics."
+    static let typefaceLater = "You can change this later in Settings › Look › Text."
 
     static let videosTitle = "Music videos"
     static let videos = "Play a song’s official video behind its lyrics, muted. Videos in your Music library come first and need nothing sent."

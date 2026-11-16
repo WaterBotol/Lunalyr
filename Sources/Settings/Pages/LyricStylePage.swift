@@ -57,15 +57,15 @@ struct LyricStylePage: View {
 
     @AppStorage(LyricLayoutRotation.enabledKey) private var rotateLayouts = true
     @AppStorage(BackingVocals.settingKey) private var backingLayer = true
-    @AppStorage(BackingVocals.styleKey) private var backingStyle = ""
+    @AppStorage(BackingVocals.styleKey) private var backingStyle = ShippedDefaults.backingVocalStyle.rawValue
     @AppStorage(LyricCreditCues.settingKey) private var showCredits = true
     @AppStorage(OpeningTitle.settingKey) private var showOpeningTitle = true
     @AppStorage(OpeningTitle.coverKey) private var showOpeningCover = true
-    @AppStorage(OpeningTitle.alwaysKey) private var keepsOpeningTitle = false
+    @AppStorage(OpeningTitle.alwaysKey) private var keepsOpeningTitle = ShippedDefaults.openingTitleAlways
     @AppStorage(OpeningTitle.Placement.leftKey) private var titleLeft: Double?
     @AppStorage(OpeningTitle.Placement.liftKey) private var titleLift: Double?
-    @AppStorage(OpeningTitle.Placement.scaleKey) private var titleScale: Double = 1
-    @AppStorage(OpeningTitle.strengthKey) private var titleStrength: Double = OpeningTitle.restOpacity
+    @AppStorage(OpeningTitle.Placement.scaleKey) private var titleScale: Double?
+    @AppStorage(OpeningTitle.strengthKey) private var titleStrength: Double = ShippedDefaults.openingTitleStrength
     @ObservedObject private var rotation = LyricLayoutRotation.shared
 
     /// What the chosen layout does, a style remembered for this song, the
@@ -155,12 +155,12 @@ struct LyricStylePage: View {
                     } else {
                         titleLeft = nil
                         titleLift = nil
-                        titleScale = 1
+                        titleScale = nil
                     }
                 }
                 .padding(.leading, 23)
                 .disabled(!showOpeningTitle || (floating.isFloating ? !floating.titleIsPlacedByHand
-                    : titleLeft == nil && titleLift == nil && abs(titleScale - 1) < 0.001))
+                    : OpeningTitle.Placement.resolved(left: titleLeft, lift: titleLift, scale: titleScale).isStandard))
                 .help(floating.isFloating
                       ? "Puts the song title card back just above the floating lyrics, at its usual size, on every display."
                       : "Drag the song title on the picture to move it, or its corner to resize it. This puts it back low on the left at its usual size.")

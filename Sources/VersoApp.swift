@@ -10,6 +10,13 @@ struct VersoApp: App {
     /// For the icon, which changes while an update waits.
     @StateObject private var updates = AppUpdates.shared
 
+    init() {
+        // Before any store reads the preferences: an install from before
+        // the November 2026 defaults keeps its old ones. Never in the test
+        // host, whose preferences are not the user's.
+        if !AppRuntime.isUnitTesting { DefaultsMigration.run(.standard) }
+    }
+
     var body: some Scene {
         // The XCTest host is this app: without this, every test run put a
         // second Lunalyr icon in the menu bar beside the real one.

@@ -26,6 +26,7 @@ extension UISnapshotCatalogue {
                  }),
             step("onboarding/3-look-lyrics", "Pick a look: the lyric layouts, the one in use first", .look,
                  prepare: { $0.settings.lyricComposition = .hinge }, lookPart: .lyrics),
+            step("onboarding/3-typeface", "Pick a typeface: the sample line in each face, SF Pro chosen", .typeface),
             step("onboarding/4-videos", "Music videos: off, both framings, YouTube search off", .videos),
             step("onboarding/4-videos-on", "Music videos: on, library videos whole, YouTube search on", .videos,
                  looks: every, prepare: { scene in

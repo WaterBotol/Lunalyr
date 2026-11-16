@@ -79,7 +79,7 @@ final class LunalyrExtras: ObservableObject {
         didSet { defaults.set(lyricCardLinesAfter, forKey: Keys.lyricCardLinesAfter) }
     }
     @Published var lyricCardComposition: LyricComposition? {
-        didSet { defaults.set(lyricCardComposition?.rawValue, forKey: Keys.lyricCardComposition) }
+        didSet { defaults.set(lyricCardComposition?.rawValue ?? ShippedDefaults.automatic, forKey: Keys.lyricCardComposition) }
     }
 
     static func clampedCardLineCount(_ count: Int) -> Int {
@@ -270,9 +270,13 @@ final class LunalyrExtras: ObservableObject {
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        lyricCardLinesBefore = Self.clampedCardLineCount(defaults.integer(forKey: Keys.lyricCardLinesBefore))
-        lyricCardLinesAfter = Self.clampedCardLineCount(defaults.integer(forKey: Keys.lyricCardLinesAfter))
-        lyricCardComposition = defaults.string(forKey: Keys.lyricCardComposition).flatMap(LyricComposition.saved)
+        lyricCardLinesBefore = Self.clampedCardLineCount(defaults.object(forKey: Keys.lyricCardLinesBefore) as? Int
+            ?? ShippedDefaults.lyricCardLines)
+        lyricCardLinesAfter = Self.clampedCardLineCount(defaults.object(forKey: Keys.lyricCardLinesAfter) as? Int
+            ?? ShippedDefaults.lyricCardLines)
+        // "automatic" stores "follow the lyrics", now that a missing key is Fable.
+        lyricCardComposition = defaults.string(forKey: Keys.lyricCardComposition).map(LyricComposition.saved)
+            ?? ShippedDefaults.lyricCardComposition
         showsMenuBarLine = defaults.bool(forKey: Keys.menuBarLine)
         showsDiscordPresence = defaults.bool(forKey: Keys.discordPresence)
         discordStatusText = defaults.string(forKey: Keys.discordStatusText).flatMap(DiscordStatusText.init(rawValue:)) ?? .lyric

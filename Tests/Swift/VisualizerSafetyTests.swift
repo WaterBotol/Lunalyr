@@ -159,19 +159,22 @@ final class VisualizerSafetyTests: XCTestCase {
         let isolated = UserDefaults(suiteName: name)!
         defer { isolated.removePersistentDomain(forName: name) }
         let preferences = VisualizerPreferences(defaults: isolated)
-        XCTAssertEqual(preferences.punch, 1)
-        XCTAssertEqual(preferences.wavefieldColours, .album)
+        // The November 2026 defaults.
+        XCTAssertEqual(preferences.punch, 2)
+        XCTAssertEqual(preferences.wavefieldColours, .original)
         XCTAssertEqual(preferences.wavecoreColours, .album)
-        XCTAssertFalse(preferences.heavyScenesOnMainDisplayOnly)
+        XCTAssertTrue(preferences.heavyScenesOnMainDisplayOnly)
         XCTAssertNil(preferences.colours(for: .light3D), "Light 3D keeps its own setting")
         preferences.punch = 5
-        preferences.setColours(.original, for: .wavefield)
-        preferences.heavyScenesOnMainDisplayOnly = true
+        XCTAssertEqual(isolated.double(forKey: VisualizerPreferences.Key.punch), 2, "A stored value outside the slider is clamped")
+        preferences.punch = 0.5
+        preferences.setColours(.album, for: .wavefield)
+        preferences.heavyScenesOnMainDisplayOnly = false
         let reloaded = VisualizerPreferences(defaults: isolated)
-        XCTAssertEqual(reloaded.punch, 2, "A stored value outside the slider is clamped")
-        XCTAssertEqual(reloaded.colours(for: .wavefield), .original)
+        XCTAssertEqual(reloaded.punch, 0.5)
+        XCTAssertEqual(reloaded.colours(for: .wavefield), .album)
         XCTAssertEqual(reloaded.wavecoreColours, .album)
-        XCTAssertTrue(reloaded.heavyScenesOnMainDisplayOnly)
+        XCTAssertFalse(reloaded.heavyScenesOnMainDisplayOnly)
         isolated.set("unknown", forKey: VisualizerPreferences.Key.wavecoreColours)
         XCTAssertEqual(VisualizerPreferences(defaults: isolated).wavecoreColours, .album)
     }

@@ -279,7 +279,7 @@ final class LyricHighlightTests: XCTestCase {
         let isolated = UserDefaults(suiteName: name)!
         defer { isolated.removePersistentDomain(forName: name) }
         let options = LyricHighlightOptions(defaults: isolated)
-        XCTAssertEqual(options.mode, .complement, "complements the lyrics until chosen otherwise")
+        XCTAssertEqual(options.mode, .album, "the album accent until chosen otherwise (November 2026)")
         XCTAssertEqual(options.customHex, LyricHighlightOptions.defaultCustom)
         for mode in LyricHighlightMode.allCases {
             options.mode = mode
@@ -295,7 +295,7 @@ final class LyricHighlightTests: XCTestCase {
         isolated.set("sepia", forKey: LyricHighlightOptions.Keys.mode)
         isolated.set("#12", forKey: LyricHighlightOptions.Keys.custom)
         let repaired = LyricHighlightOptions(defaults: isolated)
-        XCTAssertEqual(repaired.mode, .complement)
+        XCTAssertEqual(repaired.mode, .album)
         XCTAssertEqual(repaired.customHex, LyricHighlightOptions.defaultCustom)
     }
 

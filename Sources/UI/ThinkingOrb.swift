@@ -57,10 +57,11 @@ enum ThinkingOrb {
         "breathing", mixStyle,
     ]
 
-    /// A stored value as a style: unknown or missing values are `listening`.
+    /// A stored value as a style: missing is the shipped style
+    /// (`ShippedDefaults.thinkingOrbStyle`), unknown values `listening`.
     static func normalised(_ raw: String?) -> String {
-        guard let raw, styles.contains(raw) else { return defaultStyle }
-        return raw
+        guard let raw else { return ShippedDefaults.thinkingOrbStyle }
+        return styles.contains(raw) ? raw : defaultStyle
     }
 
     /// The picker's friendly name.

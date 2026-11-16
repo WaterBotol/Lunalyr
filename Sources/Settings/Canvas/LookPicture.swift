@@ -30,7 +30,7 @@ struct LookPicture: View {
     private var nothingPlaying: Bool { playing.current == nil }
     private var showsFloating: Bool { floating.isFloating && object != .covers }
     @AppStorage(OpeningTitle.settingKey) private var showsOpeningTitle = true
-    @AppStorage(OpeningTitle.alwaysKey) private var keepsOpeningTitle = false
+    @AppStorage(OpeningTitle.alwaysKey) private var keepsOpeningTitle = ShippedDefaults.openingTitleAlways
 
     var body: some View {
         PreviewStage(desktop: desktop, cornerRadius: 8, showsMenuBar: true) {
@@ -380,15 +380,14 @@ struct TitleCardHandles: View {
     // Read so the box redraws when the placement changes (a Reset).
     @AppStorage(OpeningTitle.Placement.leftKey) private var left: Double?
     @AppStorage(OpeningTitle.Placement.liftKey) private var lift: Double?
-    @AppStorage(OpeningTitle.Placement.scaleKey) private var scale: Double = 1
+    @AppStorage(OpeningTitle.Placement.scaleKey) private var scale: Double?
     @State private var start: (box: CGRect, placement: OpeningTitle.Placement)?
 
     private var baseSize: CGFloat { LyricViewportMetrics(size: desktop).baseSize }
     private var unit: CGFloat { LyricViewportMetrics.previewScale(desktop: desktop, inside: picture) }
 
     var body: some View {
-        let placement = OpeningTitle.Placement(corner: left.flatMap { x in lift.map { CGPoint(x: x, y: $0) } },
-                                               scale: scale)
+        let placement = OpeningTitle.Placement.resolved(left: left, lift: lift, scale: scale)
         let frame = OpeningTitle.box(in: desktop, baseSize: baseSize, placement: placement)
         let box = CGRect(x: frame.minX * unit, y: frame.minY * unit, width: frame.width * unit, height: frame.height * unit)
         ZStack(alignment: .topLeading) {

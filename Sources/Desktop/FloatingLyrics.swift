@@ -226,8 +226,8 @@ final class FloatingLyricsOptions: ObservableObject {
     }
 
     static let textSizeRange: ClosedRange<Double> = 22...110
-    static let defaultTextSize = SizePreset.medium.rawValue
-    static let defaultBackdrop = 0.6
+    static let defaultTextSize = ShippedDefaults.floatingTextSize
+    static let defaultBackdrop = ShippedDefaults.floatingBackdrop
 
     /// The style Settings is editing: its values are the app's lyric
     /// settings, and the other style waits under its own key
