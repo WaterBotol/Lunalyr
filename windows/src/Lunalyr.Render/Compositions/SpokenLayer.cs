@@ -355,7 +355,7 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger, Composit
                 }
                 if (unit.Symbol is not null || action.Tints)
                     DrawAccent(dc, token, unit, labelWorld, world, scale, opacity, blur, action, time, state.Presentation.Preview, clip,
-                               lettersDrawn);
+                               lettersDrawn, reduce);
                 var readingWorld = Matrix3x2.CreateTranslation(unit.ReadingOffset) * world;
                 var reading = state.Presentation.Preview ? null : unit.Reading;
                 reading?.Draw(dc, readingWorld, scale, (float)opacity, blur, GlowSpec.None, 1, readingBoundaries, readingShares, clip: clip);
@@ -471,7 +471,7 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger, Composit
     /// </summary>
     private static void DrawAccent(ID2D1DeviceContext dc, RollingWord token, SpokenUnit unit, in Matrix3x2 labelWorld,
                                    in Matrix3x2 world, float scale, double opacity, float blur, in LivelyPose action,
-                                   double time, bool preview, InkClip clip, bool lettersDrawn = false)
+                                   double time, bool preview, InkClip clip, bool lettersDrawn = false, bool reduce = false)
     {
         var sweep = unit.SymbolSung is not null || action.Tints ? Math.Clamp(SungSweep.Progress(token, time), 0, 1) : 0;
         var basis = Vector4.Lerp(unit.RestColour, unit.SungColour, (float)sweep);
@@ -480,12 +480,16 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger, Composit
         if (unit.Symbol is not { } symbol || preview) return;
         var shown = opacity * WordActionMotion.SymbolOpacity(time - token.Source.Start);
         if (!(shown > 0.002)) return;
-        var symbolWorld = Matrix3x2.CreateTranslation(unit.SymbolOffset) * world;
+        // It pops in, echoing the word's action (the Mac's symbol entrance); under Reduce Motion it only fades.
+        var entrance = LivelyWord.SymbolEntrance(unit.Action, time - token.Source.Start, reduce, token.PointSize, symbol.Box, out var cool);
+        var symbolWorld = entrance * Matrix3x2.CreateTranslation(unit.SymbolOffset) * world;
         var glow = LivelyWord.Glow(action, unit.RestColour, token.PointSize);
         if (glow.Visible) glow = glow with { Radius = glow.Radius * scale };
         symbol.Draw(dc, symbolWorld, scale, (float)shown, blur, glow, 1, clip: clip);
         if (unit.SymbolSung is { } sung && sweep > 0.002) sung.Draw(dc, symbolWorld, scale, (float)(shown * sweep), blur, GlowSpec.None, 0, clip: clip);
         if (action.Tints) symbol.DrawTinted(dc, symbolWorld, cue with { W = (float)shown }, clip);
+        if (cool > 0.005)
+            symbol.DrawTinted(dc, symbolWorld, LivelyWord.Tinted(LivelyPose.Identity with { Cool = cool }, basis with { W = 1 }, shown), clip);
     }
 
     /// <summary>A fold about the bottom edge of a unit <paramref name="height"/> tall, drawn as a foreshortening.</summary>

@@ -70,6 +70,27 @@ internal static class LivelyWord
     }
 
     /// <summary>
+    /// A word symbol's entrance (the Mac's SymbolEntranceEffect, 16 Nov 2026): <paramref name="elapsed"/> seconds after
+    /// its word's onset, it pops in (a springy scale with overshoot, a wobble, a rise), echoing the word's
+    /// <paramref name="action"/>. A transform of the symbol's own space (layout pixels from its centre; <paramref name="box"/>
+    /// its size), travel in ems of the symbol (half the word's <paramref name="size"/>); identity under Reduce Motion
+    /// (it only fades) and once settled. <paramref name="cool"/>: how cold it lands (frost), 0…1.
+    /// </summary>
+    public static Matrix3x2 SymbolEntrance(WordAction? action, double elapsed, bool reduceMotion, double size, Vector2 box,
+                                           out double cool)
+    {
+        cool = 0;
+        if (SymbolEntrancePose.Entrance(elapsed, reduceMotion) is not { } e) return Matrix3x2.Identity;
+        var p = SymbolEntrancePose.Make(action, e);
+        cool = 0.9 * p.Cool;
+        var em = (float)(size * 0.5);
+        var anchor = new Vector2(0, (float)((p.AnchorY - 0.5) * box.Y));
+        return Matrix3x2.CreateScale((float)p.Sx, (float)p.Sy, anchor)
+            * Matrix3x2.CreateRotation((float)(p.Rotation * Math.PI / 180))
+            * Matrix3x2.CreateTranslation((float)p.Dx * em, (float)p.Dy * em);
+    }
+
+    /// <summary>
     /// The frame round the word that its whirlwind and vignette are drawn in (the Mac draws them outside the word's scale
     /// and turn): the pose's tilt about <paramref name="centre"/>, then its travel in ems of <paramref name="size"/>.
     /// </summary>

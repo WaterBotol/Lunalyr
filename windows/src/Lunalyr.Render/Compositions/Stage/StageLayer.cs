@@ -873,8 +873,15 @@ internal abstract class StageLayer(CompositionKind kind, IWordBreaker breaker, L
         if (word.Symbols.Length > colour)
         {
             var symbol = shown * WordActionMotion.SymbolOpacity(time - run.Start);
-            DrawInk(dc, word.Symbols[colour], moved, word.SymbolOffset + nudge, symbol, blur, shadow, glow: glow);
-            if (pose.Tints) DrawCue(dc, word.Symbols[colour], word.Colours[Math.Min(colour, word.Colours.Length - 1)], pose, moved, word.SymbolOffset + nudge, symbol);
+            // It pops in, echoing the word's action (the Mac's symbol entrance); under Reduce Motion it only fades.
+            var entrance = LivelyWord.SymbolEntrance(word.Action, time - run.Start, ReduceMotion, word.FontSize,
+                                                     word.Symbols[colour].Box, out var cool);
+            var symbolUnit = Homography.Of(entrance) * Matrix4x4.CreateTranslation(word.SymbolOffset.X + nudge.X, word.SymbolOffset.Y + nudge.Y, 0) * moved;
+            DrawInk(dc, word.Symbols[colour], symbolUnit, Vector2.Zero, symbol, blur, shadow, glow: glow);
+            if (pose.Tints) DrawCue(dc, word.Symbols[colour], word.Colours[Math.Min(colour, word.Colours.Length - 1)], pose, symbolUnit, Vector2.Zero, symbol);
+            if (cool > 0.005)
+                DrawCue(dc, word.Symbols[colour], word.Colours[Math.Min(colour, word.Colours.Length - 1)],
+                        LivelyPose.Identity with { Cool = cool }, symbolUnit, Vector2.Zero, symbol);
         }
         if (around) DrawLivelyAround(dc, Homography.Flat(rest), wordCentre, wordBox, pose, time - run.Start, word.FontSize, tone, (float)shown, front: true);
     }

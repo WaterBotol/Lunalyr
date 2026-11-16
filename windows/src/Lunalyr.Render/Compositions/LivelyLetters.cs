@@ -868,16 +868,25 @@ internal sealed class LivelyLetters : IDisposable
                 Opacity = 1, LayerOptions = LayerOptions1.None,
             }, null!);
             dc.Transform = _world;
-            const int strips = 12;
-            var end = Math.Min(sheet.Right, reach + feather);
-            for (var k = 0; k < strips; k++)
+            // The Mac's gradient across the sheet: 0.42 at its leading edge, 0.22 where the frost is solid, clear a feather
+            // past the front.
+            var stopAt = (float)Math.Min(1, Math.Max(0.001, (reach + feather - sheet.Left) / sheet.Width));
+            var solid = (float)Math.Max(0, (reach - sheet.Left) / sheet.Width);
+            var strength = (float)(a * (1 - thaw)) * _opacity;
+            var stops = new[]
             {
-                var x0 = sheet.Left + (end - sheet.Left) * k / strips;
-                var x1 = sheet.Left + (end - sheet.Left) * (k + 1) / strips;
-                var mid = (x0 + x1) / 2;
-                var alpha = mid <= reach ? 0.42 - 0.2 * (mid - sheet.Left) / Math.Max(1, reach - sheet.Left) : 0.22 * (1 - (mid - reach) / feather);
-                SetBrush(ice with { W = (float)(Math.Max(0, alpha) * a * (1 - thaw)) });
-                dc.FillRectangle(new Vortice.RawRectF(x0, sheet.Top, x1, sheet.Bottom), _brush!);
+                new GradientStop { Position = 0, Color = new Color4(ice.X, ice.Y, ice.Z, 0.42f * strength) },
+                new GradientStop { Position = Math.Min(solid, stopAt * 0.99f), Color = new Color4(ice.X, ice.Y, ice.Z, 0.22f * strength) },
+                new GradientStop { Position = stopAt, Color = new Color4(ice.X, ice.Y, ice.Z, 0) },
+            };
+            using (var collection = dc.CreateGradientStopCollection(stops))
+            using (var gradient = dc.CreateLinearGradientBrush(new LinearGradientBrushProperties
+                   {
+                       StartPoint = new Vector2(sheet.Left, sheet.Top + sheet.Height / 2),
+                       EndPoint = new Vector2(sheet.Right, sheet.Top + sheet.Height / 2),
+                   }, collection))
+            {
+                dc.FillRectangle(new Vortice.RawRectF(sheet.Left, sheet.Top, sheet.Right, sheet.Bottom), gradient);
             }
             dc.PopLayer();
         }

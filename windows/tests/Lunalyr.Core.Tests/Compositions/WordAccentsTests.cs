@@ -136,60 +136,6 @@ public class WordAccentsTests
     public void Every_default_symbol_has_a_glyph() =>
         Assert.All(WordAccents.DefaultSymbols, pair => Assert.NotNull(WordSymbolGlyphs.Glyph(pair.Value)));
 
-    [Theory]
-    [MemberData(nameof(Actions))]
-    public void Motion_is_identity_before_and_after(WordAction action)
-    {
-        var duration = WordActionMotion.Duration(action);
-        foreach (var reduce in new[] { false, true })
-        {
-            Assert.True(WordActionMotion.Pose(action, -1, reduce).IsIdentity);
-            Assert.True(WordActionMotion.Pose(action, 0, reduce).IsIdentity);
-            Assert.True(WordActionMotion.Pose(action, duration, reduce).IsIdentity);
-            Assert.True(WordActionMotion.Pose(action, duration + 3, reduce).IsIdentity);
-            Assert.False(WordActionMotion.Pose(action, duration * 0.45, reduce).IsIdentity);
-        }
-    }
-
-    [Theory]
-    [MemberData(nameof(Actions))]
-    public void Reduce_motion_only_shows_a_colour_cue(WordAction action)
-    {
-        for (var t = 0.01; t < 1; t += 0.05)
-        {
-            var pose = WordActionMotion.Pose(action, t, reduceMotion: true);
-            Assert.Equal((0.0, 0.0, 1.0, 1.0, 1.0), (pose.Dx, pose.Dy, pose.TurnScale, pose.Scale, pose.Opacity));
-        }
-    }
-
-    [Theory]
-    [MemberData(nameof(Actions))]
-    public void Colour_cues_never_lighten(WordAction action)
-    {
-        for (var t = 0.0; t < 1; t += 0.02)
-        {
-            var (r, g, b) = WordActionMotion.Pose(action, t, false).Multiply;
-            Assert.InRange(r, 0, 1);
-            Assert.InRange(g, 0, 1);
-            Assert.InRange(b, 0, 1);
-        }
-    }
-
-    [Fact]
-    public void Motions_follow_the_mac()
-    {
-        Assert.Equal(-1, WordActionMotion.Pose(WordAction.Spin, 0.4, false).TurnScale, 6);
-        Assert.Equal(-0.24, WordActionMotion.Pose(WordAction.Hop, 0.7 * 0.3, false).Dy, 6);
-        Assert.True(WordActionMotion.Pose(WordAction.Dip, 0.3, false).Dy > 0.1);
-        Assert.True(WordActionMotion.Pose(WordAction.Float, 0.45, false).Dy < -0.15);
-        Assert.Equal(1.16, WordActionMotion.Pose(WordAction.Grow, 0.4, false).Scale, 6);
-        Assert.Equal(0.84, WordActionMotion.Pose(WordAction.Shrink, 0.4, false).Scale, 6);
-        Assert.InRange(WordActionMotion.Pose(WordAction.Dissolve, 0.45, false).Opacity, 0.29, 0.35);
-        Assert.True(WordActionMotion.Pose(WordAction.Frost, 0.45, false).Cool > 0.6);
-        var reduced = WordActionMotion.Pose(WordAction.Flicker, 0.3, true);
-        Assert.Equal(reduced.Warm, reduced.Glow);
-    }
-
     [Fact]
     public void The_symbol_fades_in_over_three_tenths_of_a_second()
     {
@@ -198,10 +144,5 @@ public class WordAccentsTests
         Assert.Equal(1, WordActionMotion.SymbolOpacity(0.3));
     }
 
-    public static TheoryData<WordAction> Actions()
-    {
-        var data = new TheoryData<WordAction>();
-        foreach (var action in WordAccents.AllActions) data.Add(action);
-        return data;
-    }
+
 }

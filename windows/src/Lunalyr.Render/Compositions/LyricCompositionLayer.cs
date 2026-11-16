@@ -1226,7 +1226,7 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
                 visibility = drawnVisibility;
             }
             if (ink.HasAccent)
-                DrawAccent(dc, run, tokens, ink, labelWorld, local, scale, visibility, blur, glow, shadow, action, time, clip, lettersDrawn);
+                DrawAccent(dc, run, tokens, ink, labelWorld, local, scale, visibility, blur, glow, shadow, action, time, clip, lettersDrawn, reduce);
             DrawLivelyAround(dc, restLocal, Vector2.Zero, unitBox, action, time - onset, size, glowInk, (float)visibility, front: true);
             if (ink.Reading is { } reading)
             {
@@ -1262,29 +1262,26 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
     private static void DrawAccent(ID2D1DeviceContext dc, EditorialRun run, IReadOnlyList<EditorialToken> tokens, RunInk ink,
                                    in Matrix3x2 labelWorld, in Matrix3x2 local, double scale, double visibility, float blur,
                                    GlowSpec glow, float shadow, in LivelyPose action, double time, InkClip clip,
-                                   bool lettersDrawn = false)
+                                   bool lettersDrawn = false, bool reduce = false)
     {
         var onset = tokens[run.TokenStart].Source.Start;
         var sweep = ink.SymbolSung is not null || action.Tints ? SungSweep.Progress(run, tokens, time) : 0;
+        var basis = Vector4.Lerp(ink.RestColour, ink.SungColour, (float)Math.Clamp(sweep, 0, 1));
         if (action.Tints && !lettersDrawn)
-        {
-            var (r, g, b) = action.Multiply;
-            var basis = Vector4.Lerp(ink.RestColour, ink.SungColour, (float)Math.Clamp(sweep, 0, 1));
-            ink.Label.DrawTinted(dc, labelWorld, new Vector4(basis.X * (float)r, basis.Y * (float)g, basis.Z * (float)b, (float)visibility), clip);
-        }
+            ink.Label.DrawTinted(dc, labelWorld, LivelyWord.Tinted(action, basis with { W = 1 }, visibility), clip);
         if (ink.Symbol is not { } symbol) return;
         var shown = visibility * WordActionMotion.SymbolOpacity(time - onset);
         if (!(shown > 0.002)) return;
-        var world = Matrix3x2.CreateTranslation(ink.SymbolOffset) * local;
+        // It pops in, echoing the word's action (the Mac's symbol entrance); under Reduce Motion it only fades.
+        var entrance = LivelyWord.SymbolEntrance(ink.Action, time - onset, reduce, run.Metrics.Size, symbol.Box, out var cool);
+        var world = entrance * Matrix3x2.CreateTranslation(ink.SymbolOffset) * local;
         symbol.Draw(dc, world, (float)scale, (float)shown, blur, glow, shadow);
         if (ink.SymbolSung is { } sung && sweep > 0.002)
             sung.Draw(dc, world, (float)scale, (float)(shown * Math.Clamp(sweep, 0, 1)), blur, GlowSpec.None, 0);
         if (action.Tints)
-        {
-            var (r, g, b) = action.Multiply;
-            var basis = Vector4.Lerp(ink.RestColour, ink.SungColour, (float)Math.Clamp(sweep, 0, 1));
-            symbol.DrawTinted(dc, world, new Vector4(basis.X * (float)r, basis.Y * (float)g, basis.Z * (float)b, (float)shown), InkClip.None);
-        }
+            symbol.DrawTinted(dc, world, LivelyWord.Tinted(action, basis with { W = 1 }, shown), InkClip.None);
+        if (cool > 0.005)
+            symbol.DrawTinted(dc, world, LivelyWord.Tinted(LivelyPose.Identity with { Cool = cool }, basis with { W = 1 }, shown), InkClip.None);
     }
 
     /// <summary>
