@@ -248,10 +248,21 @@ public sealed class MusicVideoLayer : PlacedLayer
     /// <summary>Where the decoder runs: "GPU" or "memory".</summary>
     public string? DecodedOn { get; private set; }
 
+    /// <summary>
+    /// How bright the video reads behind the lyric stage, for light or dark lyrics (the Mac's c1c33d69): unmeasured
+    /// footage under "Video dimming" and the scrim, never guessed light enough for dark text, which turned muddy with a
+    /// pale glow over a dim video.
+    /// </summary>
+    public override double? StageUnbacked => _videoUnbacked;
+
+    private double _videoUnbacked = Core.Colour.LyricBackdrop.UnmeasuredVideoCeiling;
+
     private protected override void DrawContent(in FrameContext frame)
     {
         var dc = frame.Dc;
         var inputs = _feed.Read();
+        _videoUnbacked = Core.Colour.LyricBackdrop.BeforeBacking(Core.Colour.WallpaperBackgroundMode.MusicVideo, false, [],
+            Darkening(frame.Scene), null, false, inputs.Dim);
         if (inputs.LocalPath != _path) Switch(inputs.LocalPath);
         if (_path is { } path && !_failed && _error is { } error)
         {
@@ -575,10 +586,15 @@ public sealed class MusicVideoLayer : PlacedLayer
 /// backing on top; otherwise the video's still (softened by "Video blur") over the album's colours. Filled, the still fills
 /// the surface; shown whole, it sits in the visible picture over the blurred backdrop (<see cref="DrawWhole"/>).
 /// </summary>
-public sealed class YouTubeVideoLayer : IRenderLayer, ISeeThroughLayer
+public sealed class YouTubeVideoLayer : IRenderLayer, ISeeThroughLayer, IMeasuredStage
 {
     /// <summary>The automatic backing takes a dark-middling video, as for an imported one.</summary>
     public const double AssumedLuminance = 0.2;
+
+    /// <summary>How bright the video reads behind the lyric stage (as <see cref="MusicVideoLayer.StageUnbacked"/>).</summary>
+    public double? StageUnbacked => _videoUnbacked;
+
+    private double _videoUnbacked = Core.Colour.LyricBackdrop.UnmeasuredVideoCeiling;
 
     private readonly IMusicVideoFeed _feed;
     private readonly WallpaperShadeDrawer _shade;
@@ -628,6 +644,8 @@ public sealed class YouTubeVideoLayer : IRenderLayer, ISeeThroughLayer
         try
         {
             var inputs = _feed.Read();
+            _videoUnbacked = Core.Colour.LyricBackdrop.BeforeBacking(Core.Colour.WallpaperBackgroundMode.MusicVideo, false, [],
+                _shade.Darkening(frame.Scene), null, false, inputs.Dim);
             // Only the main display's desktop surface has the player's window beneath it (the engine passes AheadWork and
             // IsMainDisplay there). The other displays' desktops never play it: they show the album's colours rather than
             // the video's still, which there would sit frozen for the whole song (Windows' choice; the Mac shows the still).

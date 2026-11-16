@@ -44,7 +44,7 @@ public abstract class PlacedLayer : IRenderLayer, IFirstFrameLayer, IMeasuredSta
     private double? _unbacked;
 
     /// <summary>The measured luminance behind the stage under the scrim, before the backing (dark lyrics' switch); null unmeasured.</summary>
-    public double? StageUnbacked => Measured ? _unbacked : null;
+    public virtual double? StageUnbacked => Measured ? _unbacked : null;
 
     private protected readonly WallpaperPlacement Placement;
     private protected readonly Logger Log;

@@ -47,7 +47,7 @@ public sealed partial class RenderEngine
     private bool _floatWasShown, _fadeOutReported;
     private SceneSnapshot? _floatSource;
     private SceneSnapshot? _floatScene;
-    private (double TextSize, double Backdrop, bool Reduce) _floatSceneKey;
+    private (double TextSize, double Backdrop, bool Reduce, double Behind) _floatSceneKey;
 
     private sealed record FloatingLook(bool ReduceTransparency, Vector4 Accent);
 
@@ -340,14 +340,30 @@ public sealed partial class RenderEngine
     /// <summary>The floating stage's scene, made again only when the shared scene or the shade changes (never per frame).</summary>
     private SceneSnapshot FloatingScene(SceneSnapshot scene, FloatingLyricsOptions o, FloatingLook look)
     {
-        var key = (o.TextSize, o.Backdrop, look.ReduceTransparency);
+        // What the shade lies over, in steps of 0.05 so the scene is not made again every frame.
+        var behind = Math.Round(FloatingBehind() * 20) / 20;
+        var key = (o.TextSize, o.Backdrop, look.ReduceTransparency, behind);
         if (!ReferenceEquals(scene, _floatSource) || key != _floatSceneKey || _floatScene is null)
         {
             _floatSource = scene;
             _floatSceneKey = key;
-            _floatScene = FloatingFrameDrawer.SceneFor(scene, o.TextSize, o.Backdrop, look.ReduceTransparency);
+            _floatScene = FloatingFrameDrawer.SceneFor(scene, o.TextSize, o.Backdrop, look.ReduceTransparency, behind);
         }
         return _floatScene;
+    }
+
+    /// <summary>
+    /// What the floating lyrics float over (the Mac's a6f7a6d8): with a music video as the wallpaper, the video as the
+    /// wallpaper's own lyrics take it (its dimming and the scrim, kept light); otherwise an unknown app window.
+    /// </summary>
+    private double FloatingBehind()
+    {
+        foreach (var s in _surfaces)
+            if (!s.IsFloating && s.Backgrounds is { } backgrounds
+                && backgrounds.Current.Layer is (Backgrounds.MusicVideoLayer or Backgrounds.YouTubeVideoLayer) and IMeasuredStage stage
+                && stage.StageUnbacked is { } video)
+                return video;
+        return Core.Colour.LyricLegibility.UnknownBackdropLuminance;
     }
 
     /// <summary>The floating window's view of the engine (called on the window's thread).</summary>

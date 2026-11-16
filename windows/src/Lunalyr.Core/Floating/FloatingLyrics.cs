@@ -346,9 +346,22 @@ public static class FloatingBackdrop
         return s <= Off ? 0 : SolidShade * s;
     }
 
-    public static double Luminance(double strength, bool reduceTransparency)
+    /// <param name="behind">What lies under the shade: an unknown app window by default, or, with a music video as the
+    /// wallpaper, that video as the wallpaper's own lyrics take it (the Mac's a6f7a6d8: with the shade turned down the
+    /// words turned dark and muddy with a pale glow over the video).</param>
+    public static double Luminance(double strength, bool reduceTransparency, double behind = LyricLegibility.UnknownBackdropLuminance)
     {
         var shade = reduceTransparency ? Panel(strength) : MaximumShade * Math.Min(1, Math.Max(0, strength));
-        return LyricLegibility.Darkened(LyricLegibility.UnknownBackdropLuminance, shade);
+        return LyricLegibility.Darkened(Math.Min(1, Math.Max(0, double.IsFinite(behind) ? behind : LyricLegibility.UnknownBackdropLuminance)), shade);
     }
+
+    /// <summary>
+    /// What the floating lyrics are taken to float over (the Mac's <c>FloatingBackdrop.behind</c>): an unknown app window,
+    /// or over a music video wallpaper the video as the desktop lyrics take it (unmeasured footage, its dimming and the
+    /// scrim, never guessed light enough for dark text).
+    /// </summary>
+    public static double Behind(bool musicVideo, double scrim, double videoDim) =>
+        musicVideo
+            ? LyricBackdrop.BeforeBacking(WallpaperBackgroundMode.MusicVideo, false, [], scrim, null, false, videoDim)
+            : LyricLegibility.UnknownBackdropLuminance;
 }

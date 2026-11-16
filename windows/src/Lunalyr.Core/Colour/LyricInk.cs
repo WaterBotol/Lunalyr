@@ -327,15 +327,24 @@ public static class LyricBackdrop
     /// <summary>The share of the text backing a line gets where it reaches the side of the stage.</summary>
     public const double EdgeBacking = 0.5;
 
+    /// <summary>
+    /// The most an unmeasured music video is taken to be (the Mac's c1c33d69): under the light-text line, so lyrics over
+    /// it stay light. Footage changes every shot; guessed at 0.35 it read as light enough for dark text, which turned
+    /// muddy with a pale glow over a dim video.
+    /// </summary>
+    public const double UnmeasuredVideoCeiling = 0.2;
+
     /// <summary>The backdrop at the brightest place a line reaches: the ends of the stage.</summary>
     /// <param name="measured">The luminance behind the stage measured from the picture shown, when there is one.</param>
     /// <param name="backing">The backing the user set by hand, or null for the automatic amount.</param>
     /// <param name="tinted">Whether the wallpaper lays the album's colours over an imported picture.</param>
+    /// <param name="videoDim">A music video's "Video dimming" (0–1).</param>
     public static double Luminance(WallpaperBackgroundMode mode, bool motion, IReadOnlyList<Vector3> palette, double scrim,
                                    double? measured = null, double? backing = null, double target = 4.5,
-                                   bool tinted = false, bool pastelText = false, bool increaseContrast = false)
+                                   bool tinted = false, bool pastelText = false, bool increaseContrast = false,
+                                   double videoDim = 0)
     {
-        var behind = BeforeBacking(mode, motion, palette, scrim, measured, tinted);
+        var behind = BeforeBacking(mode, motion, palette, scrim, measured, tinted, videoDim);
         if (backing is null && pastelText)
         {
             var pastelTarget = LyricLegibility.PastelBackingTarget(increaseContrast);
@@ -353,7 +362,7 @@ public static class LyricBackdrop
 
     /// <summary>The wallpaper and its scrim, before the text backing.</summary>
     public static double BeforeBacking(WallpaperBackgroundMode mode, bool motion, IReadOnlyList<Vector3> palette,
-                                       double scrim, double? measured = null, bool tinted = false)
+                                       double scrim, double? measured = null, bool tinted = false, double videoDim = 0)
     {
         // Called every frame: a plain loop, no intermediate arrays.
         double brightest = 0, total = 0;
@@ -385,9 +394,12 @@ public static class LyricBackdrop
             }
             case WallpaperBackgroundMode.MusicVideo:
             {
-                // Unmeasured footage under the video's dimming and the scrim.
+                // Footage under the video's dimming, then the scrim. Unmeasured footage is never guessed light enough
+                // for dark text: light text and its backing hold on any shot.
                 var footage = Math.Min(1, Math.Max(0, measured ?? LyricLegibility.UnknownBackdropLuminance));
-                return LyricLegibility.Darkened(footage, Math.Min(1, 0.12 * strength));
+                var dimmed = LyricLegibility.Darkened(footage, Math.Min(1, Math.Max(0, videoDim)));
+                var shaded = LyricLegibility.Darkened(dimmed, Math.Min(1, 0.12 * strength));
+                return measured is null ? Math.Min(shaded, UnmeasuredVideoCeiling) : shaded;
             }
             case WallpaperBackgroundMode.ColourOnly when measured is not null:
                 return LyricLegibility.Darkened(measured ?? field, WallpaperShade.ScrimAtStage(strength));

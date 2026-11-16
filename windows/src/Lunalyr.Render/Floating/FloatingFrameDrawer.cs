@@ -281,10 +281,13 @@ public sealed class FloatingFrameDrawer : IDisposable
     /// whole window, and the opening title takes the middle) and the lyric colours judged against the floating shade
     /// (the Mac's <c>lyricBackdropOverride</c>). Only the floating surface sees it.
     /// </summary>
-    public static SceneSnapshot SceneFor(SceneSnapshot scene, double textSize, double backdrop, bool reduceTransparency) =>
+    /// <param name="behind">What the shade lies over (<see cref="FloatingBackdrop.Behind"/>): an unknown app, or a music
+    /// video wallpaper as its own lyrics take it.</param>
+    public static SceneSnapshot SceneFor(SceneSnapshot scene, double textSize, double backdrop, bool reduceTransparency,
+                                         double behind = Core.Colour.LyricLegibility.UnknownBackdropLuminance) =>
         scene with
         {
             Style = scene.Style with { FloatingTextSize = textSize },
-            Palette = scene.Palette with { TextBackdrop = FloatingBackdrop.Luminance(backdrop, reduceTransparency), TextUnbacked = null },
+            Palette = scene.Palette with { TextBackdrop = FloatingBackdrop.Luminance(backdrop, reduceTransparency, behind), TextUnbacked = null },
         };
 }
