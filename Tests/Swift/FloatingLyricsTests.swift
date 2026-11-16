@@ -1,4 +1,5 @@
 import AppKit
+import SwiftUI
 import XCTest
 @testable import VersoCustom
 
@@ -299,6 +300,93 @@ final class FloatingLyricsTests: XCTestCase {
         let huge = FloatingFrame.dragged(start, by: CGSize(width: 5000, height: -5000), resizing: true, in: area)
         XCTAssertLessThanOrEqual(huge.maxX, area.maxX)
         XCTAssertGreaterThanOrEqual(huge.minY, area.minY)
+    }
+
+    // MARK: The box and the window round it
+
+    func testSpillMarginFollowsTextSize() {
+        XCTAssertEqual(FloatingFrame.spillMargin(textSize: 30), 160, "never less than 160 points")
+        XCTAssertEqual(FloatingFrame.spillMargin(textSize: 44), 160)
+        XCTAssertEqual(FloatingFrame.spillMargin(textSize: 110), 165, "1.5 times a large text size")
+        XCTAssertEqual(FloatingFrame.spillMargin(textSize: .nan), 160)
+        for size in stride(from: 22.0, through: 110, by: 0.7) {
+            let margin = FloatingFrame.spillMargin(textSize: CGFloat(size))
+            XCTAssertGreaterThanOrEqual(margin, CGFloat(size) * 1.5)
+            XCTAssertEqual(margin, margin.rounded(), "whole points, so the box stays on whole points")
+        }
+    }
+
+    func testWindowGoesRoundTheBoxAndBack() {
+        let box = CGRect(x: 412, y: 94, width: 688, height: 202)
+        let window = FloatingFrame.window(forBox: box, margin: 160)
+        XCTAssertEqual(window, CGRect(x: 252, y: -66, width: 1008, height: 522), "160 points more on every side")
+        XCTAssertEqual(window.midX, box.midX)
+        XCTAssertEqual(window.midY, box.midY)
+        XCTAssertEqual(FloatingFrame.box(forWindow: window, margin: 160), box)
+        // Off the screen's edge is fine; the conversion does not clamp.
+        let corner = CGRect(x: 0, y: 0, width: FloatingFrame.minimumSize.width, height: FloatingFrame.minimumSize.height)
+        XCTAssertEqual(FloatingFrame.box(forWindow: FloatingFrame.window(forBox: corner, margin: 165), margin: 165), corner)
+        // No margin: the window is the box.
+        XCTAssertEqual(FloatingFrame.window(forBox: box, margin: 0), box)
+    }
+
+    /// The saved frame means the box: placing it, putting the window round
+    /// it and reading the box back gives the frame that was saved, on any display.
+    func testSavedFrameRoundTripsThroughTheWindowUnchanged() {
+        let store = stores()
+        let area = FloatingFrame.usableArea(screenFrame: screen, visibleFrame: visible, safeTopInset: 32)
+        let second = CGRect(x: -1920, y: 0, width: 1920, height: 1080)
+        for (key, screenFrame, area) in [("A", screen, area), ("B", second, second)] {
+            let saved = CGRect(x: 120, y: 160, width: 640, height: 180)
+            store.options.storeCustomFrame(saved, for: key)
+            XCTAssertEqual(store.defaults.dictionary(forKey: FloatingLyricsOptions.Keys.frames)?[key] as? [Double],
+                           FloatingFrame.encode(saved), "the box is stored, not the window")
+            for textSize in [22.0, 44, 110] {
+                let box = FloatingFrame.resolve(.custom, custom: store.options.customFrame(for: key), savedSize: nil,
+                                                textSize: CGFloat(textSize), screenFrame: screenFrame, area: area)
+                let margin = FloatingFrame.spillMargin(textSize: CGFloat(textSize))
+                let window = FloatingFrame.window(forBox: box, margin: margin)
+                XCTAssertGreaterThan(window.width, box.width)
+                let back = FloatingFrame.box(forWindow: window, margin: margin)
+                XCTAssertEqual(back, box)
+                XCTAssertEqual(FloatingFrame.relative(back, to: screenFrame), saved, "\(key) at \(textSize)")
+                // Saving it again (a drag that went nowhere) changes nothing.
+                store.options.storeCustomFrame(FloatingFrame.relative(back, to: screenFrame), for: key)
+                XCTAssertEqual(store.options.customFrame(for: key), saved)
+                XCTAssertEqual(store.options.savedSize(for: key), saved.size)
+            }
+        }
+    }
+
+    /// What the stage draws past the box shows in the margin; the shade
+    /// stays on the box.
+    func testStageDrawsIntoTheMarginAndTheShadeStaysInTheBox() throws {
+        let box = CGSize(width: 300, height: 100), margin: CGFloat = 60
+        let window = CGSize(width: box.width + 2 * margin, height: box.height + 2 * margin)
+        let frame = FloatingLyricsFrame(backdrop: 1, reduceTransparency: false, albumAccent: SIMD3(0.5, 0.5, 0.5),
+                                        margin: margin) {
+            // A pill wider than the box, as a word's tile or a spin can be.
+            Capsule().fill(Color.red)
+                .frame(width: box.width + 80, height: 30)
+                .frame(width: box.width, height: box.height)
+        }
+        .frame(width: window.width, height: window.height)
+        let renderer = ImageRenderer(content: frame)
+        renderer.scale = 1
+        let bitmap = NSBitmapImageRep(cgImage: try XCTUnwrap(renderer.cgImage))
+        XCTAssertEqual(bitmap.pixelsWide, Int(window.width))
+        func pixel(_ x: CGFloat, _ y: CGFloat) -> NSColor {
+            bitmap.colorAt(x: Int(x), y: Int(y))?.usingColorSpace(.sRGB) ?? .clear
+        }
+        let middle = window.height / 2
+        for x in [margin - 30, window.width - margin + 30] {
+            let spilled = pixel(x, middle)
+            XCTAssertGreaterThan(spilled.alphaComponent, 0.9, "drawn in the margin at x \(x)")
+            XCTAssertGreaterThan(spilled.redComponent, spilled.blueComponent + 0.5, "the pill's own red at x \(x)")
+        }
+        XCTAssertEqual(pixel(4, 4).alphaComponent, 0, accuracy: 0.01, "no shade in the margin")
+        XCTAssertEqual(pixel(4, middle).alphaComponent, 0, accuracy: 0.01, "nothing past the pill")
+        XCTAssertGreaterThan(pixel(window.width / 2, margin + 30).alphaComponent, 0.3, "the shade covers the box")
     }
 
     func testFramesEncodeAndDisplaysFallBackToTheMainOne() {

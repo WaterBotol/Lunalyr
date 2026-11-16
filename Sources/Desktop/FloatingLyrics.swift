@@ -243,8 +243,9 @@ final class FloatingLyricsOptions: ObservableObject {
 
 // MARK: - Frame maths
 
-/// Where the floating window goes on a display. Pure geometry, in AppKit's
-/// global coordinates (origin bottom left).
+/// Where the floating lyrics' box goes on a display. Pure geometry, in
+/// AppKit's global coordinates (origin bottom left). The window is the box
+/// with a margin round it (`window(forBox:margin:)`).
 enum FloatingFrame {
     /// Kept clear of the menu bar, the Dock, the notch and the screen edges.
     static let margin: CGFloat = 24
@@ -335,6 +336,29 @@ enum FloatingFrame {
             return CGRect(x: start.minX, y: start.maxY - size.height, width: size.width, height: size.height)
         }
         return clamped(start.offsetBy(dx: delta.width, dy: delta.height), to: area)
+    }
+
+    // MARK: The box and the window round it
+
+    /// Every frame above, saved or placed, is the box: where the lyrics are
+    /// laid out, the shade, and what a drag, a resize or the pointer acts
+    /// on. The window itself is bigger by this see-through margin on every
+    /// side, so what is drawn (pills, glows, letters that spin, hop or drip,
+    /// dust) can spill past the box instead of being cut off at its edge.
+    /// The margin takes no clicks and may run off the screen.
+    static func spillMargin(textSize: CGFloat) -> CGFloat {
+        let size = textSize.isFinite ? max(0, textSize) : 0
+        return max(160, size * 1.5).rounded(.up)
+    }
+
+    /// The window's frame for a box: the box grown by `margin` on every side.
+    static func window(forBox box: CGRect, margin: CGFloat) -> CGRect {
+        box.insetBy(dx: -margin, dy: -margin)
+    }
+
+    /// The box inside a window made by `window(forBox:margin:)`.
+    static func box(forWindow window: CGRect, margin: CGFloat) -> CGRect {
+        window.insetBy(dx: margin, dy: margin)
     }
 
     static func encode(_ rect: CGRect) -> [Double] {

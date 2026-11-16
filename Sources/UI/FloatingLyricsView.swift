@@ -17,6 +17,10 @@ final class FloatingLyricsState: ObservableObject {
     @Published var active = false
     /// Edit position: draggable, with a resize grip and Done.
     @Published var editing = false
+    /// The see-through margin round the box on every side
+    /// (`FloatingFrame.spillMargin`): the lyrics are laid out in the box and
+    /// may draw into the margin.
+    @Published var margin: CGFloat = 0
 }
 
 /// The floating lyrics: the wallpaper's own lyric stage (`LyricStage`, same
@@ -38,24 +42,32 @@ struct FloatingLyricsView: View {
         GeometryReader { geometry in
             let look = FloatingLyricsLook(grid: palette.grid, track: nowPlaying.current,
                                           wordsPerSecond: lyricsVM.wordsPerSecond)
+            let margin = FloatingLyricsFrame<EmptyView>.fittingMargin(state.margin, in: geometry.size)
+            let box = CGSize(width: max(0, geometry.size.width - 2 * margin),
+                             height: max(0, geometry.size.height - 2 * margin))
             ZStack {
                 FloatingLyricsFrame(backdrop: options.backdrop, reduceTransparency: reduceTransparency,
                                     albumAccent: look.albumAccent,
                                     behind: FloatingBackdrop.behind(mode: settings.effectiveBackgroundMode,
                                                                     scrim: settings.scrimStrength,
-                                                                    videoDim: settings.musicVideoDim)) {
-                    LyricStage(size: geometry.size, mood: look.mood, accent: look.accent, trackSeed: look.seed,
+                                                                    videoDim: settings.musicVideoDim),
+                                    margin: margin) {
+                    // Laid out in the box; drawn wherever it reaches.
+                    LyricStage(size: box, mood: look.mood, accent: look.accent, trackSeed: look.seed,
                                palette: look.cover.artworkStops, interval: settings.effectiveAnimationRate.interval,
                                paused: !state.active, textSize: CGFloat(options.textSize))
                         .equatable()
-                        .frame(width: geometry.size.width, height: geometry.size.height)
+                        .frame(width: box.width, height: box.height)
                 }
                 if state.editing {
                     FloatingEditChrome(placeholder: nowPlaying.current == nil || lyricsVM.lines.isEmpty
                                        && lyricsVM.plainLines.isEmpty,
                                        onDrag: onDrag, onDone: onDone)
+                        .frame(width: box.width, height: box.height)
+                        .padding(margin)
                 }
             }
+            .frame(width: geometry.size.width, height: geometry.size.height)
         }
         .ignoresSafeArea()
     }
@@ -64,18 +76,33 @@ struct FloatingLyricsView: View {
 /// The floating lyrics' surroundings: the shade behind, the text colours
 /// judged against it, and one soft shadow for the whole stage, so thin type
 /// still reads where the shade fades out.
+///
+/// With a `margin`, the frame fills the whole window: the shade covers only
+/// the box (the window inset by `margin`), and the stage, sized to the box,
+/// sits in it with the margin all round it, so nothing it draws past the
+/// box is cut off, not even by the shadow's offscreen group.
 struct FloatingLyricsFrame<Stage: View>: View {
     let backdrop: Double
     let reduceTransparency: Bool
     let albumAccent: SIMD3<Double>
     /// What the shade lies over (`FloatingBackdrop.behind`).
     var behind = LyricLegibility.unknownBackdropLuminance
+    /// The see-through margin round the box, on every side.
+    var margin: CGFloat = 0
     @ViewBuilder let stage: () -> Stage
+
+    /// The margin, no more than leaves the box an empty size in a window of `size`.
+    static func fittingMargin(_ margin: CGFloat, in size: CGSize) -> CGFloat {
+        guard margin.isFinite, margin > 0 else { return 0 }
+        return min(margin, max(0, min(size.width, size.height) / 2))
+    }
 
     var body: some View {
         ZStack {
             FloatingLyricsBackdrop(strength: backdrop, reduceTransparency: reduceTransparency)
+                .padding(margin)
             stage()
+                .padding(margin)
                 .environment(\.lyricSwipePalette, LyricSwipePalette(hue: albumAccent.x, saturation: albumAccent.y))
                 .environment(\.lyricBackdropOverride,
                              FloatingBackdrop.luminance(strength: backdrop, reduceTransparency: reduceTransparency,

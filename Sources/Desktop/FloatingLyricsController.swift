@@ -8,17 +8,35 @@ import SwiftUI
 final class FloatingLyricsPanel: NSPanel {
     override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }
+    /// The window is the box plus a see-through margin that may run off the
+    /// screen; AppKit must not pull it back on.
+    override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect { frameRect }
 }
 
 /// Takes the first click, so Done and the drag work without a click to
-/// bring the panel forward first.
+/// bring the panel forward first. Nothing in the see-through margin round
+/// the box is hit, as a backstop to the controller letting the margin's
+/// clicks through to what is underneath (`updateMouseTaking`).
 private final class FirstClickHostingView<Content: View>: NSHostingView<Content> {
+    /// The margin round the box, on every side.
+    var boxInset: CGFloat = 0
+
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        let local = superview.map { convert(point, from: $0) } ?? point
+        guard bounds.insetBy(dx: boxInset, dy: boxInset).contains(local) else { return nil }
+        return super.hitTest(point)
+    }
 }
 
 /// The floating lyrics window: one panel, on the chosen display, above the
 /// apps (full-screen ones too) and on every Space, out of the Dock, ⌘-Tab and
-/// Mission Control. Clicks pass through it except in edit mode. It is shown
+/// Mission Control. Clicks pass through it except on its box in edit mode.
+/// The window is the box (the frame the placement, a drag and the saved
+/// frames give) with a see-through margin round it, so the lyrics' effects
+/// can spill past the box; the conversion happens only here, at the
+/// window. It is shown
 /// only while Floating is chosen and a song with lyrics is playing (a short
 /// pause keeps it up), and drawn by the wallpaper's own lyric stage, which
 /// the desktop stops drawing meanwhile (`LyricsSurface`).
@@ -37,6 +55,13 @@ final class FloatingLyricsController {
     let state = FloatingLyricsState()
     private let options = FloatingLyricsOptions.shared
     private var panel: FloatingLyricsPanel?
+    private var hosting: FirstClickHostingView<AnyView>?
+    /// The box on screen: the window less its margin.
+    private var box: CGRect?
+    /// While in edit position: watches the pointer, so the window takes
+    /// clicks on its box and lets those in its margin through.
+    private var pointerMonitors: [Any] = []
+    private var editPointerTimer: Timer?
     /// The display key and frame the panel is on.
     private var placedOn: (key: String, screenFrame: CGRect, area: CGRect)?
     private var cancellables: Set<AnyCancellable> = []
@@ -100,16 +125,17 @@ final class FloatingLyricsController {
     /// Follows the pointer from where the drag began; on release, keeps the
     /// frame for this display as Custom.
     func dragged(resizing: Bool, ended: Bool) {
-        guard state.editing, let panel, let placed = placedOn else { return }
+        guard state.editing, let panel, let placed = placedOn, let box else { return }
         let mouse = NSEvent.mouseLocation
-        if drag == nil || drag?.resizing != resizing { drag = (panel.frame, mouse, resizing) }
+        if drag == nil || drag?.resizing != resizing { drag = (box, mouse, resizing) }
         guard let drag else { return }
         let delta = CGSize(width: mouse.x - drag.mouse.x, height: mouse.y - drag.mouse.y)
         let frame = FloatingFrame.dragged(drag.start, by: delta, resizing: resizing, in: placed.area)
-        if panel.frame != frame { panel.setFrame(frame, display: true) }
+        setBox(frame, on: panel)
         guard ended else { return }
         self.drag = nil
         options.storeCustomFrame(FloatingFrame.relative(frame, to: placed.screenFrame), for: placed.key)
+        updateMouseTaking()
     }
 
     // MARK: Showing
@@ -142,7 +168,6 @@ final class FloatingLyricsController {
     private func show() {
         let panel = self.panel ?? makePanel()
         let editing = state.editing
-        panel.ignoresMouseEvents = !editing
         if drag == nil { place(panel) }
         if !state.active { state.active = true }
         if !shown {
@@ -157,13 +182,15 @@ final class FloatingLyricsController {
         }
         if editing, targetAlpha != 1 { fade(panel, to: 1) }
         updateHoverTimer()
+        updateEditPointer()
     }
 
     private func hide() {
         hoverTimer?.invalidate()
         hoverTimer = nil
-        guard shown, let panel else { return }
+        guard shown, let panel else { updateEditPointer(); return }
         shown = false
+        updateEditPointer()
         SongStartLog.note("floating lyrics window hidden")
         fade(panel, to: 0) { [weak self] in
             guard let self, !self.shown else { return }
@@ -197,7 +224,18 @@ final class FloatingLyricsController {
         let frame = FloatingFrame.resolve(options.placement, custom: options.customFrame(for: key),
                                           savedSize: options.savedSize(for: key), textSize: CGFloat(options.textSize),
                                           screenFrame: screen.frame, area: area)
-        if panel.frame != frame { panel.setFrame(frame, display: true) }
+        setBox(frame, on: panel)
+    }
+
+    /// Puts the box at `frame` (screen coordinates): the window goes round
+    /// it, the margin following the text size.
+    private func setBox(_ frame: CGRect, on panel: NSPanel) {
+        let margin = FloatingFrame.spillMargin(textSize: CGFloat(options.textSize))
+        box = frame
+        if state.margin != margin { state.margin = margin }
+        hosting?.boxInset = margin
+        let window = FloatingFrame.window(forBox: frame, margin: margin)
+        if panel.frame != window { panel.setFrame(window, display: true) }
     }
 
     private func makePanel() -> FloatingLyricsPanel {
@@ -223,6 +261,7 @@ final class FloatingLyricsController {
         let hosting = FirstClickHostingView(rootView: AnyView(view))
         hosting.autoresizingMask = [.width, .height]
         panel.contentView = hosting
+        self.hosting = hosting
         self.panel = panel
         return panel
     }
@@ -250,8 +289,67 @@ final class FloatingLyricsController {
 
     private func checkPointer() {
         guard let panel, shown, !state.editing else { return }
-        let over = panel.frame.contains(NSEvent.mouseLocation)
+        let over = (box ?? panel.frame).contains(NSEvent.mouseLocation)
         let target = over ? Self.pointerAlpha : 1
         if targetAlpha != target { fade(panel, to: target) }
+    }
+
+    // MARK: Clicks in edit position
+
+    /// Outside edit position the window takes no clicks at all. In it, the
+    /// box takes them (the drag, the grip, Done) and the margin round it
+    /// lets them through to what is underneath: the window takes the mouse
+    /// only while the pointer is over the box. A view returning nil from
+    /// its hit test would only swallow a click, so it is the window that
+    /// switches. The pointer is followed by a global monitor (moves over
+    /// other apps: the pointer may be coming onto the box), a local one
+    /// (moves and releases over this window) and, for moves no monitor
+    /// sees, a look twenty times a second, all only while editing.
+    private func updateEditPointer() {
+        let wanted = shown && state.editing
+        guard wanted else {
+            for monitor in pointerMonitors { NSEvent.removeMonitor(monitor) }
+            pointerMonitors = []
+            editPointerTimer?.invalidate()
+            editPointerTimer = nil
+            panel?.acceptsMouseMovedEvents = false
+            updateMouseTaking()
+            return
+        }
+        if pointerMonitors.isEmpty {
+            let events: NSEvent.EventTypeMask = [.mouseMoved, .leftMouseUp, .leftMouseDragged]
+            if let global = NSEvent.addGlobalMonitorForEvents(matching: events, handler: { [weak self] _ in
+                MainActor.assumeIsolated { self?.updateMouseTaking() }
+            }) { pointerMonitors.append(global) }
+            if let local = NSEvent.addLocalMonitorForEvents(matching: events, handler: { [weak self] event in
+                MainActor.assumeIsolated { self?.updateMouseTaking() }
+                return event
+            }) { pointerMonitors.append(local) }
+        }
+        if editPointerTimer == nil {
+            let timer = Timer(timeInterval: 0.05, repeats: true) { [weak self] _ in
+                MainActor.assumeIsolated { self?.updateMouseTaking() }
+            }
+            timer.tolerance = 0.02
+            RunLoop.main.add(timer, forMode: .common)
+            editPointerTimer = timer
+        }
+        panel?.acceptsMouseMovedEvents = true
+        updateMouseTaking()
+    }
+
+    /// Takes the mouse over the box in edit position, never in the margin
+    /// and never outside edit position. A drag under way keeps it, though a
+    /// resize may leave the pointer outside the box.
+    private func updateMouseTaking() {
+        guard let panel else { return }
+        guard state.editing, shown else {
+            if !panel.ignoresMouseEvents { panel.ignoresMouseEvents = true }
+            return
+        }
+        // Never switched mid-press: a click or drag ends where it began.
+        if drag != nil || NSEvent.pressedMouseButtons != 0 { return }
+        let takes = box?.contains(NSEvent.mouseLocation) ?? false
+        if panel.ignoresMouseEvents == takes { panel.ignoresMouseEvents = !takes }
     }
 }
