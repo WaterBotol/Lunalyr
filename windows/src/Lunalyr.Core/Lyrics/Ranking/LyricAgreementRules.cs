@@ -51,9 +51,96 @@ public static class LyricAgreementRules
                     }
                 }
             }
-            result[i] = candidates[i] with { Agreement = new LyricAgreement(peers.Count, sameWordsTimed.Count, outlier) };
+            var shift = TimelineShift(i, timings, texts, candidates);
+            result[i] = candidates[i] with { Agreement = new LyricAgreement(peers.Count, sameWordsTimed.Count, outlier, shift) };
         }
         return result;
+    }
+
+    /// <summary>The least offset, in seconds, that counts as a timeline shifted to another recording or master: more than a lyric's sync slips.</summary>
+    public const double TimelineShiftMinimum = 1.5;
+
+    /// <summary>How closely a shifted timeline's lines keep to its own offset: at least <see cref="TimelineShiftShare"/> of them within this many seconds of it.</summary>
+    public const double TimelineShiftSpread = 0.5;
+
+    public const double TimelineShiftShare = 0.8;
+
+    /// <summary>Lines paired by their words needed to judge an offset.</summary>
+    public const int TimelineShiftMinPairs = 6;
+
+    /// <summary>
+    /// How <paramref name="b"/>'s sung lines run against <paramref name="a"/>'s: the median of their start differences (b
+    /// minus a) over lines with the same words, paired in order, and whether nearly all of them keep to it
+    /// (<see cref="TimelineShiftSpread"/>). Null with fewer than <see cref="TimelineShiftMinPairs"/> pairs. Ported from
+    /// the Mac's 265d728.
+    /// </summary>
+    public static (double Median, bool Steady)? TimelineOffset(IReadOnlyList<TimedText> a, IReadOnlyList<TimedText> b)
+    {
+        ArgumentNullException.ThrowIfNull(a);
+        ArgumentNullException.ThrowIfNull(b);
+        var gaps = new List<double>();
+        var from = 0;
+        foreach (var line in a)
+        {
+            if (from >= b.Count) continue;
+            var match = -1;
+            for (var k = from; k < b.Count; k++)
+            {
+                if (b[k].Text == line.Text)
+                {
+                    match = k;
+                    break;
+                }
+            }
+            if (match < 0) continue;
+            gaps.Add(b[match].Start - line.Start);
+            from = match + 1;
+        }
+        if (gaps.Count < TimelineShiftMinPairs) return null;
+        var median = gaps.Order().ElementAt(gaps.Count / 2);
+        var near = gaps.Count(gap => Math.Abs(gap - median) <= TimelineShiftSpread);
+        return (median, near >= TimelineShiftShare * gaps.Count);
+    }
+
+    /// <summary>The offset <paramref name="b"/> runs steadily <see cref="TimelineShiftMinimum"/> or more from <paramref name="a"/>, or null.</summary>
+    public static double? IsShifted(IReadOnlyList<TimedText> a, IReadOnlyList<TimedText> b) =>
+        TimelineOffset(a, b) is { Steady: true } offset && Math.Abs(offset.Median) >= TimelineShiftMinimum ? offset.Median : null;
+
+    /// <summary>
+    /// The offset of candidate <paramref name="i"/>'s timeline when it is timed to another recording or master, or null.
+    /// Apple Music's own lyrics are the recording playing, so a timeline steadily off from their timing is shifted, and
+    /// they never are themselves. Otherwise it takes two timed matches from other services that agree with each other,
+    /// with the same words, both steadily off from it by about the same offset, while no other service's timing agrees
+    /// with its own: of two that disagree there is no telling which is right.
+    /// </summary>
+    public static double? TimelineShift(int i, IReadOnlyList<IReadOnlyList<TimedText>> timings, IReadOnlyList<IReadOnlyList<string>> texts,
+        IReadOnlyList<LyricCandidate> candidates)
+    {
+        ArgumentNullException.ThrowIfNull(timings);
+        ArgumentNullException.ThrowIfNull(texts);
+        ArgumentNullException.ThrowIfNull(candidates);
+        if (candidates[i].Source == LyricSourceId.AppleMusicCache || timings[i].Count == 0) return null;
+        var others = Enumerable.Range(0, candidates.Count).Where(j => j != i && candidates[j].RankingSource != candidates[i].RankingSource
+                                                                       && timings[j].Count > 0 && SameWords(texts[i], texts[j])).ToList();
+        foreach (var j in others)
+        {
+            if (candidates[j].Source == LyricSourceId.AppleMusicCache) return IsShifted(timings[j], timings[i]);
+        }
+        if (others.Any(j => TimingAgrees(timings[i], timings[j]))) return null;
+        var shifted = others.Select(j => (Index: j, Offset: IsShifted(timings[j], timings[i]))).Where(s => s.Offset is not null).ToList();
+        for (var a = 0; a < shifted.Count; a++)
+        {
+            for (var b = a + 1; b < shifted.Count; b++)
+            {
+                var (x, y) = (shifted[a], shifted[b]);
+                if (candidates[x.Index].RankingSource != candidates[y.Index].RankingSource
+                    && Math.Abs(x.Offset!.Value - y.Offset!.Value) <= TimelineShiftSpread && TimingAgrees(timings[x.Index], timings[y.Index]))
+                {
+                    return (x.Offset.Value + y.Offset.Value) / 2;
+                }
+            }
+        }
+        return null;
     }
 
     /// <summary>

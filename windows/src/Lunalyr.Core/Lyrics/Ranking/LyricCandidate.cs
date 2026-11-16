@@ -9,7 +9,11 @@ namespace Lunalyr.Core.Lyrics.Ranking;
 /// <param name="TimingOutlier">
 /// Its timing disagrees with every other timed source with the same words, while two of those agree with each other.
 /// </param>
-public readonly record struct LyricAgreement(int Peers = 0, int TimedCompared = 0, bool TimingOutlier = false);
+/// <param name="Shift">
+/// How far its lines run from the timing the others agree on, in seconds (positive: later), when it is timed to another
+/// recording or master (<see cref="LyricAgreementRules.TimelineShift"/>); null otherwise.
+/// </param>
+public readonly record struct LyricAgreement(int Peers = 0, int TimedCompared = 0, bool TimingOutlier = false, double? Shift = null);
 
 /// <summary>One source's best match for a lookup, with the recording the service said it matched.</summary>
 /// <param name="Source">The source that answered.</param>

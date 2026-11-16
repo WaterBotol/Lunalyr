@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace Lunalyr.Core.Lyrics.Ranking;
 
 /// <summary>Accepted candidates in ranking order, and recording mismatches with the reason.</summary>
@@ -169,9 +171,13 @@ public static class LyricRanking
     /// The lead for a match. LRCLIB's timing is made by listeners: when two other services agree on the timing and
     /// LRCLIB's disagrees with both (<see cref="LyricAgreement.TimingOutlier"/>), it takes lead 5, after every other
     /// source at its timing tier. It keeps its tier, so its word timing still beats a pair that agree on line timing.
+    /// Timing shifted to another recording or master (<see cref="LyricAgreement.Shift"/>) ranks after the other sources at
+    /// its timing in the same way (the Mac's 265d728).
     /// </summary>
     private static int Lead(LyricCandidate candidate, int timing) =>
-        candidate.Source == LyricSourceId.Lrclib && candidate.Agreement.TimingOutlier ? 5 : Lead(candidate.Source, candidate.RankingSource, timing);
+        (candidate.Source == LyricSourceId.Lrclib && candidate.Agreement.TimingOutlier) || candidate.Agreement.Shift is not null
+            ? 5
+            : Lead(candidate.Source, candidate.RankingSource, timing);
 
     /// <summary>The highest confidence: both names exact and, when the playing length is known, the same length.</summary>
     private static double ClosestMatch(LyricQuery query) => query.Duration > 0 ? 2.25 : 2;
@@ -318,6 +324,13 @@ public static class LyricRanking
     /// <param name="accepted">The accepted matches in hand.</param>
     public static bool CouldDemote(LyricCandidate best, LyricSourceId source, IEnumerable<LyricCandidate> accepted, LyricQuery query)
     {
+        ArgumentNullException.ThrowIfNull(accepted);
+        var found = accepted.ToList();
+        // The timing showing might be shifted to another recording (the Mac's 265d728).
+        if (CouldShift(best, source, found, query))
+        {
+            return true;
+        }
         // LRCLIB for another version is not weighed for agreement (Screen), so nothing can make it an outlier; any timed
         // source could still find the playing version anyway (CouldBeat). The Mac's couldDemote asks the same (spec §3.4).
         if (best.Source != LyricSourceId.Lrclib || source == best.Source || best.Agreement.TimingOutlier
@@ -328,7 +341,7 @@ public static class LyricRanking
         var text = LyricAgreementRules.Text(best);
         var timing = LyricAgreementRules.Timing(best);
         var rival = false;
-        foreach (var other in accepted)
+        foreach (var other in found)
         {
             if (other.Source == best.Source || !FitsVersion(other, query))
             {
@@ -344,6 +357,35 @@ public static class LyricRanking
             rival |= LyricTimingRules.RankedTiming(other.Result) == 2 && !LyricTimingRules.HasTimingFault(other.Result);
         }
         return source.TimingCeiling() >= 2 || rival;
+    }
+
+    /// <summary>
+    /// Whether <paramref name="source"/>'s answer could show the timing on screen to be shifted to another recording
+    /// (<see cref="LyricAgreement.Shift"/>), taking away its lead: Apple Music's own lyrics could on their own; another
+    /// source only when a match in hand already runs steadily off from it and no other service's timing in hand agrees
+    /// with it (the Mac's 265d728).
+    /// </summary>
+    public static bool CouldShift(LyricCandidate best, LyricSourceId source, IEnumerable<LyricCandidate> accepted, LyricQuery query)
+    {
+        ArgumentNullException.ThrowIfNull(best);
+        ArgumentNullException.ThrowIfNull(accepted);
+        if (best.Source == LyricSourceId.AppleMusicCache || best.Agreement.Shift is not null || source == best.Source
+            || source.TimingCeiling() < 1 || LyricTimingRules.RankedTiming(best.Result) < 1 || !FitsVersion(best, query))
+        {
+            return false;
+        }
+        if (source == LyricSourceId.AppleMusicCache)
+        {
+            return true;
+        }
+        var timing = LyricAgreementRules.Timing(best);
+        var others = accepted.Where(other => other.RankingSource != best.RankingSource && FitsVersion(other, query))
+            .Select(LyricAgreementRules.Timing).Where(other => other.Count > 0).ToList();
+        if (others.Any(other => LyricAgreementRules.TimingAgrees(timing, other)))
+        {
+            return false;
+        }
+        return others.Any(other => LyricAgreementRules.IsShifted(other, timing) is not null);
     }
 
     /// <summary>
@@ -406,7 +448,15 @@ public static class LyricRanking
             {
                 found += " · word timing spread evenly over each line (ranked as line timing)";
             }
-            if (candidate.Agreement.TimingOutlier)
+            if (candidate.Agreement.Shift is { } shift)
+            {
+                var reference = screened.Accepted.Any(c => c.Source == LyricSourceId.AppleMusicCache) ? "Music’s own" : "the others";
+                // Rounded from the exact value, as the Mac's "%.1f" does (1.8499… is "1.8", not "1.9").
+                var seconds = Math.Round(Math.Abs(shift), 1, MidpointRounding.ToEven);
+                found += string.Create(CultureInfo.InvariantCulture,
+                    $" · timed to another recording ({seconds:0.0} s {(shift > 0 ? "later" : "earlier")} than {reference})");
+            }
+            else if (candidate.Agreement.TimingOutlier)
             {
                 found += " · timing differs from other sources";
             }

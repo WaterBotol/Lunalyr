@@ -160,4 +160,115 @@ public sealed class LyricRankingQualityTests
         var musixmatch = Candidate(Musixmatch, [.. real.Select(line => L.Line(line.Text, line.Start, line.End))]);
         Assert.Equal(Musixmatch, LyricRanking.Screen([fake, musixmatch], _query, Options(order)).Accepted.FirstOrDefault()?.Source);
     }
+
+    // ---- Shifted timeline (the Mac's 265d728) ----
+
+    private static readonly string[] Verses =
+    [
+        "Morning comes around again", "Walking down the empty street", "Every light is turning green", "I can hear you calling out",
+        "Hold the line and wait for me", "Nothing ever stays the same", "Count the stars above the town", "Never let the music fade",
+    ];
+
+    /// <summary>Line-timed verses, every line <paramref name="shift"/> seconds later, plus <paramref name="jitter"/>.</summary>
+    private LyricCandidate TimedVerses(LyricSourceId source, double shift = 0, Func<int, double>? jitter = null) =>
+        Candidate(source, [.. Verses.Select((text, index) =>
+        {
+            var start = (index * 4.5) + 10 + shift + (jitter?.Invoke(index) ?? 0);
+            return L.Line(text, start, start + 4);
+        })]);
+
+    /// <summary>Whether a pending source keeps answering: it could beat what shows, or show it shifted or outvoted.</summary>
+    private bool KeepsAnswering(LyricSourceId source, LyricCandidate best, IReadOnlyList<LyricCandidate> found, LyricSourceSnapshot options) =>
+        LyricRanking.Matters(source, best, best, _query, options) || LyricRanking.CouldDemote(best, source, found, _query);
+
+    // Ported from LyricRankingQualityTests.swift: testATimelineOffFromTwoThatAgreeIsShifted
+    [Fact]
+    public void ATimelineOffFromTwoThatAgreeIsShifted()
+    {
+        LyricSourceId[] order = [Musixmatch, NetEase, QQMusic];
+        foreach (var mode in LyricMatchModeInfo.All)
+        {
+            var screened = LyricRanking.Screen([TimedVerses(Musixmatch, 2.1, i => i % 2 == 0 ? 0.1 : -0.1), TimedVerses(NetEase), TimedVerses(QQMusic, 0.2)],
+                _query, Options(order, mode)).Accepted;
+            Assert.Equal([NetEase, QQMusic, Musixmatch], screened.Select(c => c.Source));
+            Assert.Equal(2.0, screened[^1].Agreement.Shift ?? 0, 0.15);
+            Assert.Null(screened[0].Agreement.Shift);
+            Assert.Null(screened[1].Agreement.Shift);
+        }
+    }
+
+    // Ported from LyricRankingQualityTests.swift: testTwoThatDisagreeCannotTellWhichIsShifted
+    [Fact]
+    public void TwoThatDisagreeCannotTellWhichIsShifted()
+    {
+        LyricSourceId[] order = [Musixmatch, NetEase, QQMusic, Kugou];
+        var pair = LyricRanking.Screen([TimedVerses(Musixmatch, 2.5), TimedVerses(NetEase)], _query, Options(order)).Accepted;
+        Assert.Equal(Musixmatch, pair[0].Source);
+        Assert.All(pair, c => Assert.Null(c.Agreement.Shift));
+        // Two against two: no telling either.
+        var even = LyricRanking.Screen([TimedVerses(Musixmatch, 2.5), TimedVerses(Kugou, 2.4), TimedVerses(NetEase), TimedVerses(QQMusic)],
+            _query, Options(order)).Accepted;
+        Assert.All(even, c => Assert.Null(c.Agreement.Shift));
+        Assert.Equal(Musixmatch, even[0].Source);
+    }
+
+    // Ported from LyricRankingQualityTests.swift: testAnUnsteadyOffsetIsNotAShift
+    [Fact]
+    public void AnUnsteadyOffsetIsNotAShift()
+    {
+        LyricSourceId[] order = [Musixmatch, NetEase, QQMusic];
+        // Off by two seconds at the median, but scattered from one to four: badly synced, not another master.
+        double[] scatter = [1, 4, 2, 3.5, 1.2, 2.1, 3.8, 1.5];
+        var screened = LyricRanking.Screen([TimedVerses(Musixmatch, jitter: i => scatter[i]), TimedVerses(NetEase), TimedVerses(QQMusic)],
+            _query, Options(order)).Accepted;
+        Assert.All(screened, c => Assert.Null(c.Agreement.Shift));
+    }
+
+    // Ported from LyricRankingQualityTests.swift: testMusicsOwnTimingIsTheReference
+    [Fact]
+    public void MusicsOwnTimingIsTheReference()
+    {
+        LyricSourceId[] order = [AppleMusicCache, Musixmatch, NetEase];
+        var screened = LyricRanking.Screen([TimedVerses(AppleMusicCache), TimedVerses(Musixmatch, -1.8)], _query, Options(order)).Accepted;
+        Assert.Equal(AppleMusicCache, screened[0].Source);
+        Assert.Equal(-1.8, screened[^1].Agreement.Shift ?? 0, 0.01);
+        // Apple Music's own is never the shifted one, whatever the others say.
+        var outvoted = LyricRanking.Screen([TimedVerses(AppleMusicCache, 3), TimedVerses(Musixmatch), TimedVerses(NetEase, 0.1)],
+            _query, Options(order)).Accepted;
+        Assert.Null(outvoted.First(c => c.Source == AppleMusicCache).Agreement.Shift);
+        Assert.NotNull(outvoted.First(c => c.Source == Musixmatch).Agreement.Shift);
+    }
+
+    // Ported from LyricRankingQualityTests.swift: testAPendingSourceThatCouldShowTheShiftStillMatters (the Mac's
+    // matters(among:) is Matters or CouldDemote here, as the lookup asks them)
+    [Fact]
+    public void APendingSourceThatCouldShowTheShiftStillMatters()
+    {
+        var options = Options([Musixmatch, NetEase, QQMusic, Vibe]);
+        var found = LyricRanking.Screen([TimedVerses(Musixmatch), TimedVerses(NetEase, 2)], _query, options).Accepted;
+        var best = found[0];
+        Assert.Equal(Musixmatch, best.Source);
+        // VIBE (line timing only) cannot outrank Musixmatch, but agreeing with NetEase it would show Musixmatch shifted.
+        Assert.False(LyricRanking.CouldBeat(best, Vibe, _query, options));
+        Assert.True(KeepsAnswering(Vibe, best, found, options));
+        // With another service backing Musixmatch's timing, nothing could.
+        var backed = LyricRanking.Screen([TimedVerses(Musixmatch), TimedVerses(NetEase, 2), TimedVerses(QQMusic, 0.1)], _query, options).Accepted;
+        Assert.False(KeepsAnswering(Vibe, backed[0], backed, options));
+    }
+
+    // Ported from LyricRankingQualityTests.swift: testTheSourceListSaysWhyAShiftedMatchRanksLower
+    [Fact]
+    public async Task TheSourceListSaysWhyAShiftedMatchRanksLower()
+    {
+        using var folder = new TempFolder();
+        var answers = new Dictionary<LyricSourceId, LyricCandidate>
+        {
+            [Musixmatch] = TimedVerses(Musixmatch, 2), [NetEase] = TimedVerses(NetEase), [QQMusic] = TimedVerses(QQMusic, 0.3),
+        };
+        var lookup = Lookups.Create(folder.Path, (id, _, _, _) => ValueTask.FromResult(answers.GetValueOrDefault(id)), new FakeClock());
+        var report = await lookup.LookupAsync(_query, Options([Musixmatch, NetEase, QQMusic]), force: true,
+            cancellationToken: TestContext.Current.CancellationToken);
+        Assert.Equal(NetEase, report.Candidates[0].Source);
+        Assert.True(report.States[Musixmatch].Contains("timed to another recording (1.8 s later than the others)", StringComparison.Ordinal), report.States[Musixmatch]);
+    }
 }
