@@ -78,13 +78,15 @@ struct LayoutTileChoices: View {
     let width: CGFloat
     let palette: ArtworkPalette
     @Model(\.settings) private var settings
+    @ObservedObject private var showing = ShowingLayout.shared
     @AppStorage(LyricLayoutRotation.enabledKey) private var rotateLayouts = true
 
     var body: some View {
         let tile = ChoiceGridMetrics.tile(count: 6, ratio: 56.0 / 96.0, width: width)
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .firstTextBaseline) {
-                ChoiceHeader(title: "Layout", value: LookChoices.layoutTitle(settings.lyricComposition))
+                ChoiceHeader(title: "Layout", value: ShowingLayout.title(chosen: settings.lyricComposition,
+                                                                         showing: showing.layout))
                 Spacer(minLength: 8)
                 Toggle("Change layout every song", isOn: $rotateLayouts)
                     .toggleStyle(StudioCheckboxStyle())

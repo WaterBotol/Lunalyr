@@ -39,6 +39,8 @@ struct LyricLayer: View {
     var titleBand: CGFloat = 0
     /// The band is at the window's foot (the row put at the bottom).
     var titleAtBottom = false
+    /// Reports the layout in use (`ShowingLayout`); off for previews.
+    var reportsLayout = true
     @EnvironmentObject private var nowPlaying: NowPlayingMonitor
     @ObservedObject private var lyricsVM = LyricsViewModel.shared
     @ObservedObject private var settings = Settings.shared
@@ -178,6 +180,9 @@ struct LyricLayer: View {
         let wall = pace?.wall(self.wall) ?? self.wall
         let (key, loadingSince) = sceneKey(wall: wall)
         let content = sceneContent(key: key, loadingSince: loadingSince)
+        // Which layout this song is drawn in, for the menu bar and Settings
+        // (Custom Mix names only itself). Not from the Settings preview.
+        let _ = reportsLayout && nowPlaying.current != nil ? ShowingLayout.shared.note(composition(at: 0)) : ()
         // No lyrics found: the song's opening title stays, drawn once above
         // the scenes so their cross-fades neither double nor dim it. So does
         // a card that entered while the lyrics were being looked up, once

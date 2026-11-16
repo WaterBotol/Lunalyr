@@ -80,6 +80,7 @@ struct MenuBarWallpaperControls: View {
     @Model(\.players) private var options
     @Environment(\.lunalyrModels) private var models
     @ObservedObject private var musicVideo = MusicVideoController.shared
+    @ObservedObject private var showing = ShowingLayout.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -96,6 +97,18 @@ struct MenuBarWallpaperControls: View {
                 }
             }
             .help("Which music player Lunalyr follows")
+            MenuPanelSubmenuRow("Layout", value: ShowingLayout.title(chosen: settings.lyricComposition,
+                                                                     showing: showing.layout)) {
+                [MenuPanelMenuItem(id: "custom-mix", title: "Custom Mix", checked: settings.lyricComposition == nil) {
+                    settings.lyricComposition = nil
+                }] + LyricCompositionGroup.allCases.flatMap(\.layouts).map { layout in
+                    MenuPanelMenuItem(id: layout.rawValue, title: layout.title,
+                                      checked: settings.lyricComposition == layout) {
+                        settings.lyricComposition = layout
+                    }
+                }
+            }
+            .help("The layout the lyrics are in now; under Custom Mix, the one this song took")
         }
     }
 }

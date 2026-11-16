@@ -640,3 +640,33 @@ struct LyricCompositionOptions: View {
         }
     }
 }
+
+
+/// The layout the lyrics are drawn in right now, as the lyric layer reports
+/// it. Under Custom Mix the setting says only "Custom Mix"; this says which
+/// layout the current song took, for the menu bar and Settings.
+@MainActor
+final class ShowingLayout: ObservableObject {
+    static let shared = ShowingLayout()
+    @Published private(set) var layout: LyricComposition?
+
+    /// Called from the lyric layer's body: publishes later, and only a change.
+    func note(_ layout: LyricComposition) {
+        guard layout != self.layout, pending != layout else { return }
+        pending = layout
+        DispatchQueue.main.async { [weak self] in
+            guard let self, let pending = self.pending else { return }
+            self.pending = nil
+            if self.layout != pending { self.layout = pending }
+        }
+    }
+    private var pending: LyricComposition?
+
+    /// "Custom Mix · Hinge" under Custom Mix once a song has taken a layout;
+    /// otherwise the chosen layout's name.
+    nonisolated static func title(chosen: LyricComposition?, showing: LyricComposition?) -> String {
+        guard chosen == nil else { return chosen?.title ?? "Custom Mix" }
+        guard let showing else { return "Custom Mix" }
+        return "Custom Mix · \(showing.title)"
+    }
+}
