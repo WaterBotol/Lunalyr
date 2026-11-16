@@ -130,13 +130,9 @@ enum MusicVideoOffsetOrigin: Equatable, Sendable {
 /// (`values`, saved, kept even at 0 once set, for the video it was set
 /// on), then the offset measured from the video's captions, then a guess
 /// from the video's length (both kept in memory only, per song and video).
-/// Captions set the starting timing; once the user moves it, theirs wins
-/// and is kept for that video, and captions measured again later never
-/// undo it. Reset goes back to the captions' offset.
-///
-/// Timing saved before captions were matched (not in `overCaptions`) still
-/// yields to a trusted offset from captions; it applies when captions give
-/// none. Any change the user makes from now on is marked and wins.
+/// Captions set the starting timing; any timing the user saved for the
+/// video wins over them, and captions measured again later never undo it.
+/// Reset forgets the user's timing, so captions (or the estimate) apply.
 ///
 /// Offsets the earlier automatic timing stored (`retiredAutomaticKey`) are
 /// not used: they are dropped from the store when it loads.
@@ -147,17 +143,12 @@ final class MusicVideoOffsets: ObservableObject {
     static let retiredAutomaticKey = "custom.musicVideoAutoOffsets"
     /// The video each of the user's offsets was set on.
     static let manualVideoKey = "custom.musicVideoOffsetVideos"
-    /// The songs whose offset the user set since timing from captions
-    /// existed: those win over captions.
-    static let overCaptionsKey = "custom.musicVideoOffsetsOverCaptions"
 
     /// The user's offsets.
     @Published private(set) var values: [String: Double]
     /// The video (`videoKey`) each of `values` was set on. A song without
     /// one was set before videos were told apart: it applies to any video.
     @Published private(set) var manualVideos: [String: String]
-    /// The songs of `values` that win over timing from captions.
-    @Published private(set) var overCaptions: Set<String>
     @Published private(set) var estimates: [String: Double] = [:]
     /// Measured from captions, per song and video (`estimateKey`).
     @Published private(set) var captioned: [String: Double] = [:]
@@ -169,7 +160,6 @@ final class MusicVideoOffsets: ObservableObject {
         values = manual
         manualVideos = (defaults.dictionary(forKey: Self.manualVideoKey) as? [String: String] ?? [:])
             .filter { manual[$0.key] != nil }
-        overCaptions = Set((defaults.stringArray(forKey: Self.overCaptionsKey) ?? []).filter { manual[$0] != nil })
         // The real preferences are left alone inside the test host.
         if defaults.object(forKey: Self.retiredAutomaticKey) != nil,
            defaults !== UserDefaults.standard || !AppRuntime.isUnitTesting {
@@ -199,12 +189,12 @@ final class MusicVideoOffsets: ObservableObject {
 
     private func resolved(_ songKey: String?, video: String?) -> (offset: Double, origin: MusicVideoOffsetOrigin) {
         guard let songKey else { return (0, .none) }
-        let measured = video.flatMap { captioned[Self.estimateKey(songKey, $0)] }
-        if let manual = values[songKey], manualApplies(songKey, video: video),
-           measured == nil || overCaptions.contains(songKey) {
+        if let manual = values[songKey], manualApplies(songKey, video: video) {
             return (MusicVideoTiming.clampedOffset(manual), .manual)
         }
-        if let measured { return (MusicVideoTiming.clampedOffset(measured), .captions) }
+        if let video, let measured = captioned[Self.estimateKey(songKey, video)] {
+            return (MusicVideoTiming.clampedOffset(measured), .captions)
+        }
         guard let video else { return (0, .none) }
         if let estimate = estimates[Self.estimateKey(songKey, video)] { return (estimate, .estimated) }
         return (0, .none)
@@ -227,14 +217,11 @@ final class MusicVideoOffsets: ObservableObject {
 
     /// The user's offset for the song, kept even at 0, for `video` (the
     /// one on screen) when given, and saved. To a hundredth of a second, so
-    /// fine nudges add up exactly. `overCaptions`: it wins over timing from
-    /// captions (anything the user sets now; false only to put back timing
-    /// saved before, `restoreManual`).
-    func set(_ value: Double, for songKey: String, video: String? = nil, overCaptions: Bool = true) {
+    /// fine nudges add up exactly. It wins over timing from captions.
+    func set(_ value: Double, for songKey: String, video: String? = nil) {
         guard value.isFinite else { return }
         values[songKey] = (MusicVideoTiming.clampedOffset(value) * 100).rounded() / 100
         if let video { manualVideos[songKey] = video } else { manualVideos.removeValue(forKey: songKey) }
-        if overCaptions { self.overCaptions.insert(songKey) } else { self.overCaptions.remove(songKey) }
         save()
     }
 
@@ -245,43 +232,38 @@ final class MusicVideoOffsets: ObservableObject {
     }
 
     /// The user's own offset for a song, as stored: its value, the video
-    /// it was set on (nil: set before videos were told apart), and whether
-    /// it wins over captions.
+    /// it was set on (nil: set before videos were told apart).
     struct ManualEntry: Equatable, Sendable {
         var value: Double
         var video: String?
-        var overCaptions = true
     }
 
     func manualEntry(_ songKey: String) -> ManualEntry? {
-        values[songKey].map { ManualEntry(value: $0, video: manualVideos[songKey], overCaptions: overCaptions.contains(songKey)) }
+        values[songKey].map { ManualEntry(value: $0, video: manualVideos[songKey]) }
     }
 
-    /// Puts back exactly what `manualEntry` read (nil: there was none).
+    /// Puts back what `manualEntry` read (nil: there was none).
     func restoreManual(_ entry: ManualEntry?, for songKey: String) {
         if let entry {
-            set(entry.value, for: songKey, video: entry.video, overCaptions: entry.overCaptions)
+            set(entry.value, for: songKey, video: entry.video)
         } else {
             clearManual(songKey)
         }
     }
 
     /// Forgets the user's offset: back to the timing from captions, else
-    /// the estimate (or none). With `video`, only when it is the one in
-    /// force for that video (timing for another video, or saved before
-    /// captions and outranked by them, stays).
+    /// the estimate (or none). With `video`, only when it applies to that
+    /// video (timing set on another upload of the song stays).
     func clearManual(_ songKey: String, video: String? = nil) {
         if let video, origin(for: songKey, video: video) != .manual { return }
         guard values.removeValue(forKey: songKey) != nil else { return }
         manualVideos.removeValue(forKey: songKey)
-        overCaptions.remove(songKey)
         save()
     }
 
     private func save() {
         defaults.set(values, forKey: Self.key)
         defaults.set(manualVideos, forKey: Self.manualVideoKey)
-        defaults.set(overCaptions.sorted(), forKey: Self.overCaptionsKey)
     }
 
     // MARK: Estimates

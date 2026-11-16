@@ -386,19 +386,22 @@ final class MusicVideoCaptionSyncTests: XCTestCase {
         XCTAssertFalse(controller.isAligning)
     }
 
-    func testTimingSavedBeforeCaptionsYieldsToThemButStaysForWhenTheyGiveNone() async {
-        // An offset saved before captions were matched (no over-captions mark).
+    func testTimingSavedBeforeCaptionsStillWinsAndResetHandsBackToThem() async {
+        // An offset saved before caption sync existed.
         defaults.set([song.key: 3.0], forKey: MusicVideoOffsets.key)
         defaults.set([song.key: video], forKey: MusicVideoOffsets.manualVideoKey)
         let controller = await showing(lyrics: lyrics)
         XCTAssertEqual(controller.offsetOrigin, .manual)
         XCTAssertTrue(controller.wantsCaptions(for: .youTube(videoID)), "loaded even for a video the user timed")
         controller.noteCaptions(json3(asrCues(lyrics, offset: 20.6)), of: .youTube(videoID))
-        XCTAssertEqual(controller.offsetOrigin, .captions, "captions win over timing saved before them")
-        XCTAssertEqual(controller.currentOffset, 20.6, accuracy: 0.03)
+        XCTAssertEqual(controller.offsetOrigin, .manual, "the user's saved timing wins over captions")
+        XCTAssertEqual(controller.currentOffset, 3)
+        XCTAssertTrue(controller.captionLog.last?.hasSuffix("skipped: the user's timing +3.00 s wins for this video") == true,
+                      "\(controller.captionLog)")
         controller.resetOffset()
-        XCTAssertEqual(MusicVideoOffsets(defaults: defaults).values[song.key], 3,
-                       "Reset while captions are in force leaves the older timing alone")
+        XCTAssertEqual(controller.offsetOrigin, .captions, "Reset hands the video back to its captions")
+        XCTAssertEqual(controller.currentOffset, 20.6, accuracy: 0.03)
+        XCTAssertNil(MusicVideoOffsets(defaults: defaults).values[song.key], "and forgets the older timing")
     }
 
     // The bug: a nudge made while captions set the timing was kept in memory
@@ -415,7 +418,7 @@ final class MusicVideoCaptionSyncTests: XCTestCase {
         XCTAssertEqual(controller.currentOffset, 20.9, accuracy: 0.001, "moved from the captions' offset, once per press")
         let saved = MusicVideoOffsets(defaults: defaults)
         XCTAssertEqual(saved.offset(for: song.key, video: video), 20.9, accuracy: 0.001, "saved")
-        XCTAssertEqual(saved.manualEntry(song.key), .init(value: 20.9, video: video, overCaptions: true))
+        XCTAssertEqual(saved.manualEntry(song.key), .init(value: 20.9, video: video))
         XCTAssertTrue(controller.captionLog.last?.contains("the user set +20.90 s over the captions' +20.60 s") == true,
                       "\(controller.captionLog)")
 
@@ -474,8 +477,7 @@ final class MusicVideoCaptionSyncTests: XCTestCase {
         XCTAssertFalse(MusicVideoOffsets(defaults: defaults).hasManual(song.key), "and forgets the user's timing")
     }
 
-    func testAlignCancelOverCaptionsPutsBackExactlyWhatWasThere() async {
-        // Timing saved before captions: Esc after a nudge must not promote it.
+    func testAlignCancelOverCaptionsPutsBackWhatWasThere() async {
         defaults.set([song.key: 3.0], forKey: MusicVideoOffsets.key)
         defaults.set([song.key: video], forKey: MusicVideoOffsets.manualVideoKey)
         let controller = await showing(lyrics: lyrics)
@@ -484,21 +486,21 @@ final class MusicVideoCaptionSyncTests: XCTestCase {
         controller.noteVideoSample(time: 50, playing: true, of: .youTube(videoID))
         XCTAssertTrue(controller.beginAlign())
         controller.alignNudge(by: 1)
-        XCTAssertEqual(controller.currentOffset, 21.6, accuracy: 0.001)
+        XCTAssertEqual(controller.currentOffset, 4, accuracy: 0.001)
+        controller.alignCancel()
+        XCTAssertEqual(controller.offsetOrigin, .manual)
+        XCTAssertEqual(controller.currentOffset, 3)
+        XCTAssertEqual(MusicVideoOffsets(defaults: defaults).manualEntry(song.key), .init(value: 3, video: video))
+
+        // Nothing saved before: Esc forgets the nudge, and captions apply.
+        controller.resetOffset()
+        XCTAssertEqual(controller.offsetOrigin, .captions)
+        XCTAssertTrue(controller.beginAlign())
+        controller.alignNudge(by: 1)
         controller.alignCancel()
         XCTAssertEqual(controller.offsetOrigin, .captions)
         XCTAssertEqual(controller.currentOffset, 20.6, accuracy: 0.03)
-        XCTAssertEqual(MusicVideoOffsets(defaults: defaults).manualEntry(song.key),
-                       .init(value: 3, video: video, overCaptions: false))
-
-        // Nothing saved before: Esc forgets the nudge.
-        let offsets = MusicVideoOffsets(defaults: defaults)
-        offsets.clearManual(song.key)
-        offsets.setCaptioned(20.6, for: song.key, video: video)
-        XCTAssertNil(offsets.manualEntry(song.key))
-        offsets.set(25, for: song.key, video: video)
-        offsets.restoreManual(nil, for: song.key)
-        XCTAssertEqual(offsets.origin(for: song.key, video: video), .captions)
+        XCTAssertFalse(MusicVideoOffsets(defaults: defaults).hasManual(song.key))
     }
 
     func testTheCaptionLogSaysWhatWasDecidedWithoutLyricText() async {
