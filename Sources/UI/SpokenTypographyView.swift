@@ -54,7 +54,8 @@ struct SpokenTypographyView: View {
     @Environment(\.lyricInk) private var ink
     @Environment(\.lyricWordAccents) private var accents
     @Environment(\.lyricWordPresence) private var wordPresence
-    @ObservedObject private var settings = Settings.shared
+    @SurfaceStyle private var style
+    private var settings: Settings { style.settings }
     @StateObject private var typography = RenderMemo<SpokenTypography.Key, [SpokenTypography.Word]>()
 
     private var nextIndex: Int? { words.firstIndex { $0.start > time } }
@@ -209,7 +210,7 @@ struct SpokenTypographyView: View {
         let state = RollingTokenState.make(token, next: next, rank: rank, time: time, composition: composition,
             baseSize: baseSize, stageWidth: size.width, intensity: intensity, reduceMotion: reduceMotion,
             arrival: arrival, eligibleSince: eligibleSince,
-            highlightOpacity: highlight.opacity, presence: presence)
+            highlightOpacity: highlight.opacity, presence: presence, settings: settings)
         let presentation = state.presentation
         let colours = ink.sample(slot: token.slot, seed: token.seed)
         let hero = composition == .cascade && token.hero && !colours.sweeps
@@ -219,7 +220,7 @@ struct SpokenTypographyView: View {
         let stageMargin = max(baseSize * 0.22, size.width * 0.05)
         let stageMarginY = max(baseSize * 0.22, size.height * 0.05)
         let reveal = RollingTokenState.partReveal(token, time: time, composition: composition,
-            runOpacity: presentation.opacity, intensity: intensity, reduceMotion: reduceMotion)
+            runOpacity: presentation.opacity, intensity: intensity, reduceMotion: reduceMotion, settings: settings)
         // Cutout's label: one width rule before and after the onset, a
         // sliver under the faint preview, then pressed on with the word's
         // spring, so it lands with a little give. (It used to show full
@@ -326,13 +327,14 @@ struct RollingTokenState {
     static func make(_ token: SpokenTypography.Word, next: Int?, rank: Double, time: Double,
                      composition: LyricComposition, baseSize: CGFloat, stageWidth: CGFloat, intensity: Double,
                      reduceMotion: Bool, arrival: WordArrival, eligibleSince: Double = -.infinity,
-                     highlightOpacity: Double = 0, presence: Double = 1) -> RollingTokenState {
+                     highlightOpacity: Double = 0, presence: Double = 1,
+                     settings: Settings = .shared) -> RollingTokenState {
         let word = token.source
         let motion = vc_word_motion(time, word.start, word.end, token.cadence, .infinity, 0, token.seed,
                                     intensity, reduceMotion ? 1 : 0)
         let presentation = WordPresentation.make(word: word, index: token.index, nextIndex: next,
                                                   time: time, composition: composition, motion: motion,
-                                                  eligibleSince: eligibleSince)
+                                                  eligibleSince: eligibleSince, settings: settings)
         let style: Int32 = composition == .spoken ? 0 : composition == .cascade ? 1 : 2
         let pose = vc_rolling_pose(style, rank, time - word.start, word.end - word.start,
                                    token.seed, intensity, reduceMotion ? 1 : 0)
@@ -410,7 +412,8 @@ extension RollingTokenState {
     /// (`LyricRuns.revealsByPart`).
     @MainActor
     static func partReveal(_ token: SpokenTypography.Word, time: Double, composition: LyricComposition,
-                           runOpacity: Double, intensity: Double, reduceMotion: Bool) -> [Double]? {
+                           runOpacity: Double, intensity: Double, reduceMotion: Bool,
+                           settings: Settings = .shared) -> [Double]? {
         guard token.parts.count > 1, token.boundaries.count == token.parts.count + 1,
               LyricRuns.revealsByPart(token.source.text) else { return nil }
         let next = token.parts.firstIndex { $0.start > time }
@@ -419,7 +422,8 @@ extension RollingTokenState {
             let motion = vc_word_motion(time, part.start, part.end, OrganicMotion.cadence(of: token.parts, at: offset),
                                         .infinity, 0, part.presentationID.visualSeed, intensity, reduceMotion ? 1 : 0)
             let opacity = WordPresentation.make(word: part, index: offset, nextIndex: next, time: time,
-                composition: composition, motion: motion, eligibleSince: token.parts[offset - 1].start).opacity
+                composition: composition, motion: motion, eligibleSince: token.parts[offset - 1].start,
+                settings: settings).opacity
             return min(1, opacity / max(runOpacity, 0.001))
         }
     }

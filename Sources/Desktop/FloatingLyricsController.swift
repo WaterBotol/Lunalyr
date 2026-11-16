@@ -17,7 +17,7 @@ final class FloatingLyricsPanel: NSPanel {
 /// bring the panel forward first. Nothing in the see-through margin round
 /// the box is hit, as a backstop to the controller letting the margin's
 /// clicks through to what is underneath (`updateMouseTaking`).
-private final class FirstClickHostingView<Content: View>: NSHostingView<Content> {
+final class FirstClickHostingView<Content: View>: NSHostingView<Content> {
     /// The margin round the box, on every side.
     var boxInset: CGFloat = 0
 
@@ -30,16 +30,38 @@ private final class FirstClickHostingView<Content: View>: NSHostingView<Content>
     }
 }
 
-/// The floating lyrics window: one panel, on the chosen display, above the
-/// apps (full-screen ones too) and on every Space, out of the Dock, ⌘-Tab and
-/// Mission Control. Clicks pass through it except on its box in edit mode.
-/// The window is the box (the frame the placement, a drag and the saved
-/// frames give) with a see-through margin round it, so the lyrics' effects
-/// can spill past the box; the conversion happens only here, at the
-/// window. It is shown
-/// only while Floating is chosen and a song with lyrics is playing (a short
-/// pause keeps it up), and drawn by the wallpaper's own lyric stage, which
-/// the desktop stops drawing meanwhile (`LyricsSurface`).
+/// One display's floating lyrics window and where it stands.
+@MainActor
+final class FloatingLyricsWindow {
+    let key: String
+    /// What its content needs: whether it is on screen, editing, its margin.
+    let state = FloatingLyricsState()
+    var panel: FloatingLyricsPanel?
+    var hosting: FirstClickHostingView<AnyView>?
+    /// The box on screen: the window less its margin.
+    var box: CGRect?
+    /// The display's frame and the area the window may use.
+    var placedOn: (screenFrame: CGRect, area: CGRect)?
+    var drag: (start: CGRect, mouse: CGPoint, resizing: Bool)?
+    var shown = false
+    /// Where the window's fade is heading.
+    var targetAlpha: CGFloat = 0
+
+    init(key: String) { self.key = key }
+}
+
+/// The floating lyrics windows: one panel on each display set to Floating
+/// or Both (`DisplayLyrics`), above the apps (full-screen ones too) and on
+/// every Space, out of the Dock, ⌘-Tab and Mission Control. Clicks pass
+/// through them except on their box in edit mode. Each window is its box
+/// (the frame the placement, a drag and the saved frames give for that
+/// display) with a see-through margin round it, so the lyrics' effects can
+/// spill past the box; the conversion happens only here, at the window.
+/// A window is shown only while a song with lyrics is playing (a short
+/// pause keeps it up) and drawn by the wallpaper's own lyric stage in the
+/// Floating style (`LyricStyles`). The lyrics, their timing and the cover's
+/// colours are shared; each window only draws. Nothing is made for a
+/// display that does not float.
 @MainActor
 final class FloatingLyricsController {
     static let shared = FloatingLyricsController()
@@ -52,31 +74,37 @@ final class FloatingLyricsController {
     /// How faint the window gets while the pointer is over it.
     static let pointerAlpha: CGFloat = 0.18
 
+    /// Edit position, for every floating window at once.
     let state = FloatingLyricsState()
     private let options = FloatingLyricsOptions.shared
-    private var panel: FloatingLyricsPanel?
-    private var hosting: FirstClickHostingView<AnyView>?
-    /// The box on screen: the window less its margin.
-    private var box: CGRect?
-    /// While in edit position: watches the pointer, so the window takes
+    private(set) var windows: [String: FloatingLyricsWindow] = [:]
+    /// While in edit position: watches the pointer, so a window takes
     /// clicks on its box and lets those in its margin through.
     private var pointerMonitors: [Any] = []
     private var editPointerTimer: Timer?
-    /// The display key and frame the panel is on.
-    private var placedOn: (key: String, screenFrame: CGRect, area: CGRect)?
     private var cancellables: Set<AnyCancellable> = []
     private var screenObserver: NSObjectProtocol?
     private var updatePending = false
     private var pausedSince: Date?
     private var pauseCheck: DispatchWorkItem?
     private var hoverTimer: Timer?
-    private var drag: (start: CGRect, mouse: CGPoint, resizing: Bool)?
-    private var shown = false
-    /// Where the window's fade is heading.
-    private var targetAlpha: CGFloat = 0
 
-    var windowIDs: Set<CGWindowID> { panel?.windowServerID.map { [$0] } ?? [] }
+    var windowIDs: Set<CGWindowID> { Set(windows.values.compactMap { $0.panel?.windowServerID }) }
     var isEditing: Bool { state.editing }
+
+    /// The connected displays' keys, the main display first.
+    private var connected: [String] { FloatingFrame.connectedKeys() }
+
+    /// Some display has floating lyrics.
+    var floatsAnywhere: Bool { options.floats(among: connected) }
+
+    /// The Floating quick toggle (menu bar, link, Shortcuts): off on every
+    /// display when any floats, else on for the display whose menu bar is
+    /// in use (`NSScreen.main`).
+    func toggleFloating() {
+        let target = NSScreen.main?.versoDisplayID.map(FloatingFrame.cachedKey)
+        options.toggleFloating(connected: connected, target: target)
+    }
 
     func start() {
         guard screenObserver == nil else { return }
@@ -94,7 +122,13 @@ final class FloatingLyricsController {
         screenObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
         ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.placedOn = nil; self?.scheduleUpdate() }
+            MainActor.assumeIsolated {
+                FloatingFrame.forgetCachedKeys()
+                guard let self else { return }
+                self.options.migrateDisplaysIfNeeded(connected: self.connected)
+                for window in self.windows.values { window.placedOn = nil }
+                self.scheduleUpdate()
+            }
         }
         update()
     }
@@ -113,10 +147,10 @@ final class FloatingLyricsController {
     // MARK: Edit position
 
     func setEditing(_ editing: Bool) {
-        let editing = editing && options.isFloating
+        let editing = editing && floatsAnywhere
         guard state.editing != editing else { return }
         state.editing = editing
-        if !editing { drag = nil }
+        if !editing { for window in windows.values { window.drag = nil } }
         update()
     }
 
@@ -124,28 +158,26 @@ final class FloatingLyricsController {
 
     /// Follows the pointer from where the drag began; on release, keeps the
     /// frame for this display as Custom.
-    func dragged(resizing: Bool, ended: Bool) {
-        guard state.editing, let panel, let placed = placedOn, let box else { return }
+    func dragged(_ window: FloatingLyricsWindow, resizing: Bool, ended: Bool) {
+        guard state.editing, let panel = window.panel, let placed = window.placedOn, let box = window.box else { return }
         let mouse = NSEvent.mouseLocation
-        if drag == nil || drag?.resizing != resizing { drag = (box, mouse, resizing) }
-        guard let drag else { return }
+        if window.drag == nil || window.drag?.resizing != resizing { window.drag = (box, mouse, resizing) }
+        guard let drag = window.drag else { return }
         let delta = CGSize(width: mouse.x - drag.mouse.x, height: mouse.y - drag.mouse.y)
         let frame = FloatingFrame.dragged(drag.start, by: delta, resizing: resizing, in: placed.area)
-        setBox(frame, on: panel)
+        setBox(frame, of: window, on: panel)
         guard ended else { return }
-        self.drag = nil
-        options.storeCustomFrame(FloatingFrame.relative(frame, to: placed.screenFrame), for: placed.key)
+        window.drag = nil
+        options.storeCustomFrame(FloatingFrame.relative(frame, to: placed.screenFrame), for: window.key)
         updateMouseTaking()
     }
 
     // MARK: Showing
 
-    private var visibilityInput: FloatingLyricsVisibility.Input {
+    private func visibilityInput(floats: Bool) -> FloatingLyricsVisibility.Input {
         let nowPlaying = NowPlayingMonitor.shared, lyrics = LyricsViewModel.shared
-        let hasTrack = nowPlaying.current != nil
-        if !hasTrack || nowPlaying.isPlaying { pausedSince = nil } else if pausedSince == nil { pausedSince = Date() }
-        return .init(surface: options.surface, editing: state.editing,
-                     lyricsVisible: LunalyrExtras.shared.lyricsVisible, hasTrack: hasTrack,
+        return .init(floats: floats, editing: state.editing,
+                     lyricsVisible: LunalyrExtras.shared.lyricsVisible, hasTrack: nowPlaying.current != nil,
                      isPlaying: nowPlaying.isPlaying, pausedFor: pausedSince.map { Date().timeIntervalSince($0) },
                      hasTimedLines: !lyrics.lines.isEmpty, hasPlainLines: !lyrics.plainLines.isEmpty,
                      allInstrumental: !lyrics.lines.isEmpty && lyrics.lines.allSatisfy(\.isInstrumental),
@@ -153,54 +185,71 @@ final class FloatingLyricsController {
     }
 
     private func update() {
-        if !options.isFloating, state.editing { state.editing = false }
-        let input = visibilityInput
+        let nowPlaying = NowPlayingMonitor.shared
+        if nowPlaying.current == nil || nowPlaying.isPlaying { pausedSince = nil } else if pausedSince == nil { pausedSince = Date() }
+        let screens = NSScreen.screens.compactMap { screen in screen.versoDisplayID.map { (screen, FloatingFrame.cachedKey($0)) } }
+        let floating = Set(options.floatingDisplays(among: screens.map(\.1)))
+        if floating.isEmpty, state.editing { state.editing = false }
+        let input = visibilityInput(floats: true)
         pauseCheck?.cancel()
         pauseCheck = nil
-        if let after = FloatingLyricsVisibility.hidesAfter(input) {
+        if !floating.isEmpty, let after = FloatingLyricsVisibility.hidesAfter(input) {
             let work = DispatchWorkItem { [weak self] in MainActor.assumeIsolated { self?.update() } }
             pauseCheck = work
             DispatchQueue.main.asyncAfter(deadline: .now() + after + 0.05, execute: work)
         }
-        if FloatingLyricsVisibility.shows(input) { show() } else { hide() }
-    }
-
-    private func show() {
-        let panel = self.panel ?? makePanel()
-        let editing = state.editing
-        if drag == nil { place(panel) }
-        if !state.active { state.active = true }
-        if !shown {
-            shown = true
-            SongStartLog.note("floating lyrics window shown")
-            panel.alphaValue = 0
-            targetAlpha = 0
-            panel.orderFrontRegardless()
-            fade(panel, to: 1)
-        } else if !panel.isVisible {
-            panel.orderFrontRegardless()
+        let showing = FloatingLyricsVisibility.shows(input)
+        for (screen, key) in screens where floating.contains(key) && showing {
+            show(windows[key] ?? makeWindow(key), on: screen)
         }
-        if editing, targetAlpha != 1 { fade(panel, to: 1) }
+        for window in windows.values where !(floating.contains(window.key) && showing) {
+            hide(window)
+        }
         updateHoverTimer()
         updateEditPointer()
     }
 
-    private func hide() {
-        hoverTimer?.invalidate()
-        hoverTimer = nil
-        guard shown, let panel else { updateEditPointer(); return }
-        shown = false
-        updateEditPointer()
+    private func makeWindow(_ key: String) -> FloatingLyricsWindow {
+        let window = FloatingLyricsWindow(key: key)
+        windows[key] = window
+        return window
+    }
+
+    private func show(_ window: FloatingLyricsWindow, on screen: NSScreen) {
+        let panel = window.panel ?? makePanel(for: window)
+        let editing = state.editing
+        if window.state.editing != editing { window.state.editing = editing }
+        if window.drag == nil { place(window, on: panel, screen: screen) }
+        if !window.state.active { window.state.active = true }
+        if !window.shown {
+            window.shown = true
+            SongStartLog.note("floating lyrics window shown")
+            panel.alphaValue = 0
+            window.targetAlpha = 0
+            panel.orderFrontRegardless()
+            fade(window, to: 1)
+        } else if !panel.isVisible {
+            panel.orderFrontRegardless()
+        }
+        if editing, window.targetAlpha != 1 { fade(window, to: 1) }
+    }
+
+    private func hide(_ window: FloatingLyricsWindow) {
+        if window.state.editing { window.state.editing = false }
+        window.drag = nil
+        guard window.shown, window.panel != nil else { return }
+        window.shown = false
         SongStartLog.note("floating lyrics window hidden")
-        fade(panel, to: 0) { [weak self] in
-            guard let self, !self.shown else { return }
-            panel.orderOut(nil)
-            self.state.active = false
+        fade(window, to: 0) {
+            guard !window.shown else { return }
+            window.panel?.orderOut(nil)
+            window.state.active = false
         }
     }
 
-    private func fade(_ panel: NSPanel, to alpha: CGFloat, then done: (@MainActor () -> Void)? = nil) {
-        targetAlpha = alpha
+    private func fade(_ window: FloatingLyricsWindow, to alpha: CGFloat, then done: (@MainActor () -> Void)? = nil) {
+        guard let panel = window.panel else { done?(); return }
+        window.targetAlpha = alpha
         if panel.alphaValue == alpha || NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
             panel.alphaValue = alpha
             done?()
@@ -212,33 +261,30 @@ final class FloatingLyricsController {
         }
     }
 
-    /// Puts the panel where its placement says on the chosen display.
-    private func place(_ panel: NSPanel) {
-        let screens = NSScreen.screens.compactMap { screen in screen.versoDisplayID.map { (screen, $0) } }
-        let keys = screens.map { FloatingFrame.displayKey($0.1) }
-        guard let index = FloatingFrame.chosenIndex(options.display, among: keys) else { return }
-        let screen = screens[index].0, key = keys[index]
+    /// Puts the panel where this display's placement says.
+    private func place(_ window: FloatingLyricsWindow, on panel: NSPanel, screen: NSScreen) {
+        let key = window.key
         let area = FloatingFrame.usableArea(screenFrame: screen.frame, visibleFrame: screen.visibleFrame,
                                             safeTopInset: screen.safeAreaInsets.top)
-        placedOn = (key, screen.frame, area)
-        let frame = FloatingFrame.resolve(options.placement, custom: options.customFrame(for: key),
+        window.placedOn = (screen.frame, area)
+        let frame = FloatingFrame.resolve(options.placement(for: key), custom: options.customFrame(for: key),
                                           savedSize: options.savedSize(for: key), textSize: CGFloat(options.textSize),
                                           screenFrame: screen.frame, area: area)
-        setBox(frame, on: panel)
+        setBox(frame, of: window, on: panel)
     }
 
     /// Puts the box at `frame` (screen coordinates): the window goes round
     /// it, the margin following the text size.
-    private func setBox(_ frame: CGRect, on panel: NSPanel) {
+    private func setBox(_ frame: CGRect, of window: FloatingLyricsWindow, on panel: NSPanel) {
         let margin = FloatingFrame.spillMargin(textSize: CGFloat(options.textSize))
-        box = frame
-        if state.margin != margin { state.margin = margin }
-        hosting?.boxInset = margin
-        let window = FloatingFrame.window(forBox: frame, margin: margin)
-        if panel.frame != window { panel.setFrame(window, display: true) }
+        window.box = frame
+        if window.state.margin != margin { window.state.margin = margin }
+        window.hosting?.boxInset = margin
+        let outer = FloatingFrame.window(forBox: frame, margin: margin)
+        if panel.frame != outer { panel.setFrame(outer, display: true) }
     }
 
-    private func makePanel() -> FloatingLyricsPanel {
+    private func makePanel(for window: FloatingLyricsWindow) -> FloatingLyricsPanel {
         let panel = FloatingLyricsPanel(contentRect: CGRect(x: 0, y: 0, width: 640, height: 200),
                                         styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: true)
         panel.level = Self.level
@@ -254,28 +300,31 @@ final class FloatingLyricsController {
         panel.animationBehavior = .none
         panel.title = Self.windowTitle
         panel.isExcludedFromWindowsMenu = true
-        let view = FloatingLyricsView(state: state, onDrag: { [weak self] resizing, ended in
-            self?.dragged(resizing: resizing, ended: ended)
+        let view = FloatingLyricsView(state: window.state, onDrag: { [weak self, weak window] resizing, ended in
+            guard let window else { return }
+            self?.dragged(window, resizing: resizing, ended: ended)
         }, onDone: { [weak self] in self?.setEditing(false) })
             .environmentObject(NowPlayingMonitor.shared)
         let hosting = FirstClickHostingView(rootView: AnyView(view))
         hosting.autoresizingMask = [.width, .height]
         panel.contentView = hosting
-        self.hosting = hosting
-        self.panel = panel
+        window.hosting = hosting
+        window.panel = panel
         return panel
     }
 
-    // MARK: Pointer over the window
+    // MARK: Pointer over the windows
 
-    /// Four looks a second at the pointer while the window shows and should
+    private var shownWindows: [FloatingLyricsWindow] { windows.values.filter(\.shown) }
+
+    /// Four looks a second at the pointer while a window shows and should
     /// fade under it; nothing runs otherwise.
     private func updateHoverTimer() {
-        let wanted = shown && options.fadesUnderPointer && !state.editing
+        let wanted = !shownWindows.isEmpty && options.fadesUnderPointer && !state.editing
         if !wanted {
             hoverTimer?.invalidate()
             hoverTimer = nil
-            if let panel, shown, targetAlpha != 1 { fade(panel, to: 1) }
+            for window in shownWindows where window.targetAlpha != 1 { fade(window, to: 1) }
             return
         }
         guard hoverTimer == nil else { return }
@@ -288,31 +337,35 @@ final class FloatingLyricsController {
     }
 
     private func checkPointer() {
-        guard let panel, shown, !state.editing else { return }
-        let over = (box ?? panel.frame).contains(NSEvent.mouseLocation)
-        let target = over ? Self.pointerAlpha : 1
-        if targetAlpha != target { fade(panel, to: target) }
+        guard !state.editing else { return }
+        let mouse = NSEvent.mouseLocation
+        for window in shownWindows {
+            guard let panel = window.panel else { continue }
+            let over = (window.box ?? panel.frame).contains(mouse)
+            let target = over ? Self.pointerAlpha : 1
+            if window.targetAlpha != target { fade(window, to: target) }
+        }
     }
 
     // MARK: Clicks in edit position
 
-    /// Outside edit position the window takes no clicks at all. In it, the
+    /// Outside edit position the windows take no clicks at all. In it, a
     /// box takes them (the drag, the grip, Done) and the margin round it
-    /// lets them through to what is underneath: the window takes the mouse
-    /// only while the pointer is over the box. A view returning nil from
+    /// lets them through to what is underneath: a window takes the mouse
+    /// only while the pointer is over its box. A view returning nil from
     /// its hit test would only swallow a click, so it is the window that
     /// switches. The pointer is followed by a global monitor (moves over
-    /// other apps: the pointer may be coming onto the box), a local one
-    /// (moves and releases over this window) and, for moves no monitor
+    /// other apps: the pointer may be coming onto a box), a local one
+    /// (moves and releases over these windows) and, for moves no monitor
     /// sees, a look twenty times a second, all only while editing.
     private func updateEditPointer() {
-        let wanted = shown && state.editing
+        let wanted = state.editing && !shownWindows.isEmpty
         guard wanted else {
             for monitor in pointerMonitors { NSEvent.removeMonitor(monitor) }
             pointerMonitors = []
             editPointerTimer?.invalidate()
             editPointerTimer = nil
-            panel?.acceptsMouseMovedEvents = false
+            for window in windows.values { window.panel?.acceptsMouseMovedEvents = false }
             updateMouseTaking()
             return
         }
@@ -334,22 +387,26 @@ final class FloatingLyricsController {
             RunLoop.main.add(timer, forMode: .common)
             editPointerTimer = timer
         }
-        panel?.acceptsMouseMovedEvents = true
+        for window in shownWindows { window.panel?.acceptsMouseMovedEvents = true }
         updateMouseTaking()
     }
 
-    /// Takes the mouse over the box in edit position, never in the margin
+    /// Takes the mouse over a box in edit position, never in the margin
     /// and never outside edit position. A drag under way keeps it, though a
     /// resize may leave the pointer outside the box.
     private func updateMouseTaking() {
-        guard let panel else { return }
-        guard state.editing, shown else {
-            if !panel.ignoresMouseEvents { panel.ignoresMouseEvents = true }
-            return
+        let mouse = NSEvent.mouseLocation
+        let pressed = NSEvent.pressedMouseButtons != 0
+        for window in windows.values {
+            guard let panel = window.panel else { continue }
+            guard state.editing, window.shown else {
+                if !panel.ignoresMouseEvents { panel.ignoresMouseEvents = true }
+                continue
+            }
+            // Never switched mid-press: a click or drag ends where it began.
+            if window.drag != nil || pressed { continue }
+            let takes = window.box?.contains(mouse) ?? false
+            if panel.ignoresMouseEvents == takes { panel.ignoresMouseEvents = !takes }
         }
-        // Never switched mid-press: a click or drag ends where it began.
-        if drag != nil || NSEvent.pressedMouseButtons != 0 { return }
-        let takes = box?.contains(NSEvent.mouseLocation) ?? false
-        if panel.ignoresMouseEvents == takes { panel.ignoresMouseEvents = !takes }
     }
 }

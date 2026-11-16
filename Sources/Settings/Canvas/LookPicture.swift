@@ -43,6 +43,7 @@ struct LookPicture: View {
                 }
                 if showsFloating {
                     FloatingScene(desktop: desktop, options: floating, sample: nothingPlaying)
+                        .environment(\.lyricSurface, .floating)
                 }
             }
         }

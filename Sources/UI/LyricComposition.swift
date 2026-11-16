@@ -223,6 +223,7 @@ struct LyricLineView: View {
     /// backing vocals, credits and the title wear none.
     var accents: WordAccentPlan = .none
     @StateObject private var echoText = RenderMemo<EchoPhrase, (text: String, rightToLeft: Bool)>()
+    @SurfaceStyle private var style
 
     /// The words Echo repeats, and how they run together.
     struct EchoPhrase: Equatable {
@@ -233,7 +234,8 @@ struct LyricLineView: View {
     var body: some View {
         // Bracketed backing vocals are lifted out and drawn apart, behind the
         // lead (see BackingVocals). Only word-timed lines are split.
-        let split = Self.liftsBacking(wordTimed: wordTimed, firstRunOnly: firstRunOnly, allowed: liftsBackingVocals)
+        let split = Self.liftsBacking(wordTimed: wordTimed, firstRunOnly: firstRunOnly, allowed: liftsBackingVocals,
+                                      settingOn: style.backingVocals)
             ? BackingVocals.split(words, glue: glue) : nil
         Group {
             if let split, !split.backing.isEmpty {
@@ -262,7 +264,7 @@ struct LyricLineView: View {
             if composition.fillsStage {
                 StageLyricView(words: words, glue: glue, time: time, stageSize: stageSize, baseSize: baseSize, mood: mood,
                                composition: composition, seed: seed, exitStart: exitStart, firstRunOnly: firstRunOnly,
-                               readings: readings)
+                               readings: readings, settings: style.settings)
             } else if composition.arrivalOnly {
                 SpokenTypographyView(words: words, time: time, baseSize: baseSize, mood: mood,
                                      composition: composition, seed: seed, accent: accent, energy: energy, readings: readings,
@@ -306,7 +308,8 @@ struct LyricLineView: View {
         }
     }
     private func echoBackdrop(words: [LyricsFetcher.Word], glue: [Bool], lineHeight: CGFloat) -> some View {
-        let reveals = wordTimed && Settings.shared.revealsWords(in: composition)
+        let settings = style.settings
+        let reveals = wordTimed && settings.revealsWords(in: composition)
         // Set as the line reads: glued characters and syllables together,
         // as the live line shows them.
         let phrase = echoText.value(for: EchoPhrase(words: words, glue: glue)) {
@@ -316,7 +319,7 @@ struct LyricLineView: View {
             text: phrase.text,
             revealed: reveals ? EchoBackdrop.revealed(words, at: time) : 1,
             rightToLeft: phrase.rightToLeft,
-            font: { Settings.shared.lyricFont(size: $0, hero: false, mood: mood) },
+            font: { settings.lyricFont(size: $0, hero: false, mood: mood) },
             baseSize: baseSize,
             stageSize: stageSize,
             seed: seed,
@@ -358,9 +361,10 @@ struct ConstellationLines: View {
     /// Each slot's clearance around its ink: links end at the letters, not
     /// at the slot's edge.
     var insets: [CGSize] = []
+    @SurfaceStyle private var style
 
     var body: some View {
-        let opacity = Settings.shared.constellationLinkOpacity
+        let opacity = style.settings.constellationLinkOpacity
         return GeometryReader { proxy in
             Canvas { context, size in
                 // Anchors belong to fixed slots outside time-driven transforms.
@@ -434,6 +438,7 @@ struct EchoBackdrop: View {
     var time: Double = 0
     /// The live line's height: the repeats step away from its edges.
     var lineHeight: CGFloat = 0
+    @SurfaceStyle private var style
     @Environment(\.lyricReduceMotion) private var reduceMotion
     @Environment(\.lyricInk) private var ink
 
@@ -491,7 +496,7 @@ struct EchoBackdrop: View {
         let side: CGFloat = seed.isMultiple(of: 2) ? 1 : -1
         let drift = reduceMotion ? 0.0 : 1.0
         let tint = ink.sample(slot: 0.5, seed: UInt64(seed.magnitude)).rest
-        let strength = presence * Settings.shared.echoStrength
+        let strength = presence * style.settings.echoStrength
         ZStack {
             ForEach(0..<Self.variants.count, id: \.self) { slot in
                 let ghost = Self.variants[slot]

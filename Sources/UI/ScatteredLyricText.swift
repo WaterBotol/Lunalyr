@@ -692,7 +692,8 @@ struct ScatteredLyricText: View {
     /// first word's label, which `heldFirstRun` draws.
     var hidesFirstRun = false
 
-    @ObservedObject private var settings = Settings.shared
+    @SurfaceStyle private var surfaceStyle
+    private var settings: Settings { surfaceStyle.settings }
     @StateObject private var typography = RenderMemo<ScatteredTypography.Key, ScatteredTypography.Layout>()
     @Environment(\.lyricReduceMotion) private var reduceMotion
     @Environment(\.lyricInk) private var ink
@@ -722,7 +723,7 @@ struct ScatteredLyricText: View {
         let states: [ScatteredWordState] = wordTimed ? prepared.map {
             ScatteredWordFrame.state($0, nextIndex: nextIndex, time: time, composition: composition,
                 energy: intensity, exitStart: exitStart, reduceMotion: reduceMotion, ink: ink,
-                eligibleSince: $0.index > 0 ? prepared[$0.index - 1].source.start : previewSince)
+                eligibleSince: $0.index > 0 ? prepared[$0.index - 1].source.start : previewSince, settings: settings)
         } : []
         let reveals = settings.revealsWords(in: composition)
         let frames = wordTimed ? layout.runs.map {
@@ -911,23 +912,23 @@ struct ScatteredWordFrame: Equatable {
 
     @MainActor
     static func make(_ token: ScatteredTypography.Word, nextIndex: Int?, time: Double,
-                     composition: LyricComposition, energy: Double = 0) -> ScatteredWordFrame {
-        state(token, nextIndex: nextIndex, time: time, composition: composition, energy: energy).frame
+                     composition: LyricComposition, energy: Double = 0, settings: Settings = .shared) -> ScatteredWordFrame {
+        state(token, nextIndex: nextIndex, time: time, composition: composition, energy: energy, settings: settings).frame
     }
 
     @MainActor
     static func state(_ token: ScatteredTypography.Word, nextIndex: Int?, time: Double,
                       composition: LyricComposition, energy: Double = 0, exitStart: Double = .infinity,
                       reduceMotion: Bool = false, ink: LyricInk = .white,
-                      eligibleSince: Double = -.infinity) -> ScatteredWordState {
+                      eligibleSince: Double = -.infinity, settings: Settings = .shared) -> ScatteredWordState {
         let word = token.source
         let motion = vc_word_motion(time, word.start, word.end, token.cadence, exitStart, token.order,
                                     token.seed, energy, reduceMotion ? 1 : 0)
         let presentation = WordPresentation.make(word: word, index: token.index, nextIndex: nextIndex,
                                                   time: time, composition: composition, motion: motion,
-                                                  eligibleSince: eligibleSince)
+                                                  eligibleSince: eligibleSince, settings: settings)
         let progress = min(max((time - word.start) / max(word.end - word.start, 0.001), 0), 1)
-        let fill = Settings.shared.revealsWords(in: composition) ? 1 : progress
+        let fill = settings.revealsWords(in: composition) ? 1 : progress
         let heat = motion.heat
         let glow = token.sustain > 0.01 && heat > 0.01
             ? min(1, heat) * token.sustain * Easing.smoothstep(progress / 0.45) : 0

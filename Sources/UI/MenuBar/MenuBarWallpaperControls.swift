@@ -206,14 +206,15 @@ struct MenuBarToggles: View {
             .accessibilityHint(extras.lyricsVisible ? "Hides the lyrics on every wallpaper"
                                : extras.hiddenByMirroring ? "Shows the lyrics on every display until mirroring ends"
                                : "Shows the lyrics again")
-            // Lyrics over the apps instead of on the desktop.
-            QuickToggle("Floating", isOn: floating.isFloating, accessibilityTitle: "Floating lyrics",
+            // Lyrics over the apps, on this display or wherever they float.
+            let floats = FloatingLyricsController.shared.floatsAnywhere
+            QuickToggle("Floating", isOn: floats, accessibilityTitle: "Floating lyrics",
                         state: "Lyrics floating over apps") {
-                floating.toggleSurface()
+                FloatingLyricsController.shared.toggleFloating()
             }
-            .accessibilityHint(floating.isFloating ? "Puts the lyrics back on the desktop"
-                               : "Shows the lyrics over every app instead of on the desktop")
-            if floating.isFloating {
+            .accessibilityHint(floats ? "Turns the floating lyrics off on every display"
+                               : "Shows the lyrics over every app on this display")
+            if floats {
                 MenuPanelRow(floatingState.editing ? "Done placing lyrics" : "Edit position…") {
                     FloatingLyricsController.shared.toggleEditing()
                 }
@@ -225,7 +226,7 @@ struct MenuBarToggles: View {
         .animation(LunalyrDesign.Motion.animation(LunalyrDesign.Motion.quick, reduceMotion: reduceMotion),
                    value: extras.wallpaperPaused)
         .animation(LunalyrDesign.Motion.animation(LunalyrDesign.Motion.quick, reduceMotion: reduceMotion),
-                   value: floating.isFloating)
+                   value: FloatingLyricsController.shared.floatsAnywhere)
     }
 
     static let pausedNote = "Paused: your desktop is frozen until you resume it."

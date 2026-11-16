@@ -49,7 +49,7 @@ struct OpenLunalyrSettingsIntent: AppIntent {
 
 struct ToggleFloatingLyricsIntent: AppIntent {
     static let title: LocalizedStringResource = "Float Lyrics Over Apps"
-    static let description = IntentDescription("Moves the lyrics from the desktop to a window over every app, or back.")
+    static let description = IntentDescription("Turns floating lyrics over every app on or off: on for the display with the menu bar, off on every display.")
     @MainActor func perform() async throws -> some IntentResult & ProvidesDialog { LunalyrCommand.dialogResult(.toggleFloating) }
 }
 

@@ -15,7 +15,9 @@ import SwiftUI
 enum OpeningTitle {
     static let settingKey = "custom.openingTitle"
 
-    static var isOn: Bool { UserDefaults.standard.object(forKey: settingKey) as? Bool ?? true }
+    static var isOn: Bool { isOn(in: .standard) }
+    /// In one lyric style's preferences (`LyricStyle`).
+    static func isOn(in defaults: UserDefaults) -> Bool { defaults.object(forKey: settingKey) as? Bool ?? true }
 
     /// Keep the song title on screen: the card enters as usual (at the
     /// song's start, or when Lunalyr joins it part-way) and stays for the
@@ -31,7 +33,8 @@ enum OpeningTitle {
     /// The album cover beside the title.
     static let coverKey = "custom.openingTitleCover"
 
-    static var showsCover: Bool { UserDefaults.standard.object(forKey: coverKey) as? Bool ?? true }
+    static var showsCover: Bool { showsCover(in: .standard) }
+    static func showsCover(in defaults: UserDefaults) -> Bool { defaults.object(forKey: coverKey) as? Bool ?? true }
 
     /// The cover to draw: the wallpaper's own artwork for the song, when the
     /// setting is on and there is one. Nil keeps the text where it is.
@@ -120,8 +123,8 @@ enum OpeningTitle {
     /// 2026), unless the album is one the user left out of animated covers.
     @MainActor
     static func motionCover(_ motion: MotionArtworkProvider.Motion?, track: NowPlayingMonitor.Track?,
-                            settings: Settings) -> URL? {
-        guard let motion, isOn, showsCover, !settings.excludesMotion(artist: track?.artist, album: track?.album) else {
+                            settings: Settings, enabled: Bool = isOn && showsCover) -> URL? {
+        guard let motion, enabled, !settings.excludesMotion(artist: track?.artist, album: track?.album) else {
             return nil
         }
         return motion.square
@@ -129,7 +132,14 @@ enum OpeningTitle {
 
     /// Whether the card wants the album's animated cover looked up, apart
     /// from the wallpaper's own Animated covers.
-    static var wantsMotionCover: Bool { isOn && showsCover }
+    /// Either lyric style's card counts: the two draw at once.
+    @MainActor static var wantsMotionCover: Bool {
+        wantsMotionCover([LyricStyles.shared.edited, LyricStyles.shared.parked])
+    }
+
+    @MainActor static func wantsMotionCover(_ styles: [LyricStyle]) -> Bool {
+        styles.contains { $0.openingTitle && $0.openingTitleCover }
+    }
 
     // Type sizes, as shares of the title's own size (before a long title is
     // set smaller), so the hierarchy holds at every size.
@@ -823,7 +833,8 @@ struct OpeningTitleCard: View {
     /// A kept title in the floating window: one compact row at the top,
     /// above the lyrics (`OpeningTitle.rowBand`), instead of the card.
     var row = false
-    @ObservedObject private var settings = Settings.shared
+    @SurfaceStyle private var style
+    private var settings: Settings { style.settings }
     @Environment(\.lyricReduceMotion) private var reduceMotion
     @Environment(\.lyricInk) private var ink
 

@@ -815,11 +815,15 @@ final class Settings: ObservableObject {
         patternStyle ?? mood.background
     }
 
+    /// "Change layout every song", part of a lyric style, read from this
+    /// style's own preferences (the rotation itself is shared).
+    var rotatesLayouts: Bool { defaults.object(forKey: LyricLayoutRotation.enabledKey) as? Bool ?? true }
+
     /// How to arrange a lyric line, honouring an override or letting the
     /// track choose.
     func resolvedComposition(for mood: TrackMood, seed: Int, track: String? = nil) -> LyricComposition {
         if let lyricComposition { return lyricComposition }
-        if let track, LyricLayoutRotation.shared.isEnabled {
+        if let track, rotatesLayouts {
             return LyricLayoutRotation.shared.layout(for: track, mood: mood)
         }
         return LyricComposition.matching(mood, seed: seed)

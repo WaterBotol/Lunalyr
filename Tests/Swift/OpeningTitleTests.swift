@@ -505,11 +505,12 @@ final class OpeningTitleTests: XCTestCase {
         let motion = MotionArtworkProvider.Motion(square: URL(string: "https://example.invalid/square.m3u8")!, tall: nil)
         XCTAssertEqual(OpeningTitle.motionCover(motion, track: nil, settings: settings), motion.square,
                        "Animated covers off: the card still plays it")
-        XCTAssertTrue(OpeningTitle.wantsMotionCover)
+        XCTAssertTrue(OpeningTitle.wantsMotionCover([LyricStyles.shared.edited]))
         XCTAssertNil(OpeningTitle.motionCover(nil, track: nil, settings: settings))
         UserDefaults.standard.set(false, forKey: OpeningTitle.coverKey)
         XCTAssertNil(OpeningTitle.motionCover(motion, track: nil, settings: settings), "no cover, no animated cover")
-        XCTAssertFalse(OpeningTitle.wantsMotionCover)
+        XCTAssertFalse(OpeningTitle.wantsMotionCover([LyricStyles.shared.edited]),
+                       "this style's card wants none; the other style's is asked on its own")
     }
 
     // MARK: Moved and resized on the Settings picture

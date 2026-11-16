@@ -61,38 +61,148 @@ final class FloatingLyricsTests: XCTestCase {
     func testCustomFramesAreKeptPerDisplayAndResetClears() {
         let options = stores().options
         options.storeCustomFrame(CGRect(x: 40, y: 60, width: 500, height: 160), for: "A")
-        XCTAssertEqual(options.placement, .custom, "dragging the window makes it Custom")
+        XCTAssertEqual(options.placement(for: "A"), .custom, "dragging the window makes its display Custom")
+        XCTAssertEqual(options.placement(for: "B"), .bottom, "another display keeps its place")
+        XCTAssertEqual(options.placement, .bottom)
         XCTAssertEqual(options.customFrame(for: "A"), CGRect(x: 40, y: 60, width: 500, height: 160))
         XCTAssertEqual(options.savedSize(for: "A"), CGSize(width: 500, height: 160))
         XCTAssertNil(options.customFrame(for: "B"), "another display keeps its own")
         options.resetFrames()
         XCTAssertNil(options.customFrame(for: "A"))
         XCTAssertNil(options.savedSize(for: "A"))
-        XCTAssertEqual(options.placement, .bottom)
+        XCTAssertEqual(options.placement(for: "A"), .bottom)
     }
 
-    // MARK: Desktop or floating, never both
+    func testPickingAPlaceAppliesToEveryDisplay() {
+        let options = stores().options
+        options.storeCustomFrame(CGRect(x: 40, y: 60, width: 500, height: 160), for: "A")
+        options.placement = .topRight
+        XCTAssertEqual(options.placement(for: "A"), .topRight)
+        XCTAssertEqual(options.placement(for: "B"), .topRight)
+        XCTAssertEqual(options.customFrame(for: "A"), CGRect(x: 40, y: 60, width: 500, height: 160),
+                       "the frame placed by hand is kept for Custom")
+    }
 
-    func testOnlyOneSurfaceDrawsTheLyrics() {
-        XCTAssertTrue(NowPlayingView.drawsLyrics(settingsPreview: false, surface: .desktop))
-        XCTAssertFalse(NowPlayingView.drawsLyrics(settingsPreview: false, surface: .floating),
-                       "the wallpaper draws no lyrics while they float")
-        XCTAssertTrue(NowPlayingView.drawsLyrics(settingsPreview: true, surface: .floating),
+    // MARK: What each display shows
+
+    func testEachDisplayDrawsWhatItsChoiceSays() {
+        XCTAssertTrue(NowPlayingView.drawsLyrics(settingsPreview: false, choice: .desktop))
+        XCTAssertTrue(NowPlayingView.drawsLyrics(settingsPreview: false, choice: .both))
+        XCTAssertFalse(NowPlayingView.drawsLyrics(settingsPreview: false, choice: .floating),
+                       "the wallpaper draws no lyrics where they float")
+        XCTAssertFalse(NowPlayingView.drawsLyrics(settingsPreview: false, choice: .none))
+        XCTAssertTrue(NowPlayingView.drawsLyrics(settingsPreview: true, choice: .none),
                       "the Settings preview shows the style being edited")
+        XCTAssertEqual(DisplayLyrics.allCases.filter(\.onDesktop), [.desktop, .both])
+        XCTAssertEqual(DisplayLyrics.allCases.filter(\.floats), [.floating, .both])
         var input = playing
-        input.surface = .desktop
-        XCTAssertFalse(FloatingLyricsVisibility.shows(input), "no floating window while the desktop has them")
-        input.surface = .floating
+        input.floats = false
+        XCTAssertFalse(FloatingLyricsVisibility.shows(input), "no floating window on a display that does not float")
+        input.floats = true
         XCTAssertTrue(FloatingLyricsVisibility.shows(input))
     }
 
-    func testSwitchingSurfaceIsStoredAndToggles() {
+    func testChoicesAreStoredPerDisplayAndNewDisplaysGetDesktopLyrics() {
+        let s = stores()
+        XCTAssertEqual(s.options.choice(for: "A"), .desktop, "a display never seen shows the lyrics on its desktop")
+        s.options.setChoice(.both, for: "A")
+        s.options.setChoice(.none, for: "B")
+        XCTAssertEqual(s.options.choice(for: "A"), .both)
+        XCTAssertEqual(s.options.choice(for: "B"), .none)
+        XCTAssertEqual(s.options.choice(for: "C"), .desktop)
+        XCTAssertEqual(s.defaults.dictionary(forKey: FloatingLyricsOptions.Keys.displays) as? [String: String],
+                       ["A": "both", "B": "none"])
+        let reread = FloatingLyricsOptions(defaults: s.defaults, connected: ["A", "B", "C"])
+        XCTAssertEqual(reread.choice(for: "A"), .both)
+        XCTAssertEqual(reread.choice(for: "B"), .none)
+        XCTAssertEqual(reread.choice(for: "C"), .desktop, "a stored choice is never migrated again")
+    }
+
+    func testWhichDisplaysGetAFloatingWindow() {
+        let s = stores()
+        let connected = ["A", "B", "C", "D"]
+        XCTAssertEqual(s.options.floatingDisplays(among: connected), [], "nothing floats by default")
+        s.options.setChoice(.floating, for: "A")
+        s.options.setChoice(.both, for: "C")
+        s.options.setChoice(.none, for: "D")
+        s.options.setChoice(.floating, for: "gone")
+        XCTAssertEqual(s.options.floatingDisplays(among: connected), ["A", "C"], "one window per floating display")
+        XCTAssertTrue(s.options.floats(among: connected))
+        XCTAssertFalse(s.options.floats(among: ["B", "D"]))
+    }
+
+    func testMigrationFromTheDesktopKeepsEveryDisplaysLyrics() {
+        let defaults = LunalyrTestEnvironment.isolatedDefaults("LunalyrTests.Floating")
+        defaults.set("desktop", forKey: FloatingLyricsOptions.Keys.surface)
+        let options = FloatingLyricsOptions(defaults: defaults, connected: ["main", "side"])
+        XCTAssertEqual(options.choice(for: "main"), .desktop)
+        XCTAssertEqual(options.choice(for: "side"), .desktop)
+        XCTAssertEqual(options.floatingDisplays(among: ["main", "side"]), [])
+        // Never set at all (a fresh install) reads the same.
+        let fresh = FloatingLyricsOptions(defaults: LunalyrTestEnvironment.isolatedDefaults("LunalyrTests.Floating"),
+                                          connected: ["main", "side"])
+        XCTAssertEqual(fresh.floatingDisplays(among: ["main", "side"]), [])
+        XCTAssertEqual(fresh.choice(for: "side"), .desktop)
+    }
+
+    func testMigrationFromFloatingOnAChosenDisplay() {
+        let defaults = LunalyrTestEnvironment.isolatedDefaults("LunalyrTests.Floating")
+        defaults.set("floating", forKey: FloatingLyricsOptions.Keys.surface)
+        defaults.set("side", forKey: FloatingLyricsOptions.Keys.display)
+        let options = FloatingLyricsOptions(defaults: defaults, connected: ["main", "side", "third"])
+        XCTAssertEqual(options.choice(for: "side"), .floating, "the window stays on the display it was on")
+        XCTAssertEqual(options.choice(for: "main"), .none, "Floating left every wallpaper without lyrics")
+        XCTAssertEqual(options.choice(for: "third"), .none)
+        XCTAssertEqual(options.choice(for: "plugged-in-later"), .desktop)
+        XCTAssertEqual(options.surface, .floating, "and Settings still edits the Floating style")
+    }
+
+    func testMigrationFromFloatingWithNoDisplayChosen() {
+        for chosen in ["", "disconnected"] {
+            let defaults = LunalyrTestEnvironment.isolatedDefaults("LunalyrTests.Floating")
+            defaults.set("floating", forKey: FloatingLyricsOptions.Keys.surface)
+            defaults.set(chosen, forKey: FloatingLyricsOptions.Keys.display)
+            let options = FloatingLyricsOptions(defaults: defaults, connected: ["main", "side"])
+            XCTAssertEqual(options.choice(for: "main"), .floating, "the main display, where the window was: \(chosen)")
+            XCTAssertEqual(options.choice(for: "side"), .none)
+        }
+    }
+
+    func testMigrationWaitsForADisplay() {
+        let defaults = LunalyrTestEnvironment.isolatedDefaults("LunalyrTests.Floating")
+        defaults.set("floating", forKey: FloatingLyricsOptions.Keys.surface)
+        let options = FloatingLyricsOptions(defaults: defaults, connected: [])
+        XCTAssertNil(defaults.object(forKey: FloatingLyricsOptions.Keys.displays), "nothing to migrate yet")
+        options.migrateDisplaysIfNeeded(connected: ["main"])
+        XCTAssertEqual(options.choice(for: "main"), .floating)
+        options.setChoice(.desktop, for: "main")
+        options.migrateDisplaysIfNeeded(connected: ["main"])
+        XCTAssertEqual(options.choice(for: "main"), .desktop, "only once")
+    }
+
+    func testFloatingQuickToggle() {
+        let s = stores()
+        let connected = ["main", "side"]
+        s.options.setChoice(.none, for: "side")
+        s.options.toggleFloating(connected: connected, target: "side")
+        XCTAssertEqual(s.options.choice(for: "side"), .floating, "on for the display with the menu bar")
+        XCTAssertEqual(s.options.choice(for: "main"), .desktop, "the others keep their choice")
+        s.options.setChoice(.both, for: "main")
+        s.options.toggleFloating(connected: connected, target: "side")
+        XCTAssertEqual(s.options.choice(for: "main"), .desktop, "off everywhere: back on the desktop")
+        XCTAssertEqual(s.options.choice(for: "side"), .desktop)
+        s.options.toggleFloating(connected: connected, target: nil)
+        XCTAssertEqual(s.options.choice(for: "main"), .floating, "no target: the main display")
+    }
+
+    func testSwitchingTheEditedStyleIsStoredAndToggles() {
         let s = stores()
         s.options.toggleSurface()
         XCTAssertEqual(s.defaults.string(forKey: FloatingLyricsOptions.Keys.surface), "floating")
         XCTAssertEqual(FloatingLyricsOptions(defaults: s.defaults).surface, .floating)
         s.options.toggleSurface()
         XCTAssertEqual(s.options.surface, .desktop)
+        XCTAssertEqual(s.options.floatingDisplays(among: ["A"]), [], "editing a style never moves the lyrics")
     }
 
     // MARK: Two separate styles
@@ -411,7 +521,7 @@ final class FloatingLyricsTests: XCTestCase {
     // MARK: When the window shows
 
     private var playing: FloatingLyricsVisibility.Input {
-        .init(surface: .floating, lyricsVisible: true, hasTrack: true, isPlaying: true, hasTimedLines: true)
+        .init(floats: true, lyricsVisible: true, hasTrack: true, isPlaying: true, hasTimedLines: true)
     }
 
     func testShowsOnlyWithLyricsPlaying() {
@@ -449,10 +559,10 @@ final class FloatingLyricsTests: XCTestCase {
     }
 
     func testEditPositionShowsTheWindowEvenWithNothingPlaying() {
-        var input = FloatingLyricsVisibility.Input(surface: .floating, editing: true)
+        var input = FloatingLyricsVisibility.Input(floats: true, editing: true)
         XCTAssertTrue(FloatingLyricsVisibility.shows(input))
-        input.surface = .desktop
-        XCTAssertFalse(FloatingLyricsVisibility.shows(input), "nothing to place while the lyrics are on the desktop")
+        input.floats = false
+        XCTAssertFalse(FloatingLyricsVisibility.shows(input), "nothing to place on a display without floating lyrics")
     }
 
     // MARK: The window and its look

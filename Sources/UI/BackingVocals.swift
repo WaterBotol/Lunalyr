@@ -12,7 +12,9 @@ import SwiftUI
 enum BackingVocals {
     static let settingKey = "custom.backingVocalsLayer"
 
-    static var isOn: Bool { UserDefaults.standard.object(forKey: settingKey) as? Bool ?? true }
+    static var isOn: Bool { isOn(in: .standard) }
+    /// In one lyric style's preferences (`LyricStyle`).
+    static func isOn(in defaults: UserDefaults) -> Bool { defaults.object(forKey: settingKey) as? Bool ?? true }
 
     /// A run of backing words sung together: "oh oh", "ooh".
     struct Group: Identifiable, Equatable {
@@ -34,8 +36,9 @@ enum BackingVocals {
     static let choices: [LyricComposition] = [.scattered, .constellation, .echo]
 
     /// The saved choice, or nil to follow the lead's layout.
-    static var chosenStyle: LyricComposition? {
-        UserDefaults.standard.string(forKey: styleKey).flatMap(LyricComposition.saved).flatMap { choices.contains($0) ? $0 : nil }
+    static var chosenStyle: LyricComposition? { chosenStyle(in: .standard) }
+    static func chosenStyle(in defaults: UserDefaults) -> LyricComposition? {
+        defaults.string(forKey: styleKey).flatMap(LyricComposition.saved).flatMap { choices.contains($0) ? $0 : nil }
     }
 
     /// What a group animates in: the choice, else the lead's own layout,
@@ -120,6 +123,7 @@ struct BackingVocalLayer: View {
     let mood: TrackMood
     @Environment(\.lyricReduceMotion) private var reduceMotion
     @Environment(\.lyricCreditBands) private var creditBands
+    @SurfaceStyle private var surfaceStyle
 
     /// How long a group is held at least, however brief the singing was.
     private static let minimumHold = 1.1
@@ -127,7 +131,7 @@ struct BackingVocalLayer: View {
     private static let fadeOut = 0.9
 
     var body: some View {
-        let style = BackingVocals.style(forLead: composition)
+        let style = BackingVocals.style(forLead: composition, chosen: surfaceStyle.backingStyle)
         let box = CGSize(width: stageSize.width * 0.6, height: stageSize.height * 0.26)
         ZStack {
             ForEach(groups) { group in

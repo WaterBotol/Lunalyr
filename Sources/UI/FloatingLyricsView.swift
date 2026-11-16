@@ -70,6 +70,8 @@ struct FloatingLyricsView: View {
             .frame(width: geometry.size.width, height: geometry.size.height)
         }
         .ignoresSafeArea()
+        // Drawn in the Floating style, beside the desktop's (`LyricStyles`).
+        .environment(\.lyricSurface, .floating)
     }
 }
 
