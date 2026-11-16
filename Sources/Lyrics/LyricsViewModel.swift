@@ -23,6 +23,21 @@ final class LyricsViewModel: ObservableObject {
     @Published private(set) var romanized: [Int: [LyricsFetcher.Word]] = [:]
     private var readingTask: Task<Void, Never>?
     private var readingGeneration = UUID()
+    /// How `romanized` shows readings: the style being edited's choice.
+    private var readingDisplay: RomanizationOptions.Display = .off
+    /// The readings again for the other lyric style (`LyricStyles`), made
+    /// only when it shows them and differently ("Below" against "Replace").
+    @Published private(set) var otherRomanized: [Int: [LyricsFetcher.Word]] = [:]
+    private var otherDisplay: RomanizationOptions.Display = .off
+    private var otherTask: Task<Void, Never>?
+    private var otherGeneration = UUID()
+
+    /// The readings as a style showing them `display` draws them.
+    func romanized(for display: RomanizationOptions.Display) -> [Int: [LyricsFetcher.Word]] {
+        if display == readingDisplay { return romanized }
+        if display == otherDisplay { return otherRomanized }
+        return [:]
+    }
     @Published var plainLines: [String] = []
     @Published var isLoading = false
     @Published var notFound = false
@@ -102,6 +117,12 @@ final class LyricsViewModel: ObservableObject {
             .dropFirst().sink { [weak self] display, language, tones, saved in
                 self?.updateReadings(options: .init(display: display, language: language, toneMarks: tones, preferSaved: saved))
             }.store(in: &cancellables)
+        // After launch: the styles read stores that may be starting too.
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            LyricStyles.shared.objectWillChange.receive(on: RunLoop.main)
+                .sink { [weak self] in self?.updateOtherReadings(force: false) }.store(in: &self.cancellables)
+        }
         let translation = MachineTranslationOptions.shared
         Publishers.CombineLatest(translation.$enabled, translation.$target)
             .dropFirst().sink { [weak self] enabled, target in
@@ -118,6 +139,8 @@ final class LyricsViewModel: ObservableObject {
         readingTask?.cancel(); let ticket = UUID(); readingGeneration = ticket
         romanized = [:]
         let value = lines, chosen = options ?? RomanizationOptions.shared.snapshot
+        readingDisplay = chosen.display
+        updateOtherReadings(base: chosen)
         guard !value.isEmpty, chosen.display != .off else { return }
         readingTask = Task { [weak self] in
             let worker = Task.detached(priority: .utility) { LyricRomanizer.readings(value, options: chosen) }
@@ -126,6 +149,31 @@ final class LyricsViewModel: ObservableObject {
             self.romanized = readings
         }
     }
+    /// The other style's readings, when it needs its own: on new lyrics
+    /// or reading options always, after a style swap only if its choice
+    /// changed.
+    private func updateOtherReadings(base: RomanizationOptions.Snapshot? = nil, force: Bool = true) {
+        let base = base ?? RomanizationOptions.shared.snapshot
+        let wanted = LyricStyles.shared.parked.readingDisplay
+        let display: RomanizationOptions.Display = wanted == base.display ? .off : wanted
+        guard force || display != otherDisplay else { return }
+        otherTask?.cancel()
+        let ticket = UUID()
+        otherGeneration = ticket
+        otherDisplay = display
+        otherRomanized = [:]
+        let value = lines
+        guard !value.isEmpty, display != .off else { return }
+        var chosen = base
+        chosen.display = display
+        otherTask = Task { [weak self] in
+            let worker = Task.detached(priority: .utility) { LyricRomanizer.readings(value, options: chosen) }
+            let readings = await withTaskCancellationHandler(operation: { await worker.value }, onCancel: { worker.cancel() })
+            guard let self, !Task.isCancelled, self.otherGeneration == ticket else { return }
+            self.otherRomanized = readings
+        }
+    }
+
     private func updateMachineTranslations(enabled: Bool? = nil, target: String? = nil, force: Bool = false) {
         let options = MachineTranslationOptions.shared
         let chosen = target ?? options.target

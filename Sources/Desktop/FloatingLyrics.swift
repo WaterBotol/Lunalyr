@@ -4,15 +4,66 @@ import SwiftUI
 
 // MARK: - Where the lyrics are drawn
 
-/// Where the lyrics are drawn: on the desktop wallpaper (under every app) or
-/// in a floating window over every app. Never both: in Floating the
-/// wallpaper keeps its background, video or visualiser but draws no lyrics.
+/// A lyric style: the desktop's or the floating lyrics'. Each display picks
+/// where its lyrics go (`DisplayLyrics`), and both can be on screen at once,
+/// each drawn in its own style (`LyricStyles`). `FloatingLyricsOptions.surface`
+/// is the style Settings is editing.
 enum LyricsSurface: String, CaseIterable, Identifiable {
     case desktop, floating
     var id: String { rawValue }
-    var title: String { self == .desktop ? "On the desktop" : "Floating over apps" }
+    var title: String { self == .desktop ? "Desktop style" : "Floating style" }
     /// Which style the lyric settings are editing, for the Settings label.
     var styleName: String { self == .desktop ? "Desktop" : "Floating" }
+    var other: LyricsSurface { self == .desktop ? .floating : .desktop }
+}
+
+/// What one display shows: lyrics on its wallpaper, floating over its apps,
+/// both, or the wallpaper alone.
+enum DisplayLyrics: String, CaseIterable, Identifiable {
+    case desktop, floating, both, none
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .desktop: return "Desktop lyrics"
+        case .floating: return "Floating lyrics"
+        case .both: return "Both"
+        case .none: return "None (wallpaper only)"
+        }
+    }
+
+    /// The wallpaper on this display draws lyrics.
+    var onDesktop: Bool { self == .desktop || self == .both }
+    /// A floating window goes on this display.
+    var floats: Bool { self == .floating || self == .both }
+
+    /// A display with no choice of its own: one plugged in for the first
+    /// time shows the lyrics on its desktop, as every display did before.
+    static let fallback: DisplayLyrics = .desktop
+
+    /// The same, with the floating lyrics turned on or off.
+    func floating(_ on: Bool) -> DisplayLyrics {
+        switch (self, on) {
+        case (.desktop, true), (.none, true): return .floating
+        case (.floating, false), (.both, false): return .desktop
+        default: return self
+        }
+    }
+
+    /// The choices that keep someone's look from before displays had their
+    /// own. Desktop: every display had the lyrics on its wallpaper. Floating:
+    /// one window on the chosen display (the main one, first in `connected`,
+    /// when that display is not connected or none was chosen) and no lyrics
+    /// on any wallpaper. Nothing while no display is known.
+    static func migrated(surface: String?, floatingDisplay: String, connected: [String]) -> [String: DisplayLyrics] {
+        guard let main = connected.first else { return [:] }
+        guard surface == LyricsSurface.floating.rawValue else {
+            return Dictionary(connected.map { ($0, DisplayLyrics.desktop) }, uniquingKeysWith: { first, _ in first })
+        }
+        let floater = connected.contains(floatingDisplay) ? floatingDisplay : main
+        return Dictionary(connected.map { ($0, $0 == floater ? DisplayLyrics.floating : .none) },
+                          uniquingKeysWith: { first, _ in first })
+    }
 }
 
 /// Where the floating window sits on its display.
@@ -57,12 +108,12 @@ enum FloatingPlacement: String, CaseIterable, Identifiable {
 ///
 /// The app's lyric settings (Settings, the colour, highlight and reading
 /// stores, the backing-vocal and credit switches) stay the one place the
-/// renderer and the Settings pages read, and always hold the style of the
-/// surface in use. Switching surface stores the outgoing style under its
-/// own key and loads the incoming one. The first switch to Floating starts
-/// it from the desktop's style (with the size reset, since Floating has a
-/// size of its own); from then on the two never meet. Only one surface
-/// draws lyrics at a time, so nothing ever needs both at once.
+/// Settings pages change, and hold the style being edited. Switching the
+/// style being edited stores the outgoing style under its own key and
+/// loads the incoming one. The Floating style starts from the desktop's
+/// (with the size reset, since Floating has a size of its own); from then
+/// on the two never meet. Both draw at once: the style not being edited is
+/// read from its key by `LyricStyles`.
 @MainActor
 struct LyricStyleProfiles {
     /// Every preference that belongs to a lyric style.
@@ -105,6 +156,17 @@ struct LyricStyleProfiles {
         defaults.dictionary(forKey: Self.storeKey(surface))
     }
 
+    /// `surface`'s style as kept, keeping it first when it never was: the
+    /// Floating style starts from the style in use, less its size.
+    @discardableResult
+    func ensureSaved(_ surface: LyricsSurface) -> [String: Any] {
+        if let saved = saved(surface) { return saved }
+        var values = current()
+        if surface == .floating { values.merge(Self.floatingSeed) { _, seed in seed } }
+        defaults.set(values, forKey: Self.storeKey(surface))
+        return values
+    }
+
     /// Stores the style in use as `old`'s and puts `new`'s in its place.
     /// Returns true when `new` had no style yet and was seeded from `old`'s.
     @discardableResult
@@ -128,13 +190,14 @@ struct LyricStyleProfiles {
 
 // MARK: - Floating options
 
-/// The floating lyrics' own settings, apart from the lyric style: which
-/// surface is in use, the floating size, backdrop, placement and display,
-/// and frames remembered per display. Injectable defaults, so tests never
-/// touch the real preferences.
+/// The floating lyrics' own settings, apart from the lyric style: what each
+/// display shows, which style Settings edits, the floating size, backdrop
+/// and placement, and frames remembered per display. Injectable defaults
+/// and displays, so tests never touch the real preferences or screens.
 @MainActor
 final class FloatingLyricsOptions: ObservableObject {
-    static let shared = FloatingLyricsOptions(defaults: .standard, reloadStyle: FloatingLyricsOptions.reloadSharedStyle)
+    static let shared = FloatingLyricsOptions(defaults: .standard, connected: FloatingFrame.connectedKeys(),
+                                              reloadStyle: FloatingLyricsOptions.reloadSharedStyle)
 
     enum Keys {
         static let surface = "custom.lyricsSurface"
@@ -145,6 +208,14 @@ final class FloatingLyricsOptions: ObservableObject {
         static let display = "custom.floating.display"
         static let frames = "custom.floating.frames"
         static let sizes = "custom.floating.sizes"
+        /// Placements per display key, where one differs from `placement`.
+        static let placements = "custom.floating.placements"
+        /// What each display shows (`DisplayLyrics`), by display key.
+        static let displays = "custom.displayLyrics"
+        /// The song title card's own window (`FloatingTitleFrame`).
+        static let titleCard = "custom.floating.titleCard"
+        static let titleFrames = "custom.floating.titleFrames"
+        static let titleStart = "custom.floating.titleStart"
     }
 
     /// Small, Medium, Large, as text sizes in points.
@@ -158,7 +229,10 @@ final class FloatingLyricsOptions: ObservableObject {
     static let defaultTextSize = SizePreset.medium.rawValue
     static let defaultBackdrop = 0.6
 
-    /// Desktop by default, so nothing changes until someone picks Floating.
+    /// The style Settings is editing: its values are the app's lyric
+    /// settings, and the other style waits under its own key
+    /// (`LyricStyleProfiles`). Before displays had their own choice this was
+    /// where the lyrics went, which `DisplayLyrics.migrated` still reads.
     @Published var surface: LyricsSurface {
         didSet {
             guard surface != oldValue else { return }
@@ -175,22 +249,56 @@ final class FloatingLyricsOptions: ObservableObject {
     @Published var backdrop: Double { didSet { defaults.set(backdrop, forKey: Keys.backdrop) } }
     /// Fade the window down while the pointer is over it.
     @Published var fadesUnderPointer: Bool { didSet { defaults.set(fadesUnderPointer, forKey: Keys.fades) } }
+    /// The place on every display; picking one also forgets the places set
+    /// per display by dragging.
     @Published var placement: FloatingPlacement {
-        didSet { defaults.set(placement.rawValue, forKey: Keys.placement) }
+        didSet {
+            defaults.set(placement.rawValue, forKey: Keys.placement)
+            if !placements.isEmpty { placements = [:] }
+        }
     }
-    /// The display's key (`FloatingFrame.displayKey`), or empty for the main display.
+    /// Places set on one display (Custom, by dragging there).
+    @Published private(set) var placements: [String: FloatingPlacement] {
+        didSet { defaults.set(placements.mapValues(\.rawValue), forKey: Keys.placements) }
+    }
+    /// The display the one floating window used to go on: the key
+    /// (`FloatingFrame.displayKey`), or empty for the main display. Read
+    /// only to carry it into `displays`.
     @Published var display: String { didSet { defaults.set(display, forKey: Keys.display) } }
+    /// What each display shows, by display key; a display not listed shows
+    /// `DisplayLyrics.fallback`.
+    @Published private(set) var displays: [String: DisplayLyrics] {
+        didSet { defaults.set(displays.mapValues(\.rawValue), forKey: Keys.displays) }
+    }
     /// Custom frames per display key, relative to that display's frame.
     @Published private(set) var frames: [String: [Double]] { didSet { defaults.set(frames, forKey: Keys.frames) } }
     /// Window sizes per display key, used by the presets.
     @Published private(set) var sizes: [String: [Double]] { didSet { defaults.set(sizes, forKey: Keys.sizes) } }
+
+    /// The song title card floats in a window of its own, beside the
+    /// lyrics' box on every floating display.
+    @Published var showsTitleCard: Bool { didSet { defaults.set(showsTitleCard, forKey: Keys.titleCard) } }
+    /// The card's frames set by hand, per display key, relative to that
+    /// display's frame.
+    @Published private(set) var titleFrames: [String: [Double]] {
+        didSet { defaults.set(titleFrames, forKey: Keys.titleFrames) }
+    }
+    /// Where the card starts on a display with no frame of its own.
+    @Published private(set) var titleStart: FloatingTitleFrame.Start {
+        didSet {
+            if titleStart == .standard { defaults.removeObject(forKey: Keys.titleStart) }
+            else { defaults.set(titleStart.encoded, forKey: Keys.titleStart) }
+        }
+    }
 
     private let defaults: UserDefaults
     private let reloadStyle: () -> Void
 
     /// `reloadStyle` makes the app's lyric settings read the style just
     /// swapped in; tests pass their own.
-    init(defaults: UserDefaults, reloadStyle: @escaping () -> Void = {}) {
+    /// `connected`: the keys of the displays connected now, main first, for
+    /// the first launch with a choice per display (`DisplayLyrics.migrated`).
+    init(defaults: UserDefaults, connected: [String] = [], reloadStyle: @escaping () -> Void = {}) {
         self.defaults = defaults
         self.reloadStyle = reloadStyle
         surface = LyricsSurface(rawValue: defaults.string(forKey: Keys.surface) ?? "") ?? .desktop
@@ -202,25 +310,106 @@ final class FloatingLyricsOptions: ObservableObject {
         display = defaults.string(forKey: Keys.display) ?? ""
         frames = defaults.dictionary(forKey: Keys.frames) as? [String: [Double]] ?? [:]
         sizes = defaults.dictionary(forKey: Keys.sizes) as? [String: [Double]] ?? [:]
+        placements = (defaults.dictionary(forKey: Keys.placements) as? [String: String] ?? [:])
+            .compactMapValues(FloatingPlacement.init(rawValue:))
+        displays = (defaults.dictionary(forKey: Keys.displays) as? [String: String] ?? [:])
+            .compactMapValues(DisplayLyrics.init(rawValue:))
+        showsTitleCard = defaults.object(forKey: Keys.titleCard) as? Bool ?? true
+        titleFrames = defaults.dictionary(forKey: Keys.titleFrames) as? [String: [Double]] ?? [:]
+        titleStart = (defaults.array(forKey: Keys.titleStart) as? [Double]).flatMap(FloatingTitleFrame.Start.init(encoded:))
+            ?? .standard
+        migrateDisplaysIfNeeded(connected: connected)
+        migrateTitleRow()
     }
+
+    /// The title used to be a row inside the lyrics' window, placed along
+    /// its top or bottom (`OpeningTitle.RowPlacement`): once, that place
+    /// becomes where the card starts beside the box, and the row's keys go.
+    private func migrateTitleRow() {
+        let keys = [OpeningTitle.RowPlacement.centreKey, OpeningTitle.RowPlacement.edgeKey,
+                    OpeningTitle.RowPlacement.scaleKey]
+        guard keys.contains(where: { defaults.object(forKey: $0) != nil }) else { return }
+        if defaults.object(forKey: Keys.titleStart) == nil {
+            titleStart = FloatingTitleFrame.Start(row: OpeningTitle.RowPlacement.stored(defaults))
+        }
+        OpeningTitle.RowPlacement.reset(defaults)
+    }
+
+    // MARK: The song title card
+
+    func titleFrame(for display: String) -> CGRect? { titleFrames[display].flatMap(FloatingFrame.decode) }
+
+    /// Keeps the card where it was dragged on `display`, relative to it.
+    func storeTitleFrame(_ relative: CGRect, for display: String) {
+        titleFrames[display] = FloatingFrame.encode(relative)
+    }
+
+    /// Puts the card back beside the lyrics on every display.
+    func resetTitleFrames() {
+        titleFrames = [:]
+        titleStart = .standard
+    }
+
+    var titleIsPlacedByHand: Bool { !titleFrames.isEmpty || titleStart != .standard }
+
+    /// The first time displays are known: gives each connected display the
+    /// choice that keeps the look it had (`DisplayLyrics.migrated`). Once.
+    func migrateDisplaysIfNeeded(connected: [String]) {
+        guard defaults.object(forKey: Keys.displays) == nil, !connected.isEmpty else { return }
+        displays = DisplayLyrics.migrated(surface: defaults.string(forKey: Keys.surface), floatingDisplay: display,
+                                          connected: connected)
+    }
+
+    // MARK: Per display
+
+    func choice(for display: String) -> DisplayLyrics { displays[display] ?? .fallback }
+
+    func setChoice(_ choice: DisplayLyrics, for display: String) {
+        guard self.choice(for: display) != choice || displays[display] == nil else { return }
+        displays[display] = choice
+    }
+
+    /// The displays among `connected` that get a floating window.
+    func floatingDisplays(among connected: [String]) -> [String] {
+        connected.filter { choice(for: $0).floats }
+    }
+
+    /// Floating lyrics are on somewhere among `connected`.
+    func floats(among connected: [String]) -> Bool { !floatingDisplays(among: connected).isEmpty }
+
+    /// The Floating quick toggle: off everywhere when any display floats
+    /// (their lyrics go back on the desktop), else on for `target`, the
+    /// display with the menu bar, its desktop lyrics moving into the window.
+    func toggleFloating(connected: [String], target: String?) {
+        if floats(among: connected) {
+            for key in connected where choice(for: key).floats { setChoice(choice(for: key).floating(false), for: key) }
+        } else if let key = target ?? connected.first {
+            setChoice(choice(for: key).floating(true), for: key)
+        }
+    }
+
+    /// Where the window goes on `display`.
+    func placement(for display: String) -> FloatingPlacement { placements[display] ?? placement }
 
     static func clampedTextSize(_ value: Double) -> Double {
         value.isFinite ? min(textSizeRange.upperBound, max(textSizeRange.lowerBound, value)) : defaultTextSize
     }
 
+    /// Settings is editing the Floating style.
     var isFloating: Bool { surface == .floating }
 
-    func toggleSurface() { surface = surface == .floating ? .desktop : .floating }
+    func toggleSurface() { surface = surface.other }
 
     /// A frame placed by hand, relative to the display's frame.
     func customFrame(for display: String) -> CGRect? { frames[display].flatMap(FloatingFrame.decode) }
     func savedSize(for display: String) -> CGSize? { sizes[display].flatMap(FloatingFrame.decode)?.size }
 
-    /// Keeps a frame dragged into place on `display` and switches to Custom.
+    /// Keeps a frame dragged into place on `display` and makes that
+    /// display's place Custom; the others keep theirs.
     func storeCustomFrame(_ relative: CGRect, for display: String) {
         frames[display] = FloatingFrame.encode(relative)
         sizes[display] = FloatingFrame.encode(CGRect(origin: .zero, size: relative.size))
-        if placement != .custom { placement = .custom }
+        if placement(for: display) != .custom { placements[display] = .custom }
     }
 
     /// Forgets the sizes and frames set by hand; the presets go back to the
@@ -228,6 +417,7 @@ final class FloatingLyricsOptions: ObservableObject {
     func resetFrames() {
         frames = [:]
         sizes = [:]
+        placements = [:]
         if placement == .custom { placement = .bottom }
     }
 
@@ -238,6 +428,7 @@ final class FloatingLyricsOptions: ObservableObject {
         LyricColourOptions.shared.reload()
         LyricHighlightOptions.shared.reload()
         LunalyrExtras.shared.reloadTranslations()
+        LyricStyles.shared.followEditing()
     }
 }
 
@@ -291,15 +482,15 @@ enum FloatingFrame {
     }
 
     /// A size no smaller than the minimum and no larger than the area.
-    static func fitted(_ size: CGSize, in area: CGRect) -> CGSize {
-        let width = min(max(size.width, minimumSize.width), max(minimumSize.width, area.width))
-        let height = min(max(size.height, minimumSize.height), max(minimumSize.height, area.height))
+    static func fitted(_ size: CGSize, in area: CGRect, minimum: CGSize = minimumSize) -> CGSize {
+        let width = min(max(size.width, minimum.width), max(minimum.width, area.width))
+        let height = min(max(size.height, minimum.height), max(minimum.height, area.height))
         return CGSize(width: width, height: height)
     }
 
     /// Keeps a frame on the area: shrunk to fit, then moved inside it.
-    static func clamped(_ frame: CGRect, to area: CGRect) -> CGRect {
-        let size = fitted(frame.size, in: area)
+    static func clamped(_ frame: CGRect, to area: CGRect, minimum: CGSize = minimumSize) -> CGRect {
+        let size = fitted(frame.size, in: area, minimum: minimum)
         let x = min(max(frame.minX, area.minX), area.maxX - size.width)
         let y = min(max(frame.minY, area.minY), area.maxY - size.height)
         return CGRect(x: x, y: y, width: size.width, height: size.height)
@@ -326,16 +517,17 @@ enum FloatingFrame {
     /// A move or resize by hand: `delta` is how far the pointer went since
     /// the drag began, in AppKit's coordinates (y up). Resizing pins the top
     /// left corner, as dragging a window's bottom-right corner does.
-    static func dragged(_ start: CGRect, by delta: CGSize, resizing: Bool, in area: CGRect) -> CGRect {
+    static func dragged(_ start: CGRect, by delta: CGSize, resizing: Bool, in area: CGRect,
+                        minimum: CGSize = minimumSize) -> CGRect {
         if resizing {
-            let width = max(minimumSize.width, start.width + delta.width)
-            let height = max(minimumSize.height, start.height - delta.height)
+            let width = max(minimum.width, start.width + delta.width)
+            let height = max(minimum.height, start.height - delta.height)
             let maxWidth = area.maxX - start.minX, maxHeight = start.maxY - area.minY
-            let size = CGSize(width: min(width, max(minimumSize.width, maxWidth)),
-                              height: min(height, max(minimumSize.height, maxHeight)))
+            let size = CGSize(width: min(width, max(minimum.width, maxWidth)),
+                              height: min(height, max(minimum.height, maxHeight)))
             return CGRect(x: start.minX, y: start.maxY - size.height, width: size.width, height: size.height)
         }
-        return clamped(start.offsetBy(dx: delta.width, dy: delta.height), to: area)
+        return clamped(start.offsetBy(dx: delta.width, dy: delta.height), to: area, minimum: minimum)
     }
 
     // MARK: The box and the window round it
@@ -380,6 +572,26 @@ enum FloatingFrame {
         return "display-\(id)"
     }
 
+    /// The keys of the displays connected now, the main one (with the menu
+    /// bar) first.
+    @MainActor static func connectedKeys() -> [String] {
+        NSScreen.screens.compactMap(\.versoDisplayID).map(cachedKey)
+    }
+
+    @MainActor private static var keys: [CGDirectDisplayID: String] = [:]
+
+    /// After displays change: a number may now be another display's.
+    @MainActor static func forgetCachedKeys() { keys = [:] }
+
+    /// `displayKey`, worked out once per display for the wallpaper's
+    /// frequent asking.
+    @MainActor static func cachedKey(_ id: CGDirectDisplayID) -> String {
+        if let key = keys[id] { return key }
+        let key = displayKey(id)
+        keys[id] = key
+        return key
+    }
+
     /// The display the window goes on: the chosen one when connected, else
     /// the main display (the first, with the menu bar).
     static func chosenIndex(_ choice: String, among keys: [String]) -> Int? {
@@ -389,11 +601,122 @@ enum FloatingFrame {
     }
 }
 
+// MARK: - The floating song title card
+
+/// The floating lyrics' song title card: a window of its own, apart from
+/// the lyrics' box, anywhere on its display. Pure geometry, in AppKit's
+/// global coordinates (origin bottom left), like `FloatingFrame`. Its frame
+/// is the card's box; the window round it has `margin` more on every side
+/// for the glow.
+enum FloatingTitleFrame {
+    /// Small enough to fall back to the one-line row (`Layout`).
+    static let minimumSize = CGSize(width: 120, height: 24)
+    /// See-through room round the card for its shadow and glow.
+    static let margin: CGFloat = 48
+    /// Between the card and the lyrics' box, by default.
+    static let gap: CGFloat = 10
+
+    /// Where a display without a frame set by hand puts the card, relative
+    /// to the lyrics' box: centred across it (0 left, 1 right), above it or
+    /// below, and a scale of the size that follows the text size.
+    struct Start: Equatable {
+        var centre = 0.5
+        var below = false
+        var scale = 1.0
+        static let standard = Start()
+        static let scales: ClosedRange<Double> = 0.5...2.5
+
+        /// The old title row's place in the lyrics' window, carried over:
+        /// its edge becomes the side of the box, its place across and its
+        /// size kept.
+        init(centre: Double = 0.5, below: Bool = false, scale: Double = 1) {
+            self.centre = centre.isFinite ? min(1, max(0, centre)) : 0.5
+            self.below = below
+            self.scale = scale.isFinite ? min(Self.scales.upperBound, max(Self.scales.lowerBound, scale)) : 1
+        }
+
+        init(row: OpeningTitle.RowPlacement) {
+            self.init(centre: row.centre, below: row.bottom, scale: row.scale)
+        }
+
+        var encoded: [Double] { [centre, below ? 1 : 0, scale] }
+
+        init?(encoded values: [Double]) {
+            guard values.count == 3 else { return nil }
+            self.init(centre: values[0], below: values[1] >= 0.5, scale: values[2])
+        }
+    }
+
+    /// The card's size at a text size: a stacked card a little under half
+    /// the lyrics' size, wide enough for a cover and a two-line title.
+    static func defaultSize(textSize: CGFloat, scale: Double = 1) -> CGSize {
+        let size = (textSize.isFinite ? max(10, textSize) : 44) * CGFloat(scale)
+        return CGSize(width: (size * 7.2).rounded(), height: (size * 1.6).rounded())
+    }
+
+    /// The default frame: centred on the lyrics' box (`start.centre`
+    /// across it), just above it, or below it when there is no room above
+    /// (and the reverse), kept on the area.
+    static func start(_ start: Start, box: CGRect, area: CGRect, textSize: CGFloat) -> CGRect {
+        let size = FloatingFrame.fitted(defaultSize(textSize: textSize, scale: start.scale), in: area, minimum: minimumSize)
+        let x = box.minX + CGFloat(start.centre) * box.width - size.width / 2
+        let above = box.maxY + gap, below = box.minY - gap - size.height
+        let fitsAbove = above + size.height <= area.maxY, fitsBelow = below >= area.minY
+        let y = start.below ? (fitsBelow || !fitsAbove ? below : above) : (fitsAbove || !fitsBelow ? above : below)
+        return FloatingFrame.clamped(CGRect(x: x.rounded(), y: y.rounded(), width: size.width, height: size.height),
+                                     to: area, minimum: minimumSize)
+    }
+
+    /// The card's frame on one display: the one set by hand (relative to
+    /// `screenFrame`), else the start beside the lyrics' box.
+    static func resolve(custom: CGRect?, start: Start, box: CGRect, textSize: CGFloat,
+                        screenFrame: CGRect, area: CGRect) -> CGRect {
+        if let custom {
+            return FloatingFrame.clamped(custom.offsetBy(dx: screenFrame.minX, dy: screenFrame.minY), to: area,
+                                         minimum: minimumSize)
+        }
+        return self.start(start, box: box, area: area, textSize: textSize)
+    }
+
+    // MARK: Stacked card or one row
+
+    /// The smallest title the stacked card is drawn with; below it, the
+    /// card is a single row: cover, title, artist.
+    static let minimumStackedTitle: CGFloat = 14
+    /// The share of the card's height and width its contents use.
+    static let fill: CGFloat = 0.9
+
+    /// How the card is drawn in a box of `size`.
+    struct Layout: Equatable {
+        /// The desktop's stacked card: cover, title, artist and album.
+        var stacked: Bool
+        /// The stacked card's nominal title size (`OpeningTitleCard`).
+        var nominal: CGFloat
+        /// The row's lyric size (`OpeningTitle.rowCover` and so on).
+        var rowBase: CGFloat
+    }
+
+    /// The card scales with its box: the stacked card's cover fills the
+    /// height (`OpeningTitle.coverShare`) and the words have room beside it;
+    /// a box too small for a readable stacked title (`minimumStackedTitle`)
+    /// takes the row, sized to the box's height.
+    static func layout(for size: CGSize, compact: Bool = false) -> Layout {
+        let height = max(0, size.height) * fill, width = max(0, size.width) * fill
+        let byHeight: CGFloat = height / OpeningTitle.coverShare(compact: compact)
+        let byWidth: CGFloat = width / 6.5
+        let nominal: CGFloat = max(0, min(byHeight, byWidth))
+        let rowBase: CGFloat = max(0, min(height / OpeningTitle.rowCover, width / 9))
+        return Layout(stacked: nominal >= minimumStackedTitle, nominal: nominal, rowBase: rowBase)
+    }
+}
+
 // MARK: - When the window shows
 
 enum FloatingLyricsVisibility {
+    /// For one display's window.
     struct Input: Equatable {
-        var surface: LyricsSurface
+        /// The display is set to Floating or Both.
+        var floats: Bool
         /// Edit position is on: shown even with nothing playing, to place it.
         var editing = false
         /// Not hidden by Hide lyrics or by mirroring.
@@ -413,7 +736,7 @@ enum FloatingLyricsVisibility {
     static let pauseGrace: TimeInterval = 10
 
     static func shows(_ input: Input) -> Bool {
-        guard input.surface == .floating else { return false }
+        guard input.floats else { return false }
         if input.editing { return true }
         guard input.lyricsVisible, input.hasTrack, !input.notFound else { return false }
         let hasWords = (input.hasTimedLines && !input.allInstrumental) || input.hasPlainLines

@@ -26,13 +26,14 @@ struct LyricStylePage: View {
         LookInspectorForm {
             if floating.isFloating {
                 InspectorTitle(title: "Floating lyrics",
-                               subtitle: "The Floating style. The desktop keeps its own and shows no lyrics while they float.")
+                               subtitle: "The Floating style, for every floating window. The desktop lyrics keep their own.")
                     .revealRow()
             } else {
                 LooksSection()
                     .revealRow()
                 InspectorTitle(title: "Text")
             }
+            DisplayLyricsSection(options: floating)
             styleSection
             sizeAndPlace
             typeface
@@ -65,10 +66,6 @@ struct LyricStylePage: View {
     @AppStorage(OpeningTitle.Placement.liftKey) private var titleLift: Double?
     @AppStorage(OpeningTitle.Placement.scaleKey) private var titleScale: Double = 1
     @AppStorage(OpeningTitle.strengthKey) private var titleStrength: Double = OpeningTitle.restOpacity
-    @AppStorage(OpeningTitle.RowPlacement.centreKey) private var rowCentre: Double = 0.5
-    @AppStorage(OpeningTitle.RowPlacement.edgeKey) private var rowEdge: String = ""
-    @AppStorage(OpeningTitle.RowPlacement.scaleKey) private var rowScale: Double = 1
-    private var floatingRowIsStandard: Bool { abs(rowCentre - 0.5) < 0.001 && rowEdge != "bottom" && abs(rowScale - 1) < 0.001 }
     @ObservedObject private var rotation = LyricLayoutRotation.shared
 
     /// What the chosen layout does, a style remembered for this song, the
@@ -136,7 +133,7 @@ struct LyricStylePage: View {
                 Toggle("Keep the song title on screen", isOn: $keepsOpeningTitle)
                     .padding(.leading, 23)
                     .disabled(!showOpeningTitle)
-                    .help("The title stays for the whole song, quieter once the singing starts, so you always know what’s playing. Low on the left beside the lyrics; in the floating lyrics, a small line above them.")
+                    .help("The title stays for the whole song, quieter once the singing starts, so you always know what’s playing. Low on the left beside the lyrics; with floating lyrics, in the song title card.")
                 if keepsOpeningTitle && showOpeningTitle {
                     ValueSlider("Title strength", value: $titleStrength, in: OpeningTitle.strengthRange, step: 0.01,
                                 format: SettingsFormat.percent)
@@ -144,30 +141,17 @@ struct LyricStylePage: View {
                         .help("How strong the song title stays once the singing has started. 100% keeps it fully solid.")
                         .revealRow()
                 }
-                if floating.isFloating && keepsOpeningTitle && showOpeningTitle {
-                    // The title is small on the picture and sits on the
-                    // window's own handles, so it can be placed here too.
-                    ChoiceMenu("Song title sits", selection: $rowEdge,
-                               selectedTitle: { $0 == "bottom" ? "Below the lyrics" : "Above the lyrics" }) {
-                        Text("Above the lyrics").tag("")
-                        Text("Below the lyrics").tag("bottom")
-                    }
-                    .padding(.leading, 23)
-                    .revealRow()
-                    ValueSlider("Song title across", value: $rowCentre, in: 0...1, step: 0.01,
-                                minimumLabel: "Left", maximumLabel: "Right",
-                                format: { abs($0 - 0.5) < 0.005 ? "Centre" : $0 < 0.5 ? "Left \(Int(((0.5 - $0) * 200).rounded()))%" : "Right \(Int((($0 - 0.5) * 200).rounded()))%" })
+                if floating.isFloating {
+                    // The floating lyrics' card has a window of its own.
+                    Toggle("Show the song title card", isOn: $floating.showsTitleCard)
                         .padding(.leading, 23)
-                        .help("Where the song title sits along the floating window's top or bottom.")
-                        .revealRow()
-                    ValueSlider("Song title size", value: $rowScale, in: OpeningTitle.RowPlacement.scales, step: 0.01,
-                                format: SettingsFormat.percent)
-                        .padding(.leading, 23)
+                        .disabled(!showOpeningTitle)
+                        .help("The song title floats in a small window of its own, just above the lyrics to begin with. Drag it on the picture, or with Edit position, to put it anywhere; drag its corner to resize it. When it’s small, it becomes a single line.")
                         .revealRow()
                 }
                 Button("Reset Title Position") {
                     if floating.isFloating {
-                        OpeningTitle.RowPlacement.reset()
+                        floating.resetTitleFrames()
                     } else {
                         titleLeft = nil
                         titleLift = nil
@@ -175,10 +159,10 @@ struct LyricStylePage: View {
                     }
                 }
                 .padding(.leading, 23)
-                .disabled(!showOpeningTitle || (floating.isFloating ? floatingRowIsStandard
+                .disabled(!showOpeningTitle || (floating.isFloating ? !floating.titleIsPlacedByHand
                     : titleLeft == nil && titleLift == nil && abs(titleScale - 1) < 0.001))
                 .help(floating.isFloating
-                      ? "Drag the song title on the picture to move it along the floating window's top or bottom, or its corner to resize it. This puts it back at the top, centred, at its usual size."
+                      ? "Puts the song title card back just above the floating lyrics, at its usual size, on every display."
                       : "Drag the song title on the picture to move it, or its corner to resize it. This puts it back low on the left at its usual size.")
                 Toggle("Show credits in the background", isOn: $showCredits)
                     .help("Lines like “Produced by: …” appear one at a time behind the lyrics.")

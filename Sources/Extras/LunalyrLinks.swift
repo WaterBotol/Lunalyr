@@ -19,7 +19,7 @@ enum LunalyrCommand: String, CaseIterable, Sendable {
             case .lyricCard: extras.copyLyricCard()
             case .pauseWallpaper: extras.toggleWallpaperPause()
             case .openSettings: LunalyrNavigation.shared.openSettings()
-            case .toggleFloating: FloatingLyricsOptions.shared.toggleSurface()
+            case .toggleFloating: FloatingLyricsController.shared.toggleFloating()
             }
         }
     }
@@ -35,7 +35,7 @@ enum LunalyrCommand: String, CaseIterable, Sendable {
         case .lyricCard: return "Opening the lyric card"
         case .pauseWallpaper: return "Wallpaper paused or resumed"
         case .openSettings: return "Opening Lunalyr Settings"
-        case .toggleFloating: return "Lyrics moved between the desktop and floating"
+        case .toggleFloating: return "Floating lyrics turned on or off"
         }
     }
 }

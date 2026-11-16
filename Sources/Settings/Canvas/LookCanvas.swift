@@ -211,9 +211,9 @@ struct LookCanvas: View {
             .truncationMode(.tail)
             Spacer(minLength: 8)
             if object != .covers {
-                CanvasSegments(title: "Show lyrics", selection: $floating.surface,
+                CanvasSegments(title: "Editing", selection: $floating.surface,
                                options: LyricsSurface.allCases.map { ($0, $0.title) }, small: true)
-                    .help("Where the lyrics show: on the desktop, or floating over your apps")
+                    .help("Which lyric style these settings change: the desktop lyrics’ or the floating lyrics’. Each display picks where its lyrics show under Displays.")
                     .transition(.opacity)
             }
         }

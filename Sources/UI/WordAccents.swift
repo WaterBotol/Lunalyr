@@ -396,10 +396,11 @@ struct WordAccentPlan: Equatable {
     /// A plan built once per `key` (a rolling window's runs) and list
     /// version, for callers that combine several lines' plans.
     @MainActor
-    static func kept(_ key: [TimedWordKey], settings: Settings = .shared, build: () -> WordAccentPlan) -> WordAccentPlan {
+    static func kept(_ key: [TimedWordKey], settings: Settings = .shared, liftsBacking: Bool = BackingVocals.isOn,
+                     build: () -> WordAccentPlan) -> WordAccentPlan {
         let lists = settings.wordAccentLists
         guard lists.symbols != nil || lists.actions != nil else { return .none }
-        let memoKey = MemoKey(words: key, glue: [], version: lists.version, lifts: BackingVocals.isOn, window: true)
+        let memoKey = MemoKey(words: key, glue: [], version: lists.version, lifts: liftsBacking, window: true)
         if let cached = memo[memoKey] { return cached }
         if memo.count > 96 { memo.removeAll(keepingCapacity: true) }
         let plan = build()

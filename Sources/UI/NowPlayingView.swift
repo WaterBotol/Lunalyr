@@ -369,14 +369,18 @@ struct NowPlayingView: View {
                                     noticeFade: Self.noticeFadeDuration))
     }
 
-    /// Whether this surface draws the lyrics: not on the desktop while
-    /// they float over the apps (`LyricsSurface`).
-    private var drawsLyrics: Bool { Self.drawsLyrics(settingsPreview: isSettingsPreview, surface: floatingOptions.surface) }
+    /// Whether this wallpaper draws the lyrics: as its display's choice
+    /// says (`DisplayLyrics`).
+    private var drawsLyrics: Bool {
+        Self.drawsLyrics(settingsPreview: isSettingsPreview,
+                         choice: floatingOptions.choice(for: FloatingFrame.cachedKey(displayID)))
+    }
 
-    /// The desktop draws the lyrics unless they float; the Settings preview
-    /// always does, to show the style being edited.
-    nonisolated static func drawsLyrics(settingsPreview: Bool, surface: LyricsSurface) -> Bool {
-        settingsPreview || surface == .desktop
+    /// A wallpaper draws the lyrics when its display is set to Desktop
+    /// lyrics or Both; the Settings preview always does, to show the style
+    /// being edited.
+    nonisolated static func drawsLyrics(settingsPreview: Bool, choice: DisplayLyrics) -> Bool {
+        settingsPreview || choice.onDesktop
     }
 
     private var prefersTallArtwork: Bool {
@@ -620,6 +624,9 @@ struct NowPlayingView: View {
             SongStartLog.note("display \(displayID)\(isSettingsPreview ? " preview" : ""): wallpaper view appeared, "
                 + "background \(layer.traceName)")
         }
+        // The wallpaper's lyrics draw in the Desktop style, its Settings
+        // preview too: the Floating style shows on the picture's floating window.
+        .environment(\.lyricSurface, .desktop)
     }
 
     private struct LayerPhases {

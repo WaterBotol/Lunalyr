@@ -262,8 +262,7 @@ struct WordPresentation: Equatable {
     @MainActor
     static func make(word: LyricsFetcher.Word, index: Int, nextIndex: Int?, time: Double,
                      composition: LyricComposition, motion: VCWordMotion? = nil,
-                     eligibleSince: Double = -.infinity) -> WordPresentation {
-        let settings = Settings.shared
+                     eligibleSince: Double = -.infinity, settings: Settings = .shared) -> WordPresentation {
         guard settings.revealsWords(in: composition) else {
             return .init(progress: 1, arrival: 1, opacity: 1, preview: false)
         }

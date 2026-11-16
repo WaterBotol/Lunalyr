@@ -55,7 +55,9 @@ struct FloatingLyricsView: View {
                     // Laid out in the box; drawn wherever it reaches.
                     LyricStage(size: box, mood: look.mood, accent: look.accent, trackSeed: look.seed,
                                palette: look.cover.artworkStops, interval: settings.effectiveAnimationRate.interval,
-                               paused: !state.active, textSize: CGFloat(options.textSize))
+                               paused: !state.active, textSize: CGFloat(options.textSize),
+                               // The title card has a window of its own.
+                               titleMode: .none)
                         .equatable()
                         .frame(width: box.width, height: box.height)
                 }
@@ -70,6 +72,59 @@ struct FloatingLyricsView: View {
             .frame(width: geometry.size.width, height: geometry.size.height)
         }
         .ignoresSafeArea()
+        // Drawn in the Floating style, beside the desktop's (`LyricStyles`).
+        .environment(\.lyricSurface, .floating)
+    }
+}
+
+/// The floating song title card's window: the desktop's card (cover, title,
+/// artist and album), drawn by a lyric stage that draws only the card
+/// (`LyricTitleMode.only`), so it enters, stays and leaves exactly as it
+/// does on the desktop, in the Floating style. On the same soft shade as
+/// the floating lyrics (`FloatingLyricsFrame`), so it reads over any app
+/// and its colours are judged as theirs are.
+struct FloatingTitleCardView: View {
+    @ObservedObject var state: FloatingLyricsState
+    @ObservedObject var options: FloatingLyricsOptions = .shared
+    var onDrag: (_ resizing: Bool, _ ended: Bool) -> Void = { _, _ in }
+    var onDone: () -> Void = {}
+    @ObservedObject private var palette = FloatingLyricsPalette.shared
+    @ObservedObject private var settings = Settings.shared
+    @ObservedObject private var lyricsVM = LyricsViewModel.shared
+    @EnvironmentObject private var nowPlaying: NowPlayingMonitor
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+
+    var body: some View {
+        GeometryReader { geometry in
+            let look = FloatingLyricsLook(grid: palette.grid, track: nowPlaying.current,
+                                          wordsPerSecond: lyricsVM.wordsPerSecond)
+            let margin = FloatingLyricsFrame<EmptyView>.fittingMargin(state.margin, in: geometry.size)
+            let box = CGSize(width: max(0, geometry.size.width - 2 * margin),
+                             height: max(0, geometry.size.height - 2 * margin))
+            ZStack {
+                FloatingLyricsFrame(backdrop: options.backdrop, reduceTransparency: reduceTransparency,
+                                    albumAccent: look.albumAccent,
+                                    behind: FloatingBackdrop.behind(mode: settings.effectiveBackgroundMode,
+                                                                    scrim: settings.scrimStrength,
+                                                                    videoDim: settings.musicVideoDim),
+                                    margin: margin) {
+                    LyricStage(size: box, mood: look.mood, accent: look.accent, trackSeed: look.seed,
+                               palette: look.cover.artworkStops, interval: settings.effectiveAnimationRate.interval,
+                               paused: !state.active, textSize: CGFloat(options.textSize), titleMode: .only)
+                        .equatable()
+                        .frame(width: box.width, height: box.height)
+                }
+                if state.editing {
+                    FloatingEditChrome(placeholder: nowPlaying.current == nil, onDrag: onDrag, onDone: onDone,
+                                       compact: true, placeholderText: "Song title")
+                        .frame(width: box.width, height: box.height)
+                        .padding(margin)
+                }
+            }
+            .frame(width: geometry.size.width, height: geometry.size.height)
+        }
+        .ignoresSafeArea()
+        .environment(\.lyricSurface, .floating)
     }
 }
 
@@ -180,6 +235,10 @@ struct FloatingEditChrome: View {
     let placeholder: Bool
     let onDrag: (_ resizing: Bool, _ ended: Bool) -> Void
     let onDone: () -> Void
+    /// The small title card's window: only the outline, the drag and the
+    /// grip; Done is on the lyrics' own window.
+    var compact = false
+    var placeholderText = "Lyrics appear here"
     @Environment(\.colorSchemeContrast) private var contrast
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -196,13 +255,16 @@ struct FloatingEditChrome: View {
                 .contentShape(Rectangle())
                 .gesture(drag(resizing: false))
             if placeholder {
-                Text("Lyrics appear here")
-                    .font(P.TypeScale.title)
+                Text(placeholderText)
+                    .font(compact ? P.TypeScale.note : P.TypeScale.title)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.5)
                     .foregroundStyle(P.Ink.secondary.color(look))
                     .shadow(color: P.Shadow.coverColor, radius: P.Shadow.coverRadius, y: P.Shadow.coverY)
                     .allowsHitTesting(false)
             }
             VStack {
+                if !compact {
                 HStack(spacing: LunalyrDesign.Spacing.small) {
                     Label("Drag to move, corner to resize", systemImage: "arrow.up.and.down.and.arrow.left.and.right")
                         .font(P.TypeScale.note)
@@ -216,6 +278,7 @@ struct FloatingEditChrome: View {
                     Button("Done", action: onDone)
                         .buttonStyle(FloatingDoneButtonStyle(look: look))
                         .help("Locks the floating lyrics in place; clicks pass through them again")
+                }
                 }
                 Spacer(minLength: 0)
                 HStack {
@@ -231,7 +294,7 @@ struct FloatingEditChrome: View {
                         .accessibilityLabel("Resize")
                 }
             }
-            .padding(LunalyrDesign.Spacing.small)
+            .padding(compact ? LunalyrDesign.Spacing.xSmall : LunalyrDesign.Spacing.small)
         }
     }
 

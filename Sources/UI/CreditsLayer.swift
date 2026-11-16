@@ -12,7 +12,9 @@ import SwiftUI
 enum LyricCreditCues {
     static let settingKey = "custom.creditsLayer"
 
-    static var isOn: Bool { UserDefaults.standard.object(forKey: settingKey) as? Bool ?? true }
+    static var isOn: Bool { isOn(in: .standard) }
+    /// In one lyric style's preferences (`LyricStyle`).
+    static func isOn(in defaults: UserDefaults) -> Bool { defaults.object(forKey: settingKey) as? Bool ?? true }
 
     struct Cue: Identifiable, Equatable {
         var id: Int
@@ -109,13 +111,14 @@ struct CreditsLayer: View {
     let seed: Int
     let composition: LyricComposition
     let mood: TrackMood
+    @SurfaceStyle private var surfaceStyle
 
     /// Credits are not sung: "Remix by (someone)" keeps its brackets in the
     /// line instead of the bracket being drawn small and apart as a backing vocal.
     static let liftsBackingVocals = false
 
     var body: some View {
-        let style = BackingVocals.style(forLead: composition)
+        let style = BackingVocals.style(forLead: composition, chosen: surfaceStyle.backingStyle)
         // Thin bands along the top and bottom edges, clear of the middle
         // of the stage where the lyric sits.
         let box = CGSize(width: stageSize.width * 0.7, height: stageSize.height * 0.16)

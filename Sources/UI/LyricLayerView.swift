@@ -34,19 +34,19 @@ struct LyricLayer: View {
     /// Told how much motion this frame has, so the stage can slow its clock
     /// while nothing moves.
     var pace: LyricPace?
-    /// Kept clear at the top for the floating window's title row
-    /// (`LyricViewportMetrics.titleBand`): the lyrics sit below it.
-    var titleBand: CGFloat = 0
-    /// The band is at the window's foot (the row put at the bottom).
-    var titleAtBottom = false
+    /// Where the song's title card is drawn (`LyricTitleMode`).
+    var titleMode = LyricTitleMode.inline
     /// Reports the layout in use (`ShowingLayout`); off for previews.
     var reportsLayout = true
     @EnvironmentObject private var nowPlaying: NowPlayingMonitor
     @ObservedObject private var lyricsVM = LyricsViewModel.shared
-    @ObservedObject private var settings = Settings.shared
+    /// The app's settings that are not part of a lyric style.
+    @ObservedObject private var appSettings = Settings.shared
+    /// The lyric style this stage draws in: Desktop on the wallpaper,
+    /// Floating in the floating windows (`LyricStyles`).
+    @SurfaceStyle private var style
+    @Environment(\.lyricSurface) private var drawnSurface
     @ObservedObject private var readingOptions = RomanizationOptions.shared
-    @ObservedObject private var colours = LyricColourOptions.shared
-    @ObservedObject private var highlights = LyricHighlightOptions.shared
     @ObservedObject private var extras = LunalyrExtras.shared
     @ObservedObject private var memory = StyleMemory.shared
     @StateObject private var scenes = LyricSceneMemory()
@@ -57,6 +57,11 @@ struct LyricLayer: View {
     /// What lies behind the text when it is not the wallpaper: the floating
     /// lyrics' shaded backdrop (`FloatingBackdrop`).
     @Environment(\.lyricBackdropOverride) private var backdropOverride
+
+    private var settings: Settings { style.settings }
+    private var colours: LyricColourOptions { style.colours }
+    private var highlights: LyricHighlightOptions { style.highlights }
+    private var readingDisplay: RomanizationOptions.Display { style.readingDisplay }
 
     /// How long the "no lyrics" notice stays up, and how long it takes to go.
     private static let noticeHoldDuration: TimeInterval = WallpaperMotion.noticeHold
@@ -91,12 +96,13 @@ struct LyricLayer: View {
     }
 
     private func sceneContent(key: LyricSceneKey, loadingSince: Double?) -> LyricSceneContent {
-        LyricSceneContent(lines: lyricsVM.lines, romanized: lyricsVM.romanized,
+        LyricSceneContent(lines: lyricsVM.lines, romanized: lyricsVM.romanized(for: readingDisplay),
             machineTranslations: lyricsVM.machineTranslations, plainLines: lyricsVM.plainLines,
             title: nowPlaying.current?.title ?? "", artist: nowPlaying.current?.artist ?? "",
             album: nowPlaying.current?.album ?? "", artwork: nowPlaying.currentTrackArtwork,
             motionCover: OpeningTitle.motionCover(nowPlaying.currentMotionArtwork, track: nowPlaying.current,
-                                                  settings: settings),
+                                                  settings: appSettings,
+                                                  enabled: style.openingTitle && style.openingTitleCover),
             coverPending: nowPlaying.awaitsArtwork,
             joined: opening.joined(track: key.track, at: time),
             notFoundAt: lyricsVM.notFoundAt, idleSince: nowPlaying.idleSince,
@@ -141,7 +147,7 @@ struct LyricLayer: View {
     private func ink(energy: Double, wall: Double) -> LyricInk {
         let audio = AudioReactiveController.shared
         let active = lyricsVM.activeLineIndex(at: time).flatMap { lyricsVM.lines.indices.contains($0) ? $0 : nil }
-        let mode = settings.effectiveBackgroundMode
+        let mode = appSettings.effectiveBackgroundMode
         let chosenColour = memory.remembered(for: nowPlaying.current)?.style.colourMode ?? colours.mode
         // Without any timestamps there is nothing to sweep along. Keep the
         // text coloured with an ambient drift until a timed source is available.
@@ -150,20 +156,20 @@ struct LyricLayer: View {
         // the picture's measured luminance, the album tint and scrim laid
         // over it, and that backing.
         let backdrop = backdropOverride ?? LyricBackdrop.luminance(mode: mode,
-            motion: mode == .auto && settings.motionArtworkEnabled && nowPlaying.motionArtwork != nil,
-            palette: palette, scrim: settings.scrimStrength, measured: measuredBackdrop,
+            motion: mode == .auto && appSettings.motionArtworkEnabled && nowPlaying.motionArtwork != nil,
+            palette: palette, scrim: appSettings.scrimStrength, measured: measuredBackdrop,
             backing: DesktopOptions.shared.manualTextBacking,
             target: LyricLegibility.targetContrast(baseSize: baseSize), tinted: nowPlaying.artwork != nil,
             pastelText: colour != .standard, increaseContrast: contrast == .increased,
-            videoDim: settings.musicVideoDim)
+            videoDim: appSettings.musicVideoDim)
         // Without the automatic dark backing: what decides dark text.
         let unbacked = backdropOverride ?? LyricBackdrop.luminance(mode: mode,
-            motion: mode == .auto && settings.motionArtworkEnabled && nowPlaying.motionArtwork != nil,
-            palette: palette, scrim: settings.scrimStrength, measured: measuredBackdrop,
+            motion: mode == .auto && appSettings.motionArtworkEnabled && nowPlaying.motionArtwork != nil,
+            palette: palette, scrim: appSettings.scrimStrength, measured: measuredBackdrop,
             backing: DesktopOptions.shared.manualTextBacking ?? 0,
             target: LyricLegibility.targetContrast(baseSize: baseSize), tinted: nowPlaying.artwork != nil,
             pastelText: false, increaseContrast: contrast == .increased,
-            videoDim: settings.musicVideoDim)
+            videoDim: appSettings.musicVideoDim)
         return cache.ink(.init(mode: colour, speed: colours.speed, strength: colours.strength, custom: colours.customColours,
             album: palette, backdrop: backdrop, audio: audio.running ? audio.levels : nil,
             vocal: active.map { OrganicMotion.vocalIntensity(lyricsVM.lines[$0].words, at: time) } ?? energy,
@@ -182,7 +188,11 @@ struct LyricLayer: View {
         let content = sceneContent(key: key, loadingSince: loadingSince)
         // Which layout this song is drawn in, for the menu bar and Settings
         // (Custom Mix names only itself). Not from the Settings preview.
-        let _ = reportsLayout && nowPlaying.current != nil ? ShowingLayout.shared.note(composition(at: 0)) : ()
+        // With desktop and floating lyrics both up, the one in the style
+        // Settings is editing reports, so the header names its layout.
+        let _ = reportsLayout && nowPlaying.current != nil
+            && (drawnSurface == nil || drawnSurface == LyricStyles.shared.editing)
+            ? ShowingLayout.shared.note(composition(at: 0)) : ()
         // No lyrics found: the song's opening title stays, drawn once above
         // the scenes so their cross-fades neither double nor dim it. So does
         // a card that entered while the lyrics were being looked up, once
@@ -206,12 +216,21 @@ struct LyricLayer: View {
         let shown = animating ? extras.visibility.presence(at: wall) : (extras.lyricsVisible ? 1 : 0)
         // A cover fading in needs every frame for its short fade.
         let coverFading = content.artwork != nil && coverFade.value < 1
-        let _ = pace?.report(coverFading ? .active : OpeningTitle.pace(level(key: key, transition: transition, shown: shown,
-                                   target: animating ? extras.visibility.target : shown, ink: ink, wall: wall),
-                                   phase: shown > 0.001 ? OpeningTitle.upcoming(openingSchedule(content, key: key), at: time) : nil,
-                                   playing: nowPlaying.isPlaying))
+        // The title's own window paces itself by the card alone; the lyrics
+        // beside it by the lyrics alone.
+        let stageLevel = titleMode == .only ? LyricPace.Level.resting
+            : level(key: key, transition: transition, shown: shown,
+                    target: animating ? extras.visibility.target : shown, ink: ink, wall: wall)
+        let titlePhase = shown > 0.001 && titleMode != .none
+            ? OpeningTitle.upcoming(openingSchedule(content, key: key), at: time) : nil
+        let _ = pace?.report(coverFading && titleMode != .none ? .active
+            : OpeningTitle.pace(stageLevel, phase: titlePhase, playing: nowPlaying.isPlaying))
         ZStack {
-            if shown > 0.001 {
+            if shown > 0.001, titleMode == .only {
+                openingTitle(content, key: key, time: time, coverFade: coverFade)
+                    .opacity(shown)
+                    .blur(radius: reduceMotion ? 0 : (1 - shown) * 9)
+            } else if shown > 0.001 {
                 ZStack {
                     ForEach(transition.leaving, id: \.scene.id) { leaving in
                         if leaving.presence > 0.001 {
@@ -223,7 +242,6 @@ struct LyricLayer: View {
                                 scene(leaving.scene.content, key: leaving.scene.key,
                                       time: leaving.scene.renderTime(at: wall), wall: wall, live: false, energy: energy,
                                       ink: ink)
-                                    .padding(titleAtBottom ? .bottom : .top, titleBand)
                                 // The staying card is drawn once, below;
                                 // a card this scene held before it leaves
                                 // with the scene.
@@ -241,7 +259,6 @@ struct LyricLayer: View {
                     }
                     ZStack {
                         scene(content, key: key, time: time, wall: wall, live: true, energy: energy, ink: ink)
-                            .padding(titleAtBottom ? .bottom : .top, titleBand)
                         if staying == nil { openingTitle(content, key: key, time: time, coverFade: coverFade) }
                     }
                         .opacity(transition.incomingPresence)
@@ -276,7 +293,7 @@ struct LyricLayer: View {
         }
         if let quiet = LyricPace.quietLevel(.init(kind: key.kind, shown: shown, target: target,
                                                   playing: nowPlaying.isPlaying, colourMoves: drifting,
-                                                  noLyrics: settings.noLyrics, noticeAge: noticeAge),
+                                                  noLyrics: appSettings.noLyrics, noticeAge: noticeAge),
                                             timing: Self.noticeTiming) {
             return quiet
         }
@@ -378,7 +395,7 @@ struct LyricLayer: View {
         case .missing:
             // Say so briefly, then get out of the way -- an instrumental
             // should not carry a permanent error notice on the wallpaper.
-            switch settings.noLyrics {
+            switch appSettings.noLyrics {
             case .nothing:
                 Color.clear
             case .trackName where openingSchedule(content, key: key) != nil:
@@ -424,7 +441,7 @@ struct LyricLayer: View {
             // The scene's own song: an outgoing scene's credits keep its
             // title and placement instead of taking the new song's. They
             // wait for the opening title to leave.
-            let cues = LyricCreditCues.isOn
+            let cues = style.creditCues
                 ? LyricCreditCues.cues(in: lines.lines, title: content.title, artist: content.artist,
                                        notBefore: openingSchedule(content, key: key)?.clears ?? 0) : []
             currentLine(lines, time: time, live: live, energy: energy,
@@ -436,13 +453,14 @@ struct LyricLayer: View {
                 .overlay {
                     if let cue = gap?.instrumentalCue(at: time, previewLead: settings.nextWordPreviewLead,
                                                       audio: cache.orbAudio(wall: wall)) {
-                        // In the floating window the opening title takes the
-                        // middle, where the dots are: they wait for it. A
-                        // kept title is a row above them instead.
+                        // In a floating window drawing its own title the
+                        // opening title takes the middle, where the dots
+                        // are: they wait for it. A card in its own window
+                        // is out of their way.
                         let card = openingSchedule(content, key: key)
                         ThinkingOrbView(cue: cue, accent: accent, baseSize: baseSize,
                                         state: cache.orbState(style: settings.thinkingOrbStyle, seed: cue.seed))
-                            .opacity(backdropOverride == nil || card?.kept == true ? 1
+                            .opacity(backdropOverride == nil || titleMode != .inline || card?.kept == true ? 1
                                      : OpeningTitle.yields(to: card, at: time))
                     }
                 }
@@ -467,7 +485,7 @@ struct LyricLayer: View {
     /// during has ended, that card carried on (`OpeningTitle.carried`).
     private func openingSchedule(_ content: LyricSceneContent, key: LyricSceneKey,
                                  staying: Bool = true) -> OpeningTitle.Schedule? {
-        guard OpeningTitle.isOn, !content.title.isEmpty, key.kind != .idle else { return nil }
+        guard style.openingTitle, !content.title.isEmpty, key.kind != .idle else { return nil }
         let keep = OpeningTitle.keeps
         // A kept card stays whatever the lookup finds.
         if staying, !keep, let stay = opening.currentStay(track: key.track) {
@@ -500,16 +518,16 @@ struct LyricLayer: View {
     @ViewBuilder
     private func openingTitle(_ content: LyricSceneContent, key: LyricSceneKey, time: Double,
                               staying: Bool = true, coverFade: (track: Int, value: Double)? = nil) -> some View {
-        if let phase = OpeningTitle.phase(openingSchedule(content, key: key, staying: staying), at: time) {
+        if titleMode != .none, let phase = OpeningTitle.phase(openingSchedule(content, key: key, staying: staying), at: time) {
             OpeningTitleCard(phase: phase, title: content.title, artist: content.artist,
                              album: OpeningTitle.albumLine(album: content.album, title: content.title),
-                             reading: opening.reading(of: content.title, options: readingOptions.snapshot),
-                             cover: OpeningTitle.cover(content.artwork, enabled: OpeningTitle.showsCover),
+                             reading: opening.reading(of: content.title, options: style.readingSnapshot(readingOptions.snapshot)),
+                             cover: OpeningTitle.cover(content.artwork, enabled: style.openingTitleCover),
                              motionCover: content.motionCover, paused: !animating,
-                             coverPending: content.coverPending && OpeningTitle.showsCover,
+                             coverPending: content.coverPending && style.openingTitleCover,
                              coverFade: coverFade.map { key.track == $0.track ? $0.value : 1 } ?? 1,
-                             baseSize: baseSize, accent: accent, mood: mood, floating: backdropOverride != nil,
-                             row: backdropOverride != nil && phase.kept)
+                             baseSize: baseSize, accent: accent, mood: mood,
+                             floating: backdropOverride != nil && titleMode == .inline, window: titleMode == .only)
         }
     }
 
@@ -799,7 +817,7 @@ struct LyricLayer: View {
         guard let onset = LyricPhraseTiming.firstWordOnset(of: lines[next]),
               onset > time, onset - time <= settings.nextWordPreviewLead else { return nil }
         let line = lines[next]
-        let words = readingOptions.display == .replace ? scene.romanized[next] ?? line.words : line.words
+        let words = readingDisplay == .replace ? scene.romanized[next] ?? line.words : line.words
         if line.wordTimed {
             guard let first = words.first(where: { LyricRuns.isVisible($0.text) }),
                   LyricRuns.isPreviewWord(first.text) else { return nil }
@@ -844,7 +862,7 @@ struct LyricLayer: View {
             // A preview lays it out too, unseen, so the line's first word
             // previews exactly where it will sit.
             let lineReading = rolls ? nil
-                : LyricReadingPairs.line(readings, for: line, display: readingOptions.display)
+                : LyricReadingPairs.line(readings, for: line, display: readingDisplay)
             if stagePresence > 0.001 {
                 // Rolling stages fill the stage by design, so the size slider
                 // scales their words directly; fitting the whole stage capped
@@ -853,7 +871,7 @@ struct LyricLayer: View {
                 // Laid out in a preview as well (it is unseen until the line
                 // starts): the line is centred with it, so leaving it out
                 // made the previewed word jump up when the line arrived.
-                let translation = extras.showsTranslations
+                let translation = style.showsTranslations
                     ? (line.translation ?? scene.machineTranslations[index])?.trimmingCharacters(in: .whitespacesAndNewlines)
                     : nil
                 // Dense web layouts set long lines smaller.
@@ -864,7 +882,7 @@ struct LyricLayer: View {
                 // A rolling stage keeps a band for translations clear of its
                 // words whenever the song has any, so its size never changes
                 // from line to line.
-                let band = rolls && extras.showsTranslations
+                let band = rolls && style.showsTranslations
                     && (cache.hasTranslations(lines, fingerprint: scene.fingerprint) || !scene.machineTranslations.isEmpty)
                     ? translationSize * 2.7 + baseSize * 0.3 : 0
                 let fit = LyricLineStack.Fit(available: composition.hasConnections
@@ -875,13 +893,13 @@ struct LyricLayer: View {
                 Group {
                     if line.wordTimed {
                         let rolling = rolls ? rollingWords(around: index, scene: scene, time: time, live: live) : nil
-                        let words = rolling?.words ?? (readingOptions.display == .replace ? readings ?? line.words : line.words)
+                        let words = rolling?.words ?? (readingDisplay == .replace ? readings ?? line.words : line.words)
                         // A constellation is a web of fragments: an unspaced
                         // line is parted into its words there, or it is one
                         // fragment with nothing to link.
                         let glue = rolls ? [] : glue(index, words: words, scene: scene, live: live,
                                                      splitsWords: composition.hasConnections)
-                        let annotations = readingOptions.display == .below
+                        let annotations = readingDisplay == .below
                             ? rolling?.readings ?? readingPairs(index, readings: readings, words: line.words,
                                                                  glue: composition.fillsStage ? StageRun.glue(words, glue: glue) : glue,
                                                                  byPart: composition.fillsStage, scene: scene, live: live) : [:]
@@ -915,12 +933,12 @@ struct LyricLayer: View {
                             .scaleEffect(swell)
                             .offset(y: slide)
                     } else {
-                        let words = readingOptions.display == .replace ? readings ?? line.words : line.words
+                        let words = readingDisplay == .replace ? readings ?? line.words : line.words
                         let glue = glue(index, words: words, scene: scene, live: live)
                         lineTimedLyric(line, words: words, time: time, pose: pose,
                             stageSize: stageSize, composition: composition, seed: index, previewing: previewing,
                             previewSince: previewSince, glue: glue,
-                            annotations: readingOptions.display == .below
+                            annotations: readingDisplay == .below
                                 ? readingPairs(index, readings: readings, words: line.words,
                                                glue: composition.fillsStage ? StageRun.glue(words, glue: glue) : glue,
                                                byPart: composition.fillsStage, scene: scene, live: live) : [:],
@@ -1073,19 +1091,22 @@ struct LyricLayer: View {
                              rolling: LyricLayerCache.RollingWindow?, scene: SceneLines) -> WordAccentPlan {
         let lists = settings.wordAccentLists
         guard lists.symbols != nil || lists.actions != nil else { return .none }
-        guard readingOptions.display != .replace || scene.romanized[index] == nil else { return .none }
+        guard readingDisplay != .replace || scene.romanized[index] == nil else { return .none }
         // A song's repeats of an action word move gently every other time.
         let gentle = lists.actions == nil ? []
-            : WordAccentPlan.gentleLines(scene.lines, fingerprint: scene.fingerprint, settings: settings)
+            : WordAccentPlan.gentleLines(scene.lines, fingerprint: scene.fingerprint, settings: settings,
+                                             liftsBacking: style.backingVocals)
         guard let rolling else {
-            return WordAccentPlan.line(words, glue: glue, settings: settings, gentle: gentle.contains(index))
+            return WordAccentPlan.line(words, glue: glue, settings: settings, liftsBacking: style.backingVocals,
+                                       gentle: gentle.contains(index))
         }
-        return WordAccentPlan.kept(rolling.words.map(\.presentationID), settings: settings) {
+        return WordAccentPlan.kept(rolling.words.map(\.presentationID), settings: settings, liftsBacking: style.backingVocals) {
             var plan = WordAccentPlan()
             for row in LyricPhraseTiming.rollingRange(around: index, lines: scene.lines) {
                 let line = scene.lines[row]
                 plan.merge(WordAccentPlan.line(line.words, glue: LyricRuns.rollingGlue(line: line, words: line.words),
-                                               settings: settings, gentle: gentle.contains(row)))
+                                               settings: settings, liftsBacking: style.backingVocals,
+                                               gentle: gentle.contains(row)))
             }
             return plan.rekeyed(for: rolling.words, parts: rolling.parts)
         }
@@ -1111,7 +1132,7 @@ struct LyricLayer: View {
     private func rollingWords(around index: Int, scene: SceneLines, time: Double,
                               live: Bool) -> LyricLayerCache.RollingWindow {
         let lead = live ? max(SpokenTypographyView.windowLead, settings.nextWordPreviewLead) : 0
-        let display = readingOptions.display
+        let display = readingDisplay
         let offsets = cache.wordOffsets(fingerprint: scene.fingerprint, lines: scene.lines, romanized: scene.romanized,
                                         display: display)
         let build = { LyricLayerCache.rollingWindow(around: index, lines: scene.lines, romanized: scene.romanized,
@@ -1658,6 +1679,17 @@ final class LyricPace: ObservableObject {
 /// drift, 12 when nothing changes but the float, twice a second while the
 /// song is paused, and not at all once nothing on the stage can change
 /// (nothing playing, no lyrics, hidden lyrics) until an input does.
+/// Where a lyric stage draws the song's title card.
+enum LyricTitleMode: Equatable {
+    /// With the lyrics, as the desktop does.
+    case inline
+    /// Not at all: the floating lyrics, whose card has a window of its own.
+    case none
+    /// Only the card, filling the stage: that window
+    /// (`FloatingTitleCardView`). No lyrics are drawn.
+    case only
+}
+
 struct LyricStage: View, Equatable {
     let size: CGSize
     let mood: TrackMood
@@ -1675,6 +1707,8 @@ struct LyricStage: View, Equatable {
     var displayID: CGDirectDisplayID? = nil
     /// The floating lyrics' text size; nil follows the screen's size.
     var textSize: CGFloat? = nil
+    /// Where the song's title card is drawn.
+    var titleMode = LyricTitleMode.inline
     @EnvironmentObject private var nowPlaying: NowPlayingMonitor
     @ObservedObject private var lyricsVM = LyricsViewModel.shared
     @ObservedObject private var settings = Settings.shared
@@ -1686,12 +1720,11 @@ struct LyricStage: View, Equatable {
         lhs.size == rhs.size && lhs.mood == rhs.mood && lhs.accent == rhs.accent && lhs.trackSeed == rhs.trackSeed
             && lhs.palette == rhs.palette && lhs.interval == rhs.interval && lhs.paused == rhs.paused
             && lhs.backdrop == rhs.backdrop && lhs.displayID == rhs.displayID && lhs.textSize == rhs.textSize
+            && lhs.titleMode == rhs.titleMode
     }
 
     var body: some View {
-        let layout = LyricViewportMetrics(size: size, textSize: textSize,
-                                          titleRow: OpeningTitle.isOn && OpeningTitle.keeps,
-                                          titlePlacement: textSize == nil ? .standard : .stored())
+        let layout = LyricViewportMetrics(size: size, textSize: textSize)
         let previewed = scrubPreview.songTime(on: displayID)
         TimelineView(.animation(minimumInterval: previewed == nil ? pace.interval(full: interval) : interval,
                                 paused: paused || (pace.rests && previewed == nil))) { timeline in
@@ -1706,7 +1739,7 @@ struct LyricStage: View, Equatable {
             LyricLayer(time: time, baseSize: layout.baseSize, maxWidth: layout.stageSize.width,
                        maxHeight: layout.stageSize.height, mood: mood, accent: accent, trackSeed: trackSeed,
                        wall: now, palette: palette, measuredBackdrop: backdrop, animating: !paused, pace: pace,
-                       titleBand: layout.titleBand, titleAtBottom: layout.titlePlacement.bottom)
+                       titleMode: titleMode)
         }
     }
 }
@@ -1762,7 +1795,8 @@ struct LyricNoteView: View {
     let baseSize: CGFloat
     let maxHeight: CGFloat
     let mood: TrackMood
-    @ObservedObject private var settings = Settings.shared
+    @SurfaceStyle private var style
+    private var settings: Settings { style.settings }
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// 0...1 capsule presence for `note`, `chain` as observed, at `wall`.
