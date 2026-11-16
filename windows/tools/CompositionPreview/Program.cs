@@ -208,6 +208,8 @@ foreach (var factory in factories)
         Bench(stage, factory, Fixtures.NoLyrics(), 9.5, 12, scale);
         Bench(stage, factory, Fixtures.English(style), 9.5, 24, scale);
         Bench(stage, factory, Fixtures.Japanese(style), 9.5, 17, scale);
+        // The heaviest action words (dust, embers, frost, blood, ink, wedges) one after another.
+        Bench(stage, factory, Fixtures.Actions(style), 37.5, 62, scale);
         continue;
     }
     using var layer = factory.Create();

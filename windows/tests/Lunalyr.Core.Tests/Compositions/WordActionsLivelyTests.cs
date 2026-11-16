@@ -140,6 +140,35 @@ public class WordActionsLivelyTests
         Assert.False(WordAccents.Plan(lines[2]!, false, true, WordAccentLists.Defaults, gentle: true)[0].Gentle, "only the action word");
     }
 
+    // The Mac's gentleLines read from a song's lines as every layout reads them (rolling glue, backing vocals lifted):
+    // a bracketed backing "(spin)" is never the lead's action, and a word glued from syllables (spin·ning) is one word.
+    [Fact]
+    public void A_songs_repeats_are_read_from_its_lead_words()
+    {
+        static Lunalyr.Core.Lyrics.LyricLine Line(double start, params string[] texts)
+        {
+            var words = texts.Select((text, i) => new Lunalyr.Core.Lyrics.LyricWord(text, start + i * 0.4, start + i * 0.4 + 0.3)).ToList();
+            return new Lunalyr.Core.Lyrics.LyricLine
+            {
+                Start = start, End = start + 3, Text = string.Join(" ", texts).Replace("spin ning", "spinning", StringComparison.Ordinal),
+                Words = words, WordTimed = true,
+            };
+        }
+        Lunalyr.Core.Lyrics.LyricLine[] lines =
+        [
+            Line(0, "we", "spin", "around"),
+            Line(4, "(spin)", "we", "fall"),
+            Line(8, "spin", "ning", "again"),
+            Line(12, "and", "we", "spin"),
+        ];
+        var breaker = Lunalyr.Core.Lyrics.Readings.SimpleWordBreaker.Instance;
+        // spin: line 0 full, line 2 (spinning) gentle, line 3 full; the backing "(spin)" on line 1 is not heard, its
+        // "fall" is fall's first.
+        Assert.Equal([2], ActionRepeats.Of(lines, WordAccentLists.Defaults, breaker, liftsBacking: true).Order());
+        // With backing vocals left in the line, line 1's first action word is its "(spin)": the second spin.
+        Assert.Equal([1, 3], ActionRepeats.Of(lines, WordAccentLists.Defaults, breaker, liftsBacking: false).Order());
+    }
+
     // Ported from WordAccentsTests.swift: testOtherLanguagesMatchTheirOwnWords
     [Theory]
     // Spanish
