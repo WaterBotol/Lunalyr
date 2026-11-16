@@ -720,7 +720,13 @@ enum LyricRomanizer {
                 let width = character.utf16.count
                 let scalar = character.unicodeScalars.first
                 let spelled = korean ? KoreanRomanizer.containsHangul(String(character)) : scalar?.properties.isIdeographic == true
-                if !spelled, character.isLetter || character.isNumber {
+                // A Latin word is one unit through its own hyphens and
+                // apostrophes ("Ah-oh", "don't"), as its saved reading
+                // writes it: split at the hyphen, Apple's "Ah-oh bi ro so"
+                // counted one unit too many and the whole reading was
+                // kept for the line instead of going word by word.
+                let inWord = latin != nil && !character.isWhitespace && !spelled
+                if !spelled, character.isLetter || character.isNumber || inWord {
                     latin = latin.map { ($0.location, $0.length + width) } ?? (offset, width)
                 } else {
                     if let run = latin { units.append((run.location, run.length, false)); previousEnd = -1; latin = nil }

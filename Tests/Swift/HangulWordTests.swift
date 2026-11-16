@@ -220,4 +220,96 @@ final class HangulWordTests: XCTestCase {
             }
         }
     }
+
+    // MARK: Each word's romanisation with its word
+
+    /// L6 with Apple's own transliteration. Apple spaces each Hangul block
+    /// and writes "Ah-oh" hyphenated; the parser collapses its double
+    /// spaces, so the reading is "Ah-oh bi ro so nae ...".
+    static func l6WithReading() throws -> (LyricsFetcher.Line, [Int: [LyricsFetcher.Word]]) {
+        let ttml = l6.replacingOccurrences(of: "<body", with: """
+            <head><metadata><iTunesMetadata xmlns="http://music.apple.com/lyric-ttml-internal"><transliterations>\
+            <transliteration xml:lang="ko-Latn"><text for="L6">Ah-oh  bi ro so  nae  se sang i  doe eo jwo</text>\
+            </transliteration></transliterations></iTunesMetadata></metadata></head><body
+            """)
+        let line = try XCTUnwrap(TTMLLyricParser.parse(ttml, duration: 307.75).first { $0.wordTimed })
+        let options = RomanizationOptions.Snapshot(display: .below, language: .automatic, toneMarks: true, preferSaved: true)
+        return (line, LyricRomanizer.readings([line], options: options))
+    }
+
+    /// The saved reading goes word by word, not once for the whole line:
+    /// a rolling stage hung the whole line's reading under "Ah-oh" while
+    /// none of the Korean words had arrived.
+    func testAppleKoreanReadingIsPlacedWordByWord() throws {
+        let (line, romanized) = try Self.l6WithReading()
+        XCTAssertEqual(line.romanization, "Ah-oh bi ro so nae se sang i doe eo jwo")
+        let readings = try XCTUnwrap(romanized[0])
+        XCTAssertEqual(readings.count, line.words.count)
+        XCTAssertNil(LyricReadingPairs.line(readings, for: line, display: .below), "no reading of the whole line")
+        let window = LyricLayerCache.rollingWindow(around: 0, lines: [line], romanized: romanized, time: 80, lead: 1.2,
+                                                   display: .below)
+        XCTAssertEqual(window.words.map { window.readings[$0.presentationID] ?? "" },
+                       ["", "biroso", "nae", "sesangi", "doeeojwo"])
+    }
+
+    /// Each word's reading shows exactly when the word does, at the word's
+    /// own strength, and a Korean word's reading comes whole with it.
+    func testEachReadingShowsWithItsWordOnTheRollingStages() throws {
+        let (line, romanized) = try Self.l6WithReading()
+        /// How strongly each word, and its reading, shows at `time`.
+        func stage(_ composition: LyricComposition, at time: Double) -> [String: (word: Double, reading: Double, whole: Bool)] {
+            let window = LyricLayerCache.rollingWindow(around: 0, lines: [line], romanized: romanized, time: time,
+                                                       lead: 1.2, display: .below)
+            let prepared = SpokenTypography.prepare(.init(words: window.words, baseSize: 60, mood: .neutral,
+                composition: composition, fontIdentity: LyricFontIdentity(settings: .shared), readings: window.readings,
+                parts: window.parts), settings: .shared)
+            let cursor = SpokenTypographyView.cursor(prepared, time: time, intensity: 0, reduceMotion: false,
+                                                     composition: composition)
+            let next = window.words.firstIndex { $0.start > time }
+            var result: [String: (Double, Double, Bool)] = [:]
+            for token in prepared {
+                let state = RollingTokenState.make(token, next: next, rank: cursor - 1 - Double(token.index), time: time,
+                    composition: composition, baseSize: 60, stageWidth: 1200, intensity: 0, reduceMotion: false,
+                    arrival: .glide)
+                let reveal = RollingTokenState.partReveal(token, time: time, composition: composition,
+                    runOpacity: state.presentation.opacity, intensity: 0, reduceMotion: false)
+                let reading = token.reading == nil ? 0 : state.shown * (state.presentation.preview ? 0 : 1)
+                // As `SpokenTypographyView.token` passes it.
+                let shares = reveal == nil && token.parts.count > 1 ? nil
+                    : token.reading?.shareOpacities(at: time, syllables: reveal, reduceMotion: false)
+                result[token.source.text] = (state.shown, reading, shares == nil)
+            }
+            return result
+        }
+        for composition in [LyricComposition.spoken, .cascade, .cutout] {
+            let paused = stage(composition, at: 74.06)
+            for word in ["비로소", "내", "세상이", "되어줘"] {
+                XCTAssertLessThan(paused[word]?.reading ?? 1, 0.01, "\(composition.title): \(word)'s reading is not early")
+            }
+            XCTAssertEqual(paused["Ah-oh"]?.reading, 0, "\(composition.title): Ah-oh reads as itself")
+            for (word, time) in [("비로소", 76.8), ("내", 77.6), ("세상이", 78.6), ("되어줘", 80.0)] {
+                let now = try XCTUnwrap(stage(composition, at: time)[word])
+                XCTAssertGreaterThan(now.reading, 0.9, "\(composition.title): \(word)'s reading at \(time)")
+                XCTAssertEqual(now.reading, now.word, accuracy: 1e-9, "the reading shows as its word does")
+                XCTAssertTrue(now.whole, "\(word)'s reading comes whole")
+            }
+            // Just after 비로소's onset: its whole reading, nothing of 내's.
+            let early = stage(composition, at: 76.2)
+            XCTAssertGreaterThan(early["비로소"]?.reading ?? 0, 0.5)
+            XCTAssertLessThan(early["내"]?.reading ?? 1, 0.01)
+        }
+    }
+
+    /// A Latin word's hyphens and apostrophes keep it one unit beside
+    /// Hangul blocks, so the saved reading still lines up block by block.
+    func testHyphenatedAndApostrophisedLatinWordsCountOnce() throws {
+        let words = [("Don't", 10.0), ("사", 11.0), ("랑", 11.3), ("Oh-oh", 12.0)]
+        let line = LyricsFetcher.Line(start: 10, end: 13, text: "Don't 사랑 Oh-oh",
+            words: words.map { .init(text: $0.0, start: $0.1, end: $0.1 + 0.3) }, isInstrumental: false, wordTimed: true)
+        var saved = line
+        saved.romanization = "Don't sa rang Oh-oh"
+        let options = RomanizationOptions.Snapshot(display: .below, language: .automatic, toneMarks: true, preferSaved: true)
+        let readings = try XCTUnwrap(LyricRomanizer.readings([saved], options: options)[0])
+        XCTAssertEqual(readings.map(\.text), ["Don't", "sa", "rang", "Oh-oh"])
+    }
 }

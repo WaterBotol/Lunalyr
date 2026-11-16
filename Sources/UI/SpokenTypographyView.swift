@@ -250,8 +250,10 @@ struct SpokenTypographyView: View {
                            readingOpacity: presentation.preview ? 0 : 1,
                            readingWidth: size.width * 0.8,
                            reveal: reveal,
-                           readingReveal: token.reading?.shareOpacities(at: time, syllables: reveal,
-                                                                         reduceMotion: reduceMotion),
+                           // A word shown whole (a Korean word) shows its
+                           // whole reading with it, not one syllable's at a time.
+                           readingReveal: reveal == nil && token.parts.count > 1 ? nil
+                               : token.reading?.shareOpacities(at: time, syllables: reveal, reduceMotion: reduceMotion),
                            tile: tile, tileText: ink.tileText,
                            symbol: wordAccent?.symbol,
                            symbolOpacity: presentation.preview ? 0
