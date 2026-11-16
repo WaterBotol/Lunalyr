@@ -67,7 +67,7 @@ enum LivelyAction {
         switch action {
         case .spin: return h >= 0.9 ? 2.1 : 1.75
         case .float: return max(1.4, h + 0.8)
-        case .dip: return 1.35
+        case .dip: return 1.7
         case .shake: return max(0.9, min(h, 1.4) + 0.5)
         case .hop: return h >= 0.9 ? 1.55 : 1.15
         case .grow, .shrink: return max(1.2, h + 0.6)
@@ -214,9 +214,10 @@ enum LivelyAction {
     /// fast fall, a spring back up past the line, a settle.
     static func dip(_ t: Double, A: Double, duration D: Double) -> Double {
         guard t > 0, t < D else { return 0 }
-        let down = spring(t - 0.1, peak: 0.2, overshoot: 0.08)
-        let up = spring(t - 0.34, peak: 0.3, overshoot: 0.22)
-        return (0.62 * A * (down - up) - 0.08 * A * bump(t, 0.22)) * rest(t, D)
+        // Late enough that the label has pressed in and the line settled.
+        let down = spring(t - 0.3, peak: 0.22, overshoot: 0.08)
+        let up = spring(t - 0.62, peak: 0.32, overshoot: 0.22)
+        return (0.75 * A * (down - up) - 0.1 * A * bump(t - 0.08, 0.3)) * rest(t, D)
     }
 
     /// Melt: 0 → 1 as it softens, back through a jelly wobble (a little
@@ -296,7 +297,7 @@ struct LivelyPose: Equatable {
             let dy = L.dip(t, A: A, duration: D)
             pose.dy = dy
             // Squashed at the bottom, a little stretched coming back up.
-            let low = max(0, dy / max(0.01, 0.62 * A))
+            let low = max(0, dy / max(0.01, 0.75 * A))
             pose.sy = 1 - 0.16 * A * low * low + 0.06 * A * max(0, -dy / max(0.01, 0.1 * A)) * 0.5
             pose.sx = 1 + 0.11 * A * low * low
             pose.anchorY = 1
@@ -844,7 +845,8 @@ struct LivelyGlyphRenderer: TextRenderer {
             let a = -0.3 + 1.6 * L.ss(t / 0.55)
             let b = -0.3 + 1.6 * L.ss((t - (D - 0.6)) / 0.6)
             let darkness = L.ss((a - g.along) / 0.3) * (1 - L.ss((b - g.along) / 0.3))
-            c.opacity = 1 - 0.85 * A * darkness
+            // In the dark, but still legible.
+            c.opacity = 1 - 0.55 * A * darkness
             if darkness > 0.01 {
                 let grey = 1 - 0.5 * darkness
                 c.addFilter(.colorMultiply(Color(red: grey, green: grey, blue: grey * 1.02)))
