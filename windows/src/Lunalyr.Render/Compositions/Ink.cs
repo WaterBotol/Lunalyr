@@ -414,6 +414,23 @@ internal sealed class Ink : IDisposable
     /// <summary>The blur's standard deviation (property 0), set through the float overload: the typed setter boxes.</summary>
     private void SetBlur(float sigma) => _blur!.SetValue(0u, sigma);
 
+    /// <summary>
+    /// A part's edge where its letters actually fall (the Mac's measured <c>LyricRuns.boundaries</c>, c011a6f): a glued
+    /// run's parts are shared out by character count (<c>LyricRunParts.Boundaries</c>), which in a mixed run
+    /// ("HAPPYなイメージ") or a face whose letters differ in width puts the edge through the middle of a character and
+    /// shows half of it early. An edge that falls on a whole letter (k of n) moves to where letter k starts in this ink;
+    /// any other (a reading's own measured shares) is kept. Left to right only.
+    /// </summary>
+    internal double Measured(double boundary)
+    {
+        if (Letters is not { } letters || letters.Left.Length < 2 || !(Box.X > 0)) return boundary;
+        var n = letters.Left.Length;
+        var at = boundary * n;
+        var k = (int)Math.Round(at);
+        if (k <= 0 || k >= n || Math.Abs(at - k) > 1e-6) return boundary;
+        return Math.Clamp((letters.Left[k] + Box.X / 2) / Box.X, 0, 1);
+    }
+
     /// <summary>Token <paramref name="k"/>'s share of the label, in bitmap pixels; the first and last reach the bitmap's edges.</summary>
     private RawRectF SliceRect(int k, ReadOnlySpan<double> boundaries, int count, bool rightToLeft, Vector2 centre,
                                float raster, int width, int height)
@@ -422,8 +439,8 @@ internal sealed class Ink : IDisposable
         float a, b;
         if (!rightToLeft)
         {
-            a = k == 0 ? float.NegativeInfinity : -w / 2 + (float)boundaries[k] * w;
-            b = k == count - 1 ? float.PositiveInfinity : -w / 2 + (float)boundaries[k + 1] * w;
+            a = k == 0 ? float.NegativeInfinity : -w / 2 + (float)Measured(boundaries[k]) * w;
+            b = k == count - 1 ? float.PositiveInfinity : -w / 2 + (float)Measured(boundaries[k + 1]) * w;
         }
         else
         {
