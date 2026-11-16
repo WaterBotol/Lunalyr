@@ -97,6 +97,9 @@ public sealed partial record AppSettings
     /// <summary>The custom gradient's two to four colours, <c>#RRGGBB</c> (Mac <c>custom.lyricColourCustom</c>).</summary>
     public IReadOnlyList<string> LyricColourCustom { get; init; } = [.. LyricColourOptions.DefaultCustom];
 
+    /// <summary>"Make the colours pastel" (Mac <c>custom.lyricColourPastel</c>, on by default): only the custom gradient offers it.</summary>
+    public bool LyricColourPastel { get; init; } = true;
+
     // ---- Word entrances ----
 
     /// <summary>
@@ -276,6 +279,7 @@ public sealed partial record AppSettings
             ColourSpeed = double.IsFinite(LyricColourSpeed) ? Math.Clamp(LyricColourSpeed, LyricColourOptions.SpeedMin, LyricColourOptions.SpeedMax) : 1,
             ColourStrength = LyricColourOptions.ClampedStrength(LyricColourStrength),
             ColourCustom = new ValueList(LyricColourOptions.Sanitised(LyricColourCustom ?? [])),
+            ColourPastel = LyricColourPastel,
             NoWordReveal = new ValueList(noReveal),
             NoNextWordPreview = new ValueList(noPreview),
             PreviewLead = lead,

@@ -89,7 +89,7 @@ public sealed class AppSettingsTests
             "wordSymbolsEnabled", "wordSymbolsWords", "actionWordsEnabled", "actionWordsWords", "actionWordsStrength",
             // The last of the Lyric style page: backing vocals, typography, colour, word reveal and remembered styles
             "backingVocalsLayer", "backingVocalStyle", "editorialTypography", "editorialAmount", "randomizeLyricFonts",
-            "lyricColourMode", "lyricColourSpeed", "lyricColourStrength", "lyricColourCustom", "wordRevealByStyle",
+            "lyricColourMode", "lyricColourSpeed", "lyricColourStrength", "lyricColourCustom", "lyricColourPastel", "wordRevealByStyle",
             "nextWordPreviewByStyle", "nextWordPreviewLead", "styleMemoryEnabled", "styleMemorySongs", "styleMemoryArtists",
         ];
         Assert.Equal(keys.Order(), json.EnumerateObject().Select(p => p.Name).Order());
@@ -170,6 +170,18 @@ public sealed class AppSettingsTests
         Assert.Equal("Hello", line.Translation);
         Assert.Equal("Hello", Core.Compositions.LineTranslations.Of(line with { Translation = "  Hello " }));
         Assert.Null(Core.Compositions.LineTranslations.Of(line with { Translation = "   " }));
+    }
+
+    // Ported from LyricPastelTests.swift: testTheSettingIsStoredAndOnByDefault
+    [Fact]
+    public void ThePastelSettingIsOnByDefaultAndKeptPerSurface()
+    {
+        Assert.True(new AppSettings().LyricColourPastel);
+        Assert.True(new AppSettings().Style().ColourPastel);
+        Assert.False(new AppSettings { LyricColourPastel = false }.Style().ColourPastel);
+        Assert.Contains("lyricColourPastel", LyricStyleProfiles.Keys);
+        var json = JsonSerializer.Serialize(new AppSettings { LyricColourPastel = false }, AppSettingsJsonContext.Default.AppSettings);
+        Assert.False(JsonSerializer.Deserialize(json, AppSettingsJsonContext.Default.AppSettings)!.LyricColourPastel);
     }
 
     [Fact]

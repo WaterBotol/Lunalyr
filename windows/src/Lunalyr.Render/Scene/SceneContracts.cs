@@ -304,6 +304,12 @@ public sealed record LyricStyle
     /// <summary>The custom gradient's colours, <c>#RRGGBB</c> (the Mac's <c>custom.lyricColourCustom</c>).</summary>
     public ValueList ColourCustom { get; init; } = new(Lunalyr.Core.Colour.LyricColourOptions.DefaultCustom);
 
+    /// <summary>
+    /// The custom gradient's colours eased to pastel (on by default; the Mac's <c>custom.lyricColourPastel</c>). Off keeps
+    /// them as picked, lightened only as far as the contrast floor needs.
+    /// </summary>
+    public bool ColourPastel { get; init; } = true;
+
     /// <summary>Composition ids whose sung words are not revealed one by one ("Reveal sung words" off). Empty by default.</summary>
     public ValueList NoWordReveal { get; init; } = ValueList.Empty;
 

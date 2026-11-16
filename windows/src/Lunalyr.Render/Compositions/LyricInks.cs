@@ -34,6 +34,7 @@ internal static class LyricInks
             Speed = style.ColourSpeed,
             Strength = style.ColourStrength,
             Custom = CustomColours(style),
+            Pastel = LyricColourOptions.PastelApplies(style.ColourPastel, style.ColourMode),
             Album = palette.ArtworkStops,
             Backdrop = palette.TextBackdrop,
             Unbacked = palette.TextUnbacked,

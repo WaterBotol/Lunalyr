@@ -202,7 +202,7 @@ public static class LyricStyleProfiles
         // Readings and translations shown (the Mac's FloatingLyrics.swift lists Show translations right after them)
         "romanizationDisplay", "showTranslations",
         // Text and highlight colours
-        "lyricColourMode", "lyricColourSpeed", "lyricColourStrength", "lyricColourCustom",
+        "lyricColourMode", "lyricColourSpeed", "lyricColourStrength", "lyricColourCustom", "lyricColourPastel",
         "lyricHighlightMode", "lyricHighlightCustom",
     ];
 

@@ -398,6 +398,7 @@ raw values. The file also has `schemaVersion` (1). Unknown or out-of-range value
 | `lyricColourSpeed` | `1` | "Colour speed", 0.25–2, for the drifting modes | `custom.lyricColourSpeed` |
 | `lyricColourStrength` | `1` | "Colour strength", 0 (neutral) – 2 (vivid) | `custom.lyricColourStrength` |
 | `lyricColourCustom` | `["#F9D29D","#F28FAD","#9AD0F5"]` | the custom gradient's two to four `#RRGGBB` colours (bad ones dropped, missing ones from the defaults) | `custom.lyricColourCustom` |
+| `lyricColourPastel` | `true` | "Make the colours pastel": the custom gradient's colours eased to pastel; off keeps them as picked, at a gentler 1.5:1 floor. Kept per surface | `custom.lyricColourPastel` |
 | `wordRevealByStyle` | `{}` | "Reveal sung words" per composition id (`automatic`: every layout Match the music picks); a missing layout reveals. Locked on where the layout (Spoken, Cascade, Cutout) or the entrance (the Cutouts and swipes, or a mix with one) needs it | `custom.wordRevealByStyle` |
 | `nextWordPreviewByStyle` | `{}` | "Faint next-word preview" per composition id, keyed as `wordRevealByStyle`; a missing layout previews | `custom.nextWordPreviewByStyle` |
 | `nextWordPreviewLead` | `0.45` | "Preview lead", seconds, 0.15–1.25 (also when the opening title leaves and the instrumental dots hand over) | `custom.nextWordPreviewLead` |
@@ -660,7 +661,7 @@ their own style. Details, checks and what wasn't seen live: [milestones/M7.md](m
   `actionWordsEnabled`, `actionWordsStrength`, `editorialTypography`, `editorialAmount`,
   `randomizeLyricFonts`, `rotateLayouts`, `backingVocalsLayer`, `backingVocalStyle`, `creditsLayer`, `openingTitle`,
   `openingTitleCover`, `romanizationDisplay`, `lyricColourMode`, `lyricColourSpeed`, `lyricColourStrength`,
-  `lyricColourCustom`, `lyricHighlightMode`, `lyricHighlightCustom` (the Mac's list where Windows has the setting;
+  `lyricColourCustom`, `lyricColourPastel`, `lyricHighlightMode`, `lyricHighlightCustom` (the Mac's list where Windows has the setting;
   translations have none yet). Remembered styles are not part of a style: they belong to the music.
 - **When it shows** (`FloatingVisibility`, ported): Floating chosen and a song with lyrics (timed and not all
   instrumental, or plain) playing; a pause keeps it up for 10 s; none found, nothing playing or still looking hide it.

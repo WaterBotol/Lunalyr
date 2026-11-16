@@ -70,6 +70,13 @@ public static class LyricColourOptions
     public static double ClampedStrength(double value) =>
         double.IsFinite(value) ? Math.Min(StrengthMax, Math.Max(StrengthMin, value)) : 1;
 
+    /// <summary>
+    /// Whether <paramref name="mode"/>'s colours are eased to pastel (<see cref="LyricInkInputs.Pastel"/>): always, but
+    /// for a custom gradient with "Make the colours pastel" off (the Mac's cab0212). Only the custom gradient offers
+    /// it: the cover's own colours, unpastelled, came out muddy on dark wallpapers and grey for muted covers.
+    /// </summary>
+    public static bool PastelApplies(bool pastel, LyricColourMode mode) => pastel || mode != LyricColourMode.CustomGradient;
+
     /// <summary>Two to four valid colours, upper-cased; missing ones come from the defaults.</summary>
     public static List<string> Sanitised(IEnumerable<string> values)
     {
@@ -119,6 +126,12 @@ public record struct LyricInk
     /// wallpaper is the floor; colours only get lighter.
     /// </summary>
     public const double MinimumContrast = 3.0;
+
+    /// <summary>
+    /// The floor for the user's own colours with pastel off: enough to read, low enough that a saturated red or orange
+    /// keeps its hue instead of turning pink or peach. The shadow and text backing carry the rest (the Mac's 7957a6e).
+    /// </summary>
+    public const double OwnColourContrast = 1.5;
 
     /// <summary>With Increase Contrast: WCAG AA for normal text.</summary>
     public const double IncreasedContrast = 4.5;

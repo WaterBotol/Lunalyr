@@ -352,17 +352,17 @@ public class LyricColourTests
         }
     }
 
-    // The Mac's next/tester-fixes (15 Nov 2026): Sung sweep varies from word to word along the drifting palette (your
-    // colours, else the cover's), unsung words stay white, and the sung colours stay readable.
+    // The Mac's next/tester-fixes (15 Nov 2026): Sung sweep varies from word to word along the drifting palette (the
+    // cover's: since the Mac's 1763cce, never the custom gradient's), unsung words stay white, and the sung colours stay
+    // readable.
     [Fact]
     public void SungSweepGivesEachWordItsOwnColour()
     {
         const double backdrop = 0.14;
-        OkLab[] custom = [ColourHex.ToOkLab("#F28FAD")!.Value, ColourHex.ToOkLab("#9AD0F5")!.Value];
         var director = new LyricInkDirector();
         var ink = LyricInk.White;
         for (var frame = 0; frame <= 32; frame++)
-            ink = director.Ink(new LyricInkInputs(LyricColourMode.SungSweep) { Custom = custom, Backdrop = backdrop }, frame / 4.0);
+            ink = director.Ink(new LyricInkInputs(LyricColourMode.SungSweep) { Album = Vivid, Backdrop = backdrop }, frame / 4.0);
         var first = ink.Sample(0);
         var later = ink.Sample(0.6);
         Assert.True(first.Sweeps && later.Sweeps);

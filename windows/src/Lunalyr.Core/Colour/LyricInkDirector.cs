@@ -46,6 +46,13 @@ public sealed record LyricInkInputs(LyricColourMode Mode)
 
     /// <summary>The user's own highlight colour, for <see cref="LyricHighlightMode.Custom"/>.</summary>
     public OkLab? HighlightCustom { get; init; }
+
+    /// <summary>
+    /// Colours eased towards pastel (<see cref="LyricInk.Pastel"/>) before they are made readable; false keeps the
+    /// chosen colours' own lightness and chroma (<see cref="LyricColourOptions.PastelApplies"/>). The contrast floors
+    /// hold either way (the Mac's cab0212).
+    /// </summary>
+    public bool Pastel { get; init; } = true;
 }
 
 /// <summary>
@@ -74,6 +81,9 @@ public sealed class LyricInkDirector
     private LyricInk? _last;
     private Vector3[] _albumKey = [];
     private InkStops _albumStops = FallbackPastels;
+
+    /// <summary>The cover's own colours, unpastelled, for <see cref="LyricInkInputs.Pastel"/> off.</summary>
+    private InkStops _albumRawStops = FallbackPastels;
     private OkLab _vivid = FallbackPastels.S2;
     private OkLab _reactiveAccent = FallbackPastels.S3;
 
@@ -113,7 +123,11 @@ public sealed class LyricInkDirector
         _lastWall = wall;
         RefreshAlbum(inputs.Album);
         var calm = inputs.ReduceMotion;
-        var ratio = inputs.IncreaseContrast ? LyricInk.IncreasedContrast : LyricInk.MinimumContrast;
+        // Your own colours with pastel off are kept nearer what you picked: a gentler floor, with the text's shadow and
+        // backing carrying the rest (the Mac's 7957a6e and 1763cce).
+        var ownColours = inputs.Mode == LyricColourMode.CustomGradient && !inputs.Pastel && inputs.Custom.Count > 0;
+        var ratio = inputs.IncreaseContrast ? LyricInk.IncreasedContrast
+            : ownColours ? LyricInk.OwnColourContrast : LyricInk.MinimumContrast;
         var textRatio = inputs.IncreaseContrast ? LyricHighlight.IncreasedTextContrast : LyricHighlight.TextContrast;
         var (dark, deepBackdrop, darkMoving) = DarkState(inputs, dt, firstFrame);
         if (inputs.Mode == LyricColourMode.Standard && AtWhite && dark > 0.0005)
@@ -417,6 +431,7 @@ public sealed class LyricInkDirector
             _vivid = FallbackPastels.S2;
             _reactiveAccent = FallbackPastels.S3;
             _albumStops = FallbackPastels;
+            _albumRawStops = FallbackPastels;
             return;
         }
         var strongest = chromatic[0];
@@ -458,6 +473,9 @@ public sealed class LyricInkDirector
         lyric = [.. lyric.OrderBy(c => c.Hue)];
         OkLab At(int index) => lyric.Count == 0 ? OkLab.White : lyric[index % lyric.Count];
         _albumStops = new InkStops(At(0), At(1), At(2), At(3));
+        var raw = picks.OrderBy(c => c.Hue).ToList();
+        OkLab Raw(int index) => raw.Count == 0 ? OkLab.White : raw[index % raw.Count];
+        _albumRawStops = new InkStops(Raw(0), Raw(1), Raw(2), Raw(3));
     }
 
     private bool SameAlbum(IReadOnlyList<Vector3> album)
@@ -476,18 +494,14 @@ public sealed class LyricInkDirector
                 return (InkStops.AllWhite, 1);
             case LyricColourMode.AlbumDrift:
                 // Keep the gradient phase in the same slot when a new cover has a different number of colours.
-                return (_albumStops, 4);
+                return (inputs.Pastel ? _albumStops : _albumRawStops, 4);
             case LyricColourMode.SungSweep:
             {
-                // The sung colours: your colours (up to four) when set, else the cover's four lyric colours, each made
-                // pastel then strengthened ×1.35 (the Mac's next/tester-fixes, 15 Nov 2026).
-                if (inputs.Custom.Count > 0)
-                {
-                    var count = Math.Min(4, inputs.Custom.Count);
-                    OkLab Own(int index) => LyricInk.ApplyingStrength(1.35, LyricInk.Pastel(inputs.Custom[index % count]));
-                    return (new InkStops(Own(0), Own(1), Own(2), Own(3)), count);
-                }
-                OkLab Cover(int index) => LyricInk.ApplyingStrength(1.35, LyricInk.Pastel(_albumStops[index], _vivid.Hue));
+                // The cover's four lyric colours, each made pastel then strengthened ×1.35 (the Mac's
+                // next/tester-fixes, 15 Nov 2026). Not the custom gradient's colours: those always exist (there are
+                // defaults), so they took over every song's sweep and it never followed the cover (the Mac's 1763cce).
+                var album = inputs.Pastel ? _albumStops : _albumRawStops;
+                OkLab Cover(int index) => inputs.Pastel ? LyricInk.ApplyingStrength(1.35, LyricInk.Pastel(album[index], _vivid.Hue)) : album[index];
                 return (new InkStops(Cover(0), Cover(1), Cover(2), Cover(3)), 4);
             }
             case LyricColourMode.MusicReactive:
@@ -505,9 +519,9 @@ public sealed class LyricInkDirector
             }
             default:
             {
-                if (inputs.Custom.Count == 0) return (_albumStops, 4);
+                if (inputs.Custom.Count == 0) return (inputs.Pastel ? _albumStops : _albumRawStops, 4);
                 var count = Math.Min(4, inputs.Custom.Count);
-                OkLab At(int index) => LyricInk.Pastel(inputs.Custom[index % count]);
+                OkLab At(int index) => inputs.Pastel ? LyricInk.Pastel(inputs.Custom[index % count]) : inputs.Custom[index % count];
                 return (new InkStops(At(0), At(1), At(2), At(3)), count);
             }
         }

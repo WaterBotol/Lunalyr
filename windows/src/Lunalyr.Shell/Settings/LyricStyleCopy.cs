@@ -91,6 +91,10 @@ public static class LyricStyleCopy
         _ => "Colours from the cover drift slowly through the words.",
     };
 
+    /// <summary>The Mac's help for "Make the colours pastel" (cab0212).</summary>
+    public const string Pastel =
+        "Eases your colours to soft pastels. Off keeps them as you picked them, lightened only as far as they need to stay readable.";
+
     public const string ColourBacking =
         "Automatic text backing helps the pastels stay visible on bright wallpapers. Colours fade between shades and hold almost still while Windows’ animation effects are off.";
 

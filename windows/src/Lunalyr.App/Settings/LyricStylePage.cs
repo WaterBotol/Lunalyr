@@ -153,6 +153,9 @@ internal static class LyricStylePage
         page.Children.Add(RememberedNote(ctx, Playing, StyleAspect.Colour));
         page.Children.Add(Indented(Card("Your colours", null, null, CustomColours(ctx)))
             .ShowWhen(ctx, s => s.ColourMode == LyricColourMode.CustomGradient));
+        page.Children.Add(Indented(Card("Make the colours pastel", LyricStyleCopy.Pastel, "",
+                Toggle(ctx, s => s.LyricColourPastel, (s, v) => s with { LyricColourPastel = v })))
+            .ShowWhen(ctx, s => s.ColourMode == LyricColourMode.CustomGradient));
 
         // Advanced colour
         page.Children.Add(Advanced(Card("Colour strength", LyricStyleCopy.ColourBacking, "",
