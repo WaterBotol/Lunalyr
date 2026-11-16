@@ -476,6 +476,77 @@ public class OpeningTitleTests
         Assert.Equal(T.RestOpacity, Assert.NotNull(T.Phase(staying, staying.RestsFrom + T.RestFade + 1, 1.0)).Opacity, 9);
     }
 
+    // ---- The card's grid and its faces (the Mac's 11f1228, 297b2f2, 79088c3) ----
+
+    [Fact]
+    public void A_short_block_is_centred_on_the_cover_and_a_tall_one_spans_it()
+    {
+        // A one-line title (cap at 20 px of an 80 px line) and two lines of details, beside a 240 px cover.
+        CardBlock[] oneLine = [new(300, 80, 70, 70, 20), new(250, 70, 60, 60, 18), new(200, 60, 52, 52, 15), new(150, 50, 44, 44, 12), new(150, 50, 44, 44, 12)];
+        var details = new CardBlock(200, 60, 20, 52, 6);
+        var grid = T.BesideCover(240, 30, 600, 240 * T.BlockGap, oneLine, details);
+        Assert.Equal(0, grid.Title);
+        var inkTop = grid.TitleTop + 20;
+        var inkFoot = grid.DetailsTop + 52;
+        Assert.Equal(inkTop - grid.CoverTop, grid.CoverTop + 240 - inkFoot, 6); // centred: as much room above as below
+        Assert.True(inkTop - grid.CoverTop > 10);
+        Assert.Equal(240 * T.BlockGap, grid.DetailsTop + 6 - (grid.TitleTop + 70), 6); // the step under the title
+        // Two lines, as tall as the cover: capitals on its top, the last baseline on its foot.
+        CardBlock[] twoLines = [new(300, 180, 70, 160, 20), new(250, 150, 60, 135, 18), new(200, 125, 52, 112, 15), new(150, 100, 44, 90, 12), new(150, 50, 44, 44, 12)];
+        var spread = T.BesideCover(240, 30, 600, 240 * T.BlockGap, twoLines, details);
+        Assert.Equal(spread.CoverTop, spread.TitleTop + twoLines[spread.Title].Cap, 6);
+        Assert.Equal(spread.CoverTop + 240, spread.DetailsTop + 52, 6);
+    }
+
+    [Fact]
+    public void A_title_steps_down_to_fit_and_never_breaks_a_word()
+    {
+        // The first two sizes would break a word; the third is too tall for the room; the fourth fits.
+        CardBlock[] titles = [new(300, 80, 70, 70, 20, Fits: false), new(250, 70, 60, 60, 18, Fits: false), new(200, 400, 52, 380, 15),
+                              new(150, 100, 44, 90, 12), new(150, 50, 44, 44, 12)];
+        Assert.Equal(2, T.FirstThatFits(titles, null));
+        Assert.Equal(3, T.FirstThatFits(titles, 240));
+        // Nothing fits: the last, the smallest on one line, whatever.
+        Assert.Equal(2, T.FirstThatFits([new(1, 900, 1, 1, 1), new(1, 900, 1, 1, 1, Fits: false), new(1, 900, 1, 1, 1)], 100));
+    }
+
+    [Fact]
+    public void The_type_metrics_even_out_faces()
+    {
+        static double Advance(string s) => s.Length * 0.6;
+        // As tall as the reference face: kept at its size, no room added.
+        var reference = TitleTypeMetrics.Measure("MARVELOUS", 0.95, 0.3, 0.7, 0.55, _ => 0.7, s => s.Length * 0.67);
+        Assert.Equal(1, reference.Scale, 2);
+        Assert.Equal(0, reference.PadTop, 6);
+        // A script whose lower case is small is set larger.
+        var script = TitleTypeMetrics.Measure("wave to earth", 0.95, 0.3, 0.6, 0.35, _ => 0.6, Advance);
+        Assert.True(script.Scale > 1.1, $"{script.Scale}");
+        // A pixel face whose line box ends at its capitals gets room above them.
+        var pixel = TitleTypeMetrics.Measure("MARVELOUS", 0.72, 0.05, 0.7, 0.7, _ => 0.7, s => s.Length * 0.67);
+        Assert.True(pixel.PadTop > 0.2, $"{pixel.PadTop}");
+        Assert.True(pixel.PadBottom > 0.2, $"{pixel.PadBottom}");
+        // Kana measured by its own ink: as tall as the reference's fallback, kept at its size.
+        var kana = TitleTypeMetrics.Measure("夜に駆ける", 0.95, 0.3, 0.7, 0.5, _ => 0.84, Advance);
+        Assert.Equal(1, kana.Scale, 2);
+        Assert.Equal(0.84, kana.InkTop, 6);
+        // Everything stays in range.
+        Assert.Equal(1.3, TitleTypeMetrics.Measure("tiny", 0.95, 0.3, 0.2, 0.1, _ => 0.2, Advance).Scale, 6);
+        Assert.Equal(0.85, TitleTypeMetrics.Measure("HUGE", 0.95, 0.3, 1.5, 1.2, _ => 1.5, Advance).Scale, 6);
+    }
+
+    [Fact]
+    public void The_box_sits_low_on_the_left_by_default()
+    {
+        foreach (var (w, h) in new[] { (1512.0, 982.0), (1280.0, 800.0), (2560.0, 1440.0) })
+        {
+            var baseSize = ViewportMetrics.For(w, h, 1).BaseSize;
+            var box = T.Box(w, h, baseSize);
+            Assert.Equal(Math.Max(40, w * 0.058), box.X, 3);
+            Assert.Equal(Math.Max(96, h * 0.13), h - (box.Y + box.Height), 3);
+            Assert.Equal(w * 0.46, box.Width, 3);
+        }
+    }
+
     // The Mac's pace: a card that stays with no exit due is only looked at, never kept on a running clock.
     [Fact]
     public void A_kept_card_at_rest_does_not_keep_the_clock_running()

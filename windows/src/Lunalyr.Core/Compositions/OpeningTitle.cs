@@ -29,6 +29,137 @@ public static class OpeningTitle
     public const double ReadingShare = 0.32;
     public const double AlbumShare = 0.26;
 
+    /// <summary>
+    /// The cover's side, as a share of the title's nominal size: the same for every title, so the card keeps its size
+    /// whether the title takes one line or two (the Mac's 297b2f2).
+    /// </summary>
+    public static double CoverShare(bool compact) => compact ? 1.65 : 2.4;
+
+    /// <summary>The title's sizes beside a cover, largest first: it takes the largest whose two lines fit.</summary>
+    public static ReadOnlySpan<double> TitleSteps => [1, 0.84, 0.7, 0.58];
+
+    /// <summary>Between the title's last baseline and the artist's capitals, as a share of the cover's side.</summary>
+    public const double BlockGap = 0.16;
+
+    /// <summary>How much shorter than the cover a block may be and still be spread from its top to its foot, as a share of its side.</summary>
+    public const double CoverStretch = 0.14;
+
+    /// <summary>How long a card keeps an empty place for a cover still being fetched; after that, the words take the room.</summary>
+    public const double CoverWait = 8.0;
+
+    public static bool ReservesCover(double age) => age < CoverWait;
+
+    /// <summary>
+    /// The card's spacing, one scale in steps of the title's nominal size (the Mac's 11f1228): <c>Line</c> between lines
+    /// that belong together (the artist and album), <c>Reading</c> under the title, <c>Group</c> between the title and
+    /// the details, and between the cover and the words.
+    /// </summary>
+    public readonly record struct Spacing(double Nominal)
+    {
+        public double Line => Nominal * 0.08;
+        public double Reading => Nominal * 0.12;
+        public double Group => Nominal * 0.24;
+    }
+
+    // Where it sits.
+
+    /// <summary>Kept clear of the screen's edges (and, at the top, of what sits there), in points.</summary>
+    public const double EdgeMargin = 16, TopMargin = 40;
+
+    /// <summary>
+    /// The card's box on a desktop <paramref name="width"/> × <paramref name="height"/> (origin top left): as wide as a
+    /// title may run and as tall as a full card with a cover, at its scale; its lower-left corner low on the left, or
+    /// where the user put it (<paramref name="corner"/>: its left edge and lift from the bottom as shares of the screen),
+    /// kept on screen (the Mac's <c>OpeningTitle.box</c>, 3276613).
+    /// </summary>
+    /// <param name="points">Pixels per point: the margins and the default place are in points.</param>
+    public static (double X, double Y, double Width, double Height) Box(double width, double height, double baseSize, double points = 1,
+                                                                       (double Left, double Lift)? corner = null, double scale = 1)
+    {
+        scale = CardScale(scale);
+        var edge = EdgeMargin * points;
+        var boxWidth = Math.Min(width * 0.46 * scale, Math.Max(1, width - 2 * edge));
+        var boxHeight = Math.Min(baseSize * scale * 2.3, Math.Max(1, height - edge - TopMargin * points));
+        var leading = corner is { } c ? c.Left * width : Math.Max(40 * points, width * 0.058);
+        var bottom = corner is { } d ? d.Lift * height : Math.Max(96 * points, height * 0.13);
+        var x = Math.Min(Math.Max(edge, leading), Math.Max(edge, width - boxWidth - edge));
+        var lift = Math.Min(Math.Max(edge, bottom), Math.Max(edge, height - boxHeight - TopMargin * points));
+        return (x, height - lift - boxHeight, boxWidth, boxHeight);
+    }
+
+    /// <summary>
+    /// Which of the title's sizes to set (<see cref="TitleSteps"/>, then the last on one line): the first that fits its
+    /// width on at most two lines with no word broken (<see cref="CardBlock.Fits"/>) and, given a
+    /// <paramref name="room"/>, its height; the last whatever (the Mac's <c>FirstThatFits</c>).
+    /// </summary>
+    public static int FirstThatFits(ReadOnlySpan<CardBlock> titles, double? room)
+    {
+        for (var i = 0; i < titles.Length; i++)
+        {
+            if (i == titles.Length - 1) return i;
+            if (!titles[i].Fits) continue;
+            if (room is not { } r || titles[i].Height <= r + 0.5) return i;
+        }
+        return Math.Max(0, titles.Length - 1);
+    }
+
+    /// <summary>
+    /// The title card's grid beside a cover of <paramref name="side"/> (the Mac's <c>CoverBesideWords</c>, 11f1228 and
+    /// 79088c3): the words are one block, measured by their ink, from the title's capitals to the details' last baseline,
+    /// the details' capitals <paramref name="spacing"/> under the title's last baseline. A block about as tall as the cover
+    /// runs from its top to its foot; a shorter one (a one-line title) is centred on it; a taller one steps the title down
+    /// to fit, and as a last resort runs on below the cover's foot.
+    /// </summary>
+    /// <param name="titles">The title (with its reading) at each of its sizes, largest first.</param>
+    /// <param name="details">The artist and album, or null for none.</param>
+    public static CardGrid BesideCover(double side, double gap, double column, double spacing, ReadOnlySpan<CardBlock> titles,
+                                       CardBlock? details)
+    {
+        if (titles.Length == 0) return default;
+        var hasDetails = details is { Height: > 0.5 };
+        var d = details ?? default;
+        var detailsCap = hasDetails ? d.Cap : 0;
+        // The details from their capitals to their last baseline.
+        var detailsInk = hasDetails ? d.LastBaseline - detailsCap : 0;
+        var between = hasDetails ? spacing : 0;
+        var chosen = FirstThatFits(titles, side);
+        for (var pass = 0; pass < 3; pass++)
+        {
+            var t = titles[chosen];
+            var below = t.Height - t.LastBaseline;
+            var room = Math.Max(1, t.Cap + side - between - detailsInk + below);
+            chosen = FirstThatFits(titles, room);
+        }
+        var title = titles[chosen];
+        var block = title.LastBaseline - title.Cap + between + detailsInk;
+        // Where the block's top (the title's capitals) sits below the cover's top.
+        var inset = block >= side * (1 - CoverStretch) ? 0 : (side - block) / 2;
+        var coverTop = Math.Max(0, title.Cap - inset);
+        var titleTop = coverTop + inset - title.Cap;
+        var detailsTop = titleTop + title.LastBaseline + between - detailsCap;
+        // Spread: the last baseline on the cover's foot.
+        if (inset == 0 && block <= side && hasDetails) detailsTop = coverTop + side - d.LastBaseline;
+        var height = Math.Max(coverTop + side, Math.Max(titleTop + title.Height, hasDetails ? detailsTop + d.Height : 0));
+        var width = side + gap + Math.Min(column, Math.Max(title.Width, hasDetails ? d.Width : 0));
+        return new CardGrid(chosen, coverTop, titleTop, detailsTop, width, height);
+    }
+
+    /// <summary>The card without a cover: the title (the first size that fits), then the details <paramref name="gap"/> below.</summary>
+    public static CardGrid Stacked(ReadOnlySpan<CardBlock> titles, CardBlock? details, double gap)
+    {
+        if (titles.Length == 0) return default;
+        var chosen = FirstThatFits(titles, null);
+        var title = titles[chosen];
+        var hasDetails = details is { Height: > 0.5 };
+        var detailsTop = title.Height + (hasDetails ? gap : 0);
+        var height = hasDetails ? detailsTop + details!.Value.Height : title.Height;
+        var width = Math.Max(title.Width, hasDetails ? details!.Value.Width : 0);
+        return new CardGrid(chosen, 0, 0, detailsTop, width, height);
+    }
+
+    /// <summary>The card's scale, kept between 60% and 160%.</summary>
+    public static double CardScale(double scale) => double.IsFinite(scale) ? Math.Clamp(scale, 0.6, 1.6) : 1;
+
     // Timing (seconds of song time).
 
     /// <summary>The beat after the song starts before the card does.</summary>
@@ -297,6 +428,14 @@ public static class OpeningTitle
 
     private static readonly string[] Suffixes = [" - Single", " - EP", " – Single", " – EP"];
 }
+
+/// <summary>A block of the title card as set (pixels, down from its top): its size, baselines and where its ink starts.</summary>
+/// <param name="Cap">Where the first line's ink (its capitals) starts.</param>
+/// <param name="Fits">The title at this size fits the column on at most two lines with no word broken.</param>
+public readonly record struct CardBlock(double Width, double Height, double FirstBaseline, double LastBaseline, double Cap, bool Fits = true);
+
+/// <summary>Where the card's parts go, down from its top: the title's size (an index into its sizes), the cover, the title block and the details.</summary>
+public readonly record struct CardGrid(int Title, double CoverTop, double TitleTop, double DetailsTop, double Width, double Height);
 
 /// <summary>How much of the card is drawn.</summary>
 public enum OpeningSize
