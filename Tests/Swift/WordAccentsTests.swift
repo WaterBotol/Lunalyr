@@ -269,4 +269,70 @@ final class WordAccentsTests: XCTestCase {
         XCTAssertEqual(WordAccentsSection.symbolsToggle, "Show symbols beside listed words")
         XCTAssertEqual(WordAccentsSection.actionsList, "Action word list")
     }
+
+    // MARK: Lively (preview)
+
+    func testLivelyDefaultsToWild() {
+        XCTAssertEqual(LivelyAction.defaultAmount, LivelyAction.wild)
+    }
+
+    /// Every kept lively action starts and ends at rest and moves without
+    /// a jump between frames at 240 Hz, for quick and long-held words.
+    func testLivelyMotionIsContinuousAndReturnsToRest() {
+        let kept = WordAction.allCases.filter { !WordAction.dropped.contains($0) }
+        for action in kept {
+            for hold in [0.3, 0.6, 1.2, 2.5] {
+                let D = LivelyAction.duration(action, hold: hold)
+                let A = LivelyAction.intensity(amount: LivelyAction.wild, hold: hold)
+                func pose(_ t: Double) -> LivelyPose { LivelyPose.make(action, t: t, duration: D, intensity: A, hold: hold) }
+                func turn(_ p: LivelyPose) -> Double {
+                    let a = p.turn.truncatingRemainder(dividingBy: 360)
+                    return a > 180 ? a - 360 : (a < -180 ? a + 360 : a)
+                }
+                for t in [0.002, D - 0.002] {
+                    let p = pose(t)
+                    let label = "\(action) hold \(hold) t \(t)"
+                    XCTAssertEqual(p.dx, 0, accuracy: 0.01, label); XCTAssertEqual(p.dy, 0, accuracy: 0.01, label)
+                    XCTAssertEqual(p.sx, 1, accuracy: 0.01, label); XCTAssertEqual(p.sy, 1, accuracy: 0.01, label)
+                    XCTAssertEqual(p.tilt, 0, accuracy: 0.5, label); XCTAssertEqual(turn(p), 0, accuracy: 1, label)
+                }
+                var last = pose(0)
+                for step in 1...Int(D * 240) + 1 {
+                    let t = Double(step) / 240
+                    let p = pose(t)
+                    let label = "\(action) hold \(hold) t \(t)"
+                    // A tremor (shake) moves sideways fastest: ~0.035 em a frame.
+                    XCTAssertLessThan(abs(p.dx - last.dx), 0.045, label)
+                    XCTAssertLessThan(abs(p.dy - last.dy), 0.05, label)
+                    XCTAssertLessThan(abs(p.sx - last.sx), 0.03, label)
+                    XCTAssertLessThan(abs(p.sy - last.sy), 0.03, label)
+                    XCTAssertLessThan(abs(p.tilt - last.tilt), 1.5, label)
+                    let step = (p.turn - last.turn).truncatingRemainder(dividingBy: 360)
+                    XCTAssertLessThan(min(abs(step), 360 - abs(step)), 12, label)
+                    last = p
+                }
+            }
+        }
+    }
+
+    func testLivelyLetterCurvesAreContinuous() {
+        for hold in [0.3, 1.2, 2.5] {
+            for (name, D, curve) in [
+                ("hop", LivelyAction.duration(.hop, hold: hold), { (t: Double, D: Double) in LivelyAction.hop(t, A: 1, hold: hold, duration: D).dy }),
+                ("dip", LivelyAction.duration(.dip, hold: hold), { LivelyAction.dip($0, A: 1, duration: $1) }),
+                ("melt", LivelyAction.duration(.melt, hold: hold), { LivelyAction.melt($0, delay: 0.2, duration: $1) }),
+                ("sink", LivelyAction.duration(.sink, hold: hold), { LivelyAction.sink($0, delay: 0.3, duration: $1) }),
+                ("shrink", LivelyAction.duration(.shrink, hold: hold), { LivelyAction.shrink($0, A: 1, duration: $1) }),
+            ] as [(String, Double, (Double, Double) -> Double)] {
+                XCTAssertEqual(curve(0.002, D), 0, accuracy: 0.01, name)
+                XCTAssertEqual(curve(D - 0.002, D), 0, accuracy: 0.01, name)
+                var last = 0.0
+                for step in 1...Int(D * 240) + 1 {
+                    let value = curve(Double(step) / 240, D)
+                    XCTAssertLessThan(abs(value - last), 0.05, "\(name) hold \(hold) step \(step)")
+                    last = value
+                }
+            }
+        }
+    }
 }

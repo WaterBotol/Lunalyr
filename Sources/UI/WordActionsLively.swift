@@ -49,8 +49,8 @@ extension EnvironmentValues {
 }
 
 enum LivelyAction {
-    /// Towards wild.
-    static let defaultAmount = 0.75
+    /// Wild.
+    static let defaultAmount = 1.0
     static let subtle = 0.2, middle = 0.5, wild = 1.0
 
     /// 0...1: the amount, scaled from 0.6× for a quickly sung word up to 1×
@@ -60,27 +60,28 @@ enum LivelyAction {
         return min(1, max(0, amount)) * held
     }
 
-    /// Seconds from the onset; longer for a longer-held word.
+    /// Seconds from the onset; longer for a longer-held word. Every curve
+    /// has come to rest (to well under a pixel) a little before this.
     static func duration(_ action: WordAction, hold rawHold: Double) -> Double {
         let h = min(2.5, max(0.2, rawHold))
         switch action {
-        case .spin: return h >= 0.9 ? 1.55 : 1.1
-        case .float: return max(1.3, h + 0.7)
-        case .dip: return 1.05
-        case .shake: return max(0.8, min(h, 1.4) + 0.4)
-        case .hop: return h >= 0.9 ? 1.85 : 1.25
-        case .grow, .shrink: return max(1.0, h + 0.5)
+        case .spin: return h >= 0.9 ? 2.1 : 1.75
+        case .float: return max(1.4, h + 0.8)
+        case .dip: return 1.35
+        case .shake: return max(0.9, min(h, 1.4) + 0.5)
+        case .hop: return h >= 0.9 ? 1.55 : 1.15
+        case .grow, .shrink: return max(1.2, h + 0.6)
         case .dissolve: return max(1.6, h + 0.75)
         case .flicker: return max(1.2, h + 0.5)
         case .frost: return max(1.6, h + 0.8)
         case .bleed: return max(1.6, h + 0.8)
         case .dark: return max(1.5, h + 0.6)
-        case .shatter: return 1.1
-        case .melt: return max(1.6, h + 0.7)
+        case .shatter: return 1.35
+        case .melt: return max(1.7, h + 0.8)
         case .echo: return max(1.2, h + 0.5)
-        case .pulse: return max(1.0, h + 0.4)
-        case .wave: return max(1.2, h + 0.5)
-        case .sink: return max(1.7, h + 0.8)
+        case .pulse: return max(1.0, h + 0.5)
+        case .wave: return max(1.3, h + 0.6)
+        case .sink: return max(1.9, h + 1.0)
         case .explode: return 1.5
         case .scream: return max(1.0, h + 0.4)
         case .whisper: return max(1.3, h + 0.6)
@@ -90,7 +91,13 @@ enum LivelyAction {
         }
     }
 
-    // Shared curves.
+    // MARK: Curves
+    //
+    // The motion is built from damped springs (zero speed at the start, an
+    // overshoot, a settle), sin² bumps for anticipation and squash, and
+    // smoothsteps: every curve is continuous in value and speed, so nothing
+    // pops, snaps or freezes at its start or its end.
+
     static func ss(_ x: Double) -> Double { Easing.smoothstep(x) }
     static func clamp01(_ x: Double) -> Double { min(1, max(0, x)) }
     /// In over `attack`, out over the last `release` of `duration`.
@@ -102,28 +109,136 @@ enum LivelyAction {
         return 1 + (s + 1) * u * u * u + s * u * u
     }
     static func easeOutCubic(_ x: Double) -> Double { let u = 1 - clamp01(x); return 1 - u * u * u }
+
+    /// A damped spring let go at t = 0, from 0 towards 1, starting at rest.
+    /// `peak`: seconds to its first (overshooting) peak; `overshoot`: how
+    /// far past 1 that peak goes (0.1 = 10 %).
+    static func spring(_ t: Double, peak: Double, overshoot: Double) -> Double {
+        guard t > 0 else { return 0 }
+        let l = log(max(1e-4, overshoot))
+        let zeta = -l / sqrt(.pi * .pi + l * l)
+        let wd = .pi / peak
+        let w = wd / sqrt(1 - zeta * zeta)
+        return 1 - exp(-zeta * w * t) * (cos(wd * t) + zeta * w / wd * sin(wd * t))
+    }
+    /// A sin² hump over [0, width]: starts and ends at rest.
+    static func bump(_ t: Double, _ width: Double) -> Double {
+        guard t > 0, t < width else { return 0 }
+        let s = sin(.pi * t / width)
+        return s * s
+    }
+    /// 1, falling smoothly to 0 over the last `last` seconds before `D`
+    /// (by then whatever it multiplies has all but come to rest).
+    static func rest(_ t: Double, _ D: Double, last: Double = 0.22) -> Double {
+        1 - ss((t - (D - last)) / last)
+    }
+    /// A soft limit to ±`limit`.
+    static func soft(_ x: Double, _ limit: Double) -> Double { limit * tanh(x / limit) }
+
     /// A seeded number in 0..<1.
     static func rnd(_ seed: Int, _ a: Int, _ b: Int) -> Double {
         var h = UInt64(bitPattern: Int64(seed &* 73_856_093 ^ a &* 19_349_663 ^ b &* 83_492_791))
         h ^= h >> 33; h &*= 0xff51afd7ed558ccd; h ^= h >> 33; h &*= 0xc4ceb9fe1a85ec53; h ^= h >> 33
         return Double(h % 10_000) / 10_000
     }
-    /// A heartbeat's thump: a quick swell and an exponential fall.
+    /// A heartbeat's thump: a smooth swell to 1 at 70 ms and a fall
+    /// (zero speed at the start, no corner at the peak).
     static func thump(_ u: Double) -> Double {
         guard u > 0 else { return 0 }
-        return ss(u / 0.06) * exp(-max(0, u - 0.06) / 0.11)
+        let x = u / 0.07
+        return x * x * exp(2 * (1 - x))
+    }
+
+    // MARK: Shared motions (whole word and letters agree)
+
+    /// Spin: the turn in degrees. A wind-up the other way, then one or two
+    /// whole turns (eased in and out, at most ~1200°/s, so the word reads
+    /// as it goes round), swinging ~18° past, back a little, and settling.
+    static func spinAngle(_ t: Double, A: Double, hold: Double, duration D: Double) -> Double {
+        guard t > 0, t < D else { return 0 }
+        let turns: Double = hold >= 0.9 && A > 0.35 ? 2 : 1
+        let target = 360 * turns
+        let start = 0.16, time = turns == 2 ? 1.15 : 0.85
+        var x = clamp01((t - start) / time)
+        x = x * x * x * (x * (6 * x - 15) + 10)
+        let tau = t - (start + 0.72 * time)
+        let swing = tau > 0 ? 40 * A * ss(tau / 0.2) * exp(-3.2 * tau) * sin(2 * .pi * 1.15 * tau) : 0
+        let angle = -26 * A * bump(t, 0.34) + target * x + swing
+        // Whatever is left of the settle (a degree or two) eases out to rest.
+        return target + (angle - target) * rest(t, D, last: 0.3)
+    }
+    /// Spin: how fast it is turning, 0...1.
+    static func spinSpeed(_ t: Double, A: Double, hold: Double, duration D: Double) -> Double {
+        let dt = 1.0 / 240
+        let v = (spinAngle(t + dt, A: A, hold: hold, duration: D) - spinAngle(t - dt, A: A, hold: hold, duration: D)) / (2 * dt)
+        return min(1, abs(v) / 1100)
+    }
+
+    /// Hop: the whole word's jump, in ems (negative is up), with its squash
+    /// and stretch (`sy`; `sx` keeps the volume) and lean, from the foot.
+    static func hop(_ t: Double, A: Double, hold: Double, duration D: Double) -> (dy: Double, sy: Double, tilt: Double) {
+        guard t > 0, t < D else { return (0, 1, 0) }
+        var dy = 0.0, sy = 1.0, tilt = 0.0
+        // Crouch, push off.
+        sy -= 0.17 * A * bump(t, 0.24)
+        // A ballistic arc: stretched while fast, round at the top.
+        func flight(_ start: Double, _ time: Double, _ height: Double, _ lean: Double) {
+            let v = (t - start) / time
+            guard v > 0, v < 1 else { return }
+            dy -= height * 4 * v * (1 - v)
+            let fast = abs(1 - 2 * v) * ss(v / 0.16) * ss((1 - v) / 0.16)
+            sy += 0.16 * A * fast * (height / (0.82 * max(0.01, A)))
+            tilt += lean * sin(2 * .pi * v) * sin(.pi * v)
+        }
+        let land1 = 0.13 + 0.42
+        flight(0.13, 0.42, 0.82 * A, -7 * A)
+        // Landing: squash, then a smaller bounce, then a wobble to rest.
+        sy -= 0.2 * A * bump(t - land1 + 0.02, 0.2)
+        var last = land1
+        if hold >= 0.9 {
+            let start2 = land1 + 0.12
+            flight(start2, 0.3, 0.34 * A, 5 * A)
+            last = start2 + 0.3
+            sy -= 0.11 * A * bump(t - last + 0.02, 0.16)
+        } else {
+            flight(land1 + 0.1, 0.2, 0.12 * A, 0)
+            last = land1 + 0.3
+        }
+        let u = t - last - 0.12
+        if u > 0 { sy += 0.045 * A * exp(-7 * u) * sin(2 * .pi * 4.2 * u) }
+        let r = rest(t, D)
+        return (dy * r, 1 + (sy - 1) * r, tilt * r)
+    }
+
+    /// Dip: the whole word's drop, in ems (positive is down): a lift, a
+    /// fast fall, a spring back up past the line, a settle.
+    static func dip(_ t: Double, A: Double, duration D: Double) -> Double {
+        guard t > 0, t < D else { return 0 }
+        let down = spring(t - 0.1, peak: 0.2, overshoot: 0.08)
+        let up = spring(t - 0.34, peak: 0.3, overshoot: 0.22)
+        return (0.62 * A * (down - up) - 0.08 * A * bump(t, 0.22)) * rest(t, D)
+    }
+
+    /// Melt: 0 → 1 as it softens, back through a jelly wobble (a little
+    /// below 0) as it firms up.
+    static func melt(_ t: Double, delay: Double, duration D: Double) -> Double {
+        guard t > 0, t < D else { return 0 }
+        let soften = spring(t - 0.05 - delay, peak: 0.6, overshoot: 0.02)
+        let firm = spring(t - (D - 0.72) - 0.5 * delay, peak: 0.2, overshoot: 0.3)
+        return (soften - firm) * rest(t, D)
     }
 }
 
 /// The whole-word part of one frame. Travel in ems, angles in degrees.
 struct LivelyPose: Equatable {
     var dx = 0.0, dy = 0.0
-    /// About the upright axis, drawn as a horizontal squeeze (cos).
+    /// About the upright axis, drawn as a real turn in perspective
+    /// (the back of the word reads the right way round).
     var turn = 0.0
     /// In the plane.
     var tilt = 0.0
     var sx = 1.0, sy = 1.0
-    /// Scale anchor: 0.5 centre, 1 the foot.
+    /// Scale anchor: 0 the top, 0.5 centre, 1 the foot.
     var anchorY = 0.5
     var opacity = 1.0
     var glow = 0.0
@@ -132,6 +247,8 @@ struct LivelyPose: Equatable {
     var warm = 0.0, cool = 0.0, red = 0.0
     /// 0...1: the whole word (and its label) darkened.
     var dim = 0.0
+    /// 0...1: the whirlwind round a spinning word.
+    var twister = 0.0
 
     static let identity = LivelyPose()
 
@@ -140,115 +257,155 @@ struct LivelyPose: Equatable {
               blue: max(0, 1 - 0.55 * warm - 0.55 * red) * (1 - dim))
     }
 
+    /// The turn as drawn: past edge-on the word shows its back, which reads
+    /// the right way round (the flip happens while it is a sliver).
+    var shownTurn: Double {
+        let a = turn.truncatingRemainder(dividingBy: 360)
+        return cos(a * .pi / 180) < 0 ? a + 180 : a
+    }
+
     // swiftlint:disable:next cyclomatic_complexity function_body_length
     static func make(_ action: WordAction, t: Double, duration D: Double, intensity A: Double, hold: Double) -> LivelyPose {
         guard t > 0, t < D else { return .identity }
         typealias L = LivelyAction
         var pose = LivelyPose()
-        let tail = 1 - L.ss((t - (D - 0.1)) / 0.1)
+        let rest = L.rest(t, D)
         switch action {
         case .spin:
-            let turns: Double = hold >= 0.9 && A > 0.35 ? 2 : 1
-            let spinTime = turns == 2 ? 1.1 : 0.75
-            let q = min(1, t / spinTime)
-            // Eases in (so the word is seen before it turns), overshoots, settles.
-            pose.turn = 360 * turns * L.easeOutBack(pow(q, 1.6), 1.2 * A)
-            // A wobble as it settles, in the plane.
-            let u = t - spinTime * 0.9
-            if u > 0 { pose.tilt = 9 * A * exp(-5 * u) * sin(2 * .pi * 2.6 * u) * tail }
-            let up = L.envelope(t, attack: 0.2, release: 0.4, duration: D)
-            pose.dy = -0.14 * A * up
-            pose.sx = 1 + 0.1 * A * up
-            pose.sy = (1 + 0.1 * A * up) * (1 + 0.07 * A * abs(sin(pose.turn * .pi / 180)))
-            pose.glow = 0.35 * up
+            pose.turn = L.spinAngle(t, A: A, hold: hold, duration: D)
+            let speed = L.spinSpeed(t, A: A, hold: hold, duration: D)
+            let wind = L.bump(t, 0.34)
+            // A twister: it crouches as it winds up, then lifts, stretches
+            // tall and leans into the turn while it whirls.
+            let whirl = L.ss(speed / 0.8)
+            pose.dy = (-0.24 * A * whirl + 0.05 * A * wind) * rest
+            pose.sy = 1 + (0.1 * A * whirl - 0.08 * A * wind) * rest
+            pose.sx = 1 + (0.06 * A * wind - 0.03 * A * whirl) * rest
+            pose.anchorY = 1
+            pose.tilt = -8 * A * whirl * sin(.pi * L.clamp01(t / (D * 0.7))) * rest
+            pose.glow = (0.25 + 0.45 * whirl) * L.envelope(t, attack: 0.15, release: 0.4, duration: D)
+            pose.twister = whirl * A
         case .float:
-            let lift = L.ss(t / 0.42) * (1 - L.ss((t - (D - 0.5)) / 0.5))
-            pose.dy = -0.3 * A * lift - 0.05 * A * sin(2 * .pi * 1.5 * t) * lift
-            pose.dx = 0.09 * A * sin(2 * .pi * 0.7 * t) * lift
-            pose.tilt = 3.5 * A * sin(2 * .pi * 0.9 * t + 0.5) * lift
-            pose.glow = 0.4 * lift
+            let lift = L.spring(t - 0.02, peak: 0.5, overshoot: 0.08) - L.spring(t - (D - 0.78), peak: 0.5, overshoot: 0.05)
+            let drift = L.ss(t / 0.5) * L.rest(t, D, last: 0.6)
+            pose.dy = (-0.42 * A * lift - 0.05 * A * sin(2 * .pi * 1.1 * t) * drift) * rest
+            pose.dx = 0.08 * A * sin(2 * .pi * 0.6 * t) * drift
+            pose.tilt = 3.5 * A * sin(2 * .pi * 0.8 * t + 0.5) * drift
+            pose.glow = 0.45 * L.clamp01(lift) * rest
         case .dip:
-            if t < 0.16 {
-                let f = t / 0.16
-                pose.dy = 0.6 * A * f * f
-            } else {
-                let u = (t - 0.16) / (D - 0.16)
-                pose.dy = 0.6 * A * exp(-3.2 * u) * cos(2 * .pi * 1.25 * u) * tail
-                let w = L.clamp01((t - 0.16) / 0.16)
-                pose.sy = 1 - 0.2 * A * sin(.pi * w)
-                pose.sx = 1 + 0.13 * A * sin(.pi * w)
-                pose.anchorY = 1
-            }
+            let dy = L.dip(t, A: A, duration: D)
+            pose.dy = dy
+            // Squashed at the bottom, a little stretched coming back up.
+            let low = max(0, dy / max(0.01, 0.62 * A))
+            pose.sy = 1 - 0.16 * A * low * low + 0.06 * A * max(0, -dy / max(0.01, 0.1 * A)) * 0.5
+            pose.sx = 1 + 0.11 * A * low * low
+            pose.anchorY = 1
         case .shake:
-            let e = L.envelope(t, attack: 0.05, release: 0.4, duration: D)
-            pose.dx = 0.11 * A * e * sin(2 * .pi * 11 * t)
-            pose.tilt = 4.5 * A * e * sin(2 * .pi * 8 * t + 1.1)
+            // A quick onset, a tremor that swells and fades in waves, and a
+            // decay like a struck thing coming to rest.
+            let fade = t < D - 0.6 ? 1 : exp(-(t - (D - 0.6)) / 0.16)
+            let e = L.ss(t / 0.08) * fade * (0.8 + 0.2 * sin(2 * .pi * 2.3 * t)) * rest
+            pose.dx = 0.11 * A * e * (0.72 * sin(2 * .pi * 11 * t) + 0.28 * sin(2 * .pi * 17.3 * t + 1))
+            pose.dy = 0.025 * A * e * sin(2 * .pi * 9.4 * t + 2)
+            pose.tilt = 5 * A * e * (0.7 * sin(2 * .pi * 8 * t + 1.1) + 0.3 * sin(2 * .pi * 13.1 * t + 0.4))
         case .hop:
-            break
+            let h = L.hop(t, A: A, hold: hold, duration: D)
+            pose.dy = h.dy
+            pose.sy = h.sy
+            pose.sx = 1 - 0.55 * (h.sy - 1)
+            pose.tilt = h.tilt
+            pose.anchorY = 1
         case .grow:
-            let k = L.easeOutBack(min(1, t / 0.32), 1.8)
-            let r = L.ss((t - (D - 0.45)) / 0.45)
-            let held = k * (1 - r)
-            pose.sx = 1 + 0.5 * A * held - 0.04 * A * sin(.pi * r) + 0.025 * A * sin(2 * .pi * 2 * t) * held
-            pose.sy = pose.sx
-            pose.glow = 0.9 * min(1, held)
+            let up = L.spring(t - 0.1, peak: 0.3, overshoot: 0.18)
+            let down = L.spring(t - (D - 0.6), peak: 0.3, overshoot: 0.12)
+            let held = up - down
+            let breathe = L.ss((t - 0.4) / 0.3) * L.rest(t, D, last: 0.7)
+            let s = (0.52 * A * held - 0.06 * A * L.bump(t, 0.18) + 0.025 * A * sin(2 * .pi * 1.8 * (t - 0.4)) * breathe) * rest
+            pose.sx = 1 + s
+            pose.sy = 1 + s
+            pose.glow = 0.9 * L.clamp01(held) * rest
         case .shrink:
-            let k = L.ss(t / 0.2)
-            let u = (t - (D - 0.6)) / 0.6
-            let s = k * (u < 0 ? 1 : exp(-4.5 * u) * cos(2 * .pi * 1.3 * u)) * tail
-            pose.sx = 1 - 0.5 * A * s
-            pose.sy = 1 - 0.36 * A * s
+            let s = L.shrink(t, A: A, duration: D)
+            pose.sx = 1 - s
+            pose.sy = 1 - 0.72 * s
         case .dissolve:
             pose.glow = 0.3 * L.envelope(t, attack: 0.3, release: 0.5, duration: D)
         case .flicker:
-            let e = L.envelope(t, attack: 0.12, release: 0.4, duration: D)
+            let e = L.envelope(t, attack: 0.15, release: 0.45, duration: D)
             let n = sin(2 * .pi * 7.3 * t) * sin(2 * .pi * 3.1 * t + 1)
             pose.warm = 0.9 * A * e
             pose.glow = e * (0.8 + 0.6 * abs(n))
-            pose.opacity = 1 - 0.12 * A * e * abs(sin(2 * .pi * 9.7 * t))
+            pose.opacity = 1 - 0.1 * A * e * (0.5 + 0.5 * sin(2 * .pi * 9.7 * t))
             pose.sx = 1 + 0.04 * A * e * n
-            pose.sy = pose.sx
+            pose.sy = 1 + 0.04 * A * e * n
+            pose.dy = -0.02 * A * e * sin(2 * .pi * 2.2 * t)
         case .frost:
-            let f = L.ss(t / 0.5), r = L.ss((t - (D - 0.5)) / 0.5)
+            let f = L.ss(t / 0.5), r = L.ss((t - (D - 0.55)) / 0.55)
             let frozen = f * (1 - r)
             pose.cool = 0.95 * A * frozen
-            // A shiver as it sets, then still.
-            let set = exp(-pow((t - 0.45) / 0.09, 2))
-            pose.dx = 0.03 * A * sin(2 * .pi * 24 * t) * set
+            // A shiver as it sets (then still, stiff), and a shake-off as it thaws.
+            let set = exp(-pow((t - 0.42) / 0.1, 2))
+            let thaw = exp(-pow((t - (D - 0.3)) / 0.09, 2))
+            pose.dx = 0.03 * A * sin(2 * .pi * 14 * t) * (set + 0.6 * thaw)
             pose.sy = 1 + 0.03 * A * frozen
+            pose.sx = 1 - 0.015 * A * frozen
+            pose.anchorY = 1
             pose.glow = 0.3 * frozen
         case .bleed:
-            pose.red = 0.9 * A * L.envelope(t, attack: 0.3, release: 0.5, duration: D)
+            let e = L.envelope(t, attack: 0.3, release: 0.5, duration: D)
+            pose.red = 0.9 * A * e
+            // Heavy: it sags a hair as the drips run.
+            pose.dy = 0.04 * A * e
+            pose.sy = 1 - 0.02 * A * e
+            pose.anchorY = 1
         case .dark:
-            let e = L.envelope(t, attack: 0.4, release: 0.5, duration: D)
-            pose.sx = 1 - 0.03 * A * e
+            let e = L.envelope(t, attack: 0.45, release: 0.55, duration: D)
+            pose.sx = 1 - 0.04 * A * e
             pose.sy = pose.sx
+            pose.dy = 0.03 * A * e
             pose.dim = 0.5 * A * e
         case .shatter:
-            // The snap back flashes.
-            pose.glow = 1.1 * exp(-pow((t - 0.72) / 0.07, 2)) + 0.6 * exp(-pow((t - 0.06) / 0.05, 2))
+            // A jolt on the break and a smaller one on the snap back; the
+            // snap back flashes.
+            func jolt(_ u: Double) -> Double { u > 0 ? L.ss(u / 0.015) * exp(-u / 0.09) * sin(2 * .pi * 16 * u) : 0 }
+            pose.dx = (0.05 * A * jolt(t - 0.05) + 0.03 * A * jolt(t - 0.66)) * rest
+            pose.tilt = (2.5 * A * jolt(t - 0.06) - 1.5 * A * jolt(t - 0.67)) * rest
+            pose.glow = 1.1 * exp(-pow((t - 0.7) / 0.07, 2)) + 0.6 * exp(-pow((t - 0.06) / 0.05, 2))
         case .melt:
-            pose.warm = 0.15 * A * L.envelope(t, attack: 0.4, release: 0.4, duration: D)
+            // The whole label sags from its top, and firms up with a wobble.
+            let m = L.melt(t, delay: 0.08, duration: D)
+            pose.warm = 0.15 * A * L.clamp01(m)
+            pose.sy = 1 + 0.1 * A * m
+            pose.sx = 1 - 0.03 * A * m
+            pose.anchorY = 0
         case .echo:
-            pose.glow = 0.3 * L.envelope(t, attack: 0.2, release: 0.4, duration: D)
+            let e = L.envelope(t, attack: 0.2, release: 0.45, duration: D)
+            pose.glow = 0.3 * e
+            pose.dx = L.echoSway(t, A: A) * e
         case .pulse:
             var s = 0.0
             var beat = 0.0
             let last = max(0.01, hold - 0.3)
             while beat <= last {
-                s += 0.22 * A * L.thump(t - beat) + 0.14 * A * L.thump(t - beat - 0.24)
+                s += 0.2 * A * L.thump(t - beat) + 0.13 * A * L.thump(t - beat - 0.24)
                 beat += 0.8
             }
-            pose.sx = 1 + s * tail
-            pose.sy = pose.sx
+            s *= rest
+            pose.sx = 1 + s
+            pose.sy = 1 + s
             pose.glow = min(1.4, 3.5 * s)
             pose.warm = min(0.5, 1.5 * s)
         case .wave:
-            break
+            // The label rides the swell, rocking like a boat.
+            let e = L.envelope(t, attack: 0.35, release: 0.5, duration: D)
+            let phase = 2 * .pi * (0.55 - 1.5 * t)
+            pose.dy = -0.07 * A * sin(phase) * e
+            pose.tilt = 4 * A * cos(phase) * e
         case .sink:
-            let d = L.ss(t / 0.5) * (1 - L.ss((t - (D - 0.55)) / 0.55))
-            pose.dy = 0.06 * A * d
-            pose.cool = 0.3 * d
+            let d = L.sink(t, delay: 0.15, duration: D)
+            pose.dy = 0.62 * A * d
+            pose.tilt = 2.5 * A * sin(2 * .pi * 0.7 * t) * L.clamp01(d)
+            pose.cool = 0.3 * L.clamp01(d)
         case .explode:
             pose.glow = 1.2 * exp(-pow((t - 0.08) / 0.08, 2))
         case .scream:
@@ -287,6 +444,30 @@ struct LivelyPose: Equatable {
             pose.cool = e * 0.35 * flash
         }
         return pose
+    }
+}
+
+extension LivelyAction {
+    /// Shrink: how far it has pulled in (0 at rest): a little swell first,
+    /// a spring in, a tremble while squeezed, a pop back out past full size.
+    static func shrink(_ t: Double, A: Double, duration D: Double) -> Double {
+        guard t > 0, t < D else { return 0 }
+        let squeeze = spring(t - 0.12, peak: 0.24, overshoot: 0.12) - spring(t - (D - 0.55), peak: 0.26, overshoot: 0.28)
+        let tremble = 0.012 * A * sin(2 * .pi * 9 * t) * ss((t - 0.3) / 0.2) * rest(t, D, last: 0.65)
+        return (0.46 * A * squeeze - 0.06 * A * bump(t, 0.2) + tremble) * rest(t, D)
+    }
+
+    /// Echo: the word's sway, in ems.
+    static func echoSway(_ t: Double, A: Double) -> Double { 0.22 * A * sin(2 * .pi * 0.9 * max(0, t)) }
+
+    /// Sink: 0 → 1 as a letter goes under (slow to start, heavy, a bob at
+    /// the bottom), back up quickly past the line (a little below 0) and
+    /// settling.
+    static func sink(_ t: Double, delay: Double, duration D: Double) -> Double {
+        guard t > 0, t < D else { return 0 }
+        let under = spring(t - 0.05 - delay, peak: 0.55, overshoot: 0.1)
+        let up = spring(t - (D - 0.85) - 0.35 * delay, peak: 0.3, overshoot: 0.2)
+        return (under - up) * rest(t, D)
     }
 }
 
@@ -337,16 +518,136 @@ struct LivelyActionEffect: ViewModifier {
             let pose = LivelyPose.make(action, t: elapsed, duration: duration, intensity: intensity, hold: hold)
             let glyphs = LivelyGlyphs(action: action, t: elapsed, duration: duration, intensity: intensity, hold: hold,
                                       size: size, glow: glow, seed: 11, lift: pose.dy)
-            let squeeze: Double = cos(pose.turn * .pi / 180)
+            let twister = pose.twister > 0.005
+                ? LivelyTwister(t: elapsed, turn: pose.turn, strength: pose.twister, size: size, glow: glow) : nil
             content
                 .environment(\.lyricLivelyGlyphs, glyphs)
                 .colorMultiply(pose.multiply)
                 .shadow(color: glow.opacity(min(0.9, 0.75 * pose.glow)), radius: max(1, size * 0.22 * CGFloat(min(2, pose.glow))))
                 .shadow(color: glow.opacity(0.55 * pose.bloom), radius: max(1, size * 0.8 * CGFloat(pose.bloom)))
-                .scaleEffect(x: CGFloat(pose.sx * squeeze), y: CGFloat(pose.sy), anchor: UnitPoint(x: 0.5, y: pose.anchorY))
+                .scaleEffect(x: CGFloat(pose.sx), y: CGFloat(pose.sy), anchor: UnitPoint(x: 0.5, y: pose.anchorY))
+                .modifier(LivelyTurn(degrees: action == .spin ? pose.shownTurn : nil, room: size))
+                // Spin's whirlwind: the far side of the funnel behind the
+                // word, the near side in front.
+                .background { if let twister { twister.side(front: false).padding(-size * 1.3) } }
+                .overlay { if let twister { twister.side(front: true).padding(-size * 1.3) } }
                 .rotationEffect(.degrees(pose.tilt))
                 .offset(x: CGFloat(pose.dx) * size, y: CGFloat(pose.dy) * size)
+                // Sink: under the water line (fixed where the word stands)
+                // the label shows faintly.
+                .modifier(LivelyWaterline(depth: action == .sink ? LivelyAction.clamp01(pose.dy / max(0.01, 0.62 * intensity)) : nil,
+                                          size: size))
                 .opacity(pose.opacity)
+        }
+    }
+}
+
+/// A real turn about the upright axis, in perspective. Drawn flattened
+/// (with room around it for the near edge to grow), so it reads the same
+/// wherever the word is drawn, including a snapshot of the view.
+struct LivelyTurn: ViewModifier {
+    /// Nil: no turn (and no flattening).
+    let degrees: Double?
+    let room: CGFloat
+
+    func body(content: Content) -> some View {
+        if let degrees {
+            content
+                .rotation3DEffect(.degrees(degrees), axis: (x: 0, y: 1, z: 0), perspective: 0.5)
+                .padding(room)
+                .drawingGroup()
+                .padding(-room)
+        } else {
+            content
+        }
+    }
+}
+
+/// Sink's water line: at the foot of the word's place, everything below it
+/// fades as the word goes under.
+struct LivelyWaterline: ViewModifier {
+    /// Nil: none.
+    let depth: Double?
+    let size: CGFloat
+
+    func body(content: Content) -> some View {
+        if let depth {
+            content.mask {
+                Canvas { context, canvas in
+                    let line = canvas.height - size * 2.1
+                    context.fill(Path(CGRect(x: 0, y: 0, width: canvas.width, height: line)), with: .color(.black))
+                    let under = CGRect(x: 0, y: line, width: canvas.width, height: canvas.height - line)
+                    context.fill(Path(under), with: .linearGradient(
+                        Gradient(colors: [.black.opacity(1 - 0.35 * depth), .black.opacity(1 - 0.7 * depth)]),
+                        startPoint: CGPoint(x: 0, y: line), endPoint: CGPoint(x: 0, y: line + size * 0.7)))
+                }
+                .padding(-size * 2)
+            }
+        } else {
+            content
+        }
+    }
+}
+
+/// Spin's whirlwind: a funnel of streaks and dust curling round the word,
+/// narrow at its foot, wide above, faster near the bottom. Drawn in two
+/// halves, the far one behind the word and the near one in front.
+struct LivelyTwister {
+    let t: Double
+    /// The word's turn, degrees: the streaks wind with it.
+    let turn: Double
+    /// 0...1.
+    let strength: Double
+    let size: CGFloat
+    let glow: Color
+
+    func side(front: Bool) -> some View {
+        Canvas { context, canvasSize in
+            draw(front: front, in: &context, rect: CGRect(origin: .zero, size: canvasSize))
+        }
+        .allowsHitTesting(false)
+    }
+
+    private func draw(front: Bool, in context: inout GraphicsContext, rect: CGRect) {
+        typealias L = LivelyAction
+        let word = rect.insetBy(dx: size * 1.3, dy: size * 1.3)
+        guard word.width > 0, word.height > 0 else { return }
+        let k = strength
+        let bottom = word.maxY + size * 0.18, top = word.minY - size * 0.6
+        let spin = turn * .pi / 180
+        func place(_ h: Double, _ a: Double) -> CGPoint {
+            let rx = (word.width * 0.5 * (0.5 + 0.62 * h) + size * 0.14) * (0.72 + 0.28 * k)
+            let ry = rx * 0.16 + size * 0.04
+            return CGPoint(x: word.midX + rx * CGFloat(cos(a)), y: bottom + (top - bottom) * CGFloat(h) + ry * CGFloat(sin(a)))
+        }
+        let rings = 6, segments = 9, span = 1.25
+        for ring in 0..<rings {
+            let h = Double(ring) / Double(rings - 1)
+            for j in 0..<2 {
+                let a0 = spin * (1.25 - 0.5 * h) + t * (5.5 - 2.5 * h) + Double(ring) * 1.3 + Double(j) * .pi
+                for s in 0..<segments {
+                    let f0 = Double(s) / Double(segments), f1 = Double(s + 1) / Double(segments)
+                    let a = a0 + span * f0, b = a0 + span * f1
+                    // The near half is the lower half of each ring.
+                    guard (sin((a + b) / 2) > 0) == front else { continue }
+                    var path = Path()
+                    path.move(to: place(h, a)); path.addLine(to: place(h, b))
+                    // Tapered: bright at the head, fading along the tail.
+                    let alpha = k * (front ? 0.6 : 0.28) * f1 * (0.55 + 0.45 * h)
+                    context.stroke(path, with: .color(glow.opacity(alpha)),
+                                   style: StrokeStyle(lineWidth: max(1, size * CGFloat(0.022 + 0.018 * h * f1)), lineCap: .round))
+                }
+            }
+        }
+        // Dust spiralling up the funnel.
+        for n in 0..<16 {
+            let h = (t * 0.85 + L.rnd(5, n, 1)).truncatingRemainder(dividingBy: 1)
+            let a = L.rnd(5, n, 2) * 2 * .pi + t * (7 - 3 * h) + spin * 0.6
+            guard (sin(a) > 0) == front else { continue }
+            let p = place(h, a)
+            let r = size * CGFloat(0.022 + 0.022 * L.rnd(5, n, 3))
+            context.fill(Path(ellipseIn: CGRect(x: p.x - r, y: p.y - r, width: 2 * r, height: 2 * r)),
+                         with: .color(glow.opacity(k * (front ? 0.85 : 0.4) * sin(.pi * h))))
         }
     }
 }
@@ -460,56 +761,54 @@ struct LivelyGlyphRenderer: TextRenderer {
         }
         let foot = CGPoint(x: g.rect.midX, y: g.baseline)
         switch state.action {
+        case .spin:
+            // A twist through the word: the inner letters lead the turn, the
+            // outer ones trail it, each turned about its own upright (never
+            // past 45°, so none reads backwards), lifted and fanned a little.
+            let D = state.duration, hold = state.hold
+            let from = abs(g.along - 0.5) * 2
+            let lag = 0.01 + 0.04 * from
+            let turn = L.spinAngle(t, A: A, hold: hold, duration: D)
+            let delta = L.soft(L.spinAngle(t - lag, A: A, hold: hold, duration: D) - turn, 45) * .pi / 180
+            let speed = L.spinSpeed(t - lag, A: A, hold: hold, duration: D)
+            transform(dy: -0.07 * A * L.ss(speed) * (1 - from) * size, sx: cos(delta),
+                      deg: -6 * A * L.ss(speed) * (g.along - 0.5) * 2, anchor: mid, into: &c)
+            plain()
         case .hop:
-            let stagger = min(0.09, 0.5 / Double(max(1, count - 1)))
-            // A held word hops twice, the second wave smaller.
-            let first = t - 0.04 - i * stagger
-            let second = t - 0.62 - i * stagger
-            let twice = state.hold >= 0.9 && second > 0
-            let u = twice ? second : first
-            let A = twice ? A * 0.6 : A
-            var dy = 0.0, sx = 1.0, sy = 1.0
-            if u > 0 && u < 0.08 {
-                let k = L.ss(u / 0.08)
-                sy = 1 - 0.22 * A * k; sx = 1 + 0.13 * A * k
-            } else if u >= 0.08 && u < 0.4 {
-                let v = (u - 0.08) / 0.32
-                dy = -0.8 * A * 4 * v * (1 - v)
-                let speed = abs(1 - 2 * v)
-                sy = 1 + 0.2 * A * speed; sx = 1 - 0.1 * A * speed
-            } else if u >= 0.4 && u < 0.5 {
-                let w = sin(.pi * (u - 0.4) / 0.1)
-                sy = 1 - 0.2 * A * w; sx = 1 + 0.12 * A * w
-            } else if u >= 0.5 && u < 0.7 {
-                dy = -0.13 * A * sin(.pi * (u - 0.5) / 0.2)
-            }
-            transform(dy: dy * size, sx: sx, sy: sy, anchor: foot, into: &c)
+            // The word hops as one, label and all; the letters trail it a
+            // touch, one after another.
+            let lag = 0.035 * g.along
+            let now = L.hop(t, A: A, hold: state.hold, duration: D)
+            let late = L.hop(t - lag, A: A, hold: state.hold, duration: D)
+            let dy = L.soft(0.7 * (late.dy - now.dy), 0.09)
+            transform(dy: dy * size, sx: 1 - 0.3 * (late.sy - now.sy), sy: 1 + 0.6 * (late.sy - now.sy),
+                      anchor: foot, into: &c)
             plain()
         case .shake:
             let ti = 0.08 + g.along * 0.5 * min(D - 0.4, 1.0)
-            let w = exp(-pow((t - ti) / 0.12, 2))
-            let dy = 0.07 * A * sin(2 * .pi * 19 * t + i * 1.7) * w
+            let w = exp(-pow((t - ti) / 0.14, 2)) * L.rest(t, D)
+            let dy = 0.05 * A * sin(2 * .pi * 19 * t + i * 1.7) * w
             let deg = 10 * A * sin(2 * .pi * 13 * t + i) * w
             transform(dy: dy * size, deg: deg, anchor: mid, into: &c)
             plain()
         case .float:
-            let lift = L.ss(t / 0.42) * (1 - L.ss((t - (D - 0.5)) / 0.5))
-            // Each letter lifts off on its own, a little after the last.
-            let own = L.ss((t - 0.05 - g.along * 0.2) / 0.38) * (1 - L.ss((t - (D - 0.6) - g.along * 0.1) / 0.45))
-            let dy = -0.4 * A * own - 0.08 * A * sin(2 * .pi * 1.3 * t - i * 0.7) * lift
-            let deg = 6 * A * sin(2 * .pi * 1.1 * t - i * 0.9) * lift
+            // The label carries the lift; each letter bobs on its own a
+            // little out of step, like things on water.
+            let drift = L.ss((t - 0.1 - g.along * 0.15) / 0.45) * L.rest(t, D, last: 0.6 + 0.1 * g.along)
+            let dy = -0.06 * A * sin(2 * .pi * 1.2 * t - g.along * 2.4) * drift
+            let deg = 5 * A * sin(2 * .pi * 0.9 * t - i * 0.9) * drift
             transform(dy: dy * size, deg: deg, anchor: mid, into: &c)
             plain()
         case .dip:
-            let ti = 0.1 + g.along * 0.18
-            let dy = 0.09 * A * sin(.pi * L.clamp01((t - ti) / 0.25))
+            // The letters follow the word down and up a beat late, in a ripple.
+            let lag = 0.07 * g.along
+            let dy = L.soft(0.6 * (L.dip(t - lag, A: A, duration: D) - L.dip(t, A: A, duration: D)), 0.09)
             transform(dy: dy * size, anchor: mid, into: &c)
             plain()
         case .shrink:
-            let k = L.ss(t / 0.2)
-            let u = (t - (D - 0.6)) / 0.6
-            let s = k * (u < 0 ? 1 : exp(-4.5 * u) * cos(2 * .pi * 1.3 * u))
-            transform(dx: Double(word.midX - g.rect.midX) * 0.15 * A * s, anchor: mid, into: &c)
+            // Squeezed together, then out again a touch after the word.
+            let s = L.shrink(t - 0.03 * abs(g.along - 0.5), A: A, duration: D) / 0.46
+            transform(dx: Double(word.midX - g.rect.midX) * 0.14 * s, anchor: mid, into: &c)
             plain()
         case .whisper:
             let w = L.envelope(t, attack: 0.35, release: 0.5, duration: D)
@@ -518,7 +817,7 @@ struct LivelyGlyphRenderer: TextRenderer {
         case .dissolve:
             dust(g, size: size, in: c)
         case .flicker:
-            let e = L.envelope(t, attack: 0.12, release: 0.4, duration: D)
+            let e = L.envelope(t, attack: 0.15, release: 0.45, duration: D)
             c.opacity = 1 - 0.45 * A * e * max(0, sin(2 * .pi * (5.3 + i * 0.7) * t + i * 2))
             transform(dy: -0.03 * A * e * sin(2 * .pi * 3 * t + i) * size, anchor: mid, into: &c)
             plain()
@@ -557,23 +856,25 @@ struct LivelyGlyphRenderer: TextRenderer {
             melt(g, size: size, in: c)
         case .echo:
             let e = L.envelope(t, attack: 0.2, release: 0.45, duration: D)
-            func sway(_ time: Double) -> Double { 0.3 * A * sin(2 * .pi * 0.9 * max(0, time)) }
+            // The word itself sways (`LivelyPose`); the copies trail its
+            // sway, each a beat later and further out, fading.
             for k in stride(from: 3, through: 1, by: -1) {
                 let kd = Double(k)
                 var copy = c
                 copy.opacity = [0, 0.6, 0.38, 0.2][k] * e
-                let dx = (sway(t - kd * 0.12) - kd * 0.18 * A) * e
+                let dx = (L.echoSway(t - kd * 0.12, A: A) - L.echoSway(t, A: A) - kd * 0.18 * A) * e
                 transform(dx: dx * size, dy: -kd * 0.035 * A * e * size, sx: 1 + 0.07 * kd * e, sy: 1 + 0.07 * kd * e,
                           anchor: CGPoint(x: word.midX, y: word.midY), into: &copy)
                 copy.draw(g.slice)
             }
-            transform(dx: sway(t) * e * size, anchor: mid, into: &c)
             plain()
         case .wave:
-            let e = L.envelope(t, attack: 0.2, release: 0.4, duration: D)
+            // The swell runs in from the leading letter and out the same way.
+            let e = L.ss((t - 0.05 - g.along * 0.2) / 0.35) * (1 - L.ss((t - (D - 0.55) - g.along * 0.12) / 0.45))
             let phase = 2 * .pi * (g.along * 1.1 - 1.5 * t)
-            transform(dy: -0.3 * A * sin(phase) * e * size, sy: 1 + 0.06 * A * sin(phase) * e,
-                      deg: -11 * A * cos(phase) * e, anchor: mid, into: &c)
+            let lift = -0.17 * A * sin(phase) * e
+            transform(dy: lift * size, sy: 1 + 0.06 * A * sin(phase) * e,
+                      deg: -10 * A * cos(phase) * e, anchor: mid, into: &c)
             plain()
         case .sink:
             sinkGlyph(g, size: size, in: c)
@@ -622,9 +923,11 @@ struct LivelyGlyphRenderer: TextRenderer {
         let start = 0.05 + g.along * 0.35, back = D - 0.8 + g.along * 0.25
         let d = L.ss((t - start) / 0.4) * (1 - L.ss((t - back) / 0.45))
         guard d > 0.005 else { context.draw(g.slice); return }
+        // A ghost of the letter stays, so the word still reads while most
+        // of its ink drifts off as dust.
         var base = context
-        base.opacity = 1 - L.ss(d / 0.55)
-        if base.opacity > 0.01 { base.draw(g.slice) }
+        base.opacity = 1 - 0.62 * A * L.ss(d / 0.6)
+        base.draw(g.slice)
         let cell = max(3, CGFloat(size) * 0.1)
         let ink = state.glow.resolve(in: context.environment)
         let rect = g.rect.insetBy(dx: -1, dy: -1)
@@ -633,6 +936,7 @@ struct LivelyGlyphRenderer: TextRenderer {
             for col in 0..<cols {
                 let id = g.index * 10_000 + row * 100 + col
                 let r1 = L.rnd(state.seed, id, 1), r2 = L.rnd(state.seed, id, 2), r3 = L.rnd(state.seed, id, 3)
+                guard L.rnd(state.seed, id, 4) < 0.7 else { continue }
                 let dd = L.ss((d - 0.35 * r1) / 0.65)
                 let cellRect = CGRect(x: rect.minX + CGFloat(col) * cell, y: rect.minY + CGFloat(row) * cell,
                                       width: cell, height: cell)
@@ -665,9 +969,12 @@ struct LivelyGlyphRenderer: TextRenderer {
         typealias L = LivelyAction
         let t = state.t, D = state.duration, A = state.intensity
         let u = t - g.along * 0.12
-        let split = L.easeOutCubic((u - 0.06) / 0.18)
-        let back = L.easeOutBack(L.clamp01((t - 0.5 - g.along * 0.06) / 0.2), 1.6)
-        let s = max(-0.08, split * (1 - back))
+        // Burst out fast, keep drifting apart while it hangs, then pulled
+        // back together, overshooting into each other a hair, and settled.
+        let split = L.spring(u - 0.05, peak: 0.13, overshoot: 0.06)
+        let drift = 1 + 0.18 * L.ss((u - 0.12) / 0.4)
+        let back = L.spring(t - 0.52 - g.along * 0.06, peak: 0.15, overshoot: 0.25)
+        let s = max(-0.12, drift * (split - back)) * L.rest(t, D)
         guard abs(s) > 0.003 else { context.draw(g.slice); return }
         let seed = state.seed
         let cp = CGPoint(x: g.rect.midX + CGFloat((L.rnd(seed, g.index, 1) - 0.5) * 0.3) * g.rect.width,
@@ -697,13 +1004,13 @@ struct LivelyGlyphRenderer: TextRenderer {
     private func melt(_ g: Glyph, size: Double, in context: GraphicsContext) {
         typealias L = LivelyAction
         let t = state.t, D = state.duration, A = state.intensity
-        let firm = L.ss((t - (D - 0.45)) / 0.35)
-        let m = L.ss((t - (0.05 + g.along * 0.25)) / 0.5) * (1 - firm)
+        let wobbly = L.melt(t, delay: g.along * 0.25, duration: D)
+        let m = max(0, wobbly)
         var c = context
         let topY = g.rect.minY + g.rect.height * 0.12
-        let sy = 1 + 0.4 * A * m - 0.06 * A * sin(.pi * firm)
+        let sy = 1 + 0.26 * A * wobbly
         c.translateBy(x: g.rect.midX, y: topY + CGFloat(0.03 * A * m * size))
-        c.scaleBy(x: CGFloat(1 - 0.06 * A * m), y: CGFloat(sy))
+        c.scaleBy(x: CGFloat(1 - 0.06 * A * wobbly), y: CGFloat(sy))
         c.translateBy(x: -g.rect.midX, y: -topY)
         c.draw(g.slice)
         guard m > 0.01 else { return }
@@ -732,37 +1039,38 @@ struct LivelyGlyphRenderer: TextRenderer {
     }
 
     private func sinkDepth() -> Double {
-        let t = state.t, D = state.duration
-        return LivelyAction.ss(t / 0.5) * (1 - LivelyAction.ss((t - (D - 0.55)) / 0.55))
+        LivelyAction.clamp01(LivelyAction.sink(state.t, delay: 0.1, duration: state.duration) * 1.2)
     }
 
     /// How far one letter has sunk, 0...1: one after another, back up together.
     private func sinkDepth(_ g: Glyph) -> Double {
-        let t = state.t, D = state.duration
-        return LivelyAction.ss((t - 0.05 - g.along * 0.3) / 0.45) * (1 - LivelyAction.ss((t - (D - 0.65)) / 0.5))
+        LivelyAction.sink(state.t, delay: g.along * 0.3, duration: state.duration)
     }
 
     /// Sink: the letters drop through the water line one by one; under it
     /// they are fainter and bluer.
     private func sinkGlyph(_ g: Glyph, size: Double, in context: GraphicsContext) {
         let d = sinkDepth(g)
-        guard d > 0.01 else { context.draw(g.slice); return }
+        guard abs(d) > 0.005 else { context.draw(g.slice); return }
         let A = state.intensity
+        // The label carries the sinking (`LivelyPose`); each letter goes
+        // down a little ahead of or behind it, and bobs.
+        let own = 0.3 * A * (d - LivelyAction.sink(state.t, delay: 0.15, duration: state.duration))
         let line = waterline(baseline: g.baseline)
         let huge: CGFloat = 10_000
-        let wobble = 5 * A * sin(2 * .pi * 0.9 * state.t + Double(g.index)) * d
+        let wobble = 5 * A * sin(2 * .pi * 0.9 * state.t + Double(g.index)) * max(0, d)
         var above = context
         above.clip(to: Path(CGRect(x: -huge, y: -huge, width: 2 * huge, height: huge + line)))
         var aboveMoved = above
-        aboveMoved.translateBy(x: g.rect.midX, y: g.rect.midY + CGFloat(0.75 * A * d * size))
+        aboveMoved.translateBy(x: g.rect.midX, y: g.rect.midY + CGFloat(own * size))
         aboveMoved.rotate(by: .degrees(wobble))
         aboveMoved.translateBy(x: -g.rect.midX, y: -g.rect.midY)
         aboveMoved.draw(g.slice)
         var below = context
         below.clip(to: Path(CGRect(x: -huge, y: line, width: 2 * huge, height: huge)))
-        below.opacity = 1 - 0.55 * d
+        below.opacity = 1 - 0.3 * LivelyAction.clamp01(d)
         below.addFilter(.colorMultiply(Color(red: 0.5, green: 0.78, blue: 1)))
-        below.translateBy(x: g.rect.midX, y: g.rect.midY + CGFloat(0.75 * A * d * size))
+        below.translateBy(x: g.rect.midX, y: g.rect.midY + CGFloat(own * size))
         below.rotate(by: .degrees(wobble))
         below.translateBy(x: -g.rect.midX, y: -g.rect.midY)
         below.draw(g.slice)
@@ -796,6 +1104,25 @@ struct LivelyGlyphRenderer: TextRenderer {
         let size = state.size, seed = state.seed
         let liftPx = CGFloat(state.lift) * size
         switch state.action {
+        case .hop:
+            // A puff of dust kicked up on the ground at each landing.
+            let ground = baseline + size * 0.1 - liftPx
+            let landings = state.hold >= 0.9 ? [(0.55, 1.0), (0.97, 0.6)] : [(0.55, 1.0)]
+            for (at, strength) in landings {
+                let a = (t - at + 0.02) / 0.45
+                guard a > 0, a < 1 else { continue }
+                let out = CGFloat(L.easeOutCubic(a))
+                for k in 0..<8 {
+                    let side: CGFloat = k < 4 ? -1 : 1
+                    let n = CGFloat(k % 4)
+                    let edge = side < 0 ? word.minX + word.width * 0.15 : word.maxX - word.width * 0.15
+                    let x = edge + side * size * (0.12 + 0.16 * n) * out * CGFloat(0.6 + 0.4 * A)
+                    let y = ground - size * CGFloat(0.06 + 0.05 * L.rnd(seed, k, 1)) * out * (1 + n * 0.3)
+                    let r = size * CGFloat(0.035 + 0.03 * L.rnd(seed, k, 2)) * (0.5 + out)
+                    context.fill(Path(ellipseIn: CGRect(x: x - r, y: y - r, width: 2 * r, height: 2 * r)),
+                                 with: .color(state.glow.opacity(0.5 * strength * A * (1 - a) * (1 - a) * L.ss(a / 0.08))))
+                }
+            }
         case .float:
             // Soft sparkles left on the line below the lifted word.
             let lift = L.ss(t / 0.42) * (1 - L.ss((t - (D - 0.5)) / 0.5))
@@ -855,7 +1182,7 @@ struct LivelyGlyphRenderer: TextRenderer {
                 guard pick < 0.55 || g.index == 1 || g.index == glyphs.count - 2 else { continue }
                 let x = g.rect.minX + g.rect.width * CGFloat(0.3 + 0.4 * L.rnd(seed, g.index, 2))
                 let born = 0.15 + 0.45 * L.rnd(seed, g.index, 3)
-                let grow = L.easeOutCubic((t - born) / 0.75)
+                let grow = L.ss((t - born) / 0.8)
                 guard grow > 0 else { continue }
                 let w = size * 0.07
                 let length = size * CGFloat((0.35 + 0.65 * L.rnd(seed, g.index, 4)) * A * grow)

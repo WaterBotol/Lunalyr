@@ -14,16 +14,18 @@ import XCTest
 /// effect on the left and the lively one at the default amount on the
 /// right; `intensity.mp4` (Subtle / Middle / Wild for a few actions);
 /// `all-actions.mp4` (every kept action back to back); a keyframe PNG per
-/// action; dropped brainstorm actions under `dropped/`. 1280×720, 30 fps,
-/// H.264, no audio track. Nothing is played.
+/// action; dropped brainstorm actions under `dropped/`. 1280×720, 60 fps
+/// (the app draws at the display's rate), H.264, no audio track. Nothing is
+/// played.
 ///
 /// Optional: LUNALYR_ACTION_PREVIEW_DIR (output folder),
 /// LUNALYR_ACTION_PREVIEW_ONLY ("hop,spin"), LUNALYR_ACTION_PREVIEW_SHEET=1
-/// (contact sheets only, no video: quick to iterate on).
+/// (contact sheets only, no video: quick to iterate on),
+/// LUNALYR_ACTION_PREVIEW_KEEP_DROPPED=1 (leave `dropped/` as it is).
 @MainActor
 final class ActionWordsPreviewTests: XCTestCase {
     static let canvas = CGSize(width: 1280, height: 720)
-    static let fps = 30.0
+    static let fps = 60.0
     static let hold = 1.2
 
     struct Clip {
@@ -150,7 +152,8 @@ final class ActionWordsPreviewTests: XCTestCase {
 
     static func sideBySide(_ clip: Clip, time: Double, onset: Double) -> some View {
         let left = WordAction.today.contains(clip.action) ? "Today" : "Today: none"
-        let right = String(format: "New · amount %.2f (towards Wild)", LivelyAction.defaultAmount)
+        let right = LivelyAction.defaultAmount >= LivelyAction.wild ? "New · Wild"
+            : String(format: "New · amount %.2f", LivelyAction.defaultAmount)
         return panes(clip, styles: [(left, .today), (right, .lively(amount: LivelyAction.defaultAmount))],
                      time: time, onset: onset)
     }
@@ -175,7 +178,7 @@ final class ActionWordsPreviewTests: XCTestCase {
             input = AVAssetWriterInput(mediaType: .video, outputSettings: [
                 AVVideoCodecKey: AVVideoCodecType.h264,
                 AVVideoWidthKey: Int(size.width), AVVideoHeightKey: Int(size.height),
-                AVVideoCompressionPropertiesKey: [AVVideoAverageBitRateKey: 6_000_000,
+                AVVideoCompressionPropertiesKey: [AVVideoAverageBitRateKey: 9_000_000,
                                                   AVVideoProfileLevelKey: AVVideoProfileLevelH264HighAutoLevel],
                 AVVideoColorPropertiesKey: [AVVideoColorPrimariesKey: AVVideoColorPrimaries_ITU_R_709_2,
                                             AVVideoTransferFunctionKey: AVVideoTransferFunction_ITU_R_709_2,
@@ -204,7 +207,7 @@ final class ActionWordsPreviewTests: XCTestCase {
                 bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue))
             context.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
             CVPixelBufferUnlockBaseAddress(pixels, [])
-            guard adaptor.append(pixels, withPresentationTime: CMTime(value: CMTimeValue(frames), timescale: 30)) else {
+            guard adaptor.append(pixels, withPresentationTime: CMTime(value: CMTimeValue(frames), timescale: CMTimeScale(ActionWordsPreviewTests.fps))) else {
                 throw writer.error ?? CocoaError(.fileWriteUnknown)
             }
             frames += 1
@@ -230,6 +233,7 @@ final class ActionWordsPreviewTests: XCTestCase {
         let only = environment["LUNALYR_ACTION_PREVIEW_ONLY"].map { Set($0.lowercased().split(separator: ",").map(String.init)) }
             .flatMap { $0.isEmpty ? nil : $0 }
         let sheetsOnly = environment["LUNALYR_ACTION_PREVIEW_SHEET"] == "1"
+        let keepDropped = environment["LUNALYR_ACTION_PREVIEW_KEEP_DROPPED"] == "1"
         let fileManager = FileManager.default
         try fileManager.createDirectory(atPath: dir + "/keyframes", withIntermediateDirectories: true)
         try fileManager.createDirectory(atPath: dir + "/dropped", withIntermediateDirectories: true)
@@ -240,7 +244,9 @@ final class ActionWordsPreviewTests: XCTestCase {
             let rep = try painter.draw(view)
             return (rep, try XCTUnwrap(rep.cgImage))
         }
-        let chosen = Self.clips.filter { only == nil || only!.contains($0.action.rawValue) }
+        let chosen = Self.clips.filter {
+            (only == nil || only!.contains($0.action.rawValue)) && !(keepDropped && WordAction.dropped.contains($0.action))
+        }
         XCTAssertFalse(chosen.isEmpty)
 
         if sheetsOnly {
