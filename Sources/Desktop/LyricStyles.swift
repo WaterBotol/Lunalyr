@@ -1,112 +1,275 @@
 import Combine
 import SwiftUI
 
-// MARK: - Both styles at once
+// MARK: - Every monitor's styles at once
 
-/// The two lyric styles, live together: the desktop lyrics draw in the
-/// Desktop style and the floating lyrics in the Floating style, on the same
-/// display or on different ones, at the same time.
+/// Every display's look, live together: each display's wallpaper and its
+/// desktop lyrics draw in its Desktop slot, its floating lyrics in its
+/// Floating slot (`MonitorLooks.swift`), all at the same time.
 ///
-/// The style Settings is editing (`FloatingLyricsOptions.surface`) is the
-/// app's own stores (`Settings.shared`, the colour and highlight stores, the
-/// reading and translation switches), as before: every page, Look and
-/// shortcut keeps changing it in place. The other style is a second set of
-/// stores, `parked`, that reads its values from where that style is kept
-/// (`LyricStyleProfiles.storeKey`) and never writes the preferences.
-/// Switching the style being edited swaps the two in `LyricStyleProfiles`
-/// and reloads both, so `style(for:)` may hand a surface the other set.
+/// The slot Settings is editing (`editingDisplay`, `editing`) is the app's
+/// own stores (`Settings.shared`, the colour and highlight stores, the
+/// reading and translation switches, the visualiser and desktop options),
+/// as before: every page, Look and shortcut keeps changing it in place.
+/// Every other slot is a read-only copy (`LyricStyleDefaults`), made the
+/// first time a window on a connected display asks for it, that reads its
+/// values from where the slot is kept and never writes the preferences.
+/// Picking another monitor or style keeps the edited slot, loads the picked
+/// one into the app's stores and rereads the copies in place.
 ///
-/// Only the style is kept twice. The parked set's other settings are not
-/// followed, so the lyric views read those (scrim, music video, lyric
-/// offset, No lyrics) from `Settings.shared`; the word lists and the song's
-/// own typeface, which a style's reading of them needs, are copied across.
+/// A copy's settings that no look keeps (power, frame rate, timing, the
+/// word lists and the song's own typeface...) follow the app's, so a
+/// monitor's stores answer every question the app's would.
 @MainActor
 final class LyricStyles: ObservableObject {
     static let shared = LyricStyles(defaults: .standard, edited: LyricStyle(
         settings: .shared, colours: .shared, highlights: .shared, defaults: .standard,
-        readings: .shared, extras: .shared))
+        readings: .shared, extras: .shared, visualizer: .shared, desktop: .shared),
+        connected: LyricStyles.connectedDisplays, shows: { FloatingLyricsOptions.shared.choice(for: $0) })
 
-    /// The style being edited: the app's own stores.
+    /// The slot being edited: the app's own stores.
     let edited: LyricStyle
-    /// The other style.
-    let parked: LyricStyle
     /// Which style is being edited.
     @Published private(set) var editing: LyricsSurface
+    /// Which monitor is being edited (its display key).
+    @Published private(set) var editingDisplay: String
+    /// Every monitor draws the edited monitor's look.
+    @Published private(set) var sameEverywhere: Bool
 
     private let defaults: UserDefaults
-    private let parkedDefaults: LyricStyleDefaults
-    private var mirrors: Set<AnyCancellable> = []
+    private let notifications: NotificationCenter
+    private let connected: () -> [String]
+    private let shows: (String) -> DisplayLyrics
+    private var parkedStyles: [LookSlot: (style: LyricStyle, defaults: LyricStyleDefaults)] = [:]
+    private var follows: [LookSlot: AnyCancellable] = [:]
 
-    /// `defaults`: where the styles are kept; `edited`: the stores on those
-    /// defaults that Settings changes.
-    init(defaults: UserDefaults, edited: LyricStyle, notifications: NotificationCenter = .default) {
-        self.defaults = defaults
-        self.edited = edited
-        let editing = LyricsSurface(rawValue: defaults.string(forKey: FloatingLyricsOptions.Keys.surface) ?? "") ?? .desktop
-        self.editing = editing
-        parkedDefaults = LyricStyleDefaults(base: defaults, styleKeys: Set(LyricStyleProfiles.keys))
-        parkedDefaults.load(Self.kept(editing.other, in: defaults))
-        parked = LyricStyle(settings: Settings(defaults: parkedDefaults, notifications: notifications),
-                            colours: LyricColourOptions(defaults: parkedDefaults),
-                            highlights: LyricHighlightOptions(defaults: parkedDefaults), defaults: parkedDefaults)
-        mirror()
+    private var slots: MonitorLookSlots { MonitorLookSlots(defaults: defaults) }
+    var editingSlot: LookSlot { LookSlot(display: editingDisplay, surface: editing) }
+    /// The main display (with the menu bar), when one is known.
+    var mainDisplay: String? { connected().first }
+
+    /// The displays connected now, the main one first; one stand-in display
+    /// inside the test host, as Settings draws there.
+    static func connectedDisplays() -> [String] {
+        AppRuntime.isUnitTesting ? ["test-display"] : FloatingFrame.connectedKeys()
     }
 
-    /// The stores a surface draws with; nil, the style being edited.
-    func style(for surface: LyricsSurface?) -> LyricStyle { (surface ?? editing) == editing ? edited : parked }
+    /// `defaults`: where the looks are kept; `edited`: the stores on those
+    /// defaults that Settings changes; `connected`: the displays connected
+    /// now, main first; `shows`: what a display shows.
+    init(defaults: UserDefaults, edited: LyricStyle, notifications: NotificationCenter = .default,
+         connected: @escaping () -> [String] = { [] }, shows: @escaping (String) -> DisplayLyrics = { _ in .fallback }) {
+        self.defaults = defaults
+        self.edited = edited
+        self.notifications = notifications
+        self.connected = connected
+        self.shows = shows
+        let slots = MonitorLookSlots(defaults: defaults)
+        let displays = connected()
+        let editingSlot = slots.editing(main: displays.first)
+        editing = editingSlot.surface
+        editingDisplay = editingSlot.display
+        sameEverywhere = slots.sameEverywhere
+        // The first time monitors have looks, every connected display's
+        // starts as today's: nothing changes on screen.
+        slots.keepConnected(displays, editing: editingSlot)
+    }
 
-    /// After Settings swapped the style it edits (`LyricStyleProfiles.switchSurface`):
-    /// the parked stores take up the style that was being edited.
+    // MARK: Reading
+
+    /// The stores `surface`'s lyrics draw with on `display`; nil surface,
+    /// the style being edited; nil display, the monitor being edited.
+    func style(for surface: LyricsSurface?, display: String? = nil) -> LyricStyle {
+        let slot = LookSlot(display: sameEverywhere ? editingDisplay : display ?? editingDisplay,
+                            surface: surface ?? editing)
+        if slot == editingSlot { return edited }
+        return parkedStyles[slot]?.style ?? park(slot)
+    }
+
+    /// The stores `display`'s wallpaper draws with: the app's on the
+    /// monitor being edited, whichever of its styles is.
+    func wallpaperStyle(for display: String?) -> LyricStyle {
+        let display = sameEverywhere ? editingDisplay : display ?? editingDisplay
+        return display == editingDisplay ? edited : style(for: .desktop, display: display)
+    }
+
+    /// The other style of the monitor being edited.
+    var parked: LyricStyle { style(for: editing.other) }
+
+    /// Each connected display's wallpaper settings, each once (the edited
+    /// monitor's are the app's); the app's alone with no display known.
+    var wallpaperSettings: [Settings] {
+        var seen = Set<ObjectIdentifier>()
+        let all = connected().map { wallpaperStyle(for: $0).settings }
+        let settings = all.isEmpty ? [edited.settings] : all
+        return settings.filter { seen.insert(ObjectIdentifier($0)).inserted }
+    }
+
+    /// Whether any connected display's wallpaper passes `test`.
+    func anyWallpaper(_ test: (Settings) -> Bool) -> Bool { wallpaperSettings.contains(where: test) }
+
+    /// The styles lyrics are drawn in now: each connected display's, as it
+    /// shows them, and the edited one (Settings' picture); each once.
+    var liveStyles: [LyricStyle] {
+        var styles: [LyricStyle] = [edited]
+        for display in connected() {
+            let choice = shows(display)
+            if choice.onDesktop { styles.append(style(for: .desktop, display: display)) }
+            if choice.floats { styles.append(style(for: .floating, display: display)) }
+        }
+        var seen = Set<ObjectIdentifier>()
+        return styles.filter { seen.insert(ObjectIdentifier($0)).inserted }
+    }
+
+    /// A change to any monitor's wallpaper or style, delivered once it has
+    /// happened.
+    var changes: AnyPublisher<Void, Never> {
+        Publishers.Merge3(objectWillChange.map { _ in () },
+                          edited.settings.objectWillChange.map { _ in () },
+                          edited.visualizer.objectWillChange.map { _ in () })
+            .receive(on: RunLoop.main)
+            .eraseToAnyPublisher()
+    }
+
+    // MARK: Editing
+
+    /// After Settings swapped the style it edits (`FloatingLyricsOptions.surface`)
+    /// or the monitor: the copies take up their slots again.
     func followEditing() {
-        let now = LyricsSurface(rawValue: defaults.string(forKey: FloatingLyricsOptions.Keys.surface) ?? "") ?? .desktop
+        let now = slots.editing(main: mainDisplay)
         objectWillChange.send()
-        editing = now
+        editing = now.surface
+        editingDisplay = now.display
         reloadParked()
     }
 
-    /// Where `surface`'s style is kept. The Floating style, never kept yet,
-    /// is worked out from the style in use and kept only once it is first
-    /// used (`keepFloatingStyle`), so it starts from the desktop's look of
-    /// that day, not of the day this version was installed.
-    private static func kept(_ surface: LyricsSurface, in defaults: UserDefaults) -> [String: Any] {
-        let profiles = LyricStyleProfiles(defaults: defaults)
-        if let saved = profiles.saved(surface) { return saved }
-        guard surface == .floating else { return profiles.ensureSaved(surface) }
-        return profiles.current().merging(LyricStyleProfiles.floatingSeed) { _, seed in seed }
+    /// Settings edits `display`'s look from now on, the same style
+    /// (Desktop or Floating) as before. `reloadEdited` makes the app's
+    /// stores read what was loaded into them.
+    func edit(display: String, reloadEdited: (() -> Void)? = nil) {
+        let from = editingSlot
+        let to = LookSlot(display: display, surface: editing)
+        guard from != to else { return }
+        slots.switchEditing(from: from, to: to, main: mainDisplay)
+        (reloadEdited ?? reloadEditedStores)()
+        followEditing()
     }
 
-    /// Floating lyrics are on somewhere: from now on the Floating style is
-    /// its own, kept apart from the desktop's.
-    func keepFloatingStyle() {
-        let profiles = LyricStyleProfiles(defaults: defaults)
-        guard profiles.saved(.floating) == nil else { return }
-        if editing == .desktop {
-            profiles.ensureSaved(.floating)
-            reloadParked()
+    /// The app's stores reread every key a look keeps.
+    func reloadEditedStores() {
+        edited.reload()
+        // The app's Looks: which one is current is kept per style.
+        if edited.settings === Settings.shared { LookStore.shared.reloadCurrent() }
+    }
+
+    /// Floating lyrics are on for `displays` (nil: the monitor being
+    /// edited): from now on each one's Floating style is its own, kept
+    /// apart from its Desktop style.
+    func keepFloatingStyle(displays: [String]? = nil) {
+        var kept = false
+        for display in displays ?? [editingDisplay] {
+            let slot = LookSlot(display: display, surface: .floating)
+            guard slot != editingSlot, slots.saved(slot) == nil else { continue }
+            slots.store(slots.style(slot, editing: editingSlot, main: mainDisplay), for: slot)
+            kept = true
+        }
+        if kept { reloadParked() }
+    }
+
+    /// Every connected monitor takes the edited monitor's look: its
+    /// wallpaper, its Desktop style and its Floating style.
+    func copyToAllMonitors() {
+        slots.copyEdited(editingSlot, to: connected(), main: mainDisplay)
+        reloadParked()
+    }
+
+    /// Turns "Same on every monitor" on or off. Off, every monitor keeps
+    /// the look it was showing, the edited one's.
+    func setSameEverywhere(_ on: Bool) {
+        guard on != sameEverywhere else { return }
+        if !on { slots.copyEdited(editingSlot, to: connected(), main: mainDisplay) }
+        defaults.set(on, forKey: MonitorLookSlots.sameEverywhereKey)
+        objectWillChange.send()
+        sameEverywhere = on
+        reloadParked()
+    }
+
+    /// After displays came or went: a display seen for the first time
+    /// starts as a copy of the main display's look, copies for displays
+    /// gone are let go, and when the edited monitor is gone Settings edits
+    /// the main display's look.
+    func displaysChanged(reloadEdited: (() -> Void)? = nil) {
+        let displays = connected()
+        guard let main = displays.first else { return }
+        slots.keepConnected(displays, editing: editingSlot)
+        let gone = parkedStyles.keys.filter { !displays.contains($0.display) }
+        for slot in gone {
+            parkedStyles[slot] = nil
+            follows[slot] = nil
+        }
+        if !displays.contains(editingDisplay) {
+            // Every monitor was showing the edited look: the main display
+            // takes it with it rather than going back to what it kept.
+            if sameEverywhere { slots.copyEdited(editingSlot, to: displays, main: main) }
+            edit(display: main, reloadEdited: reloadEdited)
+        } else if !gone.isEmpty {
+            objectWillChange.send()
         }
     }
 
-    /// Rereads the parked style from where it is kept.
+    /// Whether a monitor other than the one being edited keeps `path` as
+    /// its imported wallpaper, so a new import must not delete it.
+    func keepsWallpaperFile(_ path: String) -> Bool {
+        guard !path.isEmpty else { return false }
+        let edited = MonitorLookSlots.storeKey(LookSlot(display: editingDisplay, surface: .desktop))
+        return defaults.dictionaryRepresentation().contains { key, value in
+            key.hasPrefix("custom.look.") && key != edited
+                && (value as? [String: Any])?["custom.wallpaperPath"] as? String == path
+        }
+    }
+
+    /// Rereads every copy from where its slot is kept.
     func reloadParked() {
-        parkedDefaults.load(Self.kept(editing.other, in: defaults))
-        parked.settings.reloadLyricStyle()
-        parked.colours.reload()
-        parked.highlights.reload()
+        for (slot, parked) in parkedStyles {
+            guard slot != editingSlot else {
+                parkedStyles[slot] = nil
+                follows[slot] = nil
+                continue
+            }
+            parked.defaults.load(slots.drawn(slot, editing: editingSlot, main: mainDisplay))
+            parked.style.reload()
+        }
         objectWillChange.send()
     }
 
-    /// What a style's look depends on that is not part of it: the word
-    /// lists (the switches are per style, the lists shared) and the
-    /// typeface remembered for the playing song.
-    private func mirror() {
-        let source = edited.settings, copy = parked.settings
-        copy.wordSymbolList = source.wordSymbolList
-        copy.actionWordList = source.actionWordList
-        copy.applySongFont(source.songFont)
-        // Published before the change: read the new value from the event.
-        source.$wordSymbolList.removeDuplicates().sink { [weak copy] in copy?.wordSymbolList = $0 }.store(in: &mirrors)
-        source.$actionWordList.removeDuplicates().sink { [weak copy] in copy?.actionWordList = $0 }.store(in: &mirrors)
-        source.$songFont.removeDuplicates().sink { [weak copy] in copy?.applySongFont($0) }.store(in: &mirrors)
+    // MARK: Copies
+
+    /// A read-only copy of `slot`, made on first use. Called while views
+    /// draw, so it publishes nothing.
+    private func park(_ slot: LookSlot) -> LyricStyle {
+        let parkedDefaults = LyricStyleDefaults(base: defaults, styleKeys: Set(MonitorLookKeys.all))
+        parkedDefaults.load(slots.drawn(slot, editing: editingSlot, main: mainDisplay))
+        let style = LyricStyle(settings: Settings(defaults: parkedDefaults, notifications: notifications),
+                               colours: LyricColourOptions(defaults: parkedDefaults),
+                               highlights: LyricHighlightOptions(defaults: parkedDefaults), defaults: parkedDefaults)
+        parkedStyles[slot] = (style, parkedDefaults)
+        follow(slot, style)
+        return style
+    }
+
+    /// A copy takes on the app's settings that no look keeps, now and
+    /// whenever they change.
+    private func follow(_ slot: LookSlot, _ copy: LyricStyle) {
+        let source = edited
+        copy.follow(appSettingsOf: source)
+        follows[slot] = Publishers.Merge3(source.settings.objectWillChange.map { _ in () },
+                                          source.visualizer.objectWillChange.map { _ in () },
+                                          source.desktop.objectWillChange.map { _ in () })
+            .receive(on: RunLoop.main)
+            .sink { [weak copy, weak source] in
+                guard let copy, let source else { return }
+                copy.follow(appSettingsOf: source)
+            }
     }
 }
 
@@ -116,6 +279,10 @@ final class LyricStyle {
     let settings: Settings
     let colours: LyricColourOptions
     let highlights: LyricHighlightOptions
+    /// The visualiser scenes' choices and the desktop's readability, kept
+    /// with the display's wallpaper.
+    let visualizer: VisualizerPreferences
+    let desktop: DesktopOptions
     /// Where this style's values are read: the app's preferences for the
     /// style being edited, else `LyricStyleDefaults`.
     let defaults: UserDefaults
@@ -125,13 +292,35 @@ final class LyricStyle {
     private let extras: LunalyrExtras?
 
     init(settings: Settings, colours: LyricColourOptions, highlights: LyricHighlightOptions, defaults: UserDefaults,
-         readings: RomanizationOptions? = nil, extras: LunalyrExtras? = nil) {
+         readings: RomanizationOptions? = nil, extras: LunalyrExtras? = nil,
+         visualizer: VisualizerPreferences? = nil, desktop: DesktopOptions? = nil) {
         self.settings = settings
         self.colours = colours
         self.highlights = highlights
         self.defaults = defaults
         self.readings = readings
         self.extras = extras
+        self.visualizer = visualizer ?? VisualizerPreferences(defaults: defaults)
+        self.desktop = desktop ?? DesktopOptions(defaults: defaults)
+    }
+
+    /// Rereads every key a look keeps, after its preferences changed under it.
+    func reload() {
+        settings.reloadLyricStyle()
+        settings.reloadWallpaper()
+        colours.reload()
+        highlights.reload()
+        readings?.reloadDisplay()
+        extras?.reloadTranslations()
+        visualizer.reload()
+        desktop.reload()
+    }
+
+    /// Takes on `source`'s settings that no look keeps.
+    func follow(appSettingsOf source: LyricStyle) {
+        settings.follow(appSettingsOf: source.settings)
+        visualizer.follow(appPreferencesOf: source.visualizer)
+        desktop.follow(appOptionsOf: source.desktop)
     }
 
     /// Readings: off, below the lyrics or in their place.
@@ -197,6 +386,11 @@ private struct LyricSurfaceKey: EnvironmentKey {
     static let defaultValue: LyricsSurface? = nil
 }
 
+private struct LyricDisplayKey: EnvironmentKey {
+    /// nil: the monitor being edited (Settings' picture, lyric cards).
+    static let defaultValue: String? = nil
+}
+
 private struct LyricStylesKey: EnvironmentKey {
     /// nil reads as `LyricStyles.shared`.
     static let defaultValue: LyricStyles? = nil
@@ -210,6 +404,13 @@ extension EnvironmentValues {
         set { self[LyricSurfaceKey.self] = newValue }
     }
 
+    /// Which display the views below are on (`FloatingFrame.displayKey`),
+    /// so they draw in that monitor's look; unset, the monitor being edited.
+    var lyricDisplay: String? {
+        get { self[LyricDisplayKey.self] }
+        set { self[LyricDisplayKey.self] = newValue }
+    }
+
     /// The styles the lyrics below read; unset in the app (`shared`).
     var lyricStyles: LyricStyles? {
         get { self[LyricStylesKey.self] }
@@ -217,21 +418,35 @@ extension EnvironmentValues {
     }
 }
 
-/// The lyric style this view draws in (`lyricSurface`), observed: a change
-/// to it, or a swap of the style being edited, draws the view again.
-/// `@SurfaceStyle private var style`, then `style.settings`, `style.colours`.
+/// The stores this view draws with, observed: a change to them, or a swap
+/// of what Settings edits, draws the view again.
+/// `@SurfaceStyle private var style`: the lyric style of `lyricSurface` on
+/// `lyricDisplay`, then `style.settings`, `style.colours`.
+/// `@SurfaceStyle(.wallpaper) private var wallpaper`: that display's
+/// wallpaper, whichever lyric style is drawn.
 @propertyWrapper
 struct SurfaceStyle: DynamicProperty {
+    enum Role { case lyrics, wallpaper }
+
     @Environment(\.lyricSurface) private var surface
+    @Environment(\.lyricDisplay) private var display
     @Environment(\.lyricStyles) private var styles
     @StateObject private var relay = LyricStyleRelay()
+    private let role: Role
 
-    @MainActor init() {}
+    @MainActor init(_ role: Role = .lyrics) { self.role = role }
 
-    @MainActor var wrappedValue: LyricStyle { (styles ?? .shared).style(for: surface) }
+    @MainActor var wrappedValue: LyricStyle { Self.resolve(styles ?? .shared, role: role, surface: surface, display: display) }
+
+    @MainActor static func resolve(_ styles: LyricStyles, role: Role, surface: LyricsSurface?, display: String?) -> LyricStyle {
+        role == .wallpaper ? styles.wallpaperStyle(for: display) : styles.style(for: surface, display: display)
+    }
 
     func update() {
-        MainActor.assumeIsolated { relay.follow(styles ?? .shared, surface: surface) }
+        MainActor.assumeIsolated {
+            let styles = styles ?? .shared
+            relay.follow(styles, style: Self.resolve(styles, role: role, surface: surface, display: display))
+        }
     }
 }
 
@@ -241,8 +456,7 @@ final class LyricStyleRelay: ObservableObject {
     private var followed: (styles: ObjectIdentifier, style: ObjectIdentifier)?
     private var subscriptions: [AnyCancellable] = []
 
-    func follow(_ styles: LyricStyles, surface: LyricsSurface?) {
-        let style = styles.style(for: surface)
+    func follow(_ styles: LyricStyles, style: LyricStyle) {
         let ids = (ObjectIdentifier(styles), ObjectIdentifier(style))
         guard followed?.styles != ids.0 || followed?.style != ids.1 else { return }
         followed = ids
@@ -252,6 +466,8 @@ final class LyricStyleRelay: ObservableObject {
             style.settings.objectWillChange.sink { _ in send() },
             style.colours.objectWillChange.sink { _ in send() },
             style.highlights.objectWillChange.sink { _ in send() },
+            style.visualizer.objectWillChange.sink { _ in send() },
+            style.desktop.objectWillChange.sink { _ in send() },
         ]
     }
 }

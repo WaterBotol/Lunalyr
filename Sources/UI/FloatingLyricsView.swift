@@ -34,6 +34,8 @@ struct FloatingLyricsView: View {
     var onDone: () -> Void = {}
     @ObservedObject private var palette = FloatingLyricsPalette.shared
     @ObservedObject private var settings = Settings.shared
+    /// This display's wallpaper, which the shade is judged against.
+    @SurfaceStyle(.wallpaper) private var wallpaper
     @ObservedObject private var lyricsVM = LyricsViewModel.shared
     @EnvironmentObject private var nowPlaying: NowPlayingMonitor
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
@@ -48,9 +50,9 @@ struct FloatingLyricsView: View {
             ZStack {
                 FloatingLyricsFrame(backdrop: options.backdrop, reduceTransparency: reduceTransparency,
                                     albumAccent: look.albumAccent,
-                                    behind: FloatingBackdrop.behind(mode: settings.effectiveBackgroundMode,
-                                                                    scrim: settings.scrimStrength,
-                                                                    videoDim: settings.musicVideoDim),
+                                    behind: FloatingBackdrop.behind(mode: wallpaper.settings.effectiveBackgroundMode,
+                                                                    scrim: wallpaper.settings.scrimStrength,
+                                                                    videoDim: wallpaper.settings.musicVideoDim),
                                     margin: margin) {
                     // Laid out in the box; drawn wherever it reaches.
                     LyricStage(size: box, mood: look.mood, accent: look.accent, trackSeed: look.seed,
@@ -90,6 +92,8 @@ struct FloatingTitleCardView: View {
     var onDone: () -> Void = {}
     @ObservedObject private var palette = FloatingLyricsPalette.shared
     @ObservedObject private var settings = Settings.shared
+    /// This display's wallpaper, which the shade is judged against.
+    @SurfaceStyle(.wallpaper) private var wallpaper
     @ObservedObject private var lyricsVM = LyricsViewModel.shared
     @EnvironmentObject private var nowPlaying: NowPlayingMonitor
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
@@ -104,9 +108,9 @@ struct FloatingTitleCardView: View {
             ZStack {
                 FloatingLyricsFrame(backdrop: options.backdrop, reduceTransparency: reduceTransparency,
                                     albumAccent: look.albumAccent,
-                                    behind: FloatingBackdrop.behind(mode: settings.effectiveBackgroundMode,
-                                                                    scrim: settings.scrimStrength,
-                                                                    videoDim: settings.musicVideoDim),
+                                    behind: FloatingBackdrop.behind(mode: wallpaper.settings.effectiveBackgroundMode,
+                                                                    scrim: wallpaper.settings.scrimStrength,
+                                                                    videoDim: wallpaper.settings.musicVideoDim),
                                     margin: margin) {
                     LyricStage(size: box, mood: look.mood, accent: look.accent, trackSeed: look.seed,
                                palette: look.cover.artworkStops, interval: settings.effectiveAnimationRate.interval,

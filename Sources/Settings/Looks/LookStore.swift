@@ -43,6 +43,14 @@ final class LookStore: ObservableObject {
         observeCoveredSettings()
     }
 
+    /// Rereads which Look is current: each monitor's style keeps its own
+    /// (`MonitorLookKeys.style`), so it changes with the monitor Settings edits.
+    func reloadCurrent() {
+        let known = Set(Look.builtIns.map(\.id)).union(userLooks.map(\.id))
+        let saved = defaults.string(forKey: Keys.current).flatMap { known.contains($0) ? $0 : nil }
+        if current != saved { current = saved }
+    }
+
     // MARK: State
 
     var currentLook: Look? { current.flatMap(look(id:)) }

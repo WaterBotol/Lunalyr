@@ -29,9 +29,10 @@ import Foundation
 ///   file, effect speed, editorial typography: the Look's wallpaper type is
 ///   chosen, and within it the track (or the user's pin) still picks.
 ///
-/// Every lyric-style key above belongs to `LyricStyleProfiles`, so with
-/// floating lyrics in use a Look styles the floating lyrics (the style in
-/// use), and the wallpaper type applies to the desktop as always.
+/// Every key above belongs to a monitor's look (`MonitorLookKeys`): a Look
+/// changes the monitor and style Settings is editing (the wallpaper type
+/// that monitor's wallpaper), and each style remembers which Look it last
+/// took (`LookStore.Keys.current`).
 struct LookValues: Equatable, Hashable {
     var wallpaper: Settings.BackgroundMode
     /// nil is Custom Mix.

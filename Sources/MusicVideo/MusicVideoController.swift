@@ -91,17 +91,29 @@ final class MusicVideoController: ObservableObject {
 
     /// Follows the playing song and the settings. Started by the app
     /// delegate, never in the test host.
-    func start() { start(monitor: .shared, settings: .shared) }
+    /// A video is looked for while any monitor's wallpaper is Music video
+    /// (each monitor has its own type); it plays where "Show the video on" says.
+    func start() {
+        let styles = LyricStyles.shared
+        let wanted = styles.changes
+            .map { styles.anyWallpaper { $0.backgroundMode == .musicVideo } }
+            .prepend(styles.anyWallpaper { $0.backgroundMode == .musicVideo })
+            .eraseToAnyPublisher()
+        start(monitor: .shared, settings: .shared, wanted: wanted)
+    }
 
-    func start(monitor: NowPlayingMonitor, settings: Settings) {
+    /// `wanted`: whether some wallpaper is Music video; by default,
+    /// `settings`' own type.
+    func start(monitor: NowPlayingMonitor, settings: Settings, wanted: AnyPublisher<Bool, Never>? = nil) {
         guard cancellables.isEmpty else { return }
+        let wanted = wanted ?? settings.$backgroundMode.map { $0 == .musicVideo }.eraseToAnyPublisher()
         Publishers.CombineLatest3(monitor.$current.removeDuplicates(by: Self.sameSong),
-                                  settings.$backgroundMode.removeDuplicates(),
+                                  wanted.removeDuplicates(),
                                   settings.$musicVideoOnline.removeDuplicates())
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] track, mode, online in
+            .sink { [weak self] track, enabled, online in
                 MainActor.assumeIsolated {
-                    self?.update(track: track, enabled: mode == .musicVideo, online: online)
+                    self?.update(track: track, enabled: enabled, online: online)
                 }
             }
             .store(in: &cancellables)

@@ -58,6 +58,30 @@ final class VisualizerPreferences: ObservableObject {
             ?? ShippedDefaults.heavyScenesOnMainDisplayOnly
     }
 
+    /// The scene choices a monitor's look keeps (`MonitorLookKeys.wallpaper`):
+    /// the web scenes' colours, as each display runs its own scene. Beat
+    /// punch and Star Trails' sky are not: every display draws one shared
+    /// simulation with them.
+    static let lookKeys = [Key.wavefieldColours, Key.wavecoreColours]
+
+    /// Rereads the scene choices, after Settings moved to another monitor.
+    func reload() {
+        func colours(_ key: String) -> VisualizerSceneColours {
+            VisualizerSceneColours(rawValue: defaults.string(forKey: key) ?? "") ?? .album
+        }
+        if wavefieldColours != colours(Key.wavefieldColours) { wavefieldColours = colours(Key.wavefieldColours) }
+        if wavecoreColours != colours(Key.wavecoreColours) { wavecoreColours = colours(Key.wavecoreColours) }
+    }
+
+    /// Takes on the app's choices that no monitor keeps for itself.
+    func follow(appPreferencesOf source: VisualizerPreferences) {
+        if punch != source.punch { punch = source.punch }
+        if starTrailsColours != source.starTrailsColours { starTrailsColours = source.starTrailsColours }
+        if heavyScenesOnMainDisplayOnly != source.heavyScenesOnMainDisplayOnly {
+            heavyScenesOnMainDisplayOnly = source.heavyScenesOnMainDisplayOnly
+        }
+    }
+
     /// The colour choice for a web engine; nil when it has no choice here.
     func colours(for engine: WebVisualizerEngine) -> VisualizerSceneColours? {
         switch engine {

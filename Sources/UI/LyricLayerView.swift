@@ -42,6 +42,9 @@ struct LyricLayer: View {
     @ObservedObject private var lyricsVM = LyricsViewModel.shared
     /// The app's settings that are not part of a lyric style.
     @ObservedObject private var appSettings = Settings.shared
+    /// The wallpaper behind this stage: its display's (`lyricDisplay`).
+    @SurfaceStyle(.wallpaper) private var wallpaper
+    @Environment(\.lyricDisplay) private var drawnDisplay
     /// The lyric style this stage draws in: Desktop on the wallpaper,
     /// Floating in the floating windows (`LyricStyles`).
     @SurfaceStyle private var style
@@ -147,7 +150,8 @@ struct LyricLayer: View {
     private func ink(energy: Double, wall: Double) -> LyricInk {
         let audio = AudioReactiveController.shared
         let active = lyricsVM.activeLineIndex(at: time).flatMap { lyricsVM.lines.indices.contains($0) ? $0 : nil }
-        let mode = appSettings.effectiveBackgroundMode
+        let backdropSettings = wallpaper.settings
+        let mode = backdropSettings.effectiveBackgroundMode
         let chosenColour = memory.remembered(for: nowPlaying.current)?.style.colourMode ?? colours.mode
         // Without any timestamps there is nothing to sweep along. Keep the
         // text coloured with an ambient drift until a timed source is available.
@@ -156,20 +160,20 @@ struct LyricLayer: View {
         // the picture's measured luminance, the album tint and scrim laid
         // over it, and that backing.
         let backdrop = backdropOverride ?? LyricBackdrop.luminance(mode: mode,
-            motion: mode == .auto && appSettings.motionArtworkEnabled && nowPlaying.motionArtwork != nil,
-            palette: palette, scrim: appSettings.scrimStrength, measured: measuredBackdrop,
-            backing: DesktopOptions.shared.manualTextBacking,
+            motion: mode == .auto && backdropSettings.motionArtworkEnabled && nowPlaying.motionArtwork != nil,
+            palette: palette, scrim: backdropSettings.scrimStrength, measured: measuredBackdrop,
+            backing: wallpaper.desktop.manualTextBacking,
             target: LyricLegibility.targetContrast(baseSize: baseSize), tinted: nowPlaying.artwork != nil,
             pastelText: colour != .standard, increaseContrast: contrast == .increased,
-            videoDim: appSettings.musicVideoDim)
+            videoDim: backdropSettings.musicVideoDim)
         // Without the automatic dark backing: what decides dark text.
         let unbacked = backdropOverride ?? LyricBackdrop.luminance(mode: mode,
-            motion: mode == .auto && appSettings.motionArtworkEnabled && nowPlaying.motionArtwork != nil,
-            palette: palette, scrim: appSettings.scrimStrength, measured: measuredBackdrop,
-            backing: DesktopOptions.shared.manualTextBacking ?? 0,
+            motion: mode == .auto && backdropSettings.motionArtworkEnabled && nowPlaying.motionArtwork != nil,
+            palette: palette, scrim: backdropSettings.scrimStrength, measured: measuredBackdrop,
+            backing: wallpaper.desktop.manualTextBacking ?? 0,
             target: LyricLegibility.targetContrast(baseSize: baseSize), tinted: nowPlaying.artwork != nil,
             pastelText: false, increaseContrast: contrast == .increased,
-            videoDim: appSettings.musicVideoDim)
+            videoDim: backdropSettings.musicVideoDim)
         return cache.ink(.init(mode: colour, speed: colours.speed, strength: colours.strength, custom: colours.customColours,
             album: palette, backdrop: backdrop, audio: audio.running ? audio.levels : nil,
             vocal: active.map { OrganicMotion.vocalIntensity(lyricsVM.lines[$0].words, at: time) } ?? energy,
@@ -188,11 +192,12 @@ struct LyricLayer: View {
         let content = sceneContent(key: key, loadingSince: loadingSince)
         // Which layout this song is drawn in, for the menu bar and Settings
         // (Custom Mix names only itself). Not from the Settings preview.
-        // With desktop and floating lyrics both up, the one in the style
-        // Settings is editing reports, so the header names its layout.
+        // Each monitor's style reports its own, so the menu bar and
+        // Settings name the layout of the monitor they are about.
         let _ = reportsLayout && nowPlaying.current != nil
-            && (drawnSurface == nil || drawnSurface == LyricStyles.shared.editing)
-            ? ShowingLayout.shared.note(composition(at: 0)) : ()
+            ? ShowingLayout.shared.note(composition(at: 0), slot: LookSlot(
+                display: drawnDisplay ?? LyricStyles.shared.editingDisplay,
+                surface: drawnSurface ?? LyricStyles.shared.editing)) : ()
         // No lyrics found: the song's opening title stays, drawn once above
         // the scenes so their cross-fades neither double nor dim it. So does
         // a card that entered while the lyrics were being looked up, once

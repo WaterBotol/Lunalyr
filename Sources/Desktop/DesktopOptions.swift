@@ -46,6 +46,25 @@ final class DesktopOptions: ObservableObject {
         textBacking = stored.isFinite ? min(1, max(0, stored)) : ShippedDefaults.textBacking
     }
 
+    /// The readability choices a monitor's look keeps (`MonitorLookKeys.wallpaper`).
+    static let lookKeys = [Keys.automaticTextBacking, Keys.textBacking, Keys.menuBarShade]
+
+    /// Rereads them, after Settings moved to another monitor.
+    func reload() {
+        let shades = defaults.object(forKey: Keys.menuBarShade) as? Bool ?? true
+        if shadesMenuBar != shades { shadesMenuBar = shades }
+        let automatic = defaults.object(forKey: Keys.automaticTextBacking) as? Bool ?? true
+        if automaticTextBacking != automatic { automaticTextBacking = automatic }
+        let stored = defaults.object(forKey: Keys.textBacking) as? Double ?? 0.35
+        let backing = stored.isFinite ? min(1, max(0, stored)) : 0.35
+        if textBacking != backing { textBacking = backing }
+    }
+
+    /// Takes on the app's choice that no monitor keeps for itself.
+    func follow(appOptionsOf source: DesktopOptions) {
+        if showsControlsOnHover != source.showsControlsOnHover { showsControlsOnHover = source.showsControlsOnHover }
+    }
+
     /// The manual setting, or nil when the backdrop decides.
     var manualTextBacking: Double? { automaticTextBacking ? nil : textBacking }
 }

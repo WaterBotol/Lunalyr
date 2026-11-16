@@ -609,12 +609,14 @@ struct NowPlayingServices {
             allowsMotionLookup: { track in
                 // Animated covers play as the wallpaper only in Custom Mix;
                 // the opening title's cover plays one whatever the switch.
+                // Any monitor's wallpaper: each has its own.
                 let settings = Settings.shared
-                let wallpaper = settings.motionArtworkEnabled && settings.backgroundMode == .auto
+                let wallpaper = LyricStyles.shared.anyWallpaper { $0.motionArtworkEnabled && $0.backgroundMode == .auto }
                 return (wallpaper || OpeningTitle.wantsMotionCover)
                     && !settings.excludesMotion(artist: track.artist, album: track.album)
             },
             motionSettingsChanged: Settings.shared.objectWillChange
+                .merge(with: LyricStyles.shared.objectWillChange)
                 .debounce(for: .milliseconds(150), scheduler: RunLoop.main)
                 .map { _ in () }
                 .eraseToAnyPublisher(),

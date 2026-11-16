@@ -244,6 +244,7 @@ final class QueueLookAhead {
             reader.$upcoming.map { _ in () }.eraseToAnyPublisher(),
             PlayerOptions.shared.$looksAhead.map { _ in () }.eraseToAnyPublisher(),
             Settings.shared.$backgroundMode.map { _ in () }.eraseToAnyPublisher(),
+            LyricStyles.shared.objectWillChange.map { _ in () }.eraseToAnyPublisher(),
             Settings.shared.$musicVideoOnline.map { _ in () }.eraseToAnyPublisher(),
             NotificationCenter.default.publisher(for: PowerSource.didChange).map { _ in () }.eraseToAnyPublisher(),
             NotificationCenter.default.publisher(for: .NSProcessInfoPowerStateDidChange).map { _ in () }.eraseToAnyPublisher(),
@@ -266,7 +267,7 @@ final class QueueLookAhead {
         let conditions = LookAheadConditions(
             enabled: enabled, followsMusic: followsMusic, online: LyricConnectivity.shared.isOnline,
             lowPowerMode: lowPowerMode, onBattery: PowerSource.isOnBattery,
-            videos: settings.backgroundMode == .musicVideo && settings.musicVideoOnline)
+            videos: LyricStyles.shared.anyWallpaper { $0.backgroundMode == .musicVideo } && settings.musicVideoOnline)
         update(upcoming: reader.upcoming, current: monitor.current, conditions: conditions)
     }
 }

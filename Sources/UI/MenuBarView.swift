@@ -49,6 +49,8 @@ struct MenuBarView: View {
                 .opacity(0)
                 .accessibilityHidden(true)
         }
+        // The panel acts on the monitor whose menu bar it opened from.
+        .onAppear { MenuBarMonitor.panelOpened() }
         .onReceive(models.resolved.audio.$state.removeDuplicates()) {
             audioPhase = MenuBarAudioStatus.phase(after: audioPhase, state: $0)
         }
@@ -278,5 +280,26 @@ struct MenuBarView: View {
             context.fill(CGRect(x: centre - bar.width / 2, y: badge.midY - bar.height / 2, width: bar.width, height: bar.height))
         }
         context.setBlendMode(.normal)
+    }
+}
+
+/// Which monitor the menu-bar panel is about. Opening the panel makes the
+/// monitor whose menu bar was clicked the one being edited
+/// (`LyricStyles.edit(display:)`), so its Look switcher, wallpaper rows and
+/// Layout row all act on and report that monitor, as Settings then does.
+/// With Same on Every Monitor on, every monitor already shows one look.
+enum MenuBarMonitor {
+    /// The display under the pointer: the menu bar just clicked is on it.
+    @MainActor static func clickedDisplay() -> String? {
+        let pointer = NSEvent.mouseLocation
+        guard let screen = NSScreen.screens.first(where: { NSMouseInRect(pointer, $0.frame, false) }),
+              let id = screen.versoDisplayID else { return nil }
+        return FloatingFrame.cachedKey(id)
+    }
+
+    @MainActor static func panelOpened() {
+        guard !AppRuntime.isUnitTesting, !LyricStyles.shared.sameEverywhere,
+              NSScreen.screens.count > 1, let display = clickedDisplay() else { return }
+        LyricStyles.shared.edit(display: display)
     }
 }
