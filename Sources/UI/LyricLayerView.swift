@@ -539,7 +539,7 @@ struct LyricLayer: View {
     private func instrumentalGap(at time: Double, windows: [VCVocalWindow], duration: Double) -> VCVocalGap? {
         var gap = VCVocalGap()
         let found = windows.withUnsafeBufferPointer {
-            vc_vocal_gap($0.baseAddress, Int32($0.count), time, duration, 2.4, &gap)
+            vc_vocal_gap($0.baseAddress, Int32($0.count), time, duration, LyricPhraseRuns.breakGap, &gap)
         }
         return found != 0 ? gap : nil
     }
@@ -878,6 +878,10 @@ struct LyricLayer: View {
             // exit: the line does not also fade, rise or swell in and out.
             let carriedIn = composition.carriesStage && carry?.incoming != nil
             let carriedOut = composition.carriesStage && carry?.outgoing != nil
+            // A translation or whole-line reading leaves as the hand-over
+            // starts, not once it is over: the next line's fades in there.
+            let textExit: Double = StageCarry.handoverStart(carry, composition: composition)
+                .map { vc_settle(time - $0, LyricPhraseTiming.exitDuration) } ?? pose.exit
             let rolls = line.wordTimed && composition.arrivalOnly
             let handsOffPreview = line.wordTimed && !outgoing && settings.revealsWords(in: composition)
                 && settings.previewsNextWord(in: composition)
@@ -994,7 +998,7 @@ struct LyricLayer: View {
                     TranslationLine(text: lineReading,
                                     font: settings.lyricFont(size: baseSize * 0.38 * densityScale, hero: false, mood: mood),
                                     width: stageSize.width * 0.8)
-                        .opacity(pose.progress * (1 - pose.exit))
+                        .opacity(pose.progress * (1 - textExit))
                 }
                 // A translation from the lyric source sits under its line as
                 // a quieter second voice, arriving and leaving with it. A
@@ -1004,7 +1008,7 @@ struct LyricLayer: View {
                     TranslationLine(text: translation,
                                     font: settings.lyricFont(size: baseSize * 0.34 * userScale, hero: false, mood: mood),
                                     width: stageSize.width * 0.8)
-                        .opacity(pose.progress * (1 - pose.exit))
+                        .opacity(pose.progress * (1 - textExit))
                 }
                 }
                 .overlay(alignment: .bottom) {
@@ -1012,7 +1016,7 @@ struct LyricLayer: View {
                         TranslationLine(text: translation,
                                         font: settings.lyricFont(size: translationSize, hero: false, mood: mood),
                                         width: stageSize.width * 0.8, lines: 2)
-                            .opacity(pose.progress * (1 - pose.exit))
+                            .opacity(pose.progress * (1 - textExit))
                             .padding(.bottom, baseSize * 0.2)
                     }
                 }

@@ -14,11 +14,12 @@ import Foundation
 /// from what was drawn before: a seek lands on exactly the picture playing
 /// through would have shown.
 struct LyricPhraseRuns: Equatable {
-    /// The longest pause, in seconds, that a run carries on through. A
-    /// breath between lines, a held beat or a short fill is well under it;
-    /// an instrumental break or a real pause is well over it. Lines a bar
-    /// apart at slow tempos (about 3 s at 80 bpm) still read as one verse.
-    static let breakGap: Double = 3.5
+    /// The shortest pause, in seconds, that breaks a run. A breath between
+    /// lines, a held beat or a short fill is under it. It is the pause that
+    /// brings up the instrumental-break cue (`LyricLayer.instrumentalGap`),
+    /// which dims every line for its dots: a hand-over across a longer pause
+    /// would play half-hidden behind them, so the two always agree.
+    static let breakGap: Double = 2.4
 
     /// Where one line hands the stage on to the next inside a run.
     struct Boundary: Equatable {
@@ -170,6 +171,18 @@ struct StageCarry: Equatable {
     /// When a carrying layout's line that hands on to the next starts its
     /// own exit: once the hand-over has played. It stays on the stage until
     /// then (`LyricPhraseTiming.exitStart(of:nextStart:heldUntil:)`).
+    /// When a carrying layout's hand-over to the next line starts; text
+    /// that is not part of the stage (a translation, a whole-line reading)
+    /// fades from here, so it never sits over the next line's.
+    static func handoverStart(_ carry: StageCarry?, composition: LyricComposition) -> Double? {
+        guard composition.carriesStage, let hand = carry?.outgoing else { return nil }
+        switch composition {
+        case .torque: return StageMotion.torqueHandover(hand)
+        case .hinge: return StageMotion.hingeHandover(hand)
+        default: return StageMotion.portalHandover(hand)
+        }
+    }
+
     static func heldUntil(_ carry: StageCarry?, composition: LyricComposition) -> Double? {
         guard composition.carriesStage, let hand = carry?.outgoing else { return nil }
         switch composition {

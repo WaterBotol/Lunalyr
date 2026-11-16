@@ -344,6 +344,10 @@ extension StageLyricView {
         // (`LyricHighlightTiming`), eased in and out, each pill and its word
         // fading, shrinking and softening as one.
         let leaving = Self.portalLeave(at: time, exitStart: exitStart)
+        // Inside a run the trail climbs away a whole pill's height, making
+        // room for the next line's first pill in the live pill's place.
+        let ownClimb: CGFloat = stageSize.height * 0.1
+        let climb: CGFloat = carry?.outgoing == nil ? ownClimb : max(ownClimb, unit * 2.4)
         // Quick songs get less float, so the eye can follow.
         let float: CGFloat = reduceMotion ? 0 : CGFloat(1 / speed)
         return StageLayout(place: { measured, bounds in
@@ -384,10 +388,7 @@ extension StageLyricView {
                            leaving: leaving)
             }
         }
-        // Inside a run the trail climbs away a whole pill's height, making
-        // room for the next line's first pill in the live pill's place.
-        .offset(y: reduceMotion ? 0 : -(carry?.outgoing == nil ? stageSize.height * 0.1
-                                        : max(stageSize.height * 0.1, unit * 2.4)) * leaving)
+        .offset(y: reduceMotion ? 0 : -climb * CGFloat(leaving))
         .opacity(1 - leaving)
     }
 

@@ -37,7 +37,7 @@ final class LyricPhraseRunsTests: XCTestCase {
     // MARK: Runs
 
     func testLinesSungCloseTogetherShareARun() {
-        let lines = lines(gaps: [0.3, 2.9])
+        let lines = lines(gaps: [0.3, 2.2])
         let runs = LyricPhraseRuns(lines: lines)
         XCTAssertEqual(runs.lines.map { $0?.run }, [0, 0, 0])
         XCTAssertEqual(runs.lines.map { $0?.ordinal }, [0, 1, 2])
@@ -52,7 +52,7 @@ final class LyricPhraseRunsTests: XCTestCase {
     }
 
     func testTheThresholdIsOneNamedGap() {
-        XCTAssertEqual(LyricPhraseRuns.breakGap, 3.5)
+        XCTAssertEqual(LyricPhraseRuns.breakGap, 2.4)
         let under = LyricPhraseRuns(lines: lines(gaps: [LyricPhraseRuns.breakGap - 0.01]))
         let over = LyricPhraseRuns(lines: lines(gaps: [LyricPhraseRuns.breakGap + 0.01]))
         XCTAssertEqual(under[1]?.run, 0)
@@ -92,9 +92,9 @@ final class LyricPhraseRunsTests: XCTestCase {
         let long = Line(start: 10, end: 16, text: "oh", words: [Word(text: "oh", start: 10, end: 16)],
                         isInstrumental: false, wordTimed: true)
         let short = line(["yeah"], start: 10.2)
-        let after = line(["again"], start: 19)
+        let after = line(["again"], start: 18.2)
         let runs = LyricPhraseRuns(lines: [long, short, after])
-        XCTAssertEqual(runs[2]?.run, 0, "19 is 3 s after the note ends at 16, not 8 s after 'yeah'")
+        XCTAssertEqual(runs[2]?.run, 0, "18.2 is 2.2 s after the note ends at 16, not 7.6 s after 'yeah'")
         XCTAssertNil(runs[0]?.outgoing, "a line still sung over the next is held, not carried")
     }
 
@@ -149,6 +149,12 @@ final class LyricPhraseRunsTests: XCTestCase {
         // After a long gap nothing is held.
         let apart = lines(gaps: [6])
         XCTAssertNil(StageCarry.heldUntil(carry(0, in: apart), composition: .torque))
+        XCTAssertNil(StageCarry.handoverStart(carry(0, in: apart), composition: .torque))
+        // Text beside the stage (a translation) leaves as the hand-over starts.
+        for composition in [LyricComposition.torque, .hinge, .portal] {
+            let start = try! XCTUnwrap(StageCarry.handoverStart(carry(0, in: song), composition: composition))
+            XCTAssertLessThanOrEqual(start, try! XCTUnwrap(StageCarry.heldUntil(carry(0, in: song), composition: composition)))
+        }
     }
 
     // MARK: Torque
@@ -294,15 +300,25 @@ final class LyricPhraseRunsTests: XCTestCase {
         let name = "LunalyrTests.\(UUID().uuidString)"
         addTeardownBlock { UserDefaults(suiteName: name)?.removePersistentDomain(forName: name) }
         let settings = Settings(defaults: try XCTUnwrap(UserDefaults(suiteName: name)), notifications: NotificationCenter())
-        let song = lines(gaps: [1.5])
+        // A short line into a short line, and into a long line of three
+        // phrases sung fast (several faces and pages after the hand-over).
+        let short = lines(gaps: [1.5])
+        let firstEnd = short[0].words.map(\.end).max()!
+        let fast = StagePhrasesTests.mixed.map { word in
+            Word(text: word.text, start: firstEnd + 1.2 + (word.start - 1) * 0.7, end: firstEnd + 1.2 + (word.end - 1) * 0.7)
+        }
+        let long = [short[0], Line(start: fast[0].start, end: fast.last!.end, text: fast.map(\.text).joined(separator: " "),
+                                   words: fast, isInstrumental: false, wordTimed: true)]
+        let stage = CGSize(width: 320, height: 180)
+        for (label, song) in [("short", short), ("long", long)] {
         let outCarry = try XCTUnwrap(carry(0, in: song))
         let inCarry = try XCTUnwrap(carry(1, in: song))
-        let stage = CGSize(width: 320, height: 180)
         for composition in [LyricComposition.torque, .hinge, .portal] {
             let hold = try XCTUnwrap(StageCarry.heldUntil(outCarry, composition: composition))
             let hand = try XCTUnwrap(outCarry.outgoing)
-            let start: Double = composition == .torque ? StageMotion.torqueHandover(hand)
-                : composition == .hinge ? StageMotion.hingeHandover(hand) : StageMotion.portalHandover(hand)
+            let start: Double = try XCTUnwrap(StageCarry.handoverStart(outCarry, composition: composition))
+            XCTAssertLessThanOrEqual(start, hold)
+            XCTAssertGreaterThanOrEqual(hand.boundary.nextOnset, start, "the hand-over starts by the next line's first word")
             func frame(_ t: Double, carried: Bool = true) throws -> (ink: Double, x: Double, y: Double) {
                 let own = LyricLayer.stageExitStart(song[0],
                     pose: LyricPhraseTiming(line: song[0], nextStart: song[1].start, time: t))
@@ -315,7 +331,7 @@ final class LyricPhraseRunsTests: XCTestCase {
                                        exitStart: exit, carry: carried ? outCarry : nil, settings: settings)
                     }
                     if t >= song[1].start {
-                        StageLyricView(words: song[1].words, glue: [false, false, false], time: t, stageSize: stage,
+                        StageLyricView(words: song[1].words, glue: song[1].words.map { _ in false }, time: t, stageSize: stage,
                                        baseSize: 22, mood: .neutral, composition: composition, seed: 1,
                                        carry: carried ? inCarry : nil, settings: settings)
                     }
@@ -329,7 +345,7 @@ final class LyricPhraseRunsTests: XCTestCase {
                 // For a look: LUNALYR_CONTINUITY_DIR (as TEST_RUNNER_LUNALYR_CONTINUITY_DIR).
                 if carried, let directory = ProcessInfo.processInfo.environment["LUNALYR_CONTINUITY_DIR"] {
                     try FileManager.default.createDirectory(atPath: directory, withIntermediateDirectories: true)
-                    let file = String(format: "%@/%@-%06.3f.png", directory, composition.rawValue, t)
+                    let file = String(format: "%@/%@-%@-%06.3f.png", directory, label, composition.rawValue, t)
                     try NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:])?
                         .write(to: URL(fileURLWithPath: file))
                 }
@@ -348,12 +364,15 @@ final class LyricPhraseRunsTests: XCTestCase {
                 XCTAssertGreaterThan(now.ink, 20, "\(composition): the stage emptied at \(t)")
                 // A Hinge page passing edge-on is a sliver for a frame or two,
                 // as it is turning within a line: its centre is not weighed then.
-                if min(now.ink, previous.ink) > 0.25 * full {
+                // A later word of the new line bursting in is its own entrance.
+                let entering = song[1].words.dropFirst().contains { t - $0.start > -0.06 && t - $0.start < 0.3 }
+                if min(now.ink, previous.ink) > 0.25 * full, !entering {
                     XCTAssertLessThan(hypot(now.x - previous.x, now.y - previous.y), 24,
                                       "\(composition): the ink jumped at \(t)")
                 }
                 previous = now
             }
+        }
         }
     }
 
