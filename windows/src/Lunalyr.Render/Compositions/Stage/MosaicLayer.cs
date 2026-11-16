@@ -78,7 +78,7 @@ internal sealed class MosaicLayer(IWordBreaker breaker, Logger? logger) : StageL
             else
             {
                 // Letter by letter, each on its own baseline: the word as a whole is only measured (no colour baked).
-                words[i] = Bake(run, run.Text, new WordSpec(size, []) { MaxWidth = Stage.Width * 0.8, MinimumScale = 0.4 });
+                words[i] = Bake(run, run.Text, new WordSpec(size, []) { MaxWidth = Stage.Width * 0.8, MinimumScale = 0.4, Accent = Accent(source, i) with { Symbol = null } });
                 BakeLetters(line, i, run, size, Colour(sample.Sung), reading, Colour(sample.Reading));
             }
             // The small version it becomes, taking over once the big one has shrunk to its size.
@@ -219,16 +219,31 @@ internal sealed class MosaicLayer(IWordBreaker breaker, Logger? logger) : StageL
                 else
                 {
                     var letters = line.Letters[id];
-                    var fitted = Matrix3x2.CreateScale((float)line.LetterScale[id]) * big;
+                    // The word's action moves the whole stack, sized as the big word is set (the Mac's wordAction round
+                    // it), and each letter moves as that letter of the word (the Mac's LivelyLetterSlot, a161036).
+                    var stackPose = word.Action is { } stackAction
+                        ? ActionPose(new RunAccent(null, stackAction, word.Gentle), run.Start, run.End, time)
+                        : LivelyPose.Identity;
+                    var acted = stackPose.IsIdentity ? big
+                        : Homography.Flat(LivelyWord.Transform(stackPose, size, Vector2.Zero, new SizeD(word.Size.Width, word.Size.Height), flat: true)) * big;
+                    var fitted = Matrix3x2.CreateScale((float)line.LetterScale[id]) * acted;
                     var readingRow = line.LetterReadings[id] is null ? 0 : line.LetterReadings[id]!.Size.Height + size * 0.1;
                     var lettersAt = Matrix3x2.CreateTranslation(0, (float)(-readingRow / 2)) * fitted;
+                    var tone = Colour(Sample(line, run).Sung);
+                    var letterSize = size / Math.Max(1e-3, line.LetterScale[id]);
+                    var stackCue = stackPose.Tints ? LivelyWord.Tinted(stackPose, tone with { W = 1 }, 1) : default;
                     for (var k = 0; k < letters.Length; k++)
                     {
                         var letter = letters[k];
                         var reveal = StageShared.Glide((time - (run.Start + k * 0.05)) / 0.25);
                         var local = Matrix3x2.CreateRotation(Radians(letter.Turn))
                             * Matrix3x2.CreateTranslation((float)letter.X, (float)(letter.Y + (reduce ? 0 : (1 - reveal) * size * 0.3))) * lettersAt;
-                        DrawInk(dc, letter.Ink, Homography.Of(local), Vector2.Zero, reveal * bigOpacity, blur);
+                        if (!(word.Action is { } letterAction
+                              && DrawLively(dc, letter.Ink, local, MathF.Sqrt(MathF.Abs(local.GetDeterminant())),
+                                            new RunAccent(null, letterAction, word.Gentle), run.Start, run.End, time, letterSize, tone, tone,
+                                            stackPose, (float)(reveal * bigOpacity), 1, GlowSpec.None, stackCue, true,
+                                            slotIndex: k, slotCount: letters.Length)))
+                            DrawInk(dc, letter.Ink, Homography.Of(local), Vector2.Zero, reveal * bigOpacity, blur);
                     }
                     if (line.LetterReadings[id] is { } under)
                     {

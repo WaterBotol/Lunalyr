@@ -320,8 +320,15 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger, Composit
                         onLabel = pressed > 0.5 && hold > 0.4 && unit.LabelOnTile is not null;
                     }
                 }
-                StageLayer.DrawInk(dc, onLabel ? unit.LabelOnTile! : unit.Label, depth, unit.LabelOffset, opacity, 0, 1,
-                                   reveal.IsEmpty ? default : AsSpan(token.Boundaries), reveal, token.RightToLeft);
+                // Its letters twist inside the turn (the inner ones lead, the outer ones trail): drawn flat, then turned.
+                var spinLabel = onLabel ? unit.LabelOnTile! : unit.Label;
+                if (!(unit.Action is { } spinAction && Revealed(reveal) && !state.Presentation.Preview
+                      && DrawLivelyProjected(dc, spinLabel, Matrix4x4.CreateTranslation(unit.LabelOffset.X, unit.LabelOffset.Y, 0) * depth,
+                                             new RunAccent(null, spinAction, unit.Gentle), token.Source.Start, token.Source.End, time,
+                                             token.PointSize, unit.RestColour, unit.RestColour, action, (float)opacity, onLabel ? 0 : 1,
+                                             GlowSpec.None, default)))
+                    StageLayer.DrawInk(dc, spinLabel, depth, unit.LabelOffset, opacity, 0, 1,
+                                       reveal.IsEmpty ? default : AsSpan(token.Boundaries), reveal, token.RightToLeft);
                 if (!state.Presentation.Preview)
                 {
                     if (unit.Symbol is { } turning)

@@ -663,7 +663,7 @@ internal abstract class StageLayer(CompositionKind kind, IWordBreaker breaker, L
                 SymbolOffset = symbols.Length == 0 ? default
                     : new Vector2(Aligned(wordWidth) + wordShift + side * (float)(w / 2 + symbolGap + symbolWidth / 2),
                                   (float)(-unitHeight / 2 + h / 2 + symbolDy)),
-                Action = spec.Colours.Length > 0 ? spec.Accent.Action : null, Gentle = spec.Accent.Gentle,
+                Action = spec.Accent.Action, Gentle = spec.Accent.Gentle,
                 Pivot = new Vector2(Aligned(wordWidth), (float)(-unitHeight / 2 + h / 2)),
                 FontSize = size,
                 Colours = spec.Colours,
@@ -863,6 +863,17 @@ internal abstract class StageLayer(CompositionKind kind, IWordBreaker breaker, L
             lettersDrawn = DrawLively(dc, word.Labels[colour], flat, worldScale, new RunAccent(null, livelyAction, word.Gentle),
                                       run.Start, run.End, time, word.FontSize, tone, tone, pose, (float)shown, shadow,
                                       glow.Visible ? glow with { Radius = glow.Radius * worldScale } : GlowSpec.None, cue, particleLayer);
+        }
+        else if (word.Action is { } turnedAction && Revealed(parts))
+        {
+            // A word on a page turned in depth (Hinge): its letters move flat, then the whole is turned with the page.
+            var cue = pose.Tints ? LivelyWord.Tinted(pose, tone with { W = 1 }, 1) : default;
+            var aroundInImage = !around && particleLayer
+                ? LivelyAround(dc, word.LabelOffset + nudge, wordCentre, wordBox, pose, time - run.Start, word.FontSize, tone)
+                : null;
+            lettersDrawn = DrawLivelyProjected(dc, word.Labels[colour], labelWorld, new RunAccent(null, turnedAction, word.Gentle),
+                                               run.Start, run.End, time, word.FontSize, tone, tone, pose, (float)shown, shadow, glow,
+                                               cue, particleLayer, aroundInImage);
         }
         if (!lettersDrawn)
         {

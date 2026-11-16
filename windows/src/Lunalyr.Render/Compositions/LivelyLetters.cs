@@ -80,9 +80,13 @@ internal sealed class LivelyLetters : IDisposable
     /// <param name="clipLeft">With <paramref name="clipRight"/>: only this stretch across the label (layout pixels from
     /// its centre, as it lies before its letters move) is drawn, so a word in two colours either side of an edge (a
     /// Cutout label's tile) draws each colour on its own side.</param>
+    /// <param name="slotIndex">With <paramref name="slotCount"/>: this text is one letter of a word set letter by letter
+    /// (Mosaic's), at that index (the Mac's <c>LivelyLetterSlot</c>, a161036): it moves as that letter of the word, the
+    /// word taken as that many letters of its width, and the word's particles are drawn once, by its middle letter.</param>
     public bool Draw(ID2D1DeviceContext dc, Ink ink, in Matrix3x2 world, float worldScale, in LivelyState state, float opacity,
                      float shadow, Vector4 basis, Vector4 cue, GlowSpec glow, bool particles,
-                     float clipLeft = float.NegativeInfinity, float clipRight = float.PositiveInfinity)
+                     float clipLeft = float.NegativeInfinity, float clipRight = float.PositiveInfinity,
+                     int slotIndex = -1, int slotCount = 0)
     {
         if (ink.Letters is not { Count: > 0 } letters) return false;
         if (!(opacity > 0.002f) || !(clipRight > clipLeft)) return true;
@@ -97,28 +101,112 @@ internal sealed class LivelyLetters : IDisposable
         _cue = cue;
         _opacity = opacity;
         _shadow = shadow;
-        _particles = particles;
         var count = letters.Count;
         if (_glyphs.Length < count) _glyphs = new Glyph[count * 2];
         var minX = letters.MinX;
         var width = Math.Max(1e-3f, letters.MaxX - minX);
+        var slotted = slotIndex >= 0 && slotCount > 0;
         for (var i = 0; i < count; i++)
         {
             var left = letters.Left[i];
             var right = letters.Right[i];
             _glyphs[i] = new Glyph
             {
-                Index = i, Left = left, Right = right, Along = ((left + right) / 2 - minX) / width,
+                Index = slotted ? slotIndex + i : i,
+                Left = left, Right = right,
+                Along = slotted ? (slotCount > 1 ? Math.Min(1, (double)(slotIndex + i) / (slotCount - 1)) : 0.5)
+                    : ((left + right) / 2 - minX) / width,
                 SliceLeft = i == 0 ? float.NegativeInfinity : (letters.Right[i - 1] + left) / 2,
                 SliceRight = i == count - 1 ? float.PositiveInfinity : (right + letters.Left[i + 1]) / 2,
             };
         }
+        var letterCount = count;
+        if (slotted)
+        {
+            // The word, estimated from this letter's width: that many letters, this one at its index.
+            minX -= width * slotIndex;
+            width *= Math.Max(1, slotCount);
+            letterCount = slotCount;
+            particles = particles && slotIndex == slotCount / 2;
+        }
+        _particles = particles;
         var word = new Rect(minX, letters.Top, width, letters.Bottom - letters.Top);
         if (glow.Visible) ink.DrawGlow(dc, world, worldScale, opacity, glow);
         if (particles) Behind(dc, word);
-        for (var i = 0; i < count; i++) DrawGlyph(dc, ref _glyphs[i], count, word);
+        for (var i = 0; i < count; i++) DrawGlyph(dc, ref _glyphs[i], letterCount, word);
         if (particles) Front(dc, count, word);
         return true;
+    }
+
+    private ID2D1Bitmap1? _scratch;
+    private int _scratchWidth, _scratchHeight;
+
+    /// <summary>
+    /// As <see cref="Draw"/>, for a word drawn through a transform that turns in depth (Hinge's pages, a spin mid-turn):
+    /// the word is drawn flat into a scratch image, its letters, tints and particles and what <paramref name="around"/>
+    /// draws with it, and the image is put through <paramref name="world"/> (layout pixels from the label's centre →
+    /// device), as SwiftUI turns a whole drawn view.
+    /// </summary>
+    /// <param name="around">Drawn into the same image behind (false) and in front (true) of the word, given the label's
+    /// layout pixels → image.</param>
+    public bool DrawProjected(ID2D1DeviceContext dc, Ink ink, in Matrix4x4 world, in LivelyState state, float opacity, float shadow,
+                              Vector4 basis, Vector4 cue, GlowSpec glow, bool particles, Action<Matrix3x2, bool>? around = null)
+    {
+        if (ink.Letters is not { Count: > 0 } letters) return false;
+        if (!(opacity > 0.002f)) return true;
+        // The image's resolution: the projection's own scale at the word, so it is drawn about one to one.
+        var s = Math.Clamp(LocalScale(world), 0.25f, 4f);
+        var pad = (float)(state.Size * 2.2 + 20);
+        float left = letters.MinX - pad, top = letters.Top - pad, right = letters.MaxX + pad, bottom = letters.Bottom + pad;
+        s = MathF.Min(s, 4096 / MathF.Max(1, MathF.Max(right - left, bottom - top)));
+        var w = Math.Max(1, (int)MathF.Ceiling((right - left) * s));
+        var h = Math.Max(1, (int)MathF.Ceiling((bottom - top) * s));
+        Ensure(dc);
+        if (_scratch is null || _scratchWidth < w || _scratchHeight < h)
+        {
+            _scratch?.Dispose();
+            _scratchWidth = Math.Max(w, _scratchWidth);
+            _scratchHeight = Math.Max(h, _scratchHeight);
+            _scratch = dc.CreateBitmap(new Vortice.Mathematics.SizeI(_scratchWidth, _scratchHeight), IntPtr.Zero, 0,
+                new BitmapProperties1(new Vortice.DCommon.PixelFormat(Vortice.DXGI.Format.B8G8R8A8_UNorm, Vortice.DCommon.AlphaMode.Premultiplied),
+                                      96, 96, BitmapOptions.Target));
+        }
+        var flat = Matrix3x2.CreateTranslation(-left, -top) * Matrix3x2.CreateScale(s);
+        var previous = dc.Target;
+        var previousTransform = dc.Transform;
+        try
+        {
+            dc.Target = _scratch;
+            dc.Transform = Matrix3x2.Identity;
+            dc.Clear(new Color4(0, 0, 0, 0));
+            around?.Invoke(flat, false);
+            Draw(dc, ink, flat, s, state, 1, shadow, basis, cue,
+                 glow.Visible ? glow with { Radius = glow.Radius * s } : GlowSpec.None, particles);
+            around?.Invoke(flat, true);
+        }
+        finally
+        {
+            dc.Target = previous;
+            previous?.Dispose();
+            dc.Transform = previousTransform;
+        }
+        var project = Matrix4x4.CreateScale(1 / s, 1 / s, 1) * Matrix4x4.CreateTranslation(left, top, 0) * world;
+        dc.Transform = Matrix3x2.Identity;
+        var rect = new Vortice.RawRectF(0, 0, w, h);
+        dc.DrawBitmap(_scratch, rect, opacity, InterpolationMode.Linear, rect, project);
+        return true;
+    }
+
+    /// <summary>How many device pixels a layout pixel at the label's centre spans through <paramref name="world"/>.</summary>
+    private static float LocalScale(in Matrix4x4 world)
+    {
+        static Vector2 Project(Vector2 p, in Matrix4x4 m)
+        {
+            var v = Vector4.Transform(new Vector4(p.X, p.Y, 0, 1), m);
+            return Math.Abs(v.W) < 1e-6f ? new Vector2(v.X, v.Y) : new Vector2(v.X / v.W, v.Y / v.W);
+        }
+        var o = Project(Vector2.Zero, world);
+        return MathF.Max(Vector2.Distance(Project(Vector2.UnitX, world), o), Vector2.Distance(Project(Vector2.UnitY, world), o));
     }
 
     private void Ensure(ID2D1DeviceContext dc)
@@ -1063,8 +1151,11 @@ internal sealed class LivelyLetters : IDisposable
     {
         _brush?.Dispose();
         _round?.Dispose();
+        _scratch?.Dispose();
         _brush = null;
         _round = null;
+        _scratch = null;
+        _scratchWidth = _scratchHeight = 0;
         _dc = null;
     }
 

@@ -176,14 +176,41 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
     protected bool DrawLively(ID2D1DeviceContext dc, Ink label, in Matrix3x2 world, float worldScale, in RunAccent accent,
                               double onset, double end, double time, double size, Vector4 basis, Vector4 glowInk,
                               in LivelyPose pose, float opacity, float shadow, GlowSpec glow, Vector4 cue, bool particles = true,
-                              float clipLeft = float.NegativeInfinity, float clipRight = float.PositiveInfinity)
+                              float clipLeft = float.NegativeInfinity, float clipRight = float.PositiveInfinity,
+                              int slotIndex = -1, int slotCount = 0)
     {
         if (label.Letters is null) return false;
         if (LivelyState.For(accent, time - onset, end - onset, StyleShown.ActionStrength, ReduceMotion, size,
                             new Vector4(glowInk.X, glowInk.Y, glowInk.Z, 1), pose.Dy) is not { } state)
             return false;
         return _lively.Draw(dc, label, world, worldScale, state, opacity, shadow, basis with { W = 1 }, cue, glow, particles,
-                            clipLeft, clipRight);
+                            clipLeft, clipRight, slotIndex, slotCount);
+    }
+
+    /// <summary>
+    /// As <see cref="DrawLively"/>, for a label drawn through a transform that turns in depth (<paramref name="world"/>:
+    /// its layout pixels from its centre → device): drawn flat, then turned as one (Hinge's pages, a spin mid-turn).
+    /// <paramref name="around"/> draws with it in the label's own layout pixels (behind, then in front).
+    /// </summary>
+    protected bool DrawLivelyProjected(ID2D1DeviceContext dc, Ink label, in Matrix4x4 world, in RunAccent accent, double onset,
+                                       double end, double time, double size, Vector4 basis, Vector4 glowInk, in LivelyPose pose,
+                                       float opacity, float shadow, GlowSpec glow, Vector4 cue, bool particles = true,
+                                       Action<Matrix3x2, bool>? around = null)
+    {
+        if (label.Letters is null) return false;
+        if (LivelyState.For(accent, time - onset, end - onset, StyleShown.ActionStrength, ReduceMotion, size,
+                            new Vector4(glowInk.X, glowInk.Y, glowInk.Z, 1), pose.Dy) is not { } state)
+            return false;
+        return _lively.DrawProjected(dc, label, world, state, opacity, shadow, basis with { W = 1 }, cue, glow, particles, around);
+    }
+
+    /// <summary>The whirlwind and vignette as a frame-relative drawing, for <see cref="DrawLivelyProjected"/>'s image.</summary>
+    protected Action<Matrix3x2, bool>? LivelyAround(ID2D1DeviceContext dc, Vector2 labelCentreInUnit, Vector2 centre, Vector2 box,
+                                                    LivelyPose pose, double elapsed, double size, Vector4 glowInk)
+    {
+        if (!(pose.Twister > 0.005) && !(pose.Vignette > 0.005)) return null;
+        return (labelToImage, front) => DrawLivelyAround(dc, Matrix3x2.CreateTranslation(-labelCentreInUnit) * labelToImage, centre, box,
+                                                         pose, elapsed, size, glowInk, 1, front);
     }
 
     /// <summary>The whole-word pose of <paramref name="accent"/>'s action at <paramref name="time"/> for a word sung from <paramref name="onset"/> to <paramref name="end"/>.</summary>
@@ -1136,9 +1163,16 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
                 // Mid-spin: the word, its symbol and its reading turn as one, in perspective (no tile, sweep or blur).
                 var depth = lively * Homography.Of(local);
                 var spinGlow = LivelyWord.Glow(action, new Vector4(ink.Glow.X, ink.Glow.Y, ink.Glow.Z, 1), size);
-                StageLayer.DrawInk(dc, ink.Label, depth, ink.LabelOffset, visibility, 0, (float)((0.28 + 0.24 * heat) / 0.52),
-                                   run.Boundaries, frame.RevealsByToken ? plan.TokenOpacities.AsSpan(run.TokenStart, run.TokenCount) : default,
-                                   run.RightToLeft, spinGlow);
+                // Its letters twist inside the turn (the inner ones lead, the outer ones trail): drawn flat, then turned.
+                var spinTokens = frame.RevealsByToken ? plan.TokenOpacities.AsSpan(run.TokenStart, run.TokenCount) : default;
+                var spinShadow = (float)((0.28 + 0.24 * heat) / 0.52);
+                if (!(ink.Action is { } spinAction && Revealed(spinTokens)
+                      && DrawLivelyProjected(dc, ink.Label, Matrix4x4.CreateTranslation(ink.LabelOffset.X, ink.LabelOffset.Y, 0) * depth,
+                                             new RunAccent(null, spinAction, ink.Gentle), onset,
+                                             tokens[run.TokenStart + Math.Max(0, run.TokenCount - 1)].Source.End, time, size, ink.RestColour,
+                                             glowInk, action, (float)visibility, spinShadow, spinGlow, default)))
+                    StageLayer.DrawInk(dc, ink.Label, depth, ink.LabelOffset, visibility, 0, spinShadow, run.Boundaries, spinTokens,
+                                       run.RightToLeft, spinGlow);
                 if (ink.Symbol is { } spinning)
                     StageLayer.DrawInk(dc, spinning, depth, ink.SymbolOffset,
                                        visibility * WordActionMotion.SymbolOpacity(time - tokens[run.TokenStart].Source.Start));
