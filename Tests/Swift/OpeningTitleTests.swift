@@ -468,19 +468,14 @@ final class OpeningTitleTests: XCTestCase {
         XCTAssertEqual(OpeningTitle.staying(joined: 60).size, .compact)
     }
 
-    func testTheFloatingRowHasRoomAboveTheLyrics() {
+    func testTheFloatingLyricsKeepNoRowForTheTitle() {
+        // The card has a window of its own: the lyrics' stage is the same
+        // whether or not the title is kept.
         let size = CGSize(width: 836, height: 202)
-        let plain = LyricViewportMetrics(size: size, textSize: 44)
-        let row = LyricViewportMetrics(size: size, textSize: 44, titleRow: true)
-        XCTAssertEqual(plain.titleBand, 0)
-        XCTAssertEqual(row.titleBand, OpeningTitle.rowBand(baseSize: 44))
-        XCTAssertEqual(row.stageSize.height, plain.stageSize.height - row.titleBand, accuracy: 0.001)
-        // The lyrics' top (centred under the band) stays below the row.
-        let lyricsTop = row.titleBand + (size.height - row.titleBand - row.stageSize.height) / 2
-        let rowBottom = 44 * (OpeningTitle.rowMargin + OpeningTitle.rowCover)
-        XCTAssertGreaterThan(lyricsTop, rowBottom)
-        XCTAssertEqual(LyricViewportMetrics(size: CGSize(width: 1512, height: 982), titleRow: true).titleBand, 0,
-                       "the desktop card sits beside the lyrics")
+        let floating = LyricViewportMetrics(size: size, textSize: 44)
+        XCTAssertEqual(floating.stageSize.height, size.height * 0.88, accuracy: 0.001)
+        XCTAssertEqual(floating.stageSize.width, size.width * 0.94, accuracy: 0.001)
+        XCTAssertNotEqual(LyricTitleMode.none, .inline, "the floating lyrics draw no title")
     }
 
     // MARK: The animated cover
@@ -608,40 +603,76 @@ final class OpeningTitleTests: XCTestCase {
         XCTAssertFalse(OpeningTitle.reservesCover(age: OpeningTitle.coverWait + 0.1))
     }
 
-    // MARK: The floating title row, moved and resized
+    // MARK: The floating title card, in a window of its own
 
-    func testTheRowStaysInsideTheWindowAtItsEdge() {
-        let window = CGSize(width: 836, height: 202)
-        let row = CGSize(width: 260, height: 27)
-        let standard = OpeningTitle.rowFrame(in: window, size: row, baseSize: 44, placement: .standard)
-        XCTAssertEqual(standard.midX, window.width / 2, accuracy: 0.5, "centred at the top by default")
-        XCTAssertEqual(standard.minY, 44 * OpeningTitle.rowMargin, accuracy: 0.001)
-        for centre in [-1.0, 0, 0.1, 0.9, 1, 3] {
-            for bottom in [false, true] {
-                let frame = OpeningTitle.rowFrame(in: window, size: row, baseSize: 44,
-                                                  placement: .init(centre: centre, bottom: bottom, scale: 1))
-                XCTAssertGreaterThanOrEqual(frame.minX, 0)
-                XCTAssertLessThanOrEqual(frame.maxX, window.width)
-                XCTAssertGreaterThanOrEqual(frame.minY, 0)
-                XCTAssertLessThanOrEqual(frame.maxY, window.height)
-            }
-        }
-        let foot = OpeningTitle.rowFrame(in: window, size: row, baseSize: 44, placement: .init(centre: 0.5, bottom: true))
-        XCTAssertEqual(window.height - foot.maxY, 44 * OpeningTitle.rowMargin, accuracy: 0.001)
+    func testTheCardStartsJustAboveTheLyricsCentred() {
+        let area = CGRect(x: 0, y: 70, width: 1512, height: 874)
+        let box = CGRect(x: 338, y: 94, width: 836, height: 202)
+        let card = FloatingTitleFrame.start(.standard, box: box, area: area, textSize: 44)
+        XCTAssertEqual(card.midX, box.midX, accuracy: 0.5)
+        XCTAssertEqual(card.minY, box.maxY + FloatingTitleFrame.gap, accuracy: 0.5, "just above the box")
+        XCTAssertEqual(card.size, FloatingTitleFrame.defaultSize(textSize: 44))
+        XCTAssertFalse(card.intersects(box))
+        // No room above a box at the top: below it instead, still on the area.
+        let high = CGRect(x: 338, y: area.maxY - 202, width: 836, height: 202)
+        let under = FloatingTitleFrame.start(.standard, box: high, area: area, textSize: 44)
+        XCTAssertEqual(under.maxY, high.minY - FloatingTitleFrame.gap, accuracy: 0.5)
+        XCTAssertTrue(area.contains(under))
     }
 
-    func testTheLyricsMakeRoomOnTheRowsSide() {
-        let size = CGSize(width: 836, height: 202)
-        let standard = LyricViewportMetrics(size: size, textSize: 44, titleRow: true)
-        let large = LyricViewportMetrics(size: size, textSize: 44, titleRow: true,
-                                         titlePlacement: .init(centre: 0.5, bottom: true, scale: 1.5))
-        XCTAssertGreaterThan(large.titleBand, standard.titleBand, "a larger row takes a deeper band")
-        XCTAssertLessThan(large.stageSize.height, standard.stageSize.height)
-        // The row (its margin and cover) fits within its band.
-        XCTAssertGreaterThan(large.titleBand, 44 * (OpeningTitle.rowMargin + OpeningTitle.rowCover * 1.5))
+    func testTheOldRowsPlaceBecomesTheCardsStart() {
+        let start = FloatingTitleFrame.Start(row: OpeningTitle.RowPlacement(centre: 0.2, bottom: true, scale: 1.3))
+        XCTAssertEqual(start, FloatingTitleFrame.Start(centre: 0.2, below: true, scale: 1.3))
+        let area = CGRect(x: 0, y: 70, width: 1512, height: 874)
+        let box = CGRect(x: 338, y: 400, width: 836, height: 202)
+        let card = FloatingTitleFrame.start(start, box: box, area: area, textSize: 44)
+        XCTAssertEqual(card.midX, box.minX + 0.2 * box.width, accuracy: 0.5, "across the box where the row was")
+        XCTAssertEqual(card.maxY, box.minY - FloatingTitleFrame.gap, accuracy: 0.5, "below it, where the row was at the foot")
+        XCTAssertEqual(card.height, FloatingTitleFrame.defaultSize(textSize: 44, scale: 1.3).height)
+        XCTAssertEqual(FloatingTitleFrame.Start(encoded: start.encoded), start)
+        XCTAssertNil(FloatingTitleFrame.Start(encoded: [1]))
     }
 
-    func testTheRowPlacementIsSavedAndClamped() throws {
+    func testTheCardIsStackedUntilItIsTooSmall() {
+        let standard = FloatingTitleFrame.layout(for: FloatingTitleFrame.defaultSize(textSize: 44))
+        XCTAssertTrue(standard.stacked, "the default card is the desktop's stacked card")
+        XCTAssertGreaterThanOrEqual(standard.nominal, FloatingTitleFrame.minimumStackedTitle)
+        // The line: the height at which the stacked title reaches its minimum.
+        let line = FloatingTitleFrame.minimumStackedTitle * OpeningTitle.coverShare(compact: false) / FloatingTitleFrame.fill
+        XCTAssertTrue(FloatingTitleFrame.layout(for: CGSize(width: 600, height: line + 1)).stacked, "stacked above it")
+        XCTAssertFalse(FloatingTitleFrame.layout(for: CGSize(width: 600, height: line - 1)).stacked, "one row below it")
+        // Too narrow for the stacked words, however tall: one row.
+        XCTAssertFalse(FloatingTitleFrame.layout(for: CGSize(width: 90, height: 200)).stacked)
+        // Resizing scales it.
+        let small = FloatingTitleFrame.layout(for: CGSize(width: 400, height: 60))
+        let large = FloatingTitleFrame.layout(for: CGSize(width: 800, height: 120))
+        XCTAssertEqual(large.nominal, small.nominal * 2, accuracy: 0.001)
+        let row = FloatingTitleFrame.layout(for: CGSize(width: 600, height: 28))
+        XCTAssertEqual(row.rowBase * OpeningTitle.rowCover, 28 * FloatingTitleFrame.fill, accuracy: 0.001,
+                       "the row's cover fills the card's height")
+        XCTAssertLessThanOrEqual(FloatingTitleFrame.minimumSize.height, line, "small enough to reach the row")
+    }
+
+    @MainActor
+    func testDraggingTheCardOnThePictureMovesItFreely() {
+        let area = CGRect(x: 0, y: 70, width: 1512, height: 874)
+        let start = CGRect(x: 400, y: 400, width: 316, height: 70)
+        // A quarter-size picture: 10 points on it are 40 on the desktop; y runs down there.
+        let moved = FloatingTitleHandles.dragged(start, translation: CGSize(width: 10, height: -20), scale: 0.25,
+                                                 resizing: false, area: area)
+        XCTAssertEqual(moved.origin, CGPoint(x: 440, y: 480))
+        XCTAssertEqual(moved.size, start.size)
+        let resized = FloatingTitleHandles.dragged(start, translation: CGSize(width: -60, height: -20), scale: 0.25,
+                                                   resizing: true, area: area)
+        XCTAssertEqual(resized.width, FloatingTitleFrame.minimumSize.width, "no smaller than the least")
+        XCTAssertEqual(resized.maxY, start.maxY, "the top left stays put")
+        XCTAssertEqual(resized.height, FloatingTitleFrame.minimumSize.height)
+        let far = FloatingTitleHandles.dragged(start, translation: CGSize(width: 9_000, height: 0), scale: 1,
+                                               resizing: false, area: area)
+        XCTAssertEqual(far.maxX, area.maxX, "kept on the display")
+    }
+
+    func testTheRowPlacementIsReadForTheMigration() throws {
         let name = "OpeningTitleRow-\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: name))
         defer { defaults.removePersistentDomain(forName: name) }
@@ -653,22 +684,6 @@ final class OpeningTitleTests: XCTestCase {
         XCTAssertEqual(OpeningTitle.RowPlacement.stored(defaults).scale, OpeningTitle.RowPlacement.scales.upperBound)
         OpeningTitle.RowPlacement.reset(defaults)
         XCTAssertTrue(OpeningTitle.RowPlacement.stored(defaults).isStandard)
-    }
-
-    @MainActor
-    func testDraggingTheRowOnThePicture() {
-        let window = CGRect(x: 100, y: 200, width: 400, height: 100)
-        let moved = FloatingTitleHandles.moved(.standard, translation: CGSize(width: 100, height: 60),
-                                               location: CGPoint(x: 400, y: 280), window: window)
-        XCTAssertEqual(moved.centre, 0.75, accuracy: 1e-9)
-        XCTAssertTrue(moved.bottom, "dropped in the window's lower half: its foot")
-        let back = FloatingTitleHandles.moved(moved, translation: CGSize(width: -900, height: -60),
-                                              location: CGPoint(x: 120, y: 210), window: window)
-        XCTAssertEqual(back.centre, 0)
-        XCTAssertFalse(back.bottom)
-        XCTAssertEqual(FloatingTitleHandles.resized(.standard, width: 100, dx: 30).scale, 1.3, accuracy: 1e-9)
-        XCTAssertEqual(FloatingTitleHandles.resized(.standard, width: 100, dx: -90).scale,
-                       OpeningTitle.RowPlacement.scales.lowerBound)
     }
 
     // MARK: Title strength

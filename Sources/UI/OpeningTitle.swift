@@ -23,8 +23,8 @@ enum OpeningTitle {
     /// song's start, or when Lunalyr joins it part-way) and stays for the
     /// whole song, settling to `restOpacity` once it would have left, so
     /// there is always a name for what is playing. Low on the left beside
-    /// the lyrics on the desktop; a compact row above them in the floating
-    /// window. Testers asked for it (Nov 2026). The key predates the
+    /// the lyrics on the desktop; in the floating lyrics, in the title
+    /// card's own window. Testers asked for it (Nov 2026). The key predates the
     /// setting's present meaning ("show it in full mid-song too").
     static let alwaysKey = "custom.openingTitleAlways"
 
@@ -571,24 +571,16 @@ extension OpeningTitle {
         }
     }
 
-    // The floating window's kept title: one row above the lyrics.
-    /// Its margin from the window's top, the cover's side and its type, as
-    /// shares of the lyric size.
-    static let rowMargin: CGFloat = 0.18
+    /// The floating title card's one-line row (`FloatingTitleFrame.layout`):
+    /// the cover's side and its type, as shares of the row's lyric size.
     static let rowCover: CGFloat = 0.62
     static let rowTitle: CGFloat = 0.38
     static let rowArtist: CGFloat = 0.3
-    /// The height kept clear for the row: its margin, the cover, and a gap
-    /// before the lyrics.
-    static func rowBand(baseSize: CGFloat, scale: Double = 1) -> CGFloat {
-        baseSize * (rowMargin + (rowCover + 0.16) * CGFloat(RowPlacement.clamped(scale)))
-    }
 
-    /// Where the floating window's title row sits, as set by dragging it on
-    /// the Settings picture (Floating over apps): across the window (its
-    /// centre, as a share of the window's width), at the window's top or
-    /// bottom edge (the lyrics make room on that side, so it never covers
-    /// them), and a scale.
+    /// Where the floating window's title row used to sit, inside the
+    /// lyrics' window: across it, at its top or bottom, and a scale. Read
+    /// once to start the title card's own window in the same place
+    /// (`FloatingTitleFrame.Start`), then removed.
     struct RowPlacement: Equatable {
         static let centreKey = "custom.floatingTitleCentre"
         static let edgeKey = "custom.floatingTitleEdge"
@@ -627,18 +619,6 @@ extension OpeningTitle {
         static func reset(_ defaults: UserDefaults = .standard) {
             for key in [centreKey, edgeKey, scaleKey] { defaults.removeObject(forKey: key) }
         }
-    }
-
-    /// The title row's frame in a window of `window` (origin top left) for a
-    /// row `size` across: centred where it was put, kept inside the window,
-    /// `rowMargin` in from the top or bottom edge.
-    static func rowFrame(in window: CGSize, size: CGSize, baseSize: CGFloat, placement: RowPlacement) -> CGRect {
-        let edge = baseSize * 0.2
-        let width = min(size.width, max(1, window.width - 2 * edge))
-        let x = min(max(edge, CGFloat(placement.centre) * window.width - width / 2), max(edge, window.width - width - edge))
-        let margin = baseSize * rowMargin
-        let y = placement.bottom ? window.height - margin - size.height : margin
-        return CGRect(x: x, y: y, width: width, height: size.height)
     }
 
     /// 1 for a title of up to 24 characters, down to 0.7 for a long one.
@@ -830,9 +810,10 @@ struct OpeningTitleCard: View {
     let mood: TrackMood
     /// The floating lyrics: centred in the window, compact, no scrim of its own.
     var floating = false
-    /// A kept title in the floating window: one compact row at the top,
-    /// above the lyrics (`OpeningTitle.rowBand`), instead of the card.
-    var row = false
+    /// The floating lyrics' title window (`FloatingTitleCardView`): the
+    /// desktop's stacked card filling the window and scaling with it, or
+    /// one row where the window is too small for it (`FloatingTitleFrame.layout`).
+    var window = false
     @SurfaceStyle private var style
     private var settings: Settings { style.settings }
     @Environment(\.lyricReduceMotion) private var reduceMotion
@@ -850,13 +831,26 @@ struct OpeningTitleCard: View {
             let box = OpeningTitle.box(in: size, baseSize: baseSize, placement: place)
             let unit = floating ? baseSize * 0.95 : (compact ? baseSize * 0.8 : baseSize) * CGFloat(place.scale)
             let dark = Self.isDark(ink.base.rest)
-            if row {
-                let rowPlace = OpeningTitle.RowPlacement.stored()
-                PlacedRow(baseSize: baseSize, placement: rowPlace) {
-                    titleRow(reveal: reveal, leaving: leaving, dark: dark, width: size.width * 0.9,
-                             scale: CGFloat(rowPlace.scale), bottom: rowPlace.bottom)
+            if window {
+                let fit = FloatingTitleFrame.layout(for: size, compact: phase.size == .compact)
+                ZStack {
+                    if fit.stacked {
+                        // The desktop's card, at the window's scale.
+                        let nominalShare: CGFloat = phase.size == .compact ? 0.72 : 0.92
+                        card(unit: fit.nominal / nominalShare, compact: phase.size == .compact, reveal: reveal,
+                             dark: dark, width: size.width * FloatingTitleFrame.fill)
+                            .opacity((1 - leaving) * phase.opacity)
+                            .blur(radius: reduceMotion ? 0 : leaving * fit.nominal * 0.06)
+                            .transition(.opacity)
+                    } else {
+                        titleRow(reveal: reveal, leaving: leaving, dark: dark, width: size.width * FloatingTitleFrame.fill,
+                                 scale: fit.rowBase / max(1, baseSize), bottom: false)
+                            .transition(.opacity)
+                    }
                 }
                 .frame(width: size.width, height: size.height)
+                // Resizing across the line swaps the two with a short fade.
+                .animation(reduceMotion ? nil : .easeInOut(duration: 0.25), value: fit.stacked)
             } else {
             let block = card(unit: unit, compact: compact, reveal: reveal, dark: dark,
                              width: floating ? size.width * 0.9 : box.width)
@@ -1207,26 +1201,6 @@ struct FirstThatFits: Layout {
 struct CappedWidthModifier: ViewModifier {
     let maximum: CGFloat
     func body(content: Content) -> some View { CappedWidth(maximum: maximum) { content } }
-}
-
-/// Places the floating window's title row (its one subview) where the
-/// user put it (`OpeningTitle.rowFrame`): kept inside the window, at its
-/// top or bottom edge.
-struct PlacedRow: Layout {
-    let baseSize: CGFloat
-    let placement: OpeningTitle.RowPlacement
-
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        proposal.replacingUnspecifiedDimensions()
-    }
-
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        guard let row = subviews.first else { return }
-        let size = row.sizeThatFits(ProposedViewSize(width: bounds.width * 0.9, height: nil))
-        let frame = OpeningTitle.rowFrame(in: bounds.size, size: size, baseSize: baseSize, placement: placement)
-        row.place(at: CGPoint(x: bounds.minX + frame.minX, y: bounds.minY + frame.minY),
-                  proposal: ProposedViewSize(width: frame.width, height: frame.height))
-    }
 }
 
 /// The card's type, as one: a soft shadow under it, as the lyrics have,

@@ -212,6 +212,10 @@ final class FloatingLyricsOptions: ObservableObject {
         static let placements = "custom.floating.placements"
         /// What each display shows (`DisplayLyrics`), by display key.
         static let displays = "custom.displayLyrics"
+        /// The song title card's own window (`FloatingTitleFrame`).
+        static let titleCard = "custom.floating.titleCard"
+        static let titleFrames = "custom.floating.titleFrames"
+        static let titleStart = "custom.floating.titleStart"
     }
 
     /// Small, Medium, Large, as text sizes in points.
@@ -271,6 +275,22 @@ final class FloatingLyricsOptions: ObservableObject {
     /// Window sizes per display key, used by the presets.
     @Published private(set) var sizes: [String: [Double]] { didSet { defaults.set(sizes, forKey: Keys.sizes) } }
 
+    /// The song title card floats in a window of its own, beside the
+    /// lyrics' box on every floating display.
+    @Published var showsTitleCard: Bool { didSet { defaults.set(showsTitleCard, forKey: Keys.titleCard) } }
+    /// The card's frames set by hand, per display key, relative to that
+    /// display's frame.
+    @Published private(set) var titleFrames: [String: [Double]] {
+        didSet { defaults.set(titleFrames, forKey: Keys.titleFrames) }
+    }
+    /// Where the card starts on a display with no frame of its own.
+    @Published private(set) var titleStart: FloatingTitleFrame.Start {
+        didSet {
+            if titleStart == .standard { defaults.removeObject(forKey: Keys.titleStart) }
+            else { defaults.set(titleStart.encoded, forKey: Keys.titleStart) }
+        }
+    }
+
     private let defaults: UserDefaults
     private let reloadStyle: () -> Void
 
@@ -294,8 +314,43 @@ final class FloatingLyricsOptions: ObservableObject {
             .compactMapValues(FloatingPlacement.init(rawValue:))
         displays = (defaults.dictionary(forKey: Keys.displays) as? [String: String] ?? [:])
             .compactMapValues(DisplayLyrics.init(rawValue:))
+        showsTitleCard = defaults.object(forKey: Keys.titleCard) as? Bool ?? true
+        titleFrames = defaults.dictionary(forKey: Keys.titleFrames) as? [String: [Double]] ?? [:]
+        titleStart = (defaults.array(forKey: Keys.titleStart) as? [Double]).flatMap(FloatingTitleFrame.Start.init(encoded:))
+            ?? .standard
         migrateDisplaysIfNeeded(connected: connected)
+        migrateTitleRow()
     }
+
+    /// The title used to be a row inside the lyrics' window, placed along
+    /// its top or bottom (`OpeningTitle.RowPlacement`): once, that place
+    /// becomes where the card starts beside the box, and the row's keys go.
+    private func migrateTitleRow() {
+        let keys = [OpeningTitle.RowPlacement.centreKey, OpeningTitle.RowPlacement.edgeKey,
+                    OpeningTitle.RowPlacement.scaleKey]
+        guard keys.contains(where: { defaults.object(forKey: $0) != nil }) else { return }
+        if defaults.object(forKey: Keys.titleStart) == nil {
+            titleStart = FloatingTitleFrame.Start(row: OpeningTitle.RowPlacement.stored(defaults))
+        }
+        OpeningTitle.RowPlacement.reset(defaults)
+    }
+
+    // MARK: The song title card
+
+    func titleFrame(for display: String) -> CGRect? { titleFrames[display].flatMap(FloatingFrame.decode) }
+
+    /// Keeps the card where it was dragged on `display`, relative to it.
+    func storeTitleFrame(_ relative: CGRect, for display: String) {
+        titleFrames[display] = FloatingFrame.encode(relative)
+    }
+
+    /// Puts the card back beside the lyrics on every display.
+    func resetTitleFrames() {
+        titleFrames = [:]
+        titleStart = .standard
+    }
+
+    var titleIsPlacedByHand: Bool { !titleFrames.isEmpty || titleStart != .standard }
 
     /// The first time displays are known: gives each connected display the
     /// choice that keeps the look it had (`DisplayLyrics.migrated`). Once.
@@ -427,15 +482,15 @@ enum FloatingFrame {
     }
 
     /// A size no smaller than the minimum and no larger than the area.
-    static func fitted(_ size: CGSize, in area: CGRect) -> CGSize {
-        let width = min(max(size.width, minimumSize.width), max(minimumSize.width, area.width))
-        let height = min(max(size.height, minimumSize.height), max(minimumSize.height, area.height))
+    static func fitted(_ size: CGSize, in area: CGRect, minimum: CGSize = minimumSize) -> CGSize {
+        let width = min(max(size.width, minimum.width), max(minimum.width, area.width))
+        let height = min(max(size.height, minimum.height), max(minimum.height, area.height))
         return CGSize(width: width, height: height)
     }
 
     /// Keeps a frame on the area: shrunk to fit, then moved inside it.
-    static func clamped(_ frame: CGRect, to area: CGRect) -> CGRect {
-        let size = fitted(frame.size, in: area)
+    static func clamped(_ frame: CGRect, to area: CGRect, minimum: CGSize = minimumSize) -> CGRect {
+        let size = fitted(frame.size, in: area, minimum: minimum)
         let x = min(max(frame.minX, area.minX), area.maxX - size.width)
         let y = min(max(frame.minY, area.minY), area.maxY - size.height)
         return CGRect(x: x, y: y, width: size.width, height: size.height)
@@ -462,16 +517,17 @@ enum FloatingFrame {
     /// A move or resize by hand: `delta` is how far the pointer went since
     /// the drag began, in AppKit's coordinates (y up). Resizing pins the top
     /// left corner, as dragging a window's bottom-right corner does.
-    static func dragged(_ start: CGRect, by delta: CGSize, resizing: Bool, in area: CGRect) -> CGRect {
+    static func dragged(_ start: CGRect, by delta: CGSize, resizing: Bool, in area: CGRect,
+                        minimum: CGSize = minimumSize) -> CGRect {
         if resizing {
-            let width = max(minimumSize.width, start.width + delta.width)
-            let height = max(minimumSize.height, start.height - delta.height)
+            let width = max(minimum.width, start.width + delta.width)
+            let height = max(minimum.height, start.height - delta.height)
             let maxWidth = area.maxX - start.minX, maxHeight = start.maxY - area.minY
-            let size = CGSize(width: min(width, max(minimumSize.width, maxWidth)),
-                              height: min(height, max(minimumSize.height, maxHeight)))
+            let size = CGSize(width: min(width, max(minimum.width, maxWidth)),
+                              height: min(height, max(minimum.height, maxHeight)))
             return CGRect(x: start.minX, y: start.maxY - size.height, width: size.width, height: size.height)
         }
-        return clamped(start.offsetBy(dx: delta.width, dy: delta.height), to: area)
+        return clamped(start.offsetBy(dx: delta.width, dy: delta.height), to: area, minimum: minimum)
     }
 
     // MARK: The box and the window round it
@@ -542,6 +598,115 @@ enum FloatingFrame {
         guard !keys.isEmpty else { return nil }
         if !choice.isEmpty, let index = keys.firstIndex(of: choice) { return index }
         return 0
+    }
+}
+
+// MARK: - The floating song title card
+
+/// The floating lyrics' song title card: a window of its own, apart from
+/// the lyrics' box, anywhere on its display. Pure geometry, in AppKit's
+/// global coordinates (origin bottom left), like `FloatingFrame`. Its frame
+/// is the card's box; the window round it has `margin` more on every side
+/// for the glow.
+enum FloatingTitleFrame {
+    /// Small enough to fall back to the one-line row (`Layout`).
+    static let minimumSize = CGSize(width: 120, height: 24)
+    /// See-through room round the card for its shadow and glow.
+    static let margin: CGFloat = 48
+    /// Between the card and the lyrics' box, by default.
+    static let gap: CGFloat = 10
+
+    /// Where a display without a frame set by hand puts the card, relative
+    /// to the lyrics' box: centred across it (0 left, 1 right), above it or
+    /// below, and a scale of the size that follows the text size.
+    struct Start: Equatable {
+        var centre = 0.5
+        var below = false
+        var scale = 1.0
+        static let standard = Start()
+        static let scales: ClosedRange<Double> = 0.5...2.5
+
+        /// The old title row's place in the lyrics' window, carried over:
+        /// its edge becomes the side of the box, its place across and its
+        /// size kept.
+        init(centre: Double = 0.5, below: Bool = false, scale: Double = 1) {
+            self.centre = centre.isFinite ? min(1, max(0, centre)) : 0.5
+            self.below = below
+            self.scale = scale.isFinite ? min(Self.scales.upperBound, max(Self.scales.lowerBound, scale)) : 1
+        }
+
+        init(row: OpeningTitle.RowPlacement) {
+            self.init(centre: row.centre, below: row.bottom, scale: row.scale)
+        }
+
+        var encoded: [Double] { [centre, below ? 1 : 0, scale] }
+
+        init?(encoded values: [Double]) {
+            guard values.count == 3 else { return nil }
+            self.init(centre: values[0], below: values[1] >= 0.5, scale: values[2])
+        }
+    }
+
+    /// The card's size at a text size: a stacked card a little under half
+    /// the lyrics' size, wide enough for a cover and a two-line title.
+    static func defaultSize(textSize: CGFloat, scale: Double = 1) -> CGSize {
+        let size = (textSize.isFinite ? max(10, textSize) : 44) * CGFloat(scale)
+        return CGSize(width: (size * 7.2).rounded(), height: (size * 1.6).rounded())
+    }
+
+    /// The default frame: centred on the lyrics' box (`start.centre`
+    /// across it), just above it, or below it when there is no room above
+    /// (and the reverse), kept on the area.
+    static func start(_ start: Start, box: CGRect, area: CGRect, textSize: CGFloat) -> CGRect {
+        let size = FloatingFrame.fitted(defaultSize(textSize: textSize, scale: start.scale), in: area, minimum: minimumSize)
+        let x = box.minX + CGFloat(start.centre) * box.width - size.width / 2
+        let above = box.maxY + gap, below = box.minY - gap - size.height
+        let fitsAbove = above + size.height <= area.maxY, fitsBelow = below >= area.minY
+        let y = start.below ? (fitsBelow || !fitsAbove ? below : above) : (fitsAbove || !fitsBelow ? above : below)
+        return FloatingFrame.clamped(CGRect(x: x.rounded(), y: y.rounded(), width: size.width, height: size.height),
+                                     to: area, minimum: minimumSize)
+    }
+
+    /// The card's frame on one display: the one set by hand (relative to
+    /// `screenFrame`), else the start beside the lyrics' box.
+    static func resolve(custom: CGRect?, start: Start, box: CGRect, textSize: CGFloat,
+                        screenFrame: CGRect, area: CGRect) -> CGRect {
+        if let custom {
+            return FloatingFrame.clamped(custom.offsetBy(dx: screenFrame.minX, dy: screenFrame.minY), to: area,
+                                         minimum: minimumSize)
+        }
+        return self.start(start, box: box, area: area, textSize: textSize)
+    }
+
+    // MARK: Stacked card or one row
+
+    /// The smallest title the stacked card is drawn with; below it, the
+    /// card is a single row: cover, title, artist.
+    static let minimumStackedTitle: CGFloat = 14
+    /// The share of the card's height and width its contents use.
+    static let fill: CGFloat = 0.9
+
+    /// How the card is drawn in a box of `size`.
+    struct Layout: Equatable {
+        /// The desktop's stacked card: cover, title, artist and album.
+        var stacked: Bool
+        /// The stacked card's nominal title size (`OpeningTitleCard`).
+        var nominal: CGFloat
+        /// The row's lyric size (`OpeningTitle.rowCover` and so on).
+        var rowBase: CGFloat
+    }
+
+    /// The card scales with its box: the stacked card's cover fills the
+    /// height (`OpeningTitle.coverShare`) and the words have room beside it;
+    /// a box too small for a readable stacked title (`minimumStackedTitle`)
+    /// takes the row, sized to the box's height.
+    static func layout(for size: CGSize, compact: Bool = false) -> Layout {
+        let height = max(0, size.height) * fill, width = max(0, size.width) * fill
+        let byHeight: CGFloat = height / OpeningTitle.coverShare(compact: compact)
+        let byWidth: CGFloat = width / 6.5
+        let nominal: CGFloat = max(0, min(byHeight, byWidth))
+        let rowBase: CGFloat = max(0, min(height / OpeningTitle.rowCover, width / 9))
+        return Layout(stacked: nominal >= minimumStackedTitle, nominal: nominal, rowBase: rowBase)
     }
 }
 

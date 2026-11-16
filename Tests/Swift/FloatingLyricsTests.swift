@@ -204,6 +204,54 @@ final class FloatingLyricsTests: XCTestCase {
                        ["Desktop lyrics", "Floating lyrics", "Both", "None (wallpaper only)"])
     }
 
+    // MARK: The song title card's window
+
+    func testTitleCardFramesAreKeptPerDisplayAndReset() {
+        let s = stores()
+        XCTAssertTrue(s.options.showsTitleCard, "on by default")
+        XCTAssertFalse(s.options.titleIsPlacedByHand)
+        s.options.storeTitleFrame(CGRect(x: 30, y: 600, width: 300, height: 66), for: "A")
+        XCTAssertEqual(s.options.titleFrame(for: "A"), CGRect(x: 30, y: 600, width: 300, height: 66))
+        XCTAssertNil(s.options.titleFrame(for: "B"), "another display keeps its own")
+        XCTAssertNil(s.options.customFrame(for: "A"), "apart from the lyrics' frame")
+        s.options.showsTitleCard = false
+        let reread = FloatingLyricsOptions(defaults: s.defaults)
+        XCTAssertEqual(reread.titleFrame(for: "A"), CGRect(x: 30, y: 600, width: 300, height: 66))
+        XCTAssertFalse(reread.showsTitleCard)
+        reread.resetTitleFrames()
+        XCTAssertNil(reread.titleFrame(for: "A"))
+        XCTAssertFalse(reread.titleIsPlacedByHand)
+    }
+
+    func testTheOldTitleRowIsCarriedOverOnce() {
+        let defaults = LunalyrTestEnvironment.isolatedDefaults("LunalyrTests.Floating")
+        OpeningTitle.RowPlacement(centre: 0.8, bottom: true, scale: 1.4).store(defaults)
+        let options = FloatingLyricsOptions(defaults: defaults)
+        XCTAssertEqual(options.titleStart, FloatingTitleFrame.Start(centre: 0.8, below: true, scale: 1.4))
+        XCTAssertTrue(options.titleIsPlacedByHand)
+        for key in [OpeningTitle.RowPlacement.centreKey, OpeningTitle.RowPlacement.edgeKey,
+                    OpeningTitle.RowPlacement.scaleKey] {
+            XCTAssertNil(defaults.object(forKey: key), "the row's keys go: \(key)")
+        }
+        XCTAssertEqual(FloatingLyricsOptions(defaults: defaults).titleStart, options.titleStart, "kept, and read again")
+        // A row left at its standard place starts the card at its standard place.
+        let plain = LunalyrTestEnvironment.isolatedDefaults("LunalyrTests.Floating")
+        plain.set("", forKey: OpeningTitle.RowPlacement.edgeKey)
+        XCTAssertEqual(FloatingLyricsOptions(defaults: plain).titleStart, .standard)
+    }
+
+    func testTheTitleCardShowsWithTheFloatingLyrics() {
+        XCTAssertTrue(FloatingTitleVisibility.shows(lyrics: true, card: true, title: true, editing: false))
+        XCTAssertFalse(FloatingTitleVisibility.shows(lyrics: false, card: true, title: true, editing: false),
+                       "only where floating lyrics show")
+        XCTAssertFalse(FloatingTitleVisibility.shows(lyrics: true, card: false, title: true, editing: false),
+                       "Show the song title card off")
+        XCTAssertFalse(FloatingTitleVisibility.shows(lyrics: true, card: true, title: false, editing: false),
+                       "the Floating style shows no song title")
+        XCTAssertTrue(FloatingTitleVisibility.shows(lyrics: true, card: true, title: false, editing: true),
+                      "but it can still be placed")
+    }
+
     func testSwitchingTheEditedStyleIsStoredAndToggles() {
         let s = stores()
         s.options.toggleSurface()
