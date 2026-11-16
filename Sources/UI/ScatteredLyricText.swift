@@ -408,7 +408,15 @@ struct LyricSweepMask: View {
             .init(color: .clear, location: min(1, max(reach, 0))),
             .init(color: .clear, location: 1),
         ], startPoint: rightToLeft ? .trailing : .leading, endPoint: rightToLeft ? .leading : .trailing)
+        // The sweep runs across only, so it reaches well above and below
+        // the text's frame: a face whose letters stand taller than its own
+        // line box (pixel fonts, some display faces) would otherwise keep
+        // their tops in the unsung ink.
+        .padding(.vertical, -Self.overreach)
     }
+
+    /// How far past the top and bottom of the frame the sweep reaches.
+    static let overreach: CGFloat = 400
 }
 
 /// The same sweep in an underline when contrast has made the fill white.
