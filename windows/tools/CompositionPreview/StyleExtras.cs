@@ -31,6 +31,9 @@ internal static class StyleExtras
                 "presence" => style with { WordPresence = Number(value) },
                 "orb" => style with { OrbStyle = value },
                 "actions" => style with { ActionWords = value != "off" },
+                // Keep the song title on screen, and its Title strength.
+                "keep" => style with { OpeningTitleKeep = value != "off" },
+                "titleStrength" => style with { OpeningTitleStrength = Number(value) },
                 _ => throw new ArgumentException($"Unknown style extra {name}"),
             };
         }

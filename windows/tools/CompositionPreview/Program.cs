@@ -179,13 +179,18 @@ if (opening)
     // The song's opening title over the album gradient, through each card's moments (-only picks the layout; Editorial
     // by default). Files: <song>-<moment>.png.
     var lyricFactory = factories.FirstOrDefault(factory => factory.Id == (only ?? "editorial")) ?? factories[0];
-    foreach (var song in OpeningFixtures.Songs())
+    foreach (var listed in OpeningFixtures.Songs())
     {
+        // -style reaches the cards too (keep=on: the title kept all song).
+        var song = extras.Count == 0 ? listed : listed with { Scene = listed.Scene with { Style = StyleExtras.Apply(listed.Scene.Style, extras) } };
         using var gradient = new Lunalyr.Render.Backgrounds.GradientLayerFactory().Create();
         using var lyrics = lyricFactory.Create();
         IRenderLayer[] layers = [gradient, lyrics];
         foreach (var layer in layers) layer.CreateResources(stage.Dc, stage.DWrite, new System.Numerics.Vector2(width, height), scale);
-        foreach (var (label, time) in song.Moments)
+        // A kept title is looked at once more, long after it has rested.
+        IEnumerable<(string, double)> moments = song.Scene.Style.OpeningTitleKeep
+            ? [.. song.Moments, ("6-rested", Math.Max(song.Joined, 0) + 40)] : song.Moments;
+        foreach (var (label, time) in moments)
         {
             // A few seconds leading up to the moment (from where the song was joined), as the app would draw them.
             var from = Math.Max(song.Joined, time - 3);

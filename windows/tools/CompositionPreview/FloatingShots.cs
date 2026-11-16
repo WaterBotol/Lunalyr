@@ -46,6 +46,8 @@ public static class FloatingShots
         // The opening title through its moments, over a dark app (the Mac's OpeningTitlePreviewTests f-floating-* frames).
         foreach (var (label, time) in OpeningFixtures.CardMoments(OpeningFixtures.HumanNature()))
             shots.Add(new Shot($"opening-{label}", "opening", time, Dark: true));
+        // Long after: only a kept title (-style keep=on) is still there, a row above the lyrics.
+        shots.Add(new Shot("opening-6-late", "opening", 15.2, Dark: true));
 
         foreach (var screen in screens)
         {
