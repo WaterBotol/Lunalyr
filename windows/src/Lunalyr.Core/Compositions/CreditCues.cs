@@ -55,11 +55,15 @@ public static class CreditCues
         var cursor = double.IsFinite(notBefore) ? notBefore : 0;
         var names = new LyricCredits.TrackNames(title ?? "", artist ?? "");
         var seen = new HashSet<string>(StringComparer.Ordinal);
+        // A song not sung in Chinese shows its Chinese-labelled credits in English, and none of a Chinese catalogue's
+        // notices (the Mac's a0b60c3).
+        var translate = LyricCredits.SungInAnotherLanguage(lines);
         foreach (var line in lines)
         {
             if (line.Credit != true || names.IsHeading(line.Text) || names.IsLoneName(line.Text)) continue;
-            if (!seen.Add(LyricQuery.Normalize(line.Text))) continue;
-            var text = line.Text.Trim();
+            if ((translate ? LyricCredits.EnglishCredit(line.Text) : line.Text) is not { } shown) continue;
+            if (!seen.Add(LyricQuery.Normalize(shown))) continue;
+            var text = shown.Trim();
             if (text.Length == 0 || !double.IsFinite(line.Start)) continue;
             var start = Math.Max(line.Start, cursor);
             cursor = start + Stagger;

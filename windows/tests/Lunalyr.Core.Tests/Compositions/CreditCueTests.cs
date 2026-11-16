@@ -10,6 +10,31 @@ public class CreditCueTests
     private static LyricLine Credit(string text, double start) =>
         new() { Start = start, End = start + 0.01, Text = text, IsInstrumental = true, Credit = true };
 
+    // Ported from CreditsLayerTests.swift: testChineseCreditLabelsShowInEnglishOnAnEnglishSong
+    [Fact]
+    public void ChineseCreditLabelsShowInEnglishOnAnEnglishSong()
+    {
+        Assert.Equal("Lyrics by: Dylan Minnette", LyricCredits.EnglishCredit("作词 : Dylan Minnette"));
+        Assert.Equal("Arranged by: John Congleton", LyricCredits.EnglishCredit("编曲：John Congleton"));
+        Assert.Equal("Produced by: Ian Kirkpatrick", LyricCredits.EnglishCredit("制作人 : Ian Kirkpatrick"));
+        Assert.Null(LyricCredits.EnglishCredit("未经许可，不得翻唱或使用"));
+        Assert.Null(LyricCredits.EnglishCredit("TME享有本翻译作品的著作权"));
+        // No common English name: dropped.
+        Assert.Null(LyricCredits.EnglishCredit("词版权管理方：某某音乐"));
+        Assert.Equal("Producer: Max Martin", LyricCredits.EnglishCredit("Producer: Max Martin"));
+    }
+
+    // Ported from CreditsLayerTests.swift: testCuesTranslateOnlyWhenTheSongIsNotSungInChinese
+    [Fact]
+    public void CuesTranslateOnlyWhenTheSongIsNotSungInChinese()
+    {
+        static LyricLine Sung(string text, double start) => new() { Start = start, End = start + 2, Text = text };
+        LyricLine[] english = [Credit("作词 : Dylan Minnette", 0), Credit("未经许可，不得翻唱", 1), Sung("Tell me why you're bored", 10), Sung("Are you bored yet", 14)];
+        Assert.Equal(["Lyrics by: Dylan Minnette"], CreditCues.Cues(english).Select(c => c.Text));
+        LyricLine[] chinese = [Credit("作词 : 方文山", 0), Sung("刮风这天我试过握着你手", 10)];
+        Assert.Equal(["作词 : 方文山"], CreditCues.Cues(chinese).Select(c => c.Text));
+    }
+
     // Ported from CreditsLayerTests.swift: testCuesArriveOneAfterAnother
     [Fact]
     public void CuesArriveOneAfterAnother()
