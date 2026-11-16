@@ -216,6 +216,7 @@ final class FloatingLyricsController {
         let screens = NSScreen.screens.compactMap { screen in screen.versoDisplayID.map { (screen, FloatingFrame.cachedKey($0)) } }
         let floating = Set(options.floatingDisplays(among: screens.map(\.1)))
         if floating.isEmpty, state.editing { state.editing = false }
+        if !floating.isEmpty { LyricStyles.shared.keepFloatingStyle() }
         let input = visibilityInput(floats: true)
         pauseCheck?.cancel()
         pauseCheck = nil
@@ -225,9 +226,7 @@ final class FloatingLyricsController {
             DispatchQueue.main.asyncAfter(deadline: .now() + after + 0.05, execute: work)
         }
         let showing = FloatingLyricsVisibility.shows(input)
-        let card = FloatingTitleVisibility.shows(lyrics: showing, card: options.showsTitleCard,
-                                                 title: LyricStyles.shared.style(for: .floating).openingTitle,
-                                                 editing: state.editing)
+        let card = FloatingTitleVisibility.shows(lyrics: showing, card: options.showsTitleCard)
         var placed: Set<String> = []
         for (screen, key) in screens where floating.contains(key) && showing {
             let window = windows[key] ?? makeWindow(key)
@@ -471,10 +470,8 @@ final class FloatingLyricsController {
 
 /// When a display's song title card window is up.
 enum FloatingTitleVisibility {
-    /// With the floating lyrics, while the card is turned on and the
-    /// Floating style shows the song title at all; in edit position too,
-    /// to be placed.
-    static func shows(lyrics: Bool, card: Bool, title: Bool, editing: Bool) -> Bool {
-        lyrics && card && (title || editing)
-    }
+    /// With the floating lyrics, while the card is turned on. With the
+    /// Floating style's song title off it draws nothing, and its stage's
+    /// clock rests (`LyricTitleMode.only` paces by the card alone).
+    static func shows(lyrics: Bool, card: Bool) -> Bool { lyrics && card }
 }

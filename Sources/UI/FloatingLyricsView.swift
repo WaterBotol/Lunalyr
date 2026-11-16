@@ -80,8 +80,9 @@ struct FloatingLyricsView: View {
 /// The floating song title card's window: the desktop's card (cover, title,
 /// artist and album), drawn by a lyric stage that draws only the card
 /// (`LyricTitleMode.only`), so it enters, stays and leaves exactly as it
-/// does on the desktop, in the Floating style. No shade: the card has its
-/// own shadow and glow, which spill into the window's margin.
+/// does on the desktop, in the Floating style. On the same soft shade as
+/// the floating lyrics (`FloatingLyricsFrame`), so it reads over any app
+/// and its colours are judged as theirs are.
 struct FloatingTitleCardView: View {
     @ObservedObject var state: FloatingLyricsState
     @ObservedObject var options: FloatingLyricsOptions = .shared
@@ -101,29 +102,25 @@ struct FloatingTitleCardView: View {
             let box = CGSize(width: max(0, geometry.size.width - 2 * margin),
                              height: max(0, geometry.size.height - 2 * margin))
             ZStack {
-                LyricStage(size: box, mood: look.mood, accent: look.accent, trackSeed: look.seed,
-                           palette: look.cover.artworkStops, interval: settings.effectiveAnimationRate.interval,
-                           paused: !state.active, textSize: CGFloat(options.textSize), titleMode: .only)
-                    .equatable()
-                    .frame(width: box.width, height: box.height)
-                    // The colours are judged as the floating lyrics' are: over
-                    // an unknown app, with no shade of its own.
-                    .environment(\.lyricBackdropOverride,
-                                 FloatingBackdrop.luminance(strength: 0, reduceTransparency: reduceTransparency,
-                                                            behind: FloatingBackdrop.behind(
-                                                                mode: settings.effectiveBackgroundMode,
-                                                                scrim: settings.scrimStrength,
-                                                                videoDim: settings.musicVideoDim)))
-                    .environment(\.lyricSwipePalette, LyricSwipePalette(hue: look.albumAccent.x,
-                                                                         saturation: look.albumAccent.y))
-                    .accessibilityHidden(true)
+                FloatingLyricsFrame(backdrop: options.backdrop, reduceTransparency: reduceTransparency,
+                                    albumAccent: look.albumAccent,
+                                    behind: FloatingBackdrop.behind(mode: settings.effectiveBackgroundMode,
+                                                                    scrim: settings.scrimStrength,
+                                                                    videoDim: settings.musicVideoDim),
+                                    margin: margin) {
+                    LyricStage(size: box, mood: look.mood, accent: look.accent, trackSeed: look.seed,
+                               palette: look.cover.artworkStops, interval: settings.effectiveAnimationRate.interval,
+                               paused: !state.active, textSize: CGFloat(options.textSize), titleMode: .only)
+                        .equatable()
+                        .frame(width: box.width, height: box.height)
+                }
                 if state.editing {
                     FloatingEditChrome(placeholder: nowPlaying.current == nil, onDrag: onDrag, onDone: onDone,
                                        compact: true, placeholderText: "Song title")
                         .frame(width: box.width, height: box.height)
+                        .padding(margin)
                 }
             }
-            .padding(margin)
             .frame(width: geometry.size.width, height: geometry.size.height)
         }
         .ignoresSafeArea()

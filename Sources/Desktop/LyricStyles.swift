@@ -45,15 +45,15 @@ final class LyricStyles: ObservableObject {
         let editing = LyricsSurface(rawValue: defaults.string(forKey: FloatingLyricsOptions.Keys.surface) ?? "") ?? .desktop
         self.editing = editing
         parkedDefaults = LyricStyleDefaults(base: defaults, styleKeys: Set(LyricStyleProfiles.keys))
-        parkedDefaults.load(LyricStyleProfiles(defaults: defaults).ensureSaved(editing.other))
+        parkedDefaults.load(Self.kept(editing.other, in: defaults))
         parked = LyricStyle(settings: Settings(defaults: parkedDefaults, notifications: notifications),
                             colours: LyricColourOptions(defaults: parkedDefaults),
                             highlights: LyricHighlightOptions(defaults: parkedDefaults), defaults: parkedDefaults)
         mirror()
     }
 
-    /// The stores a surface draws with.
-    func style(for surface: LyricsSurface) -> LyricStyle { surface == editing ? edited : parked }
+    /// The stores a surface draws with; nil, the style being edited.
+    func style(for surface: LyricsSurface?) -> LyricStyle { (surface ?? editing) == editing ? edited : parked }
 
     /// After Settings swapped the style it edits (`LyricStyleProfiles.switchSurface`):
     /// the parked stores take up the style that was being edited.
@@ -64,9 +64,31 @@ final class LyricStyles: ObservableObject {
         reloadParked()
     }
 
+    /// Where `surface`'s style is kept. The Floating style, never kept yet,
+    /// is worked out from the style in use and kept only once it is first
+    /// used (`keepFloatingStyle`), so it starts from the desktop's look of
+    /// that day, not of the day this version was installed.
+    private static func kept(_ surface: LyricsSurface, in defaults: UserDefaults) -> [String: Any] {
+        let profiles = LyricStyleProfiles(defaults: defaults)
+        if let saved = profiles.saved(surface) { return saved }
+        guard surface == .floating else { return profiles.ensureSaved(surface) }
+        return profiles.current().merging(LyricStyleProfiles.floatingSeed) { _, seed in seed }
+    }
+
+    /// Floating lyrics are on somewhere: from now on the Floating style is
+    /// its own, kept apart from the desktop's.
+    func keepFloatingStyle() {
+        let profiles = LyricStyleProfiles(defaults: defaults)
+        guard profiles.saved(.floating) == nil else { return }
+        if editing == .desktop {
+            profiles.ensureSaved(.floating)
+            reloadParked()
+        }
+    }
+
     /// Rereads the parked style from where it is kept.
     func reloadParked() {
-        parkedDefaults.load(LyricStyleProfiles(defaults: defaults).ensureSaved(editing.other))
+        parkedDefaults.load(Self.kept(editing.other, in: defaults))
         parked.settings.reloadLyricStyle()
         parked.colours.reload()
         parked.highlights.reload()
@@ -170,7 +192,9 @@ final class LyricStyleDefaults: UserDefaults, @unchecked Sendable {
 // MARK: - In the views
 
 private struct LyricSurfaceKey: EnvironmentKey {
-    static let defaultValue: LyricsSurface = .desktop
+    /// nil: the style being edited, as every lyric view read before both
+    /// styles were live (lyric cards, onboarding, Settings' samples).
+    static let defaultValue: LyricsSurface? = nil
 }
 
 private struct LyricStylesKey: EnvironmentKey {
@@ -180,8 +204,8 @@ private struct LyricStylesKey: EnvironmentKey {
 
 extension EnvironmentValues {
     /// Which style the lyrics below draw in: the wallpaper's Desktop, the
-    /// floating windows' Floating, the Settings preview the one being edited.
-    var lyricSurface: LyricsSurface {
+    /// floating windows' Floating; unset, the one being edited.
+    var lyricSurface: LyricsSurface? {
         get { self[LyricSurfaceKey.self] }
         set { self[LyricSurfaceKey.self] = newValue }
     }
@@ -217,7 +241,7 @@ final class LyricStyleRelay: ObservableObject {
     private var followed: (styles: ObjectIdentifier, style: ObjectIdentifier)?
     private var subscriptions: [AnyCancellable] = []
 
-    func follow(_ styles: LyricStyles, surface: LyricsSurface) {
+    func follow(_ styles: LyricStyles, surface: LyricsSurface?) {
         let style = styles.style(for: surface)
         let ids = (ObjectIdentifier(styles), ObjectIdentifier(style))
         guard followed?.styles != ids.0 || followed?.style != ids.1 else { return }

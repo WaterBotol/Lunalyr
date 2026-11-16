@@ -140,7 +140,10 @@ struct FloatingDisplayChoice {
     /// same name are numbered.
     @MainActor
     static func connected() -> [FloatingDisplayChoice] {
-        named(NSScreen.screens.compactMap { screen in
+        // In the test host, one display whatever this Mac has, so Settings
+        // draws the same everywhere.
+        if AppRuntime.isUnitTesting { return [FloatingDisplayChoice(key: "test-display", name: "Built-in Display")] }
+        return named(NSScreen.screens.compactMap { screen in
             screen.versoDisplayID.map { (FloatingFrame.cachedKey($0), screen.localizedName) }
         })
     }

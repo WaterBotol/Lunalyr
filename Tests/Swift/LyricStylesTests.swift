@@ -45,7 +45,21 @@ final class LyricStylesTests: XCTestCase {
         XCTAssertTrue(s.styles.style(for: .desktop).settings === s.settings, "the desktop draws with the app's stores")
         XCTAssertEqual(floating.settings.lyricComposition, .echo)
         XCTAssertEqual(floating.settings.lyricScale, 1)
-        XCTAssertNotNil(LyricStyleProfiles(defaults: s.defaults).saved(.floating), "kept, so it never drifts")
+        XCTAssertNil(LyricStyleProfiles(defaults: s.defaults).saved(.floating), "not kept until floating lyrics are used")
+    }
+
+    func testTheFloatingStyleIsKeptWhenFloatingLyricsAreFirstUsed() {
+        let s = stores { $0.set("echo", forKey: "lyricComposition") }
+        // Months later, the desktop has moved on before anything floats.
+        s.settings.lyricComposition = .torque
+        s.styles.keepFloatingStyle()
+        XCTAssertEqual(LyricStyleProfiles(defaults: s.defaults).saved(.floating)?["lyricComposition"] as? String, "torque",
+                       "it starts from the desktop's look of the day floating lyrics are first used")
+        XCTAssertEqual(s.styles.style(for: .floating).settings.lyricComposition, .torque)
+        // From then on the two are apart.
+        s.settings.lyricComposition = .hinge
+        s.styles.keepFloatingStyle()
+        XCTAssertEqual(s.styles.style(for: .floating).settings.lyricComposition, .torque)
     }
 
     func testBothSurfacesReadTheirOwnStyleAtOnce() {
@@ -132,9 +146,13 @@ final class LyricStylesTests: XCTestCase {
 
     func testTheEnvironmentPicksTheStyle() {
         var environment = EnvironmentValues()
-        XCTAssertEqual(environment.lyricSurface, .desktop, "the wallpaper draws the Desktop style")
+        XCTAssertNil(environment.lyricSurface, "unset: the style being edited (lyric cards, Settings' samples)")
         environment.lyricSurface = .floating
         XCTAssertEqual(environment.lyricSurface, .floating)
         XCTAssertNil(environment.lyricStyles)
+        let s = stores()
+        XCTAssertTrue(s.styles.style(for: nil) === s.styles.edited)
+        s.options.surface = .floating
+        XCTAssertTrue(s.styles.style(for: nil) === s.styles.style(for: .floating))
     }
 }

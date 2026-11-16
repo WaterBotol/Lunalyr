@@ -624,6 +624,9 @@ struct NowPlayingView: View {
             SongStartLog.note("display \(displayID)\(isSettingsPreview ? " preview" : ""): wallpaper view appeared, "
                 + "background \(layer.traceName)")
         }
+        // The wallpaper's lyrics draw in the Desktop style, its Settings
+        // preview too: the Floating style shows on the picture's floating window.
+        .environment(\.lyricSurface, .desktop)
     }
 
     private struct LayerPhases {

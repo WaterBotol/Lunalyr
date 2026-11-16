@@ -241,15 +241,9 @@ final class FloatingLyricsTests: XCTestCase {
     }
 
     func testTheTitleCardShowsWithTheFloatingLyrics() {
-        XCTAssertTrue(FloatingTitleVisibility.shows(lyrics: true, card: true, title: true, editing: false))
-        XCTAssertFalse(FloatingTitleVisibility.shows(lyrics: false, card: true, title: true, editing: false),
-                       "only where floating lyrics show")
-        XCTAssertFalse(FloatingTitleVisibility.shows(lyrics: true, card: false, title: true, editing: false),
-                       "Show the song title card off")
-        XCTAssertFalse(FloatingTitleVisibility.shows(lyrics: true, card: true, title: false, editing: false),
-                       "the Floating style shows no song title")
-        XCTAssertTrue(FloatingTitleVisibility.shows(lyrics: true, card: true, title: false, editing: true),
-                      "but it can still be placed")
+        XCTAssertTrue(FloatingTitleVisibility.shows(lyrics: true, card: true))
+        XCTAssertFalse(FloatingTitleVisibility.shows(lyrics: false, card: true), "only where floating lyrics show")
+        XCTAssertFalse(FloatingTitleVisibility.shows(lyrics: true, card: false), "Show the song title card off")
     }
 
     func testSwitchingTheEditedStyleIsStoredAndToggles() {
