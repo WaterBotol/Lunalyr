@@ -1,7 +1,8 @@
 // Manual live lyric lookup. Usage:
 //   LyricProbe --title "Shape of You" --artist "Ed Sheeran" [--album "Divide"] --duration 233.7 [--genre Pop]
-//              [--storefront au] [--search] [--lines 6] [--out result.txt]
-// --out also writes everything printed to a UTF-8 file (PowerShell redirection can mangle CJK names).
+//              [--storefront au] [--search] [--lines 6] [--out result.txt] [--skip musixmatch,deezer]
+// --out also writes everything printed to a UTF-8 file (PowerShell redirection can mangle CJK names). --skip leaves the
+// named sources (raw values) out, so a service that asked not to be probed again is not.
 // It asks the real lyric services (with the app's generic User-Agent), prints each source's state, the ranking and the
 // chosen result's provenance and first lines. Saved choices and the cache go to a fresh temp folder, never the app's.
 // It plays nothing and reads no media session.
@@ -25,7 +26,7 @@ var artist = Arg("--artist") ?? "";
 if (title is null || !double.TryParse(Arg("--duration") ?? "", NumberStyles.Float, CultureInfo.InvariantCulture, out var duration))
 {
     Console.WriteLine("Usage: LyricProbe --title <title> --artist <artist> [--album <album>] --duration <seconds> [--genre <genre>]"
-        + " [--storefront <cc>] [--search] [--lines N] [--out <file>]");
+        + " [--storefront <cc>] [--search] [--lines N] [--out <file>] [--skip <raw,raw>]");
     return 2;
 }
 var query = new LyricQuery(title, artist, Arg("--album"), duration) { Genre = Arg("--genre") };
@@ -51,8 +52,9 @@ try
         Http = new LyricHttpOptions { UserAgent = "Lunalyr/0.1 (Windows port; dev)" },
         Storefront = storefront,
     });
-    var options = LyricSourceSnapshot.From(LyricSourceSnapshot.RecommendedOrder, LyricSourceSnapshot.RecommendedOrder.ToHashSet(),
-        LyricMatchMode.AccuracyFirst);
+    var skipped = (Arg("--skip") ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToHashSet(StringComparer.Ordinal);
+    var options = LyricSourceSnapshot.From(LyricSourceSnapshot.RecommendedOrder,
+        LyricSourceSnapshot.RecommendedOrder.Where(s => !skipped.Contains(s.RawValue())).ToHashSet(), LyricMatchMode.AccuracyFirst);
     Console.WriteLine($"Query: \"{query.Title}\" by \"{query.Artist}\" ({LyricQuery.Clock(query.Duration)}, {query.Duration.ToString(CultureInfo.InvariantCulture)} s)"
         + $"{(query.Album is { } album ? $", album \"{album}\"" : "")}{(query.Genre is { } genre ? $", genre \"{genre}\"" : "")}"
         + $"{(search ? ", search (every source asked)" : ", automatic lookup")}");
