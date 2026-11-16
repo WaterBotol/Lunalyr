@@ -295,6 +295,28 @@ final class MonitorLooksTests: XCTestCase {
                        "turned off, each monitor keeps the look it showed")
     }
 
+    func testUnpluggingTheEditedMonitorWhileTheSameEverywhereKeepsThatLook() {
+        let s = stores([Self.a, Self.b])
+        s.settings.lyricComposition = .torque
+        s.styles.edit(display: Self.b)
+        s.styles.setSameEverywhere(true)
+        s.settings.lyricComposition = .mosaic
+        s.settings.backgroundMode = .colourOnly
+        s.displays.connected = [Self.a]
+        s.styles.displaysChanged()
+        XCTAssertEqual(s.styles.editingDisplay, Self.a)
+        XCTAssertEqual(s.settings.lyricComposition, .mosaic, "not the look A kept before every monitor shared one")
+        XCTAssertEqual(s.settings.backgroundMode, .colourOnly)
+    }
+
+    func testAnImportAnotherMonitorShowsIsKept() {
+        let s = stores([Self.a, Self.b])
+        s.settings.customWallpaperPath = "/tmp/lunalyr-test-wallpaper.png"
+        s.styles.edit(display: Self.b)
+        XCTAssertTrue(s.styles.keepsWallpaperFile("/tmp/lunalyr-test-wallpaper.png"), "monitor A still shows it")
+        XCTAssertFalse(s.styles.keepsWallpaperFile("/tmp/some-other.png"))
+    }
+
     // MARK: Looks
 
     func testALookAppliesToThePickedMonitorOnly() throws {

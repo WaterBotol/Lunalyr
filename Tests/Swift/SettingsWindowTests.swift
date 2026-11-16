@@ -55,7 +55,7 @@ final class SettingsWindowTests: XCTestCase {
         let choices: CGFloat = 150
         let picture = LookCanvas.pictureSize(canvas: canvas, aspect: aspect, choices: choices)
         XCTAssertLessThanOrEqual(picture.width, canvas.width - 44 + 0.5)
-        let used = LookCanvas.switchBand + picture.height + LookCanvas.stripGap + LookCanvas.stripHeight
+        let used = LookCanvas.monitorBand + LookCanvas.switchBand + picture.height + LookCanvas.stripGap + LookCanvas.stripHeight
             + 16 + choices + LookCanvas.padding
         XCTAssertLessThanOrEqual(used, canvas.height + 0.5, "everything stays in the window")
         XCTAssertEqual(picture.width / picture.height, aspect, accuracy: 0.02)

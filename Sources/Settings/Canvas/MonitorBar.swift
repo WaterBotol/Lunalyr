@@ -20,6 +20,7 @@ struct MonitorBar: View {
     @State private var confirmsCopy = false
     @Environment(\.undoManager) private var undoManager
 
+    /// One row's height; the bar takes two in a narrow canvas.
     static let height: CGFloat = 30
 
     private var several: Bool { screens.count > 1 }
@@ -34,18 +35,20 @@ struct MonitorBar: View {
     }
 
     var body: some View {
-        HStack(spacing: 10) {
-            if several { monitorMenu }
-            showsMenu
-            Spacer(minLength: 6)
-            if showsStyleSwitch {
-                CanvasSegments(title: "Editing", selection: $floating.surface,
-                               options: LyricsSurface.allCases.map { ($0, $0.title) }, small: true)
-                    .help("Which of this monitor’s lyric styles these settings change: its desktop lyrics’ or its floating lyrics’")
+        // One row when it fits; else two, then two with shorter labels and
+        // the monitor's name cut short, so nothing spills out of a narrow canvas.
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 10) {
+                if several { monitorMenu(compact: false) }
+                showsMenu(compact: false)
+                Spacer(minLength: 6)
+                styleSwitch(compact: false)
+                if several { moreMenu }
             }
-            if several { moreMenu }
+            .frame(height: Self.height)
+            twoRows(compact: false)
+            twoRows(compact: true)
         }
-        .frame(height: Self.height)
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didChangeScreenParametersNotification)) { _ in
             screens = FloatingDisplayChoice.connected()
         }
@@ -59,7 +62,34 @@ struct MonitorBar: View {
         .accessibilityLabel("Monitor")
     }
 
-    private var monitorMenu: some View {
+    private func twoRows(compact: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            if several {
+                HStack(spacing: 10) {
+                    monitorMenu(compact: compact)
+                    Spacer(minLength: 6)
+                    moreMenu
+                }
+                .frame(height: Self.height)
+            }
+            HStack(spacing: 10) {
+                showsMenu(compact: compact)
+                Spacer(minLength: 6)
+                styleSwitch(compact: compact)
+            }
+            .frame(height: Self.height)
+        }
+    }
+
+    @ViewBuilder private func styleSwitch(compact: Bool) -> some View {
+        if showsStyleSwitch {
+            CanvasSegments(title: "Editing", selection: $floating.surface,
+                           options: LyricsSurface.allCases.map { ($0, compact ? $0.styleName : $0.title) }, small: true)
+                .help("Which of this monitor’s lyric styles these settings change: its desktop lyrics’ or its floating lyrics’")
+        }
+    }
+
+    private func monitorMenu(compact: Bool) -> some View {
         Menu {
             Picker("Monitor", selection: Binding(get: { editing }, set: { pick($0) })) {
                 ForEach(screens, id: \.key) { Text($0.name).tag($0.key) }
@@ -71,7 +101,8 @@ struct MonitorBar: View {
         .menuStyle(.button)
         .buttonStyle(ThemedPopUpButtonStyle())
         .menuIndicator(.hidden)
-        .fixedSize()
+        .fixedSize(horizontal: !compact, vertical: true)
+        .frame(maxWidth: compact ? 200 : nil, alignment: .leading)
         .disabled(styles.sameEverywhere)
         .help(styles.sameEverywhere ? "Same on every monitor is on: every monitor shows this look"
               : "The monitor these settings change; each monitor keeps its own look")
@@ -87,7 +118,7 @@ struct MonitorBar: View {
         styles.edit(display: display)
     }
 
-    private var showsMenu: some View {
+    private func showsMenu(compact: Bool) -> some View {
         let selection = Binding(get: { floating.choice(for: editing) },
                                 set: { floating.setChoice($0, for: editing) })
         return Menu {
@@ -96,7 +127,7 @@ struct MonitorBar: View {
             }
             .pickerStyle(.inline)
         } label: {
-            ThemedPopUpLabel("Shows: \(selection.wrappedValue.title)")
+            ThemedPopUpLabel(compact ? selection.wrappedValue.title : "Shows: \(selection.wrappedValue.title)")
         }
         .menuStyle(.button)
         .buttonStyle(ThemedPopUpButtonStyle())

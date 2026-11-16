@@ -63,7 +63,10 @@ final class WallpaperImporter: ObservableObject {
                 let imported = try await CustomWallpaperStore.importFile(url)
                 let replaced = settings.customWallpaperPath
                 settings.customWallpaperPath = imported.url.path
-                CustomWallpaperStore.discardReplaced(replaced, keeping: imported.url)
+                // Another monitor may still show the file this one replaced.
+                if !LyricStyles.shared.keepsWallpaperFile(replaced) {
+                    CustomWallpaperStore.discardReplaced(replaced, keeping: imported.url)
+                }
                 settings.customWallpaperName = imported.originalName
                 settings.backgroundMode = .custom
             } catch {

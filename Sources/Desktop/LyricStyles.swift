@@ -208,9 +208,23 @@ final class LyricStyles: ObservableObject {
             follows[slot] = nil
         }
         if !displays.contains(editingDisplay) {
+            // Every monitor was showing the edited look: the main display
+            // takes it with it rather than going back to what it kept.
+            if sameEverywhere { slots.copyEdited(editingSlot, to: displays, main: main) }
             edit(display: main, reloadEdited: reloadEdited)
         } else if !gone.isEmpty {
             objectWillChange.send()
+        }
+    }
+
+    /// Whether a monitor other than the one being edited keeps `path` as
+    /// its imported wallpaper, so a new import must not delete it.
+    func keepsWallpaperFile(_ path: String) -> Bool {
+        guard !path.isEmpty else { return false }
+        let edited = MonitorLookSlots.storeKey(LookSlot(display: editingDisplay, surface: .desktop))
+        return defaults.dictionaryRepresentation().contains { key, value in
+            key.hasPrefix("custom.look.") && key != edited
+                && (value as? [String: Any])?["custom.wallpaperPath"] as? String == path
         }
     }
 

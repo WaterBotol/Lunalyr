@@ -114,9 +114,11 @@ struct LookCanvas: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var palette = ArtworkPalette.neutral
     @State private var choicesHeight: CGFloat = 200
+    @State private var monitorHeight: CGFloat = LookCanvas.monitorBand
 
     static let padding: CGFloat = 22
-    /// The monitor bar above the object switch (`MonitorBar`).
+    /// The monitor bar above the object switch (`MonitorBar`), on one row;
+    /// a narrow canvas gives it two.
     static let monitorBand: CGFloat = MonitorBar.height + 12
     static let switchBand: CGFloat = 56
     static let stripHeight: CGFloat = 22
@@ -131,9 +133,10 @@ struct LookCanvas: View {
 
     /// The picture's size in a canvas of `size` with choices `choices` tall:
     /// as wide as the canvas allows, shorter when the window is short.
-    static func pictureSize(canvas size: CGSize, aspect: CGFloat, choices: CGFloat, banner: CGFloat = 0) -> CGSize {
+    static func pictureSize(canvas size: CGSize, aspect: CGFloat, choices: CGFloat, banner: CGFloat = 0,
+                            monitor: CGFloat = monitorBand) -> CGSize {
         let width = max(1, size.width - padding * 2)
-        let room = size.height - monitorBand - switchBand - stripGap - stripHeight - banner - 16 - choices - padding
+        let room = size.height - monitor - switchBand - stripGap - stripHeight - banner - 16 - choices - padding
         let height = max(80, min(width / aspect, room))
         return CGSize(width: (height * aspect).rounded(.down), height: height.rounded(.down))
     }
@@ -141,12 +144,13 @@ struct LookCanvas: View {
     var body: some View {
         GeometryReader { proxy in
             let inner = max(1, proxy.size.width - Self.padding * 2)
-            let picture = Self.pictureSize(canvas: proxy.size, aspect: aspect, choices: choicesHeight)
+            let picture = Self.pictureSize(canvas: proxy.size, aspect: aspect, choices: choicesHeight,
+                                           monitor: monitorHeight)
             VStack(spacing: 0) {
                 MonitorBar(floating: floating, showsStyleSwitch: object != .covers)
                     .frame(width: inner)
                     .padding(.top, 12)
-                    .frame(height: Self.monitorBand, alignment: .bottom)
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { monitorHeight = $0 }
                 objectSwitch
                     .frame(height: Self.switchBand)
                 LookPicture(object: object, select: select, previewDisplay: previewDisplay, floating: floating)
