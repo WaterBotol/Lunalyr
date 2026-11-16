@@ -178,7 +178,8 @@ internal static class LinePlans
                 if (!string.IsNullOrWhiteSpace(run.Reading))
                 {
                     readings[r] = kit.Layout(run.Reading!, mix < 0 && metrics.AlternateFace ? Face.Contrast : Face.Quiet,
-                                             (float)(metrics.Size * 0.56), TextKit.LocaleFor(run.Reading!), false, mix: mix);
+                                             (float)(metrics.Size * 0.56), TextKit.LocaleFor(run.Reading!), false, mix: mix,
+                                             faceText: run.Label);
                     slices[r] = ReadingSlices.Measure(readings[r]!, run.Reading, runShares is not null && r < runShares.Count ? runShares[r] : null);
                     var reading = readings[r]!.Metrics;
                     width = Math.Max(width, reading.Width);

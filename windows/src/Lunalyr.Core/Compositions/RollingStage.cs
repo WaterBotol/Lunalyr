@@ -290,13 +290,15 @@ public readonly record struct RollingTokenState(
 
     /// <summary>
     /// A glued run's syllables or characters arriving one by one: each part's opacity relative to the run's own, into
-    /// <paramref name="reveal"/> (one per part). False for a single token (nothing to reveal by part).
+    /// <paramref name="reveal"/> (one per part). False for a single token (nothing to reveal by part), and for a Korean
+    /// word, which shows whole from its first block (<see cref="Lyrics.Readings.LyricRuns.RevealsByPart"/>).
     /// </summary>
     public static bool PartReveal(RollingWord token, double time, double runOpacity, double intensity, bool reduceMotion,
                                   WordRevealOptions options, Span<double> reveal)
     {
         var parts = token.Parts;
         if (parts.Count <= 1 || token.Boundaries.Count != parts.Count + 1 || reveal.Length < parts.Count) return false;
+        if (!Lyrics.Readings.LyricRuns.RevealsByPart(token.Source.Text)) return false;
         int? next = null;
         for (var i = 0; i < parts.Count; i++)
             if (parts[i].Start > time) { next = i; break; }

@@ -294,7 +294,10 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger, Composit
             }
             // A glued word's reading fills in with it: each token's share from its onset, never ahead of the token
             // itself (the Mac's LyricReadingInk.shareOpacities with RollingTokenState.partReveal).
-            var readingShares = unit.ReadingSlices is { } slices ? slices.Opacities(time, reveal, reduce) : default;
+            // A word shown whole (a Korean word) shows its whole reading with it, not one syllable's at a time (the Mac's
+            // 1c9c348).
+            var readingShares = unit.ReadingSlices is { } slices && !(reveal.IsEmpty && token.Parts.Count > 1)
+                ? slices.Opacities(time, reveal, reduce) : default;
             var readingBoundaries = readingShares.IsEmpty ? default : unit.ReadingSlices!.Boundaries.AsSpan();
             var actionElapsed = time - token.Source.Start;
             DrawLivelyAround(dc, restWorld, Vector2.Zero, unitBox, action, actionElapsed, token.PointSize, unit.RestColour, (float)opacity, front: false);
@@ -718,7 +721,7 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger, Composit
         var label = kit.Layout(token.Source.Text, face, size, TextKit.LocaleFor(token.Source.Text), token.RightToLeft, mix: mix);
         var reading = token.Reading is { } text
             ? kit.Layout(text, mix < 0 && alternate ? Face.Contrast : Face.Quiet, size * 0.56f, TextKit.LocaleFor(text), false,
-                         (float)(stageWidth * 0.8), mix)
+                         (float)(stageWidth * 0.8), mix, token.Source.Text)
             : null;
         double width = label.Metrics.Width, height = label.Metrics.Height;
         if (reading is not null)

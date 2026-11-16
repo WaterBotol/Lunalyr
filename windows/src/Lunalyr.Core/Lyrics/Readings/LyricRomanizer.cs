@@ -801,7 +801,11 @@ public sealed class LyricRomanizer(ReadingServices services)
                 var offset = grapheme.Offset;
                 var width = grapheme.Length;
                 var spelled = korean ? KoreanRomanizer.ContainsHangul(grapheme.Text) : ReadingText.IsIdeographic(grapheme.First);
-                if (!spelled && grapheme.IsLetterOrNumber)
+                // A Latin word is one unit through its own hyphens and apostrophes ("Ah-oh", "don't"), as its saved
+                // reading writes it: split at the hyphen, Apple's "Ah-oh bi ro so" counted one unit too many and the
+                // whole reading was kept for the line instead of going word by word (the Mac's 1c9c348).
+                var inWord = latin is not null && !string.IsNullOrWhiteSpace(grapheme.Text) && !spelled;
+                if (!spelled && (grapheme.IsLetterOrNumber || inWord))
                 {
                     latin = latin is { } run ? (run.Location, run.Length + width) : (offset, width);
                 }

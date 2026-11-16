@@ -1,4 +1,5 @@
 using System.Numerics;
+using Lunalyr.Core.Lyrics.Readings;
 using Vortice.DCommon;
 using Vortice.Direct2D1;
 using Vortice.DirectWrite;
@@ -165,6 +166,29 @@ internal sealed class TextKit : IDisposable
         return null;
     }
 
+    /// <summary>
+    /// The face a word is set in, keeping its Hangul in the main face (the Mac's <c>LyricFace.draws</c>, dd7bc1e and
+    /// 000abbf): a randomised face, or Editorial's contrasting one, that has no glyphs for the word's Hangul is passed
+    /// over for the main face, so every Korean word falls back to the same face and weight. Kana and Han keep their
+    /// contrast (their fallback matches the weight), so only Hangul is checked. A randomised face passed over goes to the
+    /// main face, not the contrasting one, as on the Mac.
+    /// </summary>
+    internal (Face Face, int Mix) KeepHangulFace(Face face, int mix, string text)
+    {
+        if (mix < 0 && face != Face.Contrast) return (face, mix);
+        var family = mix >= 0 ? MixFamily(mix) : _contrastFamily;
+        if (Draws(family, text)) return (face, mix);
+        return (face == Face.Contrast ? Face.Regular : face, -1);
+    }
+
+    /// <summary>Whether <paramref name="family"/> has its own glyph for every Hangul letter of <paramref name="text"/>.</summary>
+    private bool Draws(string family, string text)
+    {
+        foreach (var rune in text.EnumerateRunes())
+            if (LyricRuns.IsHangul(rune) && !Covers(family, rune.Value)) return false;
+        return true;
+    }
+
     /// <summary>The family "Randomise lyric fonts" face <paramref name="mix"/> resolves to on this PC.</summary>
     public string MixFamily(int mix) => _mixFamilies[(mix % MixFaces + MixFaces) % MixFaces] ?? _resolvedFamily;
 
@@ -197,9 +221,12 @@ internal sealed class TextKit : IDisposable
     /// A laid-out label on one line (or wrapped and centred at <paramref name="wrapWidth"/>), right to left when its
     /// script reads that way. The caller disposes it.
     /// </summary>
+    /// <param name="faceText">The word the face is chosen for, when it is not <paramref name="text"/> (a reading is set in
+    /// its word's face).</param>
     public IDWriteTextLayout Layout(string text, Face face, float size, string locale, bool rightToLeft, float wrapWidth = 0,
-                                    int mix = -1)
+                                    int mix = -1, string? faceText = null)
     {
+        (face, mix) = KeepHangulFace(face, mix, faceText ?? text);
         var format = Format(face, size, locale, mix);
         var layout = _dwrite.CreateTextLayout(text, format, 100_000, 100_000);
         layout.ReadingDirection = rightToLeft ? ReadingDirection.RightToLeft : ReadingDirection.LeftToRight;

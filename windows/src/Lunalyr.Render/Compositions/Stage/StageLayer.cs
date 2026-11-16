@@ -595,12 +595,12 @@ internal abstract class StageLayer(CompositionKind kind, IWordBreaker breaker, L
             {
                 var readingSize = spec.ReadingSize;
                 var readingLocale = TextKit.LocaleFor(reading);
-                var layout = kit.Layout(reading, readingFace, (float)readingSize, readingLocale, false, mix: mix);
+                var layout = kit.Layout(reading, readingFace, (float)readingSize, readingLocale, false, mix: mix, faceText: text);
                 if (layout.Metrics.Width > spec.ReadingMaxWidth && layout.Metrics.Width > 0)
                 {
                     var shrunk = readingSize * Math.Max(0.5, spec.ReadingMaxWidth / layout.Metrics.Width);
                     layout.Dispose();
-                    layout = kit.Layout(reading, readingFace, (float)shrunk, readingLocale, false, mix: mix);
+                    layout = kit.Layout(reading, readingFace, (float)shrunk, readingLocale, false, mix: mix, faceText: text);
                 }
                 using (layout)
                 {

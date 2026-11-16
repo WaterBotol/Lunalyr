@@ -84,6 +84,30 @@ public static class LyricRuns
         text.EnumerateRunes().Any(scalar => JapaneseReading.IsJapanese(scalar)
             || scalar.Value is >= 0x0E00 and <= 0x0EFF or >= 0x1000 and <= 0x109F or >= 0x1780 and <= 0x17FF);
 
+    /// <summary>
+    /// Whether a glued run shows its tokens one by one as they are sung rather than whole from its first (the Mac's
+    /// <c>revealsByPart</c>, dd7bc1e). A run of a script written without spaces can hold several words, so it still
+    /// arrives character by character, as a Latin word's syllables do. A Korean word is one word however its syllable
+    /// blocks are timed: Apple Music times 우리의 as 우 리 의, and a block at a time left a held 우 alone in focus. It shows
+    /// whole, and its blocks' timing carries the sweep.
+    /// </summary>
+    public static bool RevealsByPart(string text)
+    {
+        // Asked every frame for every rolling word: plain loops, nothing allocated.
+        var hangul = false;
+        foreach (var rune in text.EnumerateRunes())
+        {
+            if (JapaneseReading.IsJapanese(rune) || rune.Value is >= 0x0E00 and <= 0x0EFF or >= 0x1000 and <= 0x109F or >= 0x1780 and <= 0x17FF)
+                return true;
+            hangul |= IsHangul(rune);
+        }
+        return !hangul;
+    }
+
+    /// <summary>Jamo, compatibility jamo, extended jamo and syllables.</summary>
+    public static bool IsHangul(System.Text.Rune rune) =>
+        rune.Value is >= 0x1100 and <= 0x11FF or >= 0x3130 and <= 0x318F or >= 0xA960 and <= 0xA97F or >= 0xAC00 and <= 0xD7FF;
+
     /// <summary>Glue for a rolling stage, which sets a line one word at a time: <see cref="Glue(LyricLine,IReadOnlyList{LyricWord})"/>
     /// with each unspaced run parted into its words. Kept whole, a Japanese, Chinese or Thai line rolled as one
     /// word.</summary>
