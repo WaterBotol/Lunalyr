@@ -75,8 +75,8 @@ public sealed class LyricRankingQualityTests
         }),
     ];
 
-    private LyricCandidate Candidate(LyricSourceId source, IReadOnlyList<LyricLine> lines) =>
-        new(source, L.Synced(lines, LyricTimingRules.Precision(lines), source.Title()), _query.Title, _query.Artist, _query.Duration, 0);
+    private LyricCandidate Candidate(LyricSourceId source, IReadOnlyList<LyricLine> lines, string? provenance = null) =>
+        new(source, L.Synced(lines, LyricTimingRules.Precision(lines), provenance ?? source.Title()), _query.Title, _query.Artist, _query.Duration, 0);
 
     public static TheoryData<string, string> Genuine => new()
     {
@@ -270,5 +270,227 @@ public sealed class LyricRankingQualityTests
             cancellationToken: TestContext.Current.CancellationToken);
         Assert.Equal(NetEase, report.Candidates[0].Source);
         Assert.True(report.States[Musixmatch].Contains("timed to another recording (1.8 s later than the others)", StringComparison.Ordinal), report.States[Musixmatch]);
+    }
+
+    // ---- Merging text and timing (the Mac's 63662fe and bb9c434) ----
+
+    /// <summary>
+    /// QQ's word-timed lines (the donor), and Musixmatch's text for them, timed by the line 0.1 s later: lower-cased from
+    /// line 3, punctuation dropped from line 5, an ad-lib "(oh)" on line 4, different words on line 6, and a translation
+    /// on line 2.
+    /// </summary>
+    private (LyricCandidate Donor, LyricCandidate Recipient, List<LyricLine> DonorLines, List<LyricLine> RecipientLines) MergePair()
+    {
+        var donorLines = Lines(LyricRankingFixtures.QrcLatin);
+        var recipientLines = donorLines.Select((line, index) =>
+        {
+            var text = line.Text;
+            if (index >= 3) text = text.ToLowerInvariant();
+            if (index >= 5) text = new string([.. text.Where(c => !",.?!\"".Contains(c, StringComparison.Ordinal))]);
+            if (index == 4) text = string.Join(' ', text.Split(' ').Select((word, i) => i == 2 ? "(oh) " + word : word));
+            if (index == 6) text = "Entirely other words sung here instead";
+            var end = index + 1 < donorLines.Count ? donorLines[index + 1].Start + 0.1 : line.End;
+            return L.Line(text, line.Start + 0.1, end) with { EndFromNextLine = true };
+        }).ToList();
+        recipientLines[2] = recipientLines[2] with { Translation = "A translation", Romanization = "a reading" };
+        return (Candidate(QQMusic, donorLines, "QQ Music"), Candidate(Musixmatch, recipientLines, "Musixmatch"), donorLines, recipientLines);
+    }
+
+    private static bool IsAppleRelay(LyricCandidate candidate) =>
+        candidate.Source != AppleMusicCache && candidate.RankingSource == AppleMusicCache;
+
+    // Ported from LyricRankingQualityTests.swift: testLineTimedLeadingTextTakesWordTimingWhereItAligns
+    [Fact]
+    public void LineTimedLeadingTextTakesWordTimingWhereItAligns()
+    {
+        var pair = MergePair();
+        foreach (var mode in LyricMatchModeInfo.All)
+        {
+            var top = LyricRanking.Screen([pair.Donor, pair.Recipient], _query, Options([QQMusic, Musixmatch], mode)).Accepted[0];
+            Assert.Equal(Musixmatch, top.Source);
+            var synced = Assert.IsType<LyricResult.Synced>(top.Result);
+            Assert.Equal("Musixmatch text · QQ Music word timing", synced.Provenance.Source);
+            Assert.Equal("Mixed timing", top.Provenance.Precision);
+            Assert.Equal(2, LyricTimingRules.RankedTiming(top.Result));
+            Assert.Equal("QQ Music", LyricTimingMerge.TimingDonor(top));
+            Assert.False(IsAppleRelay(top));
+            var lines = synced.Lines;
+            // The text, line times, readings and translations are Musixmatch's own.
+            Assert.Equal(pair.RecipientLines.Select(l => l.Text), lines.Select(l => l.Text));
+            Assert.Equal(pair.RecipientLines.Select(l => l.Start), lines.Select(l => l.Start));
+            Assert.Equal("A translation", lines[2].Translation);
+            Assert.Equal("a reading", lines[2].Romanization);
+            // Aligned lines carry QQ's word times; the line with other words keeps line timing.
+            Assert.True(lines[3].WordTimed);
+            Assert.Equal(pair.DonorLines[3].Words.Select(w => w.Start).Skip(1), lines[3].Words.Select(w => w.Start).Skip(1));
+            Assert.True(lines[5].WordTimed, "punctuation dropped");
+            Assert.False(lines[6].WordTimed, "other words");
+            Assert.Equal(pair.RecipientLines[6].Words, lines[6].Words);
+            Assert.True(lines.Count(l => l.WordTimed) > lines.Count * 3 / 4);
+        }
+    }
+
+    // Ported from LyricRankingQualityTests.swift: testAnAdLibKeepsItsBracketsForBackingVocals
+    [Fact]
+    public void AnAdLibKeepsItsBracketsForBackingVocals()
+    {
+        var pair = MergePair();
+        var top = LyricRanking.Screen([pair.Donor, pair.Recipient], _query, Options([Musixmatch, QQMusic])).Accepted[0];
+        var lines = Assert.IsType<LyricResult.Synced>(top.Result).Lines;
+        Assert.True(lines[4].WordTimed);
+        Assert.True(LyricTimingRules.ValidWordTiming(lines[4]));
+        var split = Lunalyr.Core.Lyrics.Parsing.BackingVocals.Split(lines[4].Words, [.. Enumerable.Repeat(false, lines[4].Words.Count)]);
+        Assert.Equal(["oh"], split.Backing.Select(w => w.Text));
+        Assert.Equal(lines[4].Words.Count - 1, split.Main.Count);
+    }
+
+    // Ported from LyricRankingQualityTests.swift: testUnitsCoverTheLineInEveryScript
+    [Fact]
+    public void UnitsCoverTheLineInEveryScript()
+    {
+        Assert.Equal(["Don't", "(oh)", "stop,", "now!"], LyricTimingMerge.MergeUnits("Don't (oh) stop, now!").Select(u => u.Text));
+        Assert.Equal(["dont", "oh", "stop", "now"], LyricTimingMerge.MergeUnits("Don't (oh) stop, now!").Select(u => u.Key));
+        Assert.Equal(["故", "事", "的", "小", "黄", "花", "（Yeah）"], LyricTimingMerge.MergeUnits("故事的小黄花（Yeah）").Select(u => u.Text));
+        Assert.Equal(["夜", "に", "駆", "け", "る、", "君", "と"], LyricTimingMerge.MergeUnits("夜に駆ける、君と").Select(u => u.Text));
+        Assert.Equal(["이", "밤", "그날의"], LyricTimingMerge.MergeUnits("이 밤 그날의").Select(u => u.Text));
+        Assert.True(LyricTimingMerge.SameMergeWord("colour", "color"));
+        Assert.True(LyricTimingMerge.SameMergeWord("thinkin", "thinking"));
+        Assert.False(LyricTimingMerge.SameMergeWord("love", "live"));
+    }
+
+    // Ported from LyricRankingQualityTests.swift: testMergesIntoChineseTextFromKugou
+    [Fact]
+    public void MergesIntoChineseTextFromKugou()
+    {
+        var donorLines = Lines(LyricRankingFixtures.KrcChinese);
+        var recipientLines = donorLines.Select(line => L.Line(line.Text, line.Start, line.End) with { EndFromNextLine = true }).ToList();
+        var ranked = LyricRanking.Screen([Candidate(Kugou, donorLines, "Kugou Music"), Candidate(AppleMusicCache, recipientLines, "Apple Music")],
+            _query, Options([AppleMusicCache, Kugou])).Accepted;
+        Assert.Equal(AppleMusicCache, ranked[0].Source);
+        Assert.Equal("Kugou Music", LyricTimingMerge.TimingDonor(ranked[0]));
+        Assert.Equal(2, LyricTimingRules.RankedTiming(ranked[0].Result));
+    }
+
+    // Ported from LyricRankingQualityTests.swift: testNoMergeAcrossScriptsTranslationsOrTimelines
+    [Fact]
+    public void NoMergeAcrossScriptsTranslationsOrTimelines()
+    {
+        var pair = MergePair();
+        var order = Options([Musixmatch, QQMusic, Kugou]);
+        bool Merged(LyricCandidate donor, LyricCandidate? recipient = null) =>
+            LyricRanking.Screen([donor, recipient ?? pair.Recipient], _query, order).Accepted.Any(c => LyricTimingMerge.TimingDonor(c) is not null);
+        Assert.True(Merged(pair.Donor));
+        // A translation timed alike: the words never pair.
+        var translated = pair.DonorLines.Select((line, index) =>
+        {
+            var words = line.Words.Select((w, k) => L.Word($"tr{index}x{k}", w.Start, w.End)).ToList();
+            return line with { Words = words, Text = string.Join(' ', words.Select(w => w.Text)) };
+        }).ToList();
+        Assert.False(Merged(Candidate(QQMusic, translated)));
+        // Another script: Korean word timing never lends to Latin text, nor Latin to Korean.
+        var korean = Lines(LyricRankingFixtures.QrcKorean);
+        Assert.False(Merged(Candidate(QQMusic, korean)));
+        var koreanText = korean.Select(l => L.Line(l.Text, l.Start, l.End)).ToList();
+        Assert.False(Merged(pair.Donor, Candidate(Musixmatch, koreanText)));
+        // Timed a second later: another master.
+        var late = pair.DonorLines.Select(line => line with
+        {
+            Start = line.Start + 1, End = line.End + 1, Words = [.. line.Words.Select(w => L.Word(w.Text, w.Start + 1, w.End + 1))],
+        }).ToList();
+        Assert.False(Merged(Candidate(QQMusic, late)));
+        // Word stamps a tool spread are no timing to lend.
+        Assert.False(Merged(Candidate(Kugou, Spread(pair.DonorLines, equal: true))));
+        // Another version's word timing is not this recording's.
+        Assert.False(Merged(pair.Donor with { Title = "Our Song (Live)" }));
+    }
+
+    // Ported from LyricRankingQualityTests.swift: testOnlyALeadingSourceTakesTiming
+    [Fact]
+    public void OnlyALeadingSourceTakesTiming()
+    {
+        // NetEase's line timing leads nothing: QQ's own word timing shows, unmerged.
+        var pair = MergePair();
+        var ranked = LyricRanking.Screen([pair.Donor, pair.Recipient with { Source = NetEase }], _query, Options([NetEase, QQMusic])).Accepted;
+        Assert.Equal(QQMusic, ranked[0].Source);
+        Assert.All(ranked, c => Assert.Null(LyricTimingMerge.TimingDonor(c)));
+    }
+
+    // Ported from LyricRankingQualityTests.swift: testEarlyStoppingKeepsSourcesThatCouldLendTiming
+    [Fact]
+    public void EarlyStoppingKeepsSourcesThatCouldLendTiming()
+    {
+        var pair = MergePair();
+        var options = Options([Musixmatch, QQMusic, Kugou, Vibe], LyricMatchMode.SourceOrder);
+        // QQ's words do not pair with Musixmatch's text here, so QQ's word timing shows.
+        var unrelated = pair.RecipientLines.Select((line, index) =>
+            L.Line(index % 2 == 0 ? line.Text : $"Different words for line {index} here", line.Start, line.End)).ToList();
+        var found = LyricRanking.Screen([pair.Donor, Candidate(Musixmatch, unrelated)], _query, options).Accepted;
+        var qq = found[0];
+        Assert.Equal(QQMusic, qq.Source);
+        // Kugou cannot beat QQ, but its word timing might still pair with Musixmatch's text; VIBE has none.
+        Assert.False(LyricRanking.CouldBeat(qq, Kugou, _query, options));
+        Assert.True(LyricRanking.Matters(Kugou, qq, qq, _query, options, found));
+        Assert.False(LyricRanking.IsSettled(qq, [Kugou], _query, options, found));
+        Assert.False(LyricRanking.Matters(Vibe, qq, qq, _query, options, found));
+        // Once merged, Musixmatch leads and Kugou is not needed.
+        found = LyricRanking.Screen([pair.Donor, pair.Recipient], _query, options).Accepted;
+        var merged = found[0];
+        Assert.Equal(Musixmatch, merged.Source);
+        Assert.False(LyricRanking.Matters(Kugou, merged, merged, _query, options, found));
+        Assert.True(LyricRanking.IsSettled(merged, [Kugou], _query, options, found));
+    }
+
+    // Ported from LyricRankingQualityTests.swift: testTheMergeReplacesTheSameSourceOnScreen
+    [Fact]
+    public void TheMergeReplacesTheSameSourceOnScreen()
+    {
+        var pair = MergePair();
+        var options = Options([Musixmatch, QQMusic]);
+        var publication = new LyricPublication(options, _query);
+        var first = LyricRanking.Screen([pair.Recipient], _query, options).Accepted;
+        Assert.Equal(PublicationStep.Publish, publication.Step(first[0], false, true, false, first));
+        var later = LyricRanking.Screen([pair.Recipient, pair.Donor], _query, options).Accepted;
+        Assert.Equal(PublicationStep.Publish, publication.Step(later[0], true, true, false, later));
+        Assert.Equal("QQ Music", publication.Shown is { } shown ? LyricTimingMerge.TimingDonor(shown) : null);
+        // The same lyrics again change nothing.
+        Assert.Equal(PublicationStep.Wait, publication.Step(later[0], true, true, true, later));
+    }
+
+    // Ported from LyricRankingQualityTests.swift: testTheLookupShowsAndSavesTheMerge
+    [Fact]
+    public async Task TheLookupShowsAndSavesTheMerge()
+    {
+        using var folder = new TempFolder();
+        var pair = MergePair();
+        var answers = new Dictionary<LyricSourceId, LyricCandidate> { [Musixmatch] = pair.Recipient, [QQMusic] = pair.Donor };
+        var clock = new FakeClock();
+        var options = Options([Musixmatch, QQMusic]);
+        var report = await Lookups.Create(folder.Path, (id, _, _, _) => ValueTask.FromResult(answers.GetValueOrDefault(id)), clock)
+            .LookupAsync(_query, options, cancellationToken: TestContext.Current.CancellationToken);
+        var synced = Assert.IsType<LyricResult.Synced>(report.Result);
+        Assert.Equal("Musixmatch text · QQ Music word timing", synced.Provenance.Source);
+        Assert.True(report.States[Musixmatch].Contains("word timing from QQ Music", StringComparison.Ordinal), report.States[Musixmatch]);
+        // Saved, the merge is what a replay shows.
+        var again = await Lookups.Create(folder.Path, (_, _, _, _) => ValueTask.FromResult<LyricCandidate?>(null), clock)
+            .LookupAsync(_query, options, cancellationToken: TestContext.Current.CancellationToken);
+        Assert.True(LyricTimingRules.SameResult(again.Result, report.Result));
+    }
+
+    // Ported from LyricRankingQualityTests.swift: testAMergedAppleRelayKeepsItsLead
+    [Fact]
+    public void AMergedAppleRelayKeepsItsLead()
+    {
+        Assert.Equal(AppleMusicCache, LyricSourceRanking.RankingSource(LyricsPlus,
+            LyricTimingMerge.MergedProvenanceSource("Apple via Lyrics+", "QQ Music")));
+        var pair = MergePair();
+        var relay = pair.Recipient with
+        {
+            Source = LyricsPlus,
+            Result = L.Synced(((LyricResult.Synced)pair.Recipient.Result).Lines, "", "Apple via Lyrics+"),
+        };
+        var ranked = LyricRanking.Screen([pair.Donor, relay], _query, Options([QQMusic, LyricsPlus])).Accepted;
+        Assert.Equal(LyricsPlus, ranked[0].Source);
+        Assert.True(IsAppleRelay(ranked[0]));
+        Assert.Equal(1, LyricRanking.Lead(ranked[0], LyricTimingRules.RankedTiming(ranked[0].Result)));
     }
 }

@@ -95,7 +95,7 @@ public static class LyricTimingRules
     /// validly timed words. Lyrics where every timed line is a single token (LRCLIB Lyricsfile rows for line-synced
     /// uploads, plus a few genuinely one-word lines) carry no word timing at all and rank as line timing.
     /// </summary>
-    static bool HasRealWordEvidence(IEnumerable<LyricLine> lines)
+    internal static bool HasRealWordEvidence(IEnumerable<LyricLine> lines)
     {
         // At least a quarter of the sung lines (and at least one) must carry two or more real word tokens: a couple
         // of space-split decorative lines in otherwise line-timed lyrics (晴天's bopomofo solfège) aren't word timing.

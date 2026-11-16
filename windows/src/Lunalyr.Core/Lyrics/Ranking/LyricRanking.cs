@@ -65,6 +65,8 @@ public static class LyricRanking
         {
             accepted[fitting[k]] = weighed[k];
         }
+        // The leading text, line-timed, with another match's word timing (the Mac's 63662fe).
+        accepted = LyricTimingMerge.Merging(accepted, query, options);
         var comparer = new OutranksComparer(query, options);
         return new LyricScreening(
             [.. accepted.Order(comparer)],
@@ -174,7 +176,7 @@ public static class LyricRanking
     /// Timing shifted to another recording or master (<see cref="LyricAgreement.Shift"/>) ranks after the other sources at
     /// its timing in the same way (the Mac's 265d728).
     /// </summary>
-    private static int Lead(LyricCandidate candidate, int timing) =>
+    internal static int Lead(LyricCandidate candidate, int timing) =>
         (candidate.Source == LyricSourceId.Lrclib && candidate.Agreement.TimingOutlier) || candidate.Agreement.Shift is not null
             ? 5
             : Lead(candidate.Source, candidate.RankingSource, timing);
@@ -255,8 +257,13 @@ public static class LyricRanking
         return best;
     }
 
-    /// <summary>Whether no pending source could change what <see cref="Choose"/> picks.</summary>
-    public static bool IsSettled(LyricCandidate? best, IEnumerable<LyricSourceId> pending, LyricQuery query, LyricSourceSnapshot options)
+    /// <summary>
+    /// Whether no pending source could change what <see cref="Choose"/> picks. <paramref name="among"/>: the matches in
+    /// hand, whose line timing a pending source's word timing could still upgrade past <paramref name="best"/>
+    /// (<see cref="CouldLendTiming"/>).
+    /// </summary>
+    public static bool IsSettled(LyricCandidate? best, IEnumerable<LyricSourceId> pending, LyricQuery query, LyricSourceSnapshot options,
+        IReadOnlyList<LyricCandidate>? among = null)
     {
         var open = pending.Where(options.IsEnabled).ToList();
         if (open.Count == 0)
@@ -267,7 +274,25 @@ public static class LyricRanking
         {
             return false;
         }
-        return !open.Any(source => CouldBeat(best, source, query, options));
+        return !open.Any(source => CouldBeat(best, source, query, options) || CouldLendTiming(best, source, among ?? [], query));
+    }
+
+    /// <summary>
+    /// Whether <paramref name="source"/>'s word timing could still be merged into line-timed lyrics in hand
+    /// (<see cref="LyricTimingMerge"/>) that would then outrank <paramref name="best"/>: a match from a leading source
+    /// that no word timing in hand could be merged into yet (the Mac's 63662fe).
+    /// </summary>
+    public static bool CouldLendTiming(LyricCandidate best, LyricSourceId source, IEnumerable<LyricCandidate> found, LyricQuery query)
+    {
+        ArgumentNullException.ThrowIfNull(best);
+        ArgumentNullException.ThrowIfNull(found);
+        // Below word timing, CouldBeat already keeps every word-capable source.
+        if (source.TimingCeiling() < 2 || LyricTimingRules.RankedTiming(best.Result) != 2)
+        {
+            return false;
+        }
+        var bestLead = Lead(best, 2);
+        return found.Any(c => c.Source != source && LyricTimingMerge.IsMergeRecipient(c, query) && Lead(c, 2) < bestLead);
     }
 
     /// <summary>
@@ -393,14 +418,14 @@ public static class LyricRanking
     /// <paramref name="best"/> is what shows once any upgrade waiting for a better match has been made.
     /// </summary>
     public static bool Matters(LyricSourceId source, LyricCandidate best, LyricCandidate? onlineBest, LyricQuery query,
-        LyricSourceSnapshot options)
+        LyricSourceSnapshot options, IReadOnlyList<LyricCandidate>? among = null)
     {
         // Nothing outranks Apple Music's own word-by-word or mixed timing, and a replay reads it again, so no service is needed.
         if (best.Source == LyricSourceId.AppleMusicCache && LyricTimingRules.RankedTiming(best.Result) == 2)
         {
             return false;
         }
-        if (CouldBeat(best, source, query, options))
+        if (CouldBeat(best, source, query, options) || CouldLendTiming(best, source, among ?? [], query))
         {
             return true;
         }
@@ -439,6 +464,10 @@ public static class LyricRanking
             if (candidate.RankingSource == LyricSourceId.AppleMusicCache && candidate.Source != LyricSourceId.AppleMusicCache)
             {
                 found += AppleRelayNote;
+            }
+            if (LyricTimingMerge.TimingDonor(candidate) is { } donor)
+            {
+                found += $" · word timing from {donor}";
             }
             if (LyricTimingRules.TimingFault(candidate.Result) is { } fault)
             {

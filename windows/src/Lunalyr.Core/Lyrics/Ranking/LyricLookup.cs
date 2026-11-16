@@ -212,7 +212,8 @@ public sealed class LyricLookup
         if (LyricRanking.Choose(report.Candidates.Where(c => !c.Source.IsLocal()), query, options) is { } best)
         {
             // A choice that a source stopped early might have beaten is not kept.
-            if (LyricRanking.IsSettled(best, collected.Stopped.Where(s => !s.IsLocal()), query, options))
+            if (LyricRanking.IsSettled(best, collected.Stopped.Where(s => !s.IsLocal()), query, options,
+                    [.. report.Candidates.Where(c => !c.Source.IsLocal())]))
             {
                 _saved.Save(best, key);
                 _misses.Remove(key);
@@ -520,7 +521,7 @@ public sealed class LyricLookup
                     }
                     var screened = Screen();
                     var best = LyricRanking.Choose(screened.Accepted, _query, _options);
-                    var settled = LyricRanking.IsSettled(best, _pending, _query, _options);
+                    var settled = LyricRanking.IsSettled(best, _pending, _query, _options, screened.Accepted);
                     switch (_publication.Step(best, settled, graceOver, settleOver, screened.Accepted))
                     {
                         case PublicationStep.Publish:
@@ -540,7 +541,7 @@ public sealed class LyricLookup
                     if (_automatic && _publication.Shown is not null && best is not null)
                     {
                         var onlineBest = LyricRanking.Choose(screened.Accepted.Where(c => !c.Source.IsLocal()), _query, _options);
-                        var idle = _pending.Where(id => !LyricRanking.Matters(id, best, onlineBest, _query, _options)).ToList();
+                        var idle = _pending.Where(id => !LyricRanking.Matters(id, best, onlineBest, _query, _options, screened.Accepted)).ToList();
                         // While LRCLIB's word timing leads, the sources that could still agree against it keep answering
                         // up to their own limits (ranking decisions of 12 Nov 2026).
                         idle.RemoveAll(id => LyricRanking.CouldDemote(best, id, screened.Accepted, _query));

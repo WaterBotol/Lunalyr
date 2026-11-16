@@ -54,7 +54,7 @@ public static class LyricSourceRanking
     /// Apple Music for Apple's lyrics relayed by Lyrics+, otherwise the source itself.
     /// </summary>
     public static LyricSourceId RankingSource(LyricSourceId source, string provenanceSource) =>
-        IsAppleUpstream(RelayUpstream(source, provenanceSource))
+        IsAppleUpstream(RelayUpstream(source, LyricTimingMerge.TextSource(provenanceSource)))
             ? LyricSourceId.AppleMusicCache
             : source;
 

@@ -81,9 +81,26 @@ public sealed class LyricPublication
         return PublicationStep.Publish;
     }
 
-    /// <summary>Whether <paramref name="next"/> from another source ranks above <paramref name="current"/>.</summary>
-    public bool IsUpgrade(LyricCandidate next, LyricCandidate current) =>
-        next.Source != current.Source && LyricRanking.Outranks(next, current, _query, _options);
+    /// <summary>
+    /// Whether <paramref name="next"/> from another source ranks above <paramref name="current"/>, or is the same source's
+    /// lyrics given better timing (<see cref="LyricTimingMerge"/>; the Mac's 63662fe). A merge that took word timing
+    /// from a better donor once more sources answered replaces the earlier merge of the same text, so what shows is what
+    /// is listed and saved (the Mac's bb9c434).
+    /// </summary>
+    public bool IsUpgrade(LyricCandidate next, LyricCandidate current)
+    {
+        ArgumentNullException.ThrowIfNull(next);
+        ArgumentNullException.ThrowIfNull(current);
+        var nextTiming = LyricTimingRules.RankedTiming(next.Result);
+        var currentTiming = LyricTimingRules.RankedTiming(current.Result);
+        if (next.Source == current.Source && LyricTimingMerge.TimingDonor(next) is not null && LyricTimingMerge.TimingDonor(current) is not null
+            && nextTiming == currentTiming && !LyricTimingRules.SameResult(next.Result, current.Result))
+        {
+            return true;
+        }
+        var better = next.Source != current.Source || nextTiming > currentTiming;
+        return better && LyricRanking.Outranks(next, current, _query, _options);
+    }
 
     /// <summary>The match showing as it is weighed among <paramref name="accepted"/> now, or as it was shown.</summary>
     private static LyricCandidate Reweighed(LyricCandidate shown, IReadOnlyList<LyricCandidate>? accepted) =>
