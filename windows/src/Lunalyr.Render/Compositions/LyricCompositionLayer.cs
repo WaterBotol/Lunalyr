@@ -425,8 +425,10 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
         Invalidate();
         SceneShown = scene;
         Kit!.SetFamily(scene.Style.FontFamily);
+        // The floating window keeps room for the kept song title's row (the Mac's d849c49).
         Metrics = scene.Style.FloatingTextSize is { } textSize
-            ? ViewportMetrics.ForText(SurfaceSize.X, SurfaceSize.Y, Scale, textSize, scene.Style.SizeFraction)
+            ? ViewportMetrics.ForText(SurfaceSize.X, SurfaceSize.Y, Scale, textSize, scene.Style.SizeFraction,
+                                      titleRow: scene.Style is { OpeningTitle: true, OpeningTitleKeep: true })
             : ViewportMetrics.For(SurfaceSize.X, SurfaceSize.Y, Scale, scene.Style.SizeFraction);
         // Each word's entrance comes from the choice (a mix picks per word); "Cutout · Highlight" adds a tile and the
         // words still enter as the layout has them enter.
@@ -516,8 +518,9 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
 
     protected double BaseSize => Metrics.BaseSize;
     protected SizeD Stage => Metrics.Stage;
-    protected Vector2 StageCentre => SurfaceSize / 2;
-    protected Vector2 StageOrigin => new((float)((SurfaceSize.X - Stage.Width) / 2), (float)((SurfaceSize.Y - Stage.Height) / 2));
+    /// <summary>The stage's middle: the surface's, moved clear of the floating window's title row when it has one.</summary>
+    protected Vector2 StageCentre => new(SurfaceSize.X / 2, (float)(SurfaceSize.Y / 2 + Metrics.CentreShift));
+    protected Vector2 StageOrigin => new((float)((SurfaceSize.X - Stage.Width) / 2), (float)((SurfaceSize.Y - Stage.Height) / 2 + Metrics.CentreShift));
     protected float Points(double points) => (float)(points * Scale);
     protected bool ReadingsShown => SceneShown?.Style.Readings == ReadingPlacement.Below || SceneShown?.Style.Readings == ReadingPlacement.Instead;
 

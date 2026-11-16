@@ -42,6 +42,13 @@ public static class LyricStyleCopy
     public const string BackingVocals =
         "Bracketed backing words like (oh oh) are animated word by word like the lyrics, but small and soft behind the lead, easing in and lingering. Layouts that can’t carry them (Spoken, Cascade, Cutout and the stage layouts) set them as Scattered.";
 
+    /// <summary>Under "Keep the song title on screen" (the Mac's help text, d849c49).</summary>
+    public const string KeepTitle =
+        "The title stays for the whole song, quieter once the singing starts, so you always know what’s playing. Low on the left beside the lyrics; in the floating lyrics, a small line above them.";
+
+    /// <summary>Under "Title strength" (the Mac's help text, e30fbb2).</summary>
+    public const string TitleStrength = "How strong the song title stays once the singing has started. 100% keeps it fully solid.";
+
     public const string BackingLeadsLayout = "The lead’s layout";
 
     /// <summary>"Backing vocals animate like": the lead's layout, then the layouts backing words can take.</summary>

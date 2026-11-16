@@ -52,6 +52,15 @@ public sealed partial record AppSettings
     /// <summary>"Show the album cover" beside the opening title (Mac <c>custom.openingTitleCover</c>).</summary>
     public bool OpeningTitleCover { get; init; } = true;
 
+    /// <summary>
+    /// "Keep the song title on screen": the opening title stays for the whole song, quieter once the singing starts (Mac
+    /// <c>custom.openingTitleAlways</c>, d849c49). Shared by both surfaces, as on the Mac.
+    /// </summary>
+    public bool OpeningTitleAlways { get; init; }
+
+    /// <summary>"Title strength": how strong the kept title stays once it has rested, 30–100% (Mac <c>custom.openingTitleStrength</c>, e30fbb2).</summary>
+    public double OpeningTitleStrength { get; init; } = Core.Compositions.OpeningTitle.RestOpacity;
+
     /// <summary>Three dots during instrumental breaks (Mac <c>custom.showInterludes</c>).</summary>
     public bool ShowInterludes { get; init; } = true;
 
@@ -225,6 +234,7 @@ public sealed partial record AppSettings
                 .ToDictionary(pair => pair.Key, pair => Math.Clamp(pair.Value, 0, Core.Compositions.LayoutRotation.MaximumCount)),
             RotateLayoutsCursor = Math.Max(0, RotateLayoutsCursor),
             Player = Core.NowPlaying.PlayerChoice.Normalize(Player),
+            OpeningTitleStrength = Core.Compositions.OpeningTitle.KeptStrength(OpeningTitleStrength),
         }).NormalizedWindowSettings().NormalizedLyricTools().NormalizedWallpaper().NormalizedFloating()
             .NormalizedDiscord().NormalizedLyricExtras();
     }
@@ -264,6 +274,8 @@ public sealed partial record AppSettings
         Credits = CreditsLayer,
         OpeningTitle = OpeningTitle,
         OpeningTitleCover = OpeningTitleCover,
+        OpeningTitleKeep = OpeningTitleAlways,
+        OpeningTitleStrength = Core.Compositions.OpeningTitle.KeptStrength(OpeningTitleStrength),
         Interludes = ShowInterludes,
         OrbStyle = ThinkingOrbStyle ?? "listening",
         HighlightMode = LyricHighlightMode,

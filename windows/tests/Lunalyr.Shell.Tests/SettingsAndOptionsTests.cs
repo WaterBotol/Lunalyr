@@ -57,7 +57,7 @@ public sealed class AppSettingsTests
             "schemaVersion", "lyricComposition", "wordArrival", "lyricScale", "fontChoice", "fontFamily", "romanizationDisplay",
             "romanizationLanguage", "romanizationTones", "romanizationSaved", "backgroundMode", "wallpaperPaused", "animationRate",
             "pauseWhenCovered", "pauseOnBatterySaver", "pauseWhenFullScreen", "lyricOffset", "repairQQGaps", "songOffsets",
-            "lyricSourceOrder", "lyricSources", "lyricMatchMode", "lyrimuseFolder", "artistAliases", "creditsLayer", "openingTitle", "openingTitleCover", "showInterludes", "thinkingOrbStyle",
+            "lyricSourceOrder", "lyricSources", "lyricMatchMode", "lyrimuseFolder", "artistAliases", "creditsLayer", "openingTitle", "openingTitleCover", "openingTitleAlways", "openingTitleStrength", "showInterludes", "thinkingOrbStyle",
             "lyricHighlightMode", "lyricHighlightCustom", "rotateLayouts", "rotateLayoutCounts", "rotateLayoutsCursor",
             "constellationSpread", "constellationLinkOpacity", "echoStrength", "wordEntranceMix", "wordArrivalByStyle", "appTheme",
             "showControlsOnHover", "desktopPlayerTimeMode", "player",

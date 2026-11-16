@@ -252,6 +252,18 @@ internal sealed class TextKit : IDisposable
     }
 
     /// <summary>
+    /// Narrows a one-line <paramref name="layout"/> to <paramref name="maxWidth"/>, ending in "…" where it is cut (the
+    /// Mac's <c>.lineLimit(1).truncationMode(.tail)</c>). A line that fits is left as it is.
+    /// </summary>
+    public void Truncate(IDWriteTextLayout layout, float maxWidth)
+    {
+        if (!(layout.Metrics.WidthIncludingTrailingWhitespace > maxWidth)) return;
+        layout.MaxWidth = MathF.Max(1, maxWidth);
+        using var sign = _dwrite.CreateEllipsisTrimmingSign(layout);
+        layout.SetTrimming(new Trimming { Granularity = TrimmingGranularity.Character }, sign);
+    }
+
+    /// <summary>
     /// Bakes a layout into an <see cref="Ink"/>: the text in <paramref name="colour"/> at <paramref name="raster"/>
     /// bitmap pixels per layout pixel, and its soft shadow at half that resolution. With <see cref="Defers"/> the ink is
     /// measured now and baked later (the kit keeps its own reference to the layout, so the caller may dispose it).

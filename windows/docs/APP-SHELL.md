@@ -378,6 +378,8 @@ raw values. The file also has `schemaVersion` (1). Unknown or out-of-range value
 | `creditsLayer` | `true` | the song's production credits on the wallpaper | `custom.creditsLayer` |
 | `openingTitle` | `true` | "Show the song title at the start": the opening title card | `custom.openingTitle` |
 | `openingTitleCover` | `true` | "Show the album cover" beside the opening title | `custom.openingTitleCover` |
+| `openingTitleAlways` | `false` | "Keep the song title on screen": the card stays for the whole song (a row above the floating lyrics); shared by both surfaces | `custom.openingTitleAlways` |
+| `openingTitleStrength` | `0.55` | "Title strength": how strong the kept title stays once it rests, 0.3–1 | `custom.openingTitleStrength` |
 | `showInterludes` | `true` | three dots during instrumental breaks | `custom.showInterludes` |
 | `lyricHighlightMode` | `"complement"` | `complement`, `album`, `custom` (highlight tiles) | `custom.lyricHighlightMode` |
 | `lyricHighlightCustom` | `"#FF92A3"` | `#RRGGBB` | `custom.lyricHighlightCustom` |

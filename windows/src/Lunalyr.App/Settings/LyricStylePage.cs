@@ -47,6 +47,13 @@ internal static class LyricStylePage
             .ShowWhen(ctx, s => s.LyricComposition == Automatic));
         page.Children.Add(Card("Show the song title at the start", "Title, artist and album as a song begins.",
             "", Toggle(ctx, s => s.OpeningTitle, (s, v) => s with { OpeningTitle = v })));
+        // The Mac's d849c49 and e30fbb2: kept for the whole song, and how strong it stays once it rests.
+        page.Children.Add(Indented(Card("Keep the song title on screen", LyricStyleCopy.KeepTitle, null,
+            Toggle(ctx, s => s.OpeningTitleAlways, (s, v) => s with { OpeningTitleAlways = v }).EnableWhen(ctx, s => s.OpeningTitle))));
+        page.Children.Add(Indented(Card("Title strength", LyricStyleCopy.TitleStrength, null,
+                Slider(ctx, Core.Compositions.OpeningTitle.StrengthMin, Core.Compositions.OpeningTitle.StrengthMax, 0.01, SettingsCopy.Percent,
+                    s => s.OpeningTitleStrength, (s, v) => s with { OpeningTitleStrength = Math.Round(v, 2) }))
+            .ShowWhen(ctx, s => s.OpeningTitle && s.OpeningTitleAlways)));
 
         // Advanced layout
         page.Children.Add(Advanced(Expander("Layouts in the rotation",

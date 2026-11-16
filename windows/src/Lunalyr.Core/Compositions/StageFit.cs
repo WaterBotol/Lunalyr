@@ -44,16 +44,42 @@ public readonly record struct ViewportMetrics(double BaseSize, SizeD Stage, doub
     /// A text size set outright (the floating lyrics' own, in points) instead of one following the screen: the stage
     /// then fills nearly the whole window, 94% × 88% (the Mac's <c>LyricViewportMetrics(size:textSize:)</c>).
     /// </summary>
+    /// <param name="titleRow">
+    /// The song title is kept on screen: a row above the lyrics, which give it room (<see cref="TitleBand"/>, the Mac's
+    /// d849c49), the stage shortened by it.
+    /// </param>
+    /// <param name="rowScale">The row's scale (60–160%).</param>
+    /// <param name="rowAtBottom">The row sits at the window's foot: the band is there instead.</param>
     public static ViewportMetrics ForText(double width, double height, double scale, double textSize,
-                                          double sizeFraction = NeutralSizeFraction)
+                                          double sizeFraction = NeutralSizeFraction, bool titleRow = false, double rowScale = 1,
+                                          bool rowAtBottom = false)
     {
         if (!double.IsFinite(textSize) || textSize <= 0) return For(width, height, scale, sizeFraction);
         if (!double.IsFinite(scale) || scale <= 0) scale = 1;
         if (!double.IsFinite(width) || width < 0) width = 0;
         if (!double.IsFinite(height) || height < 0) height = 0;
         var user = double.IsFinite(sizeFraction) && sizeFraction > 0 ? sizeFraction / NeutralSizeFraction : 1;
-        return new ViewportMetrics(textSize * scale, new SizeD(width * 0.94, height * 0.88), Math.Clamp(user, 0.7, 1.5));
+        var baseSize = textSize * scale;
+        var band = titleRow ? OpeningTitle.RowBand(baseSize, rowScale) : 0;
+        return new ViewportMetrics(baseSize, new SizeD(width * 0.94, Math.Max(baseSize, height * 0.88 - band)), Math.Clamp(user, 0.7, 1.5))
+        {
+            TitleBand = band,
+            TitleAtBottom = titleRow && rowAtBottom,
+        };
     }
+
+    /// <summary>
+    /// Kept clear for the floating window's title row and its margin, at the window's top (or foot,
+    /// <see cref="TitleAtBottom"/>): the lyrics are centred in what is left. None on the desktop, where the card sits
+    /// beside them.
+    /// </summary>
+    public double TitleBand { get; init; }
+
+    /// <summary>The band is at the window's foot (the row put at the bottom).</summary>
+    public bool TitleAtBottom { get; init; }
+
+    /// <summary>How far the stage's centre moves from the window's: down past a band at the top, up from one at the foot.</summary>
+    public double CentreShift => (TitleAtBottom ? -1 : 1) * TitleBand / 2;
 }
 
 /// <summary>How a line (with its readings) is scaled to the stage. No mask: it only ever shrinks or grows as a whole.</summary>

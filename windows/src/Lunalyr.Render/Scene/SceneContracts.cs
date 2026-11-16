@@ -204,6 +204,16 @@ public sealed record LyricStyle
     /// <summary>The album cover beside the opening title, when the song has one (the Mac's <c>custom.openingTitleCover</c>).</summary>
     public bool OpeningTitleCover { get; init; } = true;
 
+    /// <summary>
+    /// "Keep the song title on screen" (the Mac's <c>custom.openingTitleAlways</c>): the card stays for the whole song,
+    /// resting at <see cref="OpeningTitleStrength"/> once the ordinary card would have left; in the floating window, a
+    /// compact row above the lyrics, which make room for it.
+    /// </summary>
+    public bool OpeningTitleKeep { get; init; }
+
+    /// <summary>"Title strength": how strong a kept title stays once it has rested, 0.3–1 (the Mac's <c>custom.openingTitleStrength</c>).</summary>
+    public double OpeningTitleStrength { get; init; } = Lunalyr.Core.Compositions.OpeningTitle.RestOpacity;
+
     // ---- Milestone 5: the Scattered family's own settings, the custom mix and an entrance per layout ----
 
     /// <summary>How far the constellations throw their words apart, 0.4–1.8 (the Mac's "Spread", <c>constellationSpread</c>).</summary>

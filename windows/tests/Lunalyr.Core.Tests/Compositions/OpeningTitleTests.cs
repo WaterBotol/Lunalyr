@@ -273,7 +273,10 @@ public class OpeningTitleTests
         Assert.False(OpeningTitle.Stays(yielding));
         Assert.Equal(40, yielding.Leave);
         Assert.Equal(40 + OpeningTitle.FullExit, yielding.End, 6);
-        Assert.Equal(1, OpeningTitle.Resting(yielding, 39));
+        Assert.Equal(1, OpeningTitle.Resting(yielding, 20));
+        // Rested before the lyrics came, it leaves from its rest rather than flaring back to full strength (the Mac's
+        // leaving keeps the card's stays).
+        Assert.Equal(OpeningTitle.RestOpacity, OpeningTitle.Resting(yielding, 39), 6);
     }
 
     [Fact]
@@ -318,5 +321,168 @@ public class OpeningTitleTests
         Assert.Equal(3 + OpeningTitle.FullExit, handed.End, 6);
         var leaving = OpeningTitle.Handover(loading, null, 2, 0.45, loading.Leave + 0.1);
         Assert.Equal(loading, leaving);
+    }
+
+    // ---- Kept on screen for the whole song (the Mac's d849c49, e30fbb2) ----
+
+    // Ported from OpeningTitleTests.swift: testAKeptCardEntersAsUsualAndNeverLeaves
+    [Fact]
+    public void A_kept_card_enters_as_usual_and_never_leaves()
+    {
+        var ordinary = Some(T.Schedule(OpeningWords.Timed(14)));
+        var kept = Some(T.Schedule(OpeningWords.Timed(14), keep: true));
+        Assert.Equal(ordinary.Start, kept.Start, 9);
+        Assert.Equal(OpeningSize.Full, kept.Size);
+        Assert.True(kept.Kept);
+        Assert.True(kept.Stays);
+        Assert.Equal(double.PositiveInfinity, kept.Leave);
+        Assert.Equal(double.PositiveInfinity, kept.End);
+        foreach (var time in new[] { 3.0, 30.0, 200.0, 1_000.0 }) Assert.NotNull(T.Phase(kept, time));
+        // Lyrics arriving after a lookup found none do not end it.
+        Assert.Equal(kept, T.Yielding(kept, 40));
+    }
+
+    // Ported from OpeningTitleTests.swift: testAKeptCardRestsWhenTheOrdinaryOneWouldHaveLeft
+    [Fact]
+    public void A_kept_card_rests_when_the_ordinary_one_would_have_left()
+    {
+        var ordinary = Some(T.Schedule(OpeningWords.Timed(14)));
+        var kept = Some(T.Schedule(OpeningWords.Timed(14), keep: true));
+        Assert.Equal(ordinary.Leave, kept.RestsFrom, 9);
+        Assert.Equal(0, T.Rest(kept, ordinary.Leave - 0.1), 9);
+        Assert.Equal(1, T.Rest(kept, ordinary.Leave + T.RestFade), 9);
+        var phase = Assert.NotNull(T.Phase(kept, 60));
+        Assert.Equal(T.RestOpacity, phase.Opacity, 9);
+        Assert.False(phase.Moving); // held at rest, nothing on it changes
+        Assert.True(phase.Kept);
+        Assert.True(phase.Stays);
+    }
+
+    // Ported from OpeningTitleTests.swift: testWhatWaitsForAKeptCardWaitsOnlyForTheOrdinaryOne
+    [Fact]
+    public void What_waits_for_a_kept_card_waits_only_for_the_ordinary_one()
+    {
+        var ordinary = Some(T.Schedule(OpeningWords.Timed(14)));
+        var kept = Some(T.Schedule(OpeningWords.Timed(14), keep: true));
+        Assert.Equal(ordinary.End, kept.Clears, 9); // credits start where they always did
+        Assert.Equal(ordinary.End, ordinary.Clears);
+        // Singing at once: no ordinary card, so nothing is held up.
+        var soon = Some(T.Schedule(OpeningWords.Timed(1), keep: true));
+        Assert.Equal(soon.Start, soon.Clears, 9);
+        Assert.Equal(soon.Settled, soon.RestsFrom, 9); // quiet as soon as it has arrived
+    }
+
+    // Windows' own: none found is a staying card of its own on Windows (Absent); kept, it is the ordinary no-words card's
+    // rest and clearance that count, never an endless one.
+    [Fact]
+    public void A_kept_card_for_a_song_without_lyrics_still_rests_and_clears()
+    {
+        var kept = Some(T.Schedule(OpeningWords.Absent, keep: true));
+        var none = Some(T.Schedule(OpeningWords.None));
+        Assert.True(kept.Kept);
+        Assert.Equal(none.Leave, kept.RestsFrom, 9);
+        Assert.Equal(none.End, kept.Clears, 9);
+        Assert.True(double.IsFinite(kept.RestsFrom) && double.IsFinite(kept.Clears));
+    }
+
+    // Ported from OpeningTitleTests.swift: testAKeptCardShowsWhenLunalyrOpensMidSong
+    [Fact]
+    public void A_kept_card_shows_when_Lunalyr_opens_mid_song()
+    {
+        var memory = new OpeningTitleMemory();
+        var joined = memory.Joined("7", 120);
+        Assert.Equal(120, joined);
+        var kept = Some(T.Schedule(OpeningWords.Timed(12), joined, keep: true));
+        Assert.Equal(120 + T.JoinLead, kept.Start, 9);
+        Assert.Equal(OpeningSize.Full, kept.Size);
+        Assert.NotNull(T.Phase(kept, 125));
+        Assert.NotNull(T.Phase(kept, 200));
+        // Even when the song was first seen before its position was known.
+        Assert.NotNull(T.Phase(Some(T.Schedule(OpeningWords.Timed(12), 0, keep: true)), 120));
+    }
+
+    // Ported from OpeningTitleTests.swift: testSeekingBackBeforeTheJoinJoinsThere
+    [Fact]
+    public void Seeking_back_before_the_join_joins_there()
+    {
+        var memory = new OpeningTitleMemory();
+        Assert.Equal(120, memory.Joined("7", 120));
+        Assert.Equal(120, memory.Joined("7", 130)); // playing on
+        Assert.Equal(60, memory.Joined("7", 60)); // sought back
+        var kept = Some(T.Schedule(OpeningWords.Timed(12), 60, keep: true));
+        Assert.NotNull(T.Phase(kept, 61)); // not missing until 120 s comes round again
+        Assert.Equal(0, memory.Joined("7", 1)); // back at the start
+    }
+
+    // Ported from OpeningTitleTests.swift: testAKeptCardIsNotKeptWithoutTheSetting
+    [Fact]
+    public void A_kept_card_is_not_kept_without_the_setting()
+    {
+        Assert.False(Some(T.Schedule(OpeningWords.Timed(14))).Kept);
+        Assert.Null(T.Schedule(OpeningWords.Timed(1)));
+        Assert.Equal(OpeningSize.Compact, Some(T.Schedule(OpeningWords.Absent, joined: 60)).Size);
+    }
+
+    // Ported from OpeningTitleTests.swift: testTheFloatingRowHasRoomAboveTheLyrics
+    [Fact]
+    public void The_floating_row_has_room_above_the_lyrics()
+    {
+        const double width = 836, height = 202;
+        var plain = ViewportMetrics.ForText(width, height, 1, 44);
+        var row = ViewportMetrics.ForText(width, height, 1, 44, titleRow: true);
+        Assert.Equal(0, plain.TitleBand);
+        Assert.Equal(T.RowBand(44), row.TitleBand);
+        Assert.Equal(plain.Stage.Height - row.TitleBand, row.Stage.Height, 3);
+        // The lyrics' top (centred under the band) stays below the row.
+        var lyricsTop = row.TitleBand + (height - row.TitleBand - row.Stage.Height) / 2;
+        Assert.Equal(height / 2 + row.CentreShift - row.Stage.Height / 2, lyricsTop, 6);
+        Assert.True(lyricsTop > 44 * (T.RowMargin + T.RowCover));
+        Assert.Equal(0, ViewportMetrics.For(1512, 982, 1).TitleBand); // the desktop card sits beside the lyrics
+    }
+
+    // Ported from OpeningTitleTests.swift: testTheRowStaysInsideTheWindowAtItsEdge
+    [Fact]
+    public void The_row_stays_inside_the_window_at_its_edge()
+    {
+        const double width = 836, height = 202;
+        var standard = T.RowFrame(width, height, 260, 27, 44);
+        Assert.Equal(width / 2, standard.X + standard.Width / 2, 0.5); // centred at the top by default
+        Assert.Equal(44 * T.RowMargin, standard.Y, 3);
+        foreach (var centre in new[] { -1.0, 0, 0.1, 0.9, 1, 3 })
+            foreach (var bottom in new[] { false, true })
+            {
+                var frame = T.RowFrame(width, height, 260, 27, 44, centre, bottom);
+                Assert.True(frame.X >= 0 && frame.X + frame.Width <= width);
+                Assert.True(frame.Y >= 0 && frame.Y + frame.Height <= height);
+            }
+        var foot = T.RowFrame(width, height, 260, 27, 44, 0.5, bottom: true);
+        Assert.Equal(44 * T.RowMargin, height - (foot.Y + foot.Height), 3);
+    }
+
+    // Ported from OpeningTitleTests.swift: testTitleStrengthSetsWhereAKeptCardRests
+    [Fact]
+    public void Title_strength_sets_where_a_kept_card_rests()
+    {
+        var kept = Some(T.Schedule(OpeningWords.Timed(14), keep: true));
+        var rested = kept.RestsFrom + T.RestFade + 1;
+        Assert.Equal(T.RestOpacity, Assert.NotNull(T.Phase(kept, rested)).Opacity, 9); // 55% by default, as before
+        foreach (var (set, expected) in new[] { (1.0, 1.0), (0.3, 0.3), (0.8, 0.8), (0.05, 0.3), (4.0, 1.0), (double.NaN, T.RestOpacity) })
+        {
+            Assert.Equal(expected, Assert.NotNull(T.Phase(kept, rested, set)).Opacity, 9);
+            Assert.Equal(1, Assert.NotNull(T.Phase(kept, kept.Settled + 0.1, set)).Opacity, 9); // full strength before it rests
+        }
+        // A card staying for want of lyrics keeps its own rest.
+        var staying = Some(T.Schedule(OpeningWords.Absent));
+        Assert.Equal(T.RestOpacity, Assert.NotNull(T.Phase(staying, staying.RestsFrom + T.RestFade + 1, 1.0)).Opacity, 9);
+    }
+
+    // The Mac's pace: a card that stays with no exit due is only looked at, never kept on a running clock.
+    [Fact]
+    public void A_kept_card_at_rest_does_not_keep_the_clock_running()
+    {
+        var kept = Some(T.Schedule(OpeningWords.Timed(14), keep: true));
+        var held = T.Phase(kept, 60);
+        Assert.Equal(LyricPace.Level.Waiting, T.Pace(LyricPace.Level.Resting, held, playing: true));
+        Assert.Equal(LyricPace.Level.Active, T.Pace(LyricPace.Level.Resting, T.Phase(kept, kept.RestsFrom + 0.5), playing: true));
     }
 }

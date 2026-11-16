@@ -64,10 +64,29 @@ public static class OpeningTitle
     public static double Deadline(double firstLine, double previewLead) => firstLine - Math.Max(Clearance, previewLead + 0.6);
 
     /// <summary>The card's timing for a song first seen at <paramref name="joined"/> seconds in, or null when there is no room for it.</summary>
-    public static OpeningSchedule? Schedule(OpeningWords words, double joined = 0, double previewLead = 0.45)
+    /// <param name="keep">
+    /// "Keep the song title on screen" (the Mac's <c>custom.openingTitleAlways</c>, d849c49): the full card, from the
+    /// usual moment, for the whole song, whatever the lookup finds. It rests from where the ordinary card would have
+    /// left, and what waits for the card (the credits) waits only as long as for the ordinary one.
+    /// </param>
+    public static OpeningSchedule? Schedule(OpeningWords words, double joined = 0, double previewLead = 0.45, bool keep = false)
     {
         var partWay = joined > MidSong;
         var start = partWay ? joined + JoinLead : Lead;
+        if (keep)
+        {
+            // The ordinary card this one stands in for: none found counts as nothing to sing along to (the Mac has no
+            // Absent words; its kept card skips the staying path).
+            var ordinary = Schedule(words.Kind == OpeningWordsKind.Absent ? OpeningWords.None : words, joined, previewLead);
+            var settled = start + FullEntrance;
+            return new OpeningSchedule(start, settled, double.PositiveInfinity, double.PositiveInfinity, OpeningSize.Full)
+            {
+                Stays = true,
+                Kept = true,
+                OrdinaryLeave = Math.Max(settled, ordinary?.Leave ?? settled),
+                OrdinaryEnd = ordinary?.End ?? start,
+            };
+        }
         OpeningSchedule Card(OpeningSize size, double leave)
         {
             var entrance = size == OpeningSize.Full ? FullEntrance : CompactEntrance;
@@ -82,7 +101,7 @@ public static class OpeningTitle
             case OpeningWordsKind.Absent:
                 // No lyrics for this song: the card stays for the rest of it (the owner, 15 Nov 2026), compact when joined
                 // part-way. It still gives way if lyrics arrive late (Yielding).
-                return Card(partWay ? OpeningSize.Compact : OpeningSize.Full, double.PositiveInfinity);
+                return Card(partWay ? OpeningSize.Compact : OpeningSize.Full, double.PositiveInfinity) with { Stays = true };
             case OpeningWordsKind.None:
             case OpeningWordsKind.Timed when words.FirstLine is null:
                 return partWay ? brief : Card(OpeningSize.Full, start + FullEntrance + WordlessHold);
@@ -108,15 +127,26 @@ public static class OpeningTitle
     /// <summary>The resting state's opacity: still there, quieter.</summary>
     public const double RestOpacity = 0.55;
 
-    /// <summary>Whether <paramref name="schedule"/> stays for the rest of the song (no lyrics).</summary>
+    /// <summary>
+    /// "Title strength" (the Mac's e30fbb2, <c>custom.openingTitleStrength</c>): how strong a kept card stays once it has
+    /// rested, 30% to 100% (solid); <see cref="RestOpacity"/> by default.
+    /// </summary>
+    public const double StrengthMin = 0.3, StrengthMax = 1;
+
+    /// <summary>A stored Title strength, kept in range; one that is not a number is the default.</summary>
+    public static double KeptStrength(double stored) =>
+        double.IsFinite(stored) ? Math.Clamp(stored, StrengthMin, StrengthMax) : RestOpacity;
+
+    /// <summary>Whether <paramref name="schedule"/> stays with no leave due: no lyrics found, or kept for the whole song.</summary>
     public static bool Stays(OpeningSchedule? schedule) => schedule is { } s && double.IsPositiveInfinity(s.Leave);
 
     /// <summary>
     /// A card that was staying (<paramref name="staying"/>), now that lyrics arrived at <paramref name="at"/>: it leaves
-    /// from then, with its usual exit, rather than vanishing.
+    /// from then, with its usual exit, rather than vanishing. A kept card never leaves.
     /// </summary>
     public static OpeningSchedule Yielding(OpeningSchedule staying, double at)
     {
+        if (staying.Kept) return staying;
         var leave = Math.Max(at, staying.Settled);
         var exit = staying.Size == OpeningSize.Full ? FullExit : CompactExit;
         return staying with { Leave = leave, End = leave + exit };
@@ -153,12 +183,22 @@ public static class OpeningTitle
         return staying with { Start = at, Settled = at + entrance };
     }
 
-    /// <summary>The opacity a staying card is drawn at: 1, then easing to <see cref="RestOpacity"/> once held a while.</summary>
-    public static double Resting(OpeningSchedule? schedule, double time)
+    /// <summary>How far a staying card has eased to rest at <paramref name="time"/>, 0…1 (the Mac's <c>rest</c>).</summary>
+    public static double Rest(OpeningSchedule? schedule, double time)
     {
-        if (!Stays(schedule) || !double.IsFinite(time)) return 1;
-        var t = (time - schedule!.Value.Settled - RestAfter) / RestFade;
-        return 1 - (1 - RestOpacity) * Easing.Smoothstep(Math.Clamp(t, 0, 1));
+        if (schedule is not { Stays: true } s || !double.IsFinite(time)) return 0;
+        return Easing.Smoothstep(Math.Clamp((time - s.RestsFrom) / RestFade, 0, 1));
+    }
+
+    /// <summary>
+    /// The opacity a staying card is drawn at: 1, then easing to its rest once held a while: a kept card's to
+    /// <paramref name="keptStrength"/> (Title strength), one staying for want of lyrics to <see cref="RestOpacity"/>. A
+    /// staying card that yields to late lyrics leaves from where it rested.
+    /// </summary>
+    public static double Resting(OpeningSchedule? schedule, double time, double keptStrength = RestOpacity)
+    {
+        var floor = schedule is { Kept: true } ? KeptStrength(keptStrength) : RestOpacity;
+        return 1 - (1 - floor) * Rest(schedule, time);
     }
 
     /// <summary>The start of the first line that is sung (credits and breaks are not).</summary>
@@ -171,11 +211,20 @@ public static class OpeningTitle
     }
 
     /// <summary>Where the card is at <paramref name="time"/>: null before it starts and once it has gone.</summary>
-    public static OpeningPhase? Phase(OpeningSchedule? schedule, double time)
+    /// <param name="keptStrength">Title strength, where a kept card rests.</param>
+    public static OpeningPhase? Phase(OpeningSchedule? schedule, double time, double keptStrength = RestOpacity)
     {
         if (schedule is not { } s || !(time >= s.Start) || !(time < s.End)) return null;
         var exit = time <= s.Leave ? 0 : (time - s.Leave) / (s.End - s.Leave);
-        return new OpeningPhase(time - s.Start, Math.Min(1, Math.Max(0, exit)), s.Size, time < s.Settled || time > s.Leave);
+        // Easing to rest counts as moving; held at rest, nothing on it changes.
+        var resting = s.Stays && time >= s.RestsFrom && time <= s.RestsFrom + RestFade;
+        return new OpeningPhase(time - s.Start, Math.Min(1, Math.Max(0, exit)), s.Size, time < s.Settled || time > s.Leave || resting)
+        {
+            Rest = Rest(s, time),
+            Stays = double.IsPositiveInfinity(s.Leave),
+            Kept = s.Kept,
+            Opacity = Resting(s, time, keptStrength),
+        };
     }
 
     /// <summary>0…1: how much of something else naming the song (the loading notice) may show: none while the card is up, fading back after.</summary>
@@ -190,12 +239,45 @@ public static class OpeningTitle
         return new OpeningPhase(0, 0, s.Size, true);
     }
 
-    /// <summary>The stage's clock while the card is up: every frame while it moves, and never stopped while it is held, so its exit is drawn.</summary>
+    /// <summary>
+    /// The stage's clock while the card is up: every frame while it moves, and never stopped while it is held, so its
+    /// exit is drawn. A card that stays with no exit due is only looked at, for its ease to rest.
+    /// </summary>
     public static LyricPace.Level Pace(LyricPace.Level level, OpeningPhase? phase, bool playing)
     {
         if (phase is not { } p) return level;
         if (p.Moving) return playing ? LyricPace.Level.Active : (level == LyricPace.Level.Resting ? LyricPace.Level.Waiting : level);
-        return level == LyricPace.Level.Resting ? (playing ? LyricPace.Level.Still : LyricPace.Level.Waiting) : level;
+        return level == LyricPace.Level.Resting ? (playing && !p.Stays ? LyricPace.Level.Still : LyricPace.Level.Waiting) : level;
+    }
+
+    // The floating window's kept title: one row above the lyrics (the Mac's d849c49). Its margin from the window's
+    // edge, the cover's side and its type, as shares of the lyric size.
+    public const double RowMargin = 0.18;
+    public const double RowCover = 0.62;
+    public const double RowTitle = 0.38;
+    public const double RowArtist = 0.3;
+
+    /// <summary>The height kept clear for the row: its margin, the cover, and a gap before the lyrics.</summary>
+    public static double RowBand(double baseSize, double scale = 1) => baseSize * (RowMargin + (RowCover + 0.16) * RowScale(scale));
+
+    /// <summary>The row's scale, kept between 60% and 160% (the Mac's <c>RowPlacement.clamped</c>).</summary>
+    public static double RowScale(double scale) => double.IsFinite(scale) ? Math.Clamp(scale, 0.6, 1.6) : 1;
+
+    /// <summary>
+    /// The title row's frame in a window <paramref name="windowWidth"/> × <paramref name="windowHeight"/> (origin top
+    /// left) for a row <paramref name="rowWidth"/> across: centred at <paramref name="centre"/> (a share of the window's
+    /// width), kept inside the window, <see cref="RowMargin"/> in from its top or (<paramref name="bottom"/>) its foot.
+    /// </summary>
+    public static (double X, double Y, double Width, double Height) RowFrame(double windowWidth, double windowHeight, double rowWidth,
+                                                                            double rowHeight, double baseSize, double centre = 0.5,
+                                                                            bool bottom = false)
+    {
+        var edge = baseSize * 0.2;
+        var width = Math.Min(rowWidth, Math.Max(1, windowWidth - 2 * edge));
+        var x = Math.Min(Math.Max(edge, centre * windowWidth - width / 2), Math.Max(edge, windowWidth - width - edge));
+        var margin = baseSize * RowMargin;
+        var y = bottom ? windowHeight - margin - rowHeight : margin;
+        return (x, y, width, rowHeight);
     }
 
     /// <summary>1 for a title of up to 24 characters, down to 0.7 for a long one.</summary>
@@ -244,13 +326,49 @@ public readonly record struct OpeningWords(OpeningWordsKind Kind, double? FirstL
 }
 
 /// <summary>When the card enters, settles, starts leaving and is gone, in song time.</summary>
-public readonly record struct OpeningSchedule(double Start, double Settled, double Leave, double End, OpeningSize Size);
+public readonly record struct OpeningSchedule(double Start, double Settled, double Leave, double End, OpeningSize Size)
+{
+    /// <summary>
+    /// The card stays and rests: no lyrics were found (its leave is infinite until lyrics arrive, and a card yielding to
+    /// them leaves from where it rested), or it is kept.
+    /// </summary>
+    public bool Stays { get; init; }
+
+    /// <summary>Kept on screen for the whole song ("Keep the song title on screen"): only a new song ends it.</summary>
+    public bool Kept { get; init; }
+
+    /// <summary>
+    /// A kept card: where the ordinary card would have left and been gone (its start when there would have been none). It
+    /// rests from <see cref="OrdinaryLeave"/>, and what waits for the card waits for <see cref="OrdinaryEnd"/>.
+    /// </summary>
+    public double? OrdinaryLeave { get; init; }
+    public double? OrdinaryEnd { get; init; }
+
+    /// <summary>When what waits for the card to go (the credits) may start.</summary>
+    public double Clears => OrdinaryEnd ?? End;
+
+    /// <summary>When a staying card starts to ease to rest.</summary>
+    public double RestsFrom => OrdinaryLeave ?? Settled + OpeningTitle.RestAfter;
+}
 
 /// <summary>Where the card is.</summary>
 /// <param name="Age">Seconds since the card started entering.</param>
 /// <param name="Exit">0 while held, rising to 1 as it leaves.</param>
-/// <param name="Moving">Entering or leaving. Held, nothing on it changes.</param>
-public readonly record struct OpeningPhase(double Age, double Exit, OpeningSize Size, bool Moving);
+/// <param name="Moving">Entering, easing to rest or leaving. Held, nothing on it changes.</param>
+public readonly record struct OpeningPhase(double Age, double Exit, OpeningSize Size, bool Moving)
+{
+    /// <summary>0 at full strength, 1 rested (a staying card).</summary>
+    public double Rest { get; init; }
+
+    /// <summary>Staying with no leave due: only an input (lyrics arriving, a new song) ends it.</summary>
+    public bool Stays { get; init; }
+
+    /// <summary>Kept for the whole song.</summary>
+    public bool Kept { get; init; }
+
+    /// <summary>The card's strength before its exit: a kept card rests at Title strength, one staying for want of lyrics at <see cref="OpeningTitle.RestOpacity"/>.</summary>
+    public double Opacity { get; init; } = 1;
+}
 
 /// <summary>How far each part of the card has arrived, 0…1.</summary>
 /// <param name="Cover">The cover: arrives a beat before the title's wipe.</param>
@@ -289,7 +407,9 @@ public sealed class OpeningTitleMemory
 
     /// <summary>
     /// The song time at which <paramref name="track"/> was first seen: 0 for a song seen from its start, or once
-    /// playback is back at its start. A time that is not a number (no position yet) is not a sighting.
+    /// playback is back at its start. Playback sought back before that moment joins the song there instead, so a card (a
+    /// kept one above all) is not missing until the old moment returns (the Mac's d849c49). A time that is not a number
+    /// (no position yet) is not a sighting.
     /// </summary>
     public double Joined(string? track, double time)
     {
@@ -299,6 +419,7 @@ public sealed class OpeningTitleMemory
             _track = track;
             _joinedAt = time;
         }
+        if (time < _joinedAt) _joinedAt = time;
         if (time < OpeningTitle.MidSong) _joinedAt = 0;
         return _joinedAt;
     }

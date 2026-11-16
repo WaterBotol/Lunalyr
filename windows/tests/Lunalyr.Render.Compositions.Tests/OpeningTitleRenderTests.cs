@@ -159,6 +159,64 @@ public sealed class OpeningTitleRenderTests : IDisposable
         Assert.Equal(Allocated(Off(scene)), Allocated(scene));
     }
 
+    private static SceneSnapshot Kept(SceneSnapshot scene, double strength = 0.55) =>
+        scene with { Style = scene.Style with { OpeningTitleKeep = true, OpeningTitleStrength = strength } };
+
+    // The Mac's d849c49: the card stays for the whole song, low on the left, quieter once the ordinary card would have
+    // left; credits wait only as long as for the ordinary card.
+    [Fact]
+    public void AKeptCardStaysAllSongAndRestsAtTitleStrength()
+    {
+        using var layer = Layer("editorial");
+        var scene = OpeningFixtures.HumanNature();
+        var off = Frame(layer, Off(scene), 60);
+        var rested = Frame(layer, Kept(scene), 60);
+        Assert.True(Differing(rested, off, 0, Width / 2, Height / 2, Height) > 1000, $"{Differing(rested, off, 0, Width / 2, Height / 2, Height)}");
+        Assert.Equal(0, Differing(Frame(layer, scene, 60), off)); // not kept: long gone
+        // At 100% it stays as strong as it arrived; at the default it rests quieter.
+        var solid = Frame(layer, Kept(scene, 1), 60);
+        Assert.True(Differing(solid, rested, 0, Width / 2, Height / 2, Height) > 300);
+        Assert.Equal(0, Differing(Frame(layer, Kept(scene, 1), 5), Frame(layer, Kept(scene), 5))); // before it rests, the same
+        var credits = OpeningFixtures.HumanNature(credits: true);
+        Assert.True(Lit(Frame(layer, Kept(credits), 11), 0, Height / 4) > 150);
+        Assert.Empty(_sink.Entries);
+    }
+
+    // The Mac's d849c49: in the floating window the kept title is a row at the top, and the lyrics move down clear of it.
+    [Fact]
+    public void TheFloatingWindowsKeptTitleIsARowAboveTheLyrics()
+    {
+        using var layer = Layer("editorial");
+        var floating = OpeningFixtures.HumanNature() with { Style = OpeningFixtures.HumanNature().Style with { FloatingTextSize = 40 } };
+        var kept = Kept(floating);
+        var untitled = kept with { Title = "" };
+        // The row: in the band at the top (40 × (0.18 + 0.62 + 0.16) ≈ 38 px), nowhere in the lower half.
+        var row = Frame(layer, kept, 60);
+        var none = Frame(layer, untitled, 60);
+        Assert.True(Differing(row, none, 0, Width, 0, 40) > 200, $"{Differing(row, none, 0, Width, 0, 40)}");
+        Assert.Equal(0, Differing(row, none, 0, Width, Height / 2, Height));
+        // The lyrics sit lower than without the band.
+        var line = Frame(layer, floating, 12.5);
+        var lowered = Frame(layer, untitled, 12.5);
+        Assert.True(Centroid(lowered) > Centroid(line) + 10, $"{Centroid(line)} → {Centroid(lowered)}");
+        Assert.Empty(_sink.Entries);
+    }
+
+    /// <summary>The mean row of the lit pixels.</summary>
+    private static double Centroid(byte[] pixels)
+    {
+        double sum = 0, count = 0;
+        for (var y = 0; y < Height; y++)
+        for (var x = 0; x < Width; x++)
+        {
+            var i = (y * Width + x) * 4;
+            if (pixels[i] + pixels[i + 1] + pixels[i + 2] <= 3 * 110) continue;
+            sum += y;
+            count++;
+        }
+        return count == 0 ? double.NaN : sum / count;
+    }
+
     /// <summary>Bytes a layer allocates drawing the card's entrance and exit a second time (the first sets everything).</summary>
     private long Allocated(SceneSnapshot scene)
     {
