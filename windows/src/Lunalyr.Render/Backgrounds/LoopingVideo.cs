@@ -26,6 +26,7 @@ internal sealed class LoopingVideo(string what, CategoryLogger log) : IDisposabl
     private readonly SemaphoreSlim _space = new(QueueLength, QueueLength);
     private Thread? _worker;
     private volatile bool _stopping;
+    private CancellationTokenSource _wake = new();
 
     private ID3D11Device? _device;
     private ID3D11Texture2D? _texture;
@@ -146,6 +147,12 @@ internal sealed class LoopingVideo(string what, CategoryLogger log) : IDisposabl
         using (var multithread = _device?.QueryInterfaceOrNull<ID3D11Multithread>()) multithread?.SetMultithreadProtected(true);
         var device = _device?.NativePointer ?? 0;
         var path = Path;
+        // A fresh wake for this run (the last stop's was used).
+        if (_wake.IsCancellationRequested)
+        {
+            _wake.Dispose();
+            _wake = new CancellationTokenSource();
+        }
         _stopping = false;
         _worker = new Thread(() => Decode(path, device)) { IsBackground = true, Name = "Lunalyr video", Priority = ThreadPriority.BelowNormal };
         _worker.Start();
@@ -200,9 +207,20 @@ internal sealed class LoopingVideo(string what, CategoryLogger log) : IDisposabl
 
     private bool Enqueue(VideoFrame frame)
     {
+        var wake = _wake.Token;
         while (!_stopping)
         {
-            if (_space.Wait(200))
+            bool room;
+            try
+            {
+                // A stop wakes it at once rather than at the next 200 ms: the drawing thread may be waiting on it.
+                room = _space.Wait(200, wake);
+            }
+            catch (OperationCanceledException)
+            {
+                break;
+            }
+            if (room)
             {
                 if (_stopping)
                 {
@@ -222,6 +240,7 @@ internal sealed class LoopingVideo(string what, CategoryLogger log) : IDisposabl
     private void Stop()
     {
         _stopping = true;
+        _wake.Cancel();
         _worker?.Join(3000);
         _worker = null;
         lock (_gate)
@@ -255,5 +274,36 @@ internal sealed class LoopingVideo(string what, CategoryLogger log) : IDisposabl
     {
         Release();
         _space.Dispose();
+        _wake.Dispose();
+    }
+
+    /// <summary>
+    /// Lets go of it without waiting on the decoder: the drawing thread drops the frame it draws now, and the worker is
+    /// stopped and its frames and device let go on another thread (the title card's cover, released mid-frame).
+    /// </summary>
+    public void DisposeInBackground()
+    {
+        _stopping = true;
+        _wake.Cancel();
+        var worker = _worker;
+        _worker = null;
+        _bitmap?.Dispose();
+        _bitmap = null;
+        _texture?.Dispose();
+        _texture = null;
+        // The decoder works on the device until it has stopped: it goes after.
+        var device = _device;
+        _device = null;
+        _ = Task.Run(() =>
+        {
+            worker?.Join(3000);
+            lock (_gate)
+            {
+                while (_queue.Count > 0) _queue.Dequeue().Dispose();
+            }
+            device?.Dispose();
+            _space.Dispose();
+            _wake.Dispose();
+        });
     }
 }

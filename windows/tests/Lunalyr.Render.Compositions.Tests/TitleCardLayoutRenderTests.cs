@@ -250,6 +250,10 @@ public sealed class TitleCardLayoutRenderTests : IDisposable
                 Thread.Sleep(15);
             }
             Assert.True(seen.Green > 1000 && seen.Magenta < 50, $"green {seen.Green}, magenta {seen.Magenta}");
+            // The card ends (here, the title off): its video is let go without the frame waiting on the decoder.
+            var ending = System.Diagnostics.Stopwatch.StartNew();
+            _stage.Render([layer], song with { Style = song.Style with { OpeningTitle = false } }, 6, 106, 1);
+            Assert.True(ending.ElapsedMilliseconds < 150, $"the frame that let the video go took {ending.ElapsedMilliseconds} ms");
 
             // Under Reduce Motion, only the still.
             using var still = new EditorialFactory(IcuWordBreaker.TryCreate(), _logger).Create();

@@ -423,7 +423,8 @@ internal sealed class Ink : IDisposable
     /// </summary>
     internal double Measured(double boundary)
     {
-        if (Letters is not { } letters || letters.Left.Length < 2 || !(Box.X > 0)) return boundary;
+        // Only where letter k is character k (no space or ligature between them: the share was counted by character).
+        if (Letters is not { OneCharacterEach: true } letters || letters.Left.Length < 2 || !(Box.X > 0)) return boundary;
         var n = letters.Left.Length;
         var at = boundary * n;
         var k = (int)Math.Round(at);

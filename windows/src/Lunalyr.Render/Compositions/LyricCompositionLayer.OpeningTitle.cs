@@ -570,7 +570,8 @@ internal abstract partial class LyricCompositionLayer
         _cardVideoBrush?.Dispose();
         _cardVideoBrush = null;
         _cardVideoBrushFor = null;
-        _cardVideo?.Dispose();
+        // Mid-frame: the decoder stops on another thread, so the frame never waits on it.
+        _cardVideo?.DisposeInBackground();
         _cardVideo = null;
         _cardVideoPath = null;
     }

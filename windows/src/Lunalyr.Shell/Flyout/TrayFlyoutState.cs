@@ -29,7 +29,7 @@ public sealed record FlyoutInputs
 
     public AppSettings Settings { get; init; } = new();
 
-    /// <summary>The layout Custom Mix took for the song playing (<see cref="AppController.MatchedComposition"/>), or null.</summary>
+    /// <summary>The layout drawn for the song playing (<see cref="AppController.ShownComposition"/>: a remembered one, or Custom Mix's pick), or null.</summary>
     public string? ShowingLayout { get; init; }
 
     /// <summary>What the followed player takes from other apps.</summary>

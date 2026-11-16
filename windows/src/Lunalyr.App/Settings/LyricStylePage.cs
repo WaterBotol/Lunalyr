@@ -43,7 +43,8 @@ internal static class LyricStylePage
         void ShowLayout(AppSettings s)
         {
             var detail = SettingsCopy.Layouts.FirstOrDefault(c => c.Value == s.LyricComposition)?.Detail ?? "";
-            var showing = s.LyricComposition == Automatic && controller()?.Status.Title is not null ? controller()?.MatchedComposition : null;
+            // The layout drawn (a remembered one wins over Custom Mix's pick), as the Mac's lyric layer reports it.
+            var showing = s.LyricComposition == Automatic && controller()?.Status.Title is not null ? controller()?.ShownComposition : null;
             layoutCard.Description = showing is null ? detail : $"Now {SettingsCopy.ShowingLayoutTitle(Automatic, showing)}. {detail}";
         }
         ctx.OnRefresh(ShowLayout);

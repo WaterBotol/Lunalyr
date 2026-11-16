@@ -17,6 +17,12 @@ internal sealed class InkLetters(float[] left, float[] right, float top, float b
     public float Baseline { get; } = baseline;
     public float Bottom { get; } = bottom;
     public int Count => Left.Length;
+
+    /// <summary>
+    /// Every letter is one character, with no spaces or ligatures between them: letter k starts where character k does,
+    /// so a share counted by character can be placed by letter (<see cref="Ink.Measured"/>).
+    /// </summary>
+    public bool OneCharacterEach { get; init; }
     /// <summary>The letters' span across.</summary>
     public float MinX => Left.Length > 0 ? Left[0] : 0;
     public float MaxX => Right.Length > 0 ? Right[^1] : 0;
@@ -37,18 +43,27 @@ internal sealed class InkLetters(float[] left, float[] right, float top, float b
         var cy = metrics.Top + box.Y / 2;
         var spans = new List<(float Left, float Right)>(clusters.Length);
         uint position = 0;
+        var single = true;
         foreach (var cluster in clusters)
         {
             if (!cluster.IsWhitespace && !cluster.IsNewline && cluster.Width > 0)
             {
                 layout.HitTestTextPosition(position, false, out _, out _, out var hit);
                 spans.Add((hit.Left - cx, hit.Left + hit.Width - cx));
+                single &= cluster.Length == 1;
+            }
+            else
+            {
+                single = false;
             }
             position += cluster.Length;
         }
         if (spans.Count == 0) return null;
         spans.Sort((a, b) => a.Left.CompareTo(b.Left));
         return new InkLetters([.. spans.Select(s => s.Left)], [.. spans.Select(s => s.Right)],
-                              metrics.Top - cy, metrics.Top + lines[0].Baseline - cy, metrics.Top + lines[0].Height - cy);
+                              metrics.Top - cy, metrics.Top + lines[0].Baseline - cy, metrics.Top + lines[0].Height - cy)
+        {
+            OneCharacterEach = single,
+        };
     }
 }

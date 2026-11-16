@@ -73,4 +73,15 @@ public sealed class TokenRevealEdgeTests : IDisposable
         Assert.Equal((x - layout.Metrics.Left) / layout.Metrics.Width, ink.Measured(0.5), 4);
         ink.Dispose();
     }
+
+    // A space between the letters: letter k is no longer character k, so the share counted by character stays.
+    [Fact]
+    public void A_label_with_a_space_keeps_the_character_share()
+    {
+        using var layout = _kit.Layout("HAPPY なイ", Face.Heavy, 60, "ja-jp", false);
+        var ink = _kit.Bake(layout, Vector4.One, 1, default);
+        Assert.False(ink.Letters!.OneCharacterEach);
+        Assert.Equal(5 / 7.0, ink.Measured(5 / 7.0), 9);
+        ink.Dispose();
+    }
 }

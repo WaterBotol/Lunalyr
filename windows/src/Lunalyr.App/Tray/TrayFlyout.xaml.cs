@@ -361,7 +361,7 @@ public sealed partial class TrayFlyout : Window
             SongOffset = controller?.SongOffset ?? 0,
             Lyric = controller?.CurrentLyric() ?? LyricNow.None,
             PendingPlaying = _pending,
-            ShowingLayout = controller?.MatchedComposition,
+            ShowingLayout = controller?.ShownComposition,
         });
     }
 
