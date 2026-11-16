@@ -224,7 +224,8 @@ public sealed class OnboardingReworkTests
     {
         Assert.True(SettingsLoader.ShouldShow(reduceMotion: false, alreadyShown: false, isUnitTesting: false, hasVideo: true));
         Assert.False(SettingsLoader.ShouldShow(reduceMotion: true, alreadyShown: false, isUnitTesting: false, hasVideo: true));
-        Assert.False(SettingsLoader.ShouldShow(reduceMotion: false, alreadyShown: true, isUnitTesting: false, hasVideo: true)); // only the first opening of a launch
+        // Every opening, not only the first of a launch (the Mac's 5525d62).
+        Assert.True(SettingsLoader.ShouldShow(reduceMotion: false, alreadyShown: true, isUnitTesting: false, hasVideo: true));
         Assert.False(SettingsLoader.ShouldShow(reduceMotion: false, alreadyShown: false, isUnitTesting: true, hasVideo: true));
         Assert.False(SettingsLoader.ShouldShow(reduceMotion: false, alreadyShown: false, isUnitTesting: false, hasVideo: false));
     }

@@ -166,9 +166,12 @@ public static class SettingsLoader
     /// <summary>The video's logo sits in the middle of its square frame: this zoom makes the glass tile large in the window.</summary>
     public const double Zoom = 1.6;
 
-    /// <summary>The Mac's rule: once per launch, with motion allowed, outside tests, and with the video there.</summary>
+    /// <summary>
+    /// The Mac's rule: every time Settings opens (the owner's choice, 16 Nov 2026; the Mac's 5525d62), with motion
+    /// allowed, outside tests, and with the video there. <paramref name="alreadyShown"/> is no longer a reason to skip.
+    /// </summary>
     public static bool ShouldShow(bool reduceMotion, bool alreadyShown, bool isUnitTesting, bool hasVideo) =>
-        !reduceMotion && !alreadyShown && !isUnitTesting && hasVideo;
+        !reduceMotion && !isUnitTesting && hasVideo;
 
     /// <summary>
     /// Windows' rule: the Mac's, and never in a quiet window (a check while someone works at the PC) unless a capture asks

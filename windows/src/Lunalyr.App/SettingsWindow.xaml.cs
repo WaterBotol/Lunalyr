@@ -43,7 +43,7 @@ public sealed partial class SettingsWindow : Window
             _host.SetFloatingEditing(false);
             RemoveLoader();
         };
-        // The first opening of a launch builds its page behind the glass logo (SettingsWindow.Loader.cs).
+        // Each opening builds its page behind the glass logo (SettingsWindow.Loader.cs).
         if (!StartLoader(page))
         {
             ShowPage(page ?? "Lyrics");

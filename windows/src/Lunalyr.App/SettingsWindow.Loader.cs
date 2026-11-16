@@ -1,6 +1,6 @@
 // The Settings loader (the Mac's Settings/SettingsLoader.swift and its use in SettingsWindow.swift, Test Build 88; the
 // loader file is Lunalyr's own lines, and the Mac window's Verso-attributed NSWindow plumbing around it is not translated).
-// The first Settings window of a launch opens at once on Lunalyr's glass logo (WelcomeGlass.mp4, muted, at double speed,
+// Every Settings window (the Mac's 5525d62) opens at once on Lunalyr's glass logo (WelcomeGlass.mp4, muted, at double speed,
 // the logo filling the window), builds its first page behind it, and fades the logo once Settings is ready and the glass
 // has formed: SettingsLoader.Remaining after the window opened, never a wait of its own making. A click skips it.
 
