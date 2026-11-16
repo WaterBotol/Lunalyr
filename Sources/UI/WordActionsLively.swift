@@ -70,12 +70,12 @@ enum LivelyAction {
         case .dip: return 1.7
         case .shake: return max(0.9, min(h, 1.4) + 0.5)
         case .hop: return h >= 0.9 ? 1.55 : 1.15
-        case .grow: return max(1.4, h + 0.7)
+        case .grow: return max(1.8, h + 1.0)
         case .shrink: return max(1.2, h + 0.6)
         case .dissolve: return max(2.3, h + 1.3)
         case .flicker: return max(1.5, h + 0.7)
         case .frost: return max(2.0, h + 1.0)
-        case .bleed: return max(2.0, h + 1.0)
+        case .bleed: return max(2.4, h + 1.2)
         case .dark: return max(1.9, h + 0.8)
         case .shatter: return 1.35
         case .melt: return max(1.7, h + 0.8)
@@ -335,9 +335,12 @@ struct LivelyPose: Equatable {
         case .grow:
             // A smooth swell that drifts a little past its size and eases
             // back, a slow breath while held, and an unhurried return.
-            let held = L.ss5(t / 0.6) + 0.08 * L.bump(t - 0.35, 0.7) - L.ss5((t - (D - 0.7)) / 0.65)
-            let breathe = L.ss5((t - 0.7) / 0.5) * L.rest(t, D, last: 0.8)
-            let s = (0.5 * A * held + 0.018 * A * sin(2 * .pi * 1.1 * (t - 0.7)) * breathe) * rest
+            // Like a breath in: a slow start, a gentle swell over ~0.85 s to
+            // ~1.36× at Wild with a barely-there overshoot, a soft breath
+            // while held, and an equally unhurried return.
+            let held = L.ss5(t / 0.85) + 0.03 * L.bump(t - 0.6, 0.8) - L.ss5((t - (D - 0.9)) / 0.85)
+            let breathe = L.ss5((t - 0.9) / 0.6) * L.rest(t, D, last: 0.95)
+            let s = (0.36 * A * held + 0.012 * A * sin(2 * .pi * 0.8 * (t - 0.9)) * breathe) * rest
             pose.sx = 1 + s
             pose.sy = 1 + s
             pose.glow = 0.9 * L.clamp01(held) * rest
@@ -365,7 +368,7 @@ struct LivelyPose: Equatable {
             pose.glow = 0.35 * frozen
         case .bleed:
             let e = L.envelope(t, attack: 0.3, release: 0.5, duration: D)
-            pose.red = 0.9 * A * e
+            pose.red = 0.3 * A * e
             // Heavy: it sags a hair as the drips run.
             pose.dy = 0.04 * A * e
             pose.sy = 1 - 0.02 * A * e
@@ -972,6 +975,8 @@ struct LivelyGlyphRenderer: TextRenderer {
             shards(g, size: size, in: c)
         case .melt:
             melt(g, size: size, in: c)
+        case .bleed:
+            seep(g, size: size, in: c)
         case .echo:
             let e = L.envelope(t, attack: 0.2, release: 0.45, duration: D)
             // The word itself sways (`LivelyPose`); the copies trail its
@@ -1057,6 +1062,32 @@ struct LivelyGlyphRenderer: TextRenderer {
                                       width: g.rect.width + 8, height: h + CGFloat(size * 0.2))))
             ember.addFilter(.colorMatrix(matrix))
             ember.draw(g.slice)
+        }
+    }
+
+    /// Bleed: red soaks into the letter from the top down, like ink
+    /// through paper: a soft front, darker at the letter's edges.
+    private func seep(_ g: Glyph, size: Double, in context: GraphicsContext) {
+        typealias L = LivelyAction
+        let t = state.t, D = state.duration, A = state.intensity
+        context.draw(g.slice)
+        let soak = L.ss5((t - 0.05 - g.along * 0.2) / 0.8) * (1 - L.ss5((t - (D - 0.7)) / 0.65))
+        guard soak > 0.005 else { return }
+        let k = Float(0.9 * A)
+        var matrix = ColorMatrix()
+        matrix.r1 = 1 - k; matrix.r5 = k * 0.5
+        matrix.g2 = 1 - k; matrix.g5 = 0
+        matrix.b3 = 1 - k; matrix.b5 = k * 0.05
+        let top = g.rect.minY, height = g.rect.height
+        // Four overlapping layers from the top, so the front is soft.
+        for layer in 1...4 {
+            let h = height * CGFloat(soak) * (0.55 + 0.15 * CGFloat(layer))
+            var stain = context
+            stain.opacity = 0.3
+            stain.clip(to: Path(CGRect(x: g.rect.minX - 4, y: top - 4, width: g.rect.width + 8, height: h + 4)))
+            stain.addFilter(.shadow(color: Color(red: 0.25, green: 0, blue: 0.03).opacity(0.7), radius: CGFloat(size * 0.025)))
+            stain.addFilter(.colorMatrix(matrix))
+            stain.draw(g.slice)
         }
     }
 
@@ -1442,34 +1473,85 @@ struct LivelyGlyphRenderer: TextRenderer {
                 }
             }
         case .bleed:
-            // Drips with weight, at uneven places and times and of uneven
-            // sizes: each swells at the foot of its letter, stretches, lets
-            // a drop go that falls and fades, and springs back to a bead.
-            let e = L.envelope(t, attack: 0.3, release: 0.55, duration: D)
-            guard e > 0.005 else { break }
-            let blood = Color(red: 0.62, green: 0.02, blue: 0.07)
-            let shine = Color(red: 1, green: 0.75, blue: 0.75)
-            for g in glyphs {
-                let pick = L.rnd(seed, g.index, 1)
-                let count = g.index == 1 ? 1 : (pick < 0.35 ? 0 : (pick < 0.8 ? 1 : 2))
-                for k in 0..<count {
-                    let r = { (n: Int) in L.rnd(seed, g.index * 5 + k, n) }
-                    let sz = (0.6 + 0.8 * r(2)) * A
-                    guard let drip = L.drip(t, born: 0.1 + 0.5 * r(3) + Double(k) * 0.3, size: sz,
-                                            swell: 0.3 + 0.3 * r(4), stretch: 0.3 + 0.35 * r(5)) else { continue }
-                    let x = g.rect.minX + g.rect.width * CGFloat(0.2 + 0.6 * r(6))
-                    let lip = g.baseline - size * 0.04
-                    let w = size * CGFloat(0.06 * (0.7 + 0.6 * r(2)))
-                    for shape in dripPaths(drip, x: x, lip: lip, width: w, size: size) {
-                        context.fill(shape, with: .color(blood.opacity(0.92 * e)))
-                    }
-                    let bead = CGFloat(drip.bead) * size, end = lip + CGFloat(drip.length) * size
-                    if bead > 1.5 {
-                        context.fill(Path(ellipseIn: CGRect(x: x - bead * 0.45, y: end - bead * 0.35, width: bead * 0.4, height: bead * 0.45)),
-                                     with: .color(shine.opacity(0.4 * e)))
-                    }
-                    if let drop = dropPath(drip, x: x, lip: lip, size: size) {
-                        context.fill(drop, with: .color(blood.opacity(0.92 * e * drip.dropAlpha)))
+            // A few thick, glossy runs (2 to 4) from the letters' feet, of
+            // uneven length and pace, slow and heavy, each with a round bead
+            // at its tip; the longest lets its bead go, which falls and
+            // splats.
+            let e = L.envelope(t, attack: 0.3, release: 0.65, duration: D)
+            guard e > 0.005, !glyphs.isEmpty else { break }
+            let crimson = Color(red: 0.42, green: 0.0, blue: 0.05)
+            let gloss = Color(red: 1, green: 0.8, blue: 0.82)
+            let runs = min(4, max(2, glyphs.count / 2 + 1))
+            for k in 0..<runs {
+                let r = { (n: Int) in L.rnd(seed, 300 + k, n) }
+                // Spread along the word, a little uneven.
+                let slot = (Double(k) + 0.5 + 0.5 * (r(1) - 0.5)) / Double(runs)
+                let g = glyphs[min(glyphs.count - 1, max(0, Int(slot * Double(glyphs.count))))]
+                let x = g.rect.minX + g.rect.width * CGFloat(0.3 + 0.4 * r(2))
+                let lip = g.baseline - size * 0.06
+                let start = 0.35 + 0.35 * r(3) + 0.15 * Double(k % 2)
+                let pace = 1.0 + 0.7 * r(4)
+                let reach = (0.45 + 0.6 * r(5)) * A
+                let flow = L.ss5((t - start) / pace)
+                guard flow > 0.003 else { continue }
+                let w = size * CGFloat(0.085 + 0.035 * r(6))
+                let releases = k == 0
+                let release = start + pace * 0.85
+                var length = size * CGFloat(reach * flow)
+                var bead = w * CGFloat(0.55 + 0.35 * L.ss5((t - start) / (pace * 0.7)))
+                var fallen = 0.0
+                if releases, t > release {
+                    fallen = t - release
+                    // The bead has gone; a smaller one gathers again.
+                    bead = w * CGFloat(0.35 + 0.25 * L.ss5(fallen / 0.6))
+                    length *= CGFloat(1 - 0.12 * L.spring(fallen, peak: 0.15, overshoot: 0.3))
+                }
+                // The run: wide at the lip, a little narrower down its length.
+                var run = Path()
+                run.move(to: CGPoint(x: x - w * 0.7, y: lip))
+                run.addQuadCurve(to: CGPoint(x: x - w * 0.42, y: lip + length), control: CGPoint(x: x - w * 0.5, y: lip + length * 0.3))
+                run.addLine(to: CGPoint(x: x + w * 0.42, y: lip + length))
+                run.addQuadCurve(to: CGPoint(x: x + w * 0.7, y: lip), control: CGPoint(x: x + w * 0.5, y: lip + length * 0.3))
+                run.closeSubpath()
+                context.fill(run, with: .color(crimson.opacity(0.95 * e)))
+                context.fill(Path(ellipseIn: CGRect(x: x - w * 0.9, y: lip - w * 0.3, width: w * 1.8, height: w * 0.6)),
+                             with: .color(crimson.opacity(0.95 * e)))
+                let tip = CGPoint(x: x, y: lip + length)
+                context.fill(Path(ellipseIn: CGRect(x: tip.x - bead, y: tip.y - bead * 0.85, width: bead * 2, height: bead * 2.05)),
+                             with: .color(crimson.opacity(0.95 * e)))
+                // Gloss: a soft streak down the run and a glint on the bead.
+                var streak = Path()
+                streak.move(to: CGPoint(x: x - w * 0.22, y: lip + w * 0.2))
+                streak.addLine(to: CGPoint(x: x - w * 0.18, y: lip + length - bead * 0.2))
+                context.stroke(streak, with: .color(gloss.opacity(0.22 * e)), style: StrokeStyle(lineWidth: max(1, w * 0.16), lineCap: .round))
+                context.fill(Path(ellipseIn: CGRect(x: tip.x - bead * 0.5, y: tip.y - bead * 0.45, width: bead * 0.45, height: bead * 0.5)),
+                             with: .color(gloss.opacity(0.4 * e)))
+                // The released bead: falls with gravity, then splats.
+                if releases, fallen > 0 {
+                    let big = w * 0.95
+                    let drop = size * CGFloat(0.4 * fallen + 0.5 * 6 * fallen * fallen)
+                    let floor = size * CGFloat(reach + 0.55)
+                    if lip + length + drop < lip + floor {
+                        let y = tip.y + drop
+                        context.fill(Path(ellipseIn: CGRect(x: x - big * 0.85, y: y - big * 1.1, width: big * 1.7, height: big * 2.3)),
+                                     with: .color(crimson.opacity(0.95 * e)))
+                    } else {
+                        // The splat: a flattened pool and two small flecks, fading.
+                        let tLand = (-0.4 + sqrt(0.16 + 12 * Double((floor - length) / size))) / 6
+                        let since = max(0, fallen - tLand)
+                        let spread = CGFloat(L.easeOutCubic(since / 0.18))
+                        let fade = 1 - L.ss5((since - 0.25) / 0.6)
+                        let y = lip + floor
+                        let pw = big * (1.6 + 1.4 * spread), ph = big * (0.9 - 0.35 * spread)
+                        context.fill(Path(ellipseIn: CGRect(x: x - pw / 2, y: y - ph / 2, width: pw, height: ph)),
+                                     with: .color(crimson.opacity(0.9 * e * fade)))
+                        for side in [-1.0, 1.0] {
+                            let fx = x + CGFloat(side) * big * (0.9 + 1.4 * spread)
+                            let fy = y - big * CGFloat(0.9 * sin(.pi * min(1, since / 0.3)))
+                            let fr = big * 0.22
+                            context.fill(Path(ellipseIn: CGRect(x: fx - fr, y: fy - fr, width: fr * 2, height: fr * 2)),
+                                         with: .color(crimson.opacity(0.85 * e * fade)))
+                        }
                     }
                 }
             }
