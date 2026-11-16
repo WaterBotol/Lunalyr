@@ -195,6 +195,15 @@ final class FloatingLyricsTests: XCTestCase {
         XCTAssertEqual(s.options.choice(for: "main"), .floating, "no target: the main display")
     }
 
+    func testDisplaysAreListedByNameAndTwinsNumbered() {
+        let listed = FloatingDisplayChoice.named([("a", "Studio Display"), ("b", "Built-in Retina Display"),
+                                                  ("c", "Studio Display")])
+        XCTAssertEqual(listed.map(\.name), ["Studio Display 1", "Built-in Retina Display", "Studio Display 2"])
+        XCTAssertEqual(listed.map(\.key), ["a", "b", "c"])
+        XCTAssertEqual(DisplayLyrics.allCases.map(\.title),
+                       ["Desktop lyrics", "Floating lyrics", "Both", "None (wallpaper only)"])
+    }
+
     func testSwitchingTheEditedStyleIsStoredAndToggles() {
         let s = stores()
         s.options.toggleSurface()

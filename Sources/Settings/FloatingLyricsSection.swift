@@ -8,7 +8,7 @@ struct LyricStyleEditingNote: View {
 
     var body: some View {
         if options.isFloating {
-            InspectorCaption("These settings change the Floating style; the desktop keeps its own.")
+            InspectorCaption("These settings change the Floating style; the desktop lyrics keep their own.")
         }
     }
 }
@@ -21,7 +21,6 @@ struct LyricStyleEditingNote: View {
 struct FloatingSizeAndPlace: View {
     @ObservedObject var options: FloatingLyricsOptions = .shared
     @ObservedObject private var editing = FloatingLyricsController.shared.state
-    @State private var screens = FloatingDisplayChoice.connected()
 
     var body: some View {
         ThemedSegments("Size", selection: Binding(
@@ -30,13 +29,6 @@ struct FloatingSizeAndPlace: View {
                        options: FloatingLyricsOptions.SizePreset.allCases.map { (Optional($0), $0.title) })
         LabeledContent("Place") {
             FloatingPlaceGrid(placement: $options.placement)
-        }
-        if screens.count > 1 {
-            ChoiceMenu("Display", selection: $options.display,
-                       selectedTitle: { key in screens.first { $0.key == key }?.name ?? "Main display" }) {
-                Text("Main display").tag("")
-                ForEach(screens, id: \.key) { Text($0.name).tag($0.key) }
-            }
         }
         InspectorCaption("Clicks pass through the lyrics. Edit position lets you drag them; Done locks them again.")
         MoreOptions {
@@ -52,6 +44,28 @@ struct FloatingSizeAndPlace: View {
                     .help("Forgets sizes and places set by hand; the window follows the text size again")
             }
             .controlSize(.small)
+        }
+    }
+}
+
+/// What each display shows: a menu per connected display, listed by name.
+@MainActor
+struct DisplayLyricsSection: View {
+    @ObservedObject var options: FloatingLyricsOptions = .shared
+    @State private var screens = FloatingDisplayChoice.connected()
+
+    var body: some View {
+        InspectorSection("Displays") {
+            ForEach(screens, id: \.key) { screen in
+                ChoiceMenu(screens.count > 1 ? screen.name : "This display", selection: Binding(
+                    get: { options.choice(for: screen.key) },
+                    set: { options.setChoice($0, for: screen.key) }), selectedTitle: \.title) {
+                    ForEach(DisplayLyrics.allCases) { Text($0.title).tag($0) }
+                }
+                .help("What \(screen.name) shows: lyrics on its desktop, floating over its apps, both, or the wallpaper alone")
+            }
+            InspectorCaption("Desktop lyrics use the Desktop style and floating lyrics the Floating style.",
+                             more: "Each display can show either, both, or no lyrics at all. A display you plug in for the first time shows Desktop lyrics.")
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didChangeScreenParametersNotification)) { _ in
             screens = FloatingDisplayChoice.connected()
@@ -122,10 +136,23 @@ struct FloatingDisplayChoice {
     let key: String
     let name: String
 
+    /// The connected displays, the main one first; two displays of the
+    /// same name are numbered.
     @MainActor
     static func connected() -> [FloatingDisplayChoice] {
-        NSScreen.screens.compactMap { screen in
-            screen.versoDisplayID.map { FloatingDisplayChoice(key: FloatingFrame.displayKey($0), name: screen.localizedName) }
+        named(NSScreen.screens.compactMap { screen in
+            screen.versoDisplayID.map { (FloatingFrame.cachedKey($0), screen.localizedName) }
+        })
+    }
+
+    static func named(_ displays: [(key: String, name: String)]) -> [FloatingDisplayChoice] {
+        var seen: [String: Int] = [:]
+        let repeated = Set(Dictionary(grouping: displays.map(\.name), by: { $0 }).filter { $0.value.count > 1 }.keys)
+        return displays.map { display in
+            guard repeated.contains(display.name) else { return FloatingDisplayChoice(key: display.key, name: display.name) }
+            let number = (seen[display.name] ?? 0) + 1
+            seen[display.name] = number
+            return FloatingDisplayChoice(key: display.key, name: "\(display.name) \(number)")
         }
     }
 }

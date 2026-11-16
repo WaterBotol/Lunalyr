@@ -26,13 +26,14 @@ struct LyricStylePage: View {
         LookInspectorForm {
             if floating.isFloating {
                 InspectorTitle(title: "Floating lyrics",
-                               subtitle: "The Floating style. The desktop keeps its own and shows no lyrics while they float.")
+                               subtitle: "The Floating style, for every floating window. The desktop lyrics keep their own.")
                     .revealRow()
             } else {
                 LooksSection()
                     .revealRow()
                 InspectorTitle(title: "Text")
             }
+            DisplayLyricsSection(options: floating)
             styleSection
             sizeAndPlace
             typeface
