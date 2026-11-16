@@ -60,7 +60,8 @@ struct WordAccentsSection: View {
                                                }
                                                .labelsHidden()
                                            },
-                                           commit: { s.actionWordList = $0 }, reset: { s.actionWordList = nil })
+                                           commit: { s.actionWordList = $0 }, reset: { s.actionWordList = nil },
+                                           key: Self.actionKey)
                         }
                         .revealRow()
                         InspectorCaption("One action word a line, in English and other common languages.",
@@ -71,6 +72,14 @@ struct WordAccentsSection: View {
                 .revealRow()
             }
         }
+    }
+
+    /// An action word as its list keeps it: English as matched, any other
+    /// language folded (accents and case), CJK as written.
+    static func actionKey(_ word: String) -> String? {
+        if let english = LyricWordIcons.englishKey(word) { return english }
+        let folded = ActionLexicon.fold(word)
+        return folded.isEmpty ? nil : folded
     }
 
     /// The default order first, then the user's own words A to Z.
@@ -107,12 +116,16 @@ struct WordListEditor: View {
     let editor: (Binding<String>) -> AnyView
     let commit: ([String: String]) -> Void
     let reset: () -> Void
+    /// A new word as the list keeps it (nil: not accepted).
+    let key: (String) -> String?
     @State private var newWord = ""
 
     init<Preview: View, Editor: View>(entries: [Entry], isDefault: Bool, valueLabel: String, newValue: String,
                                       @ViewBuilder preview: @escaping (String) -> Preview,
                                       @ViewBuilder editor: @escaping (Binding<String>) -> Editor,
-                                      commit: @escaping ([String: String]) -> Void, reset: @escaping () -> Void) {
+                                      commit: @escaping ([String: String]) -> Void, reset: @escaping () -> Void,
+                                      key: @escaping (String) -> String? = { (word: String) -> String? in
+                                          LyricWordIcons.englishKey(word) }) {
         self.entries = entries
         self.isDefault = isDefault
         self.valueLabel = valueLabel
@@ -121,6 +134,7 @@ struct WordListEditor: View {
         self.editor = { AnyView(editor($0)) }
         self.commit = commit
         self.reset = reset
+        self.key = key
     }
 
     var body: some View {
@@ -145,7 +159,7 @@ struct WordListEditor: View {
                     .textFieldStyle(.roundedBorder)
                     .onSubmit(add)
                 Button("Add", action: add)
-                    .disabled(LyricWordIcons.englishKey(newWord) == nil)
+                    .disabled(key(newWord) == nil)
             }
             Button("Restore Defaults", action: reset)
                 .disabled(isDefault)
@@ -165,7 +179,7 @@ struct WordListEditor: View {
 
     /// A new word is kept as it will be matched: lowercased, letters only.
     private func add() {
-        guard let word = LyricWordIcons.englishKey(newWord) else { return }
+        guard let word = key(newWord) else { return }
         var list = current()
         if list[word] == nil { list[word] = newValue }
         commit(list)

@@ -193,6 +193,18 @@ final class WordAccentsTests: XCTestCase {
         // The entrance is only drawn without Reduce Motion (`WordSymbolView`);
         // its pose is never consulted otherwise, and it is at rest once done.
         XCTAssertEqual(SymbolEntrancePose.make(.spin, elapsed: SymbolEntrancePose.duration), .rest)
+        for elapsed in [0.0, 0.2, 0.7, 1.4] {
+            XCTAssertNil(WordSymbolView.entrance(elapsed: elapsed, reduceMotion: true), "Reduce Motion: no pop")
+            XCTAssertEqual(WordSymbolView.entrance(elapsed: elapsed, reduceMotion: false), elapsed)
+        }
+        XCTAssertNil(WordSymbolView.entrance(elapsed: nil, reduceMotion: false))
+    }
+
+    func testTheActionListEditorKeepsWordsInAnyLanguage() {
+        XCTAssertEqual(WordAccentsSection.actionKey("Spinning"), "spinning")
+        XCTAssertEqual(WordAccentsSection.actionKey("Tombé"), "tombe")
+        XCTAssertEqual(WordAccentsSection.actionKey("飛ぶ"), "飛ぶ")
+        XCTAssertNil(WordAccentsSection.actionKey("  !! "))
     }
 
     func testStrengthSetsTheAmount() {
@@ -315,9 +327,22 @@ final class WordAccentsTests: XCTestCase {
             "그날 밤", "날 사랑해", "今回だけ", "浪漫的晚上", "我暗恋你", "沉默的人", "影響される",
             // Vietnamese words only on a Vietnamese line: English "run" and "bay" stay still.
             "we run to the bay",
+            // Words another listed language spells the same way.
+            "don't be late", "mi bebé", "onde você está", "se queda conmigo", "me llamas", "zu laut",
+            "i grandi amori", "a crescent moon", "sangria at noon", "olá amigo", "커피가 좋아", "沈黙の夜",
         ]
         for line in misses {
             XCTAssertNil(actionIn(line), line)
+        }
+    }
+
+    func testAWordTheUserRemovedStaysStill() {
+        // English words a built-in list could also spell (ocean, echo)
+        // follow the user's list alone.
+        var user = Self.actions
+        user["ocean"] = nil; user["echo"] = nil
+        for word in ["ocean", "echo"] {
+            XCTAssertNil(ActionLexicon.match(word, user: user, script: ActionLexicon.Script(word)), word)
         }
     }
 

@@ -78,7 +78,8 @@ final class ActionWordsPreviewTests: XCTestCase {
         let actions = actionList
         var found = false
         for text in clip.texts {
-            let isAction = !found && LyricWordIcons.match(text, in: actions)?.value == clip.action
+            let script = ActionLexicon.Script(clip.texts.joined(separator: " "))
+            let isAction = !found && ActionLexicon.match(text, user: actions, script: script)?.action == clip.action
             if isAction { found = true; onset = time }
             let length = isAction ? hold : 0.3
             result.append(LyricsFetcher.Word(text: text, start: time, end: time + length))
@@ -267,10 +268,14 @@ final class ActionWordsPreviewTests: XCTestCase {
         if layouts {
             // Every layout, a few actions: a row per action, a column per moment.
             let actions: [WordAction] = [.spin, .hop, .bleed, .frost, .sink, .dark]
-            let moments = [0.15, 0.35, 0.6, 0.9]
+            // Into the hold and past it (where layers swap and a held swell returns).
+            let moments = [0.15, 0.35, 0.6, 0.9, 1.5, 1.9]
+            // A Japanese and a Chinese line: one token each, CJK glyphs.
+            let cjk = [Clip(action: .float, texts: ["空を", "飛んで", "行く"], hue: 0.6),
+                       Clip(action: .shatter, texts: ["我的", "心碎了"], hue: 0.88)]
             for composition in LyricComposition.allCases {
                 var rows: [[NSBitmapImageRep]] = []
-                for clip in Self.clips where actions.contains(clip.action) {
+                for clip in Self.clips.filter({ actions.contains($0.action) }) + cjk {
                     let onset = Self.words(clip).onset
                     rows.append(try moments.map {
                         try image(Self.sideBySide(clip, time: onset + $0, onset: onset, composition: composition)).0

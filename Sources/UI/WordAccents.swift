@@ -504,6 +504,13 @@ struct WordSymbolView: View, Equatable {
     var action: WordAction? = nil
     @Environment(\.lyricReduceMotion) private var reduceMotion
 
+    /// The entrance time to draw, or nil for a plain fade (Reduce Motion,
+    /// a settled symbol or a preview).
+    static func entrance(elapsed: Double?, reduceMotion: Bool) -> Double? {
+        guard !reduceMotion, let elapsed, elapsed < SymbolEntrancePose.duration else { return nil }
+        return elapsed
+    }
+
     static func == (lhs: Self, rhs: Self) -> Bool {
         lhs.symbol == rhs.symbol && lhs.size == rhs.size && lhs.rest == rhs.rest && lhs.sung == rhs.sung
             && lhs.tint == rhs.tint && lhs.opacity == rhs.opacity && lhs.elapsed == rhs.elapsed && lhs.action == rhs.action
@@ -519,7 +526,7 @@ struct WordSymbolView: View, Equatable {
             }
         }
         Group {
-            if !reduceMotion, let elapsed, elapsed < SymbolEntrancePose.duration {
+            if let elapsed = Self.entrance(elapsed: elapsed, reduceMotion: reduceMotion) {
                 glyph.modifier(SymbolEntranceEffect(action: action, elapsed: elapsed, size: size))
             } else {
                 glyph

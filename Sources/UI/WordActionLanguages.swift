@@ -119,13 +119,13 @@ enum ActionLexicon {
         words(.float, ["volar", "vuelo", "vuela", "vuelas", "volando", "flota", "flotar", "flotando"]),
         words(.dip, ["caer", "cae", "caes", "caigo", "cayo", "caida", "cayendo", "caemos", "caen"]),
         words(.hop, ["saltar", "salto", "salta", "saltas", "saltando", "brinca", "brincar", "brincando"]),
-        words(.flicker, ["fuego", "arde", "ardo", "arder", "ardes", "ardiendo", "llamas"]),
+        words(.flicker, ["fuego", "arde", "ardo", "arder", "ardes", "ardiendo"]),
         words(.frost, ["hielo", "frio", "fria", "helado", "helada"]),
         words(.dark, ["sombra", "sombras", "tinieblas"]),
         words(.shatter, ["rompe", "romper", "rompes", "rompi", "rompio", "rompiendo", "rompo", "roto", "rota", "pedazos"]),
         words(.echo, ["eco", "ecos"]),
-        words(.pulse, ["latido", "latidos", "latir", "late"]),
-        words(.wave, ["ola", "olas", "mar", "oceano", "marea"]),
+        words(.pulse, ["latido", "latidos", "latir"]),
+        words(.wave, ["olas", "mar", "oceano", "marea"]),
         words(.sink, ["hundir", "hundo", "hunde", "hundiendo", "hundirme"]),
     ], stems: [
         ("tembl", .shake), ("tiembl", .shake), ("sacud", .shake),
@@ -134,23 +134,24 @@ enum ActionLexicon {
         ("quema", .flicker), ("quemo", .flicker), ("congel", .frost),
         ("sangr", .bleed), ("oscur", .dark), ("quebr", .shatter),
         ("derrit", .melt), ("derret", .melt), ("ahog", .sink),
-    ])
+    ], exclude: ["sangria", "sangrias"])
 
     static let portuguese: Latin = latinList("pt", words: [
         words(.float, ["voar", "voo", "voa", "voando", "voei"]),
-        words(.dip, ["cair", "cai", "caio", "caiu", "caindo", "queda"]),
+        words(.dip, ["cair", "cai", "caio", "caiu", "caindo"]),
         words(.shake, ["tremer", "tremo", "treme", "tremendo"]),
         words(.hop, ["pular", "pulo", "pula", "pulando"]),
-        words(.flicker, ["fogo", "chama", "chamas"]),
+        words(.flicker, ["fogo", "fogueira"]),
         words(.frost, ["gelo", "gelado", "gelada"]),
         words(.bleed, ["sangue"]),
         words(.echo, ["eco"]),
         words(.wave, ["onda", "ondas", "mar", "oceano"]),
+        words(.grow, ["crescer", "cresce", "cresceu", "cresco", "crescendo"]),
     ], stems: [
-        ("flutu", .float), ("cresc", .grow), ("encolh", .shrink), ("desapare", .dissolve),
+        ("flutu", .float), ("encolh", .shrink), ("desapare", .dissolve),
         ("queim", .flicker), ("congel", .frost), ("sangr", .bleed), ("escur", .dark),
         ("quebr", .shatter), ("derret", .melt), ("batiment", .pulse), ("afund", .sink), ("afog", .sink),
-    ], exclude: ["tremendo"])
+    ], exclude: ["tremendo", "sangria", "sangrias"])
 
     static let french: Latin = latinList("fr", words: [
         words(.spin, ["tourne", "tourner", "tournent", "tournoie", "tournoyer"]),
@@ -161,11 +162,12 @@ enum ActionLexicon {
         words(.dark, ["obscurite", "tenebres", "ombre", "ombres"]),
         words(.shatter, ["casse", "casser", "cassee", "eclats", "brisee", "briser"]),
         words(.melt, ["fondre", "fondu", "fondent"]),
-        words(.wave, ["mer", "houle", "ocean"]),
+        words(.grow, ["grandir", "grandis", "grandit", "grandissent", "grandissant"]),
+        words(.wave, ["mer", "houle"]),
         words(.sink, ["noie", "noyer", "noyee", "sombrer", "sombrent"]),
     ], stems: [
         ("envol", .float), ("flott", .float), ("trembl", .shake), ("saut", .hop),
-        ("grandi", .grow), ("retreci", .shrink), ("disparai", .dissolve), ("disparu", .dissolve),
+        ("retreci", .shrink), ("disparai", .dissolve), ("disparu", .dissolve),
         ("brul", .flicker), ("battement", .pulse),
     ], exclude: ["grandiose", "sauterelle"])
 
@@ -176,16 +178,17 @@ enum ActionLexicon {
         words(.hop, ["springen", "springt", "sprang"]),
         words(.dark, ["schatten", "finster", "finsternis"]),
         words(.shatter, ["gebrochen", "zerbrochen"]),
-        words(.echo, ["echo", "widerhall"]),
+        words(.echo, ["widerhall"]),
+        words(.shake, ["beben", "bebt", "bebte", "bebten"]),
         words(.wave, ["welle", "wellen", "meer", "ozean"]),
         words(.sink, ["sinken", "sinkt", "versinken", "versinkt", "versank"]),
     ], stems: [
-        ("flieg", .float), ("schweb", .float), ("dreh", .spin), ("zitter", .shake), ("bebe", .shake),
+        ("flieg", .float), ("schweb", .float), ("dreh", .spin), ("zitter", .shake),
         ("hupf", .hop), ("wachs", .grow), ("schrumpf", .shrink), ("verschw", .dissolve), ("verblass", .dissolve),
         ("brenn", .flicker), ("brannt", .flicker), ("blut", .bleed), ("dunkel", .dark), ("dunkl", .dark),
         ("zerbr", .shatter), ("schmelz", .melt), ("schmolz", .melt), ("schmilz", .melt), ("herzschlag", .pulse),
         ("ertrink", .sink), ("ertrank", .sink),
-    ], exclude: ["gefallen", "drehbuch", "bebeto"])
+    ], exclude: ["gefallen", "drehbuch"])
 
     static let italian: Latin = latinList("it", words: [
         words(.spin, ["gira", "giro", "girare", "girando"]),
@@ -200,10 +203,10 @@ enum ActionLexicon {
         words(.shatter, ["rotto", "rotta", "frantumi"]),
         words(.echo, ["eco"]),
         words(.pulse, ["battito", "battiti"]),
-        words(.wave, ["onda", "onde", "mare", "oceano"]),
-    ], stems: [
-        ("cresc", .grow), ("svani", .dissolve), ("scompar", .dissolve), ("bruci", .flicker), ("congel", .frost),
-        ("sanguin", .bleed), ("oscur", .dark), ("spezz", .shatter), ("sciogl", .melt), ("sciolt", .melt),
+        words(.wave, ["onda", "mare", "oceano"]),
+        words(.grow, ["crescere", "cresce", "cresci", "cresco", "cresciuto"]),
+    ], stems: [ ("svani", .dissolve), ("scompar", .dissolve), ("bruci", .flicker), ("congel", .frost),
+        ("oscur", .dark), ("spezz", .shatter), ("sciogl", .melt), ("sciolt", .melt),
         ("affond", .sink), ("annega", .sink),
     ])
 
@@ -223,7 +226,7 @@ enum ActionLexicon {
         words(.melt, ["meleleh", "mencair"]),
         words(.echo, ["gema", "bergema"]),
         words(.pulse, ["detak", "berdetak"]),
-        words(.wave, ["ombak", "laut", "gelombang", "samudra"]),
+        words(.wave, ["ombak", "lautan", "gelombang", "samudra"]),
         words(.sink, ["tenggelam"]),
     ], stems: [])
 
@@ -300,7 +303,7 @@ enum ActionLexicon {
         words(.pulse, ["鼓動"]),
         words(.wave, ["波", "海"]),
         words(.sink, ["沈", "溺れ"]),
-    ], exclude: ["影響", "暗記", "暗号", "落ち着", "回答", "今回", "一回", "毎回", "前回", "海外", "暗恋", "暗戀"])
+    ], exclude: ["影響", "暗記", "暗号", "落ち着", "回答", "今回", "一回", "毎回", "前回", "海外", "暗恋", "暗戀", "沈黙"])
 
     static let chinese = Contained("zh", [
         words(.spin, ["旋转", "旋轉", "转圈", "轉圈", "回旋"]),
@@ -342,5 +345,5 @@ enum ActionLexicon {
         words(.pulse, ["두근", "심장 소리"]),
         words(.wave, ["파도", "바다"]),
         words(.sink, ["가라앉", "잠겨"]),
-    ], exclude: ["날아갈 듯"])
+    ], exclude: ["커피"])
 }
