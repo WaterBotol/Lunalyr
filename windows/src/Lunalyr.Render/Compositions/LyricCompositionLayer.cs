@@ -175,13 +175,15 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
     /// </summary>
     protected bool DrawLively(ID2D1DeviceContext dc, Ink label, in Matrix3x2 world, float worldScale, in RunAccent accent,
                               double onset, double end, double time, double size, Vector4 basis, Vector4 glowInk,
-                              in LivelyPose pose, float opacity, float shadow, GlowSpec glow, Vector4 cue, bool particles = true)
+                              in LivelyPose pose, float opacity, float shadow, GlowSpec glow, Vector4 cue, bool particles = true,
+                              float clipLeft = float.NegativeInfinity, float clipRight = float.PositiveInfinity)
     {
         if (label.Letters is null) return false;
         if (LivelyState.For(accent, time - onset, end - onset, StyleShown.ActionStrength, ReduceMotion, size,
                             new Vector4(glowInk.X, glowInk.Y, glowInk.Z, 1), pose.Dy) is not { } state)
             return false;
-        return _lively.Draw(dc, label, world, worldScale, state, opacity, shadow, basis with { W = 1 }, cue, glow, particles);
+        return _lively.Draw(dc, label, world, worldScale, state, opacity, shadow, basis with { W = 1 }, cue, glow, particles,
+                            clipLeft, clipRight);
     }
 
     /// <summary>The whole-word pose of <paramref name="accent"/>'s action at <paramref name="time"/> for a word sung from <paramref name="onset"/> to <paramref name="end"/>.</summary>

@@ -300,8 +300,27 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger, Composit
             DrawLivelyAround(dc, restWorld, Vector2.Zero, unitBox, action, actionElapsed, token.PointSize, unit.RestColour, (float)opacity, front: false);
             if (turned is { } depth)
             {
-                // Mid-spin: the word, its symbol and its reading turn as one (no tile, sweep or blur while it turns).
-                StageLayer.DrawInk(dc, unit.Label, depth, unit.LabelOffset, opacity, 0, 1,
+                // Mid-spin: the word, its symbol and its reading turn as one (no sweep or blur while it turns). A Cutout
+                // label's tile turns with it, the word on it in the tile's text colour.
+                var onLabel = false;
+                if (unit.Tile is not null && !state.Presentation.Preview)
+                {
+                    var member = _members[m];
+                    var hold = RollingLabel.Hold(state.Slot.Rank);
+                    if (member + 1 < prepared.Length)
+                        hold = Math.Max(hold, 1 - LyricHighlightTiming.ExitProgress(time - prepared[member + 1].Source.Start));
+                    if (hold > 0.001)
+                    {
+                        var width = (float)unit.Size.Width;
+                        var pressed = (float)RollingLabel.TileWidth(state.Presentation.Arrival, reduce);
+                        var edge = token.RightToLeft ? width / 2 : -width / 2;
+                        var tileLocal = Matrix3x2.CreateTranslation(-edge, 0) * Matrix3x2.CreateScale(pressed, 1)
+                            * Matrix3x2.CreateTranslation(edge, 0) * Matrix3x2.CreateRotation(Radians(reduce ? 0 : RollingLabel.DrawnTilt));
+                        StageLayer.DrawInk(dc, unit.Tile, Homography.Of(tileLocal) * depth, Vector2.Zero, opacity * hold);
+                        onLabel = pressed > 0.5 && hold > 0.4 && unit.LabelOnTile is not null;
+                    }
+                }
+                StageLayer.DrawInk(dc, onLabel ? unit.LabelOnTile! : unit.Label, depth, unit.LabelOffset, opacity, 0, 1,
                                    reveal.IsEmpty ? default : AsSpan(token.Boundaries), reveal, token.RightToLeft);
                 if (!state.Presentation.Preview)
                 {
@@ -320,7 +339,7 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger, Composit
                 var member = _members[m];
                 double? nextOnset = member + 1 < prepared.Length ? prepared[member + 1].Source.Start : null;
                 DrawLabelled(dc, token, unit, state, world, scale, (float)opacity, blur, reveal, clip, readingBoundaries, readingShares,
-                             time, nextOnset);
+                             time, nextOnset, action);
             }
             else
             {
@@ -383,7 +402,7 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger, Composit
     private void DrawLabelled(ID2D1DeviceContext dc, RollingWord token, SpokenUnit unit, in RollingTokenState state,
                               in Matrix3x2 world, float scale, float opacity, float blur, ReadOnlySpan<double> reveal,
                               InkClip clip, ReadOnlySpan<double> readingBoundaries, ReadOnlySpan<double> readingShares,
-                              double time = double.NaN, double? nextOnset = null)
+                              double time = double.NaN, double? nextOnset = null, LivelyPose? action = null)
     {
         var boundaries = reveal.IsEmpty ? default : AsSpan(token.Boundaries);
         var rightToLeft = token.RightToLeft;
@@ -411,7 +430,7 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger, Composit
         try
         {
             DrawLabelParts(dc, token, unit, state, world, labelWorld, readingWorld, reading, scale, opacity, blur, boundaries, reveal,
-                           readingBoundaries, readingShares, ReduceMotion, hold);
+                           readingBoundaries, readingShares, ReduceMotion, hold, time, action);
         }
         finally
         {
@@ -419,20 +438,33 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger, Composit
         }
     }
 
-    private static void DrawLabelParts(ID2D1DeviceContext dc, RollingWord token, SpokenUnit unit, in RollingTokenState state,
-                                       in Matrix3x2 world, in Matrix3x2 labelWorld, in Matrix3x2 readingWorld, Ink? reading,
-                                       float scale, float opacity, float blur, ReadOnlySpan<double> boundaries,
-                                       ReadOnlySpan<double> reveal, ReadOnlySpan<double> readingBoundaries,
-                                       ReadOnlySpan<double> readingShares, bool reduce, double hold = 1)
+    private void DrawLabelParts(ID2D1DeviceContext dc, RollingWord token, SpokenUnit unit, in RollingTokenState state,
+                                in Matrix3x2 world, in Matrix3x2 labelWorld, in Matrix3x2 readingWorld, Ink? reading,
+                                float scale, float opacity, float blur, ReadOnlySpan<double> boundaries,
+                                ReadOnlySpan<double> reveal, ReadOnlySpan<double> readingBoundaries,
+                                ReadOnlySpan<double> readingShares, bool reduce, double hold = 1, double time = double.NaN,
+                                LivelyPose? action = null)
     {
         // Under Reduce Motion the label is simply there (no press, no tilt) and fades in with its word.
         var rightToLeft = token.RightToLeft;
         unit.Label.DrawShadow(dc, labelWorld, opacity, 1, boundaries, reveal, rightToLeft);
         reading?.DrawShadow(dc, readingWorld, opacity, 1, readingBoundaries, readingShares);
+        // An action word's letters move on the label while its action runs (the Mac's RollingUnit with LivelyGlyphHook):
+        // the tile follows the pose (in the world already), the letters move on it, each colour on its own side of the
+        // tile's edge, the particles drawn once.
+        var lively = action is { } livelyPose && unit.Action is { } livelyAction && double.IsFinite(time)
+                     && !state.Presentation.Preview && Revealed(reveal);
+        var livelyAccent = lively ? new RunAccent(null, unit.Action, unit.Gentle) : default;
+        var livelyCue = lively && action!.Value.Tints ? LivelyWord.Tinted(action.Value, unit.RestColour with { W = 1 }, 1) : default;
+        var letterWorld = labelWorld;
+        bool Letters(Ink ink, float alpha, Vector4 cue, bool particles, float from, float to) =>
+            lively && DrawLively(dc, ink, letterWorld, scale, livelyAccent, token.Source.Start, token.Source.End, time, token.PointSize,
+                                 unit.RestColour, unit.RestColour, action!.Value, alpha, 0, GlowSpec.None, cue, particles, from, to);
         if (!(hold > 0.001))
         {
             // The label has lifted away: plain type again.
-            unit.Label.Draw(dc, labelWorld, scale, opacity, blur, GlowSpec.None, 0, boundaries, reveal, rightToLeft);
+            if (!Letters(unit.Label, opacity, livelyCue, true, float.NegativeInfinity, float.PositiveInfinity))
+                unit.Label.Draw(dc, labelWorld, scale, opacity, blur, GlowSpec.None, 0, boundaries, reveal, rightToLeft);
             reading?.Draw(dc, readingWorld, scale, opacity, blur, GlowSpec.None, 0, readingBoundaries, readingShares);
             return;
         }
@@ -453,10 +485,18 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger, Composit
         float offFrom = rightToLeft ? float.NegativeInfinity : seam, offTo = rightToLeft ? seam : float.PositiveInfinity;
         // As the label lifts away, the word on it changes back to its own colour (the Mac's tile-text switch, at 0.4).
         var on = (float)LyricHighlightTiming.TextOpacity(hold, 0.4, hold < 0.999 ? LyricHighlightTiming.ExitTextBand : LyricHighlightTiming.SwitchWidth);
-        unit.Label.DrawBetween(dc, labelWorld, scale, opacity, blur, offFrom, offTo, boundaries, reveal, rightToLeft);
-        // Mid-switch the word is whole in its own colour under the tile's text colour, as the Mac draws it.
-        if (on < 0.999f) unit.Label.DrawBetween(dc, labelWorld, scale, opacity, blur, onFrom, onTo, boundaries, reveal, rightToLeft);
-        unit.LabelOnTile!.DrawBetween(dc, labelWorld, scale, opacity * on, blur, onFrom, onTo, boundaries, reveal, rightToLeft);
+        if (Letters(unit.Label, opacity, livelyCue, true, offFrom, offTo))
+        {
+            if (on < 0.999f) Letters(unit.Label, opacity, livelyCue, false, onFrom, onTo);
+            Letters(unit.LabelOnTile!, opacity * on, default, false, onFrom, onTo);
+        }
+        else
+        {
+            unit.Label.DrawBetween(dc, labelWorld, scale, opacity, blur, offFrom, offTo, boundaries, reveal, rightToLeft);
+            // Mid-switch the word is whole in its own colour under the tile's text colour, as the Mac draws it.
+            if (on < 0.999f) unit.Label.DrawBetween(dc, labelWorld, scale, opacity, blur, onFrom, onTo, boundaries, reveal, rightToLeft);
+            unit.LabelOnTile!.DrawBetween(dc, labelWorld, scale, opacity * on, blur, onFrom, onTo, boundaries, reveal, rightToLeft);
+        }
         if (reading is not null)
         {
             reading.DrawBetween(dc, readingWorld, scale, opacity, blur, offFrom, offTo, readingBoundaries, readingShares);

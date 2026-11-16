@@ -69,6 +69,7 @@ internal sealed class LivelyLetters : IDisposable
     private InkLetters _letters = null!;
     private bool _particles;
     private LivelyState _s;
+    private float _clipLeft = float.NegativeInfinity, _clipRight = float.PositiveInfinity;
 
     /// <summary>
     /// Draws <paramref name="ink"/> (a one-line label with <see cref="Ink.Letters"/>) letter by letter for
@@ -76,11 +77,17 @@ internal sealed class LivelyLetters : IDisposable
     /// its particles when <paramref name="particles"/> (the first layer of a word drawn in several). Returns false when the
     /// label has no letters (the caller draws it whole).
     /// </summary>
+    /// <param name="clipLeft">With <paramref name="clipRight"/>: only this stretch across the label (layout pixels from
+    /// its centre, as it lies before its letters move) is drawn, so a word in two colours either side of an edge (a
+    /// Cutout label's tile) draws each colour on its own side.</param>
     public bool Draw(ID2D1DeviceContext dc, Ink ink, in Matrix3x2 world, float worldScale, in LivelyState state, float opacity,
-                     float shadow, Vector4 basis, Vector4 cue, GlowSpec glow, bool particles)
+                     float shadow, Vector4 basis, Vector4 cue, GlowSpec glow, bool particles,
+                     float clipLeft = float.NegativeInfinity, float clipRight = float.PositiveInfinity)
     {
         if (ink.Letters is not { Count: > 0 } letters) return false;
-        if (!(opacity > 0.002f)) return true;
+        if (!(opacity > 0.002f) || !(clipRight > clipLeft)) return true;
+        _clipLeft = clipLeft;
+        _clipRight = clipRight;
         Ensure(dc);
         _ink = ink;
         _world = world;
@@ -142,8 +149,9 @@ internal sealed class LivelyLetters : IDisposable
     {
         var a = _opacity * alpha;
         if (!(a > 0.002f)) return;
-        var l = float.IsNaN(left) ? g.SliceLeft : left;
-        var r = float.IsNaN(right) ? g.SliceRight : right;
+        var l = Math.Max(float.IsNaN(left) ? g.SliceLeft : left, _clipLeft);
+        var r = Math.Min(float.IsNaN(right) ? g.SliceRight : right, _clipRight);
+        if (!(r > l)) return;
         var m = local * _world;
         _ink.DrawRegion(_dc!, m, l, top, r, bottom, a, _shadow, _cue.W > 0.004f ? _cue with { W = _cue.W * a } : default);
         if (tint.W > 0.004f) _ink.DrawRegion(_dc!, m, l, top, r, bottom, 0, 0, tint with { W = tint.W * a });
