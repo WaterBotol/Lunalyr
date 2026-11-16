@@ -8,10 +8,13 @@ using System.Text;
 namespace Lunalyr.Core.Compositions;
 
 /// <summary>What an action word does.</summary>
-public enum WordAction { Spin, Float, Dip, Shake, Hop, Grow, Shrink, Dissolve, Flicker, Frost }
+public enum WordAction { Spin, Float, Dip, Shake, Hop, Grow, Shrink, Dissolve, Flicker, Frost, Bleed, Dark, Shatter, Melt, Echo, Pulse, Wave, Sink }
 
-/// <summary>The accents one run takes: a symbol name (SF Symbol, as stored) and an action, either or both.</summary>
-public readonly record struct RunAccent(string? Symbol, WordAction? Action)
+/// <summary>
+/// The accents one run takes: a symbol name (SF Symbol, as stored) and an action, either or both. <c>Gentle</c>: a
+/// chorus repeat of an action word already heard (every second repeat) moves at <c>LivelyAction.GentleShare</c>.
+/// </summary>
+public readonly record struct RunAccent(string? Symbol, WordAction? Action, bool Gentle = false)
 {
     public bool IsEmpty => Symbol is null && Action is null;
 }
@@ -71,37 +74,121 @@ public static class WordAccents
         ("world", "globe"),
         ("call", "phone"), ("phone", "phone"));
 
-    /// <summary>The default actions, in the Mac's order.</summary>
+    /// <summary>
+    /// The default actions, in the Mac's order (16 Nov 2026). Plurals, -ing and -ed fold through <see cref="EnglishForms"/>;
+    /// irregular forms are listed. Vivid words the motion shows, not everyday ones ("love", "go", "night", "heart",
+    /// "high", "rain" are left out: measured on a few hundred songs, they made action words constant).
+    /// </summary>
     public static readonly IReadOnlyList<KeyValuePair<string, WordAction>> DefaultActions = Pairs(
-        ("spin", WordAction.Spin),
+        ("spin", WordAction.Spin), ("twirl", WordAction.Spin), ("whirl", WordAction.Spin), ("whirlwind", WordAction.Spin),
+        ("spiral", WordAction.Spin), ("tornado", WordAction.Spin), ("dizzy", WordAction.Spin), ("carousel", WordAction.Spin),
+        ("revolve", WordAction.Spin),
         ("levitate", WordAction.Float), ("float", WordAction.Float), ("fly", WordAction.Float), ("flying", WordAction.Float),
-        ("fall", WordAction.Dip), ("falling", WordAction.Dip), ("drop", WordAction.Dip),
-        ("shake", WordAction.Shake), ("tremble", WordAction.Shake), ("shiver", WordAction.Shake),
-        ("bounce", WordAction.Hop), ("jump", WordAction.Hop),
-        ("grow", WordAction.Grow), ("rise", WordAction.Grow), ("rising", WordAction.Grow),
-        ("shrink", WordAction.Shrink),
-        ("fade", WordAction.Dissolve), ("disappear", WordAction.Dissolve), ("vanish", WordAction.Dissolve),
-        ("burn", WordAction.Flicker), ("fire", WordAction.Flicker),
-        ("freeze", WordAction.Frost), ("frozen", WordAction.Frost), ("cold", WordAction.Frost));
+        ("flew", WordAction.Float), ("soar", WordAction.Float), ("drift", WordAction.Float), ("heaven", WordAction.Float),
+        ("clouds", WordAction.Float), ("weightless", WordAction.Float), ("wings", WordAction.Float), ("higher", WordAction.Float),
+        ("fall", WordAction.Dip), ("falling", WordAction.Dip), ("fell", WordAction.Dip), ("drop", WordAction.Dip),
+        ("dive", WordAction.Dip), ("tumble", WordAction.Dip), ("gravity", WordAction.Dip), ("plunge", WordAction.Dip),
+        ("shake", WordAction.Shake), ("shook", WordAction.Shake), ("tremble", WordAction.Shake), ("shiver", WordAction.Shake),
+        ("nervous", WordAction.Shake), ("quake", WordAction.Shake), ("earthquake", WordAction.Shake), ("scared", WordAction.Shake),
+        ("rattle", WordAction.Shake),
+        ("bounce", WordAction.Hop), ("jump", WordAction.Hop), ("leap", WordAction.Hop), ("hop", WordAction.Hop),
+        ("dance", WordAction.Hop), ("dancing", WordAction.Hop),
+        ("grow", WordAction.Grow), ("grew", WordAction.Grow), ("rise", WordAction.Grow), ("rising", WordAction.Grow),
+        ("bigger", WordAction.Grow), ("bloom", WordAction.Grow), ("blossom", WordAction.Grow), ("swell", WordAction.Grow),
+        ("shrink", WordAction.Shrink), ("smaller", WordAction.Shrink), ("tiny", WordAction.Shrink),
+        ("fade", WordAction.Dissolve), ("disappear", WordAction.Dissolve), ("vanish", WordAction.Dissolve), ("gone", WordAction.Dissolve),
+        ("dust", WordAction.Dissolve), ("ghost", WordAction.Dissolve), ("forget", WordAction.Dissolve), ("forgotten", WordAction.Dissolve),
+        ("erase", WordAction.Dissolve), ("evaporate", WordAction.Dissolve), ("dissolve", WordAction.Dissolve),
+        ("burn", WordAction.Flicker), ("burnt", WordAction.Flicker), ("fire", WordAction.Flicker), ("flame", WordAction.Flicker),
+        ("blaze", WordAction.Flicker), ("ignite", WordAction.Flicker), ("spark", WordAction.Flicker), ("embers", WordAction.Flicker),
+        ("smoke", WordAction.Flicker), ("heat", WordAction.Flicker),
+        ("freeze", WordAction.Frost), ("frozen", WordAction.Frost), ("froze", WordAction.Frost), ("cold", WordAction.Frost),
+        ("colder", WordAction.Frost), ("ice", WordAction.Frost), ("icy", WordAction.Frost), ("winter", WordAction.Frost),
+        ("snow", WordAction.Frost), ("numb", WordAction.Frost), ("chill", WordAction.Frost), ("frost", WordAction.Frost),
+        ("bleed", WordAction.Bleed), ("bled", WordAction.Bleed), ("blood", WordAction.Bleed), ("bloody", WordAction.Bleed),
+        ("wound", WordAction.Bleed), ("scar", WordAction.Bleed), ("veins", WordAction.Bleed),
+        ("dark", WordAction.Dark), ("darker", WordAction.Dark), ("darkest", WordAction.Dark), ("darkness", WordAction.Dark),
+        ("shadow", WordAction.Dark), ("midnight", WordAction.Dark), ("black", WordAction.Dark), ("blackout", WordAction.Dark),
+        ("void", WordAction.Dark),
+        ("break", WordAction.Shatter), ("broke", WordAction.Shatter), ("broken", WordAction.Shatter), ("shatter", WordAction.Shatter),
+        ("crack", WordAction.Shatter), ("pieces", WordAction.Shatter), ("crash", WordAction.Shatter), ("smash", WordAction.Shatter),
+        ("heartbreak", WordAction.Shatter), ("apart", WordAction.Shatter),
+        ("melt", WordAction.Melt), ("drip", WordAction.Melt), ("meltdown", WordAction.Melt), ("thaw", WordAction.Melt),
+        ("liquid", WordAction.Melt), ("wax", WordAction.Melt),
+        ("echo", WordAction.Echo), ("repeat", WordAction.Echo), ("resonate", WordAction.Echo), ("voices", WordAction.Echo),
+        ("calling", WordAction.Echo),
+        ("heartbeat", WordAction.Pulse), ("pulse", WordAction.Pulse), ("beat", WordAction.Pulse), ("alive", WordAction.Pulse),
+        ("pounding", WordAction.Pulse), ("racing", WordAction.Pulse), ("drum", WordAction.Pulse), ("drums", WordAction.Pulse),
+        ("rhythm", WordAction.Pulse),
+        ("wave", WordAction.Wave), ("ocean", WordAction.Wave), ("sea", WordAction.Wave), ("tide", WordAction.Wave),
+        ("river", WordAction.Wave), ("surf", WordAction.Wave), ("shore", WordAction.Wave), ("flood", WordAction.Wave),
+        ("sway", WordAction.Wave), ("water", WordAction.Wave),
+        ("sink", WordAction.Sink), ("sank", WordAction.Sink), ("sunk", WordAction.Sink), ("drown", WordAction.Sink),
+        ("deep", WordAction.Sink), ("deeper", WordAction.Sink), ("underwater", WordAction.Sink), ("abyss", WordAction.Sink),
+        ("anchor", WordAction.Sink), ("quicksand", WordAction.Sink));
 
-    /// <summary>The stored name of an action ("spin", "float", …).</summary>
+    /// <summary>The stored name of an action (its raw value: "spin", "float", …).</summary>
     public static string Name(this WordAction action) => action switch
     {
         WordAction.Spin => "spin", WordAction.Float => "float", WordAction.Dip => "dip", WordAction.Shake => "shake",
         WordAction.Hop => "hop", WordAction.Grow => "grow", WordAction.Shrink => "shrink", WordAction.Dissolve => "dissolve",
-        WordAction.Flicker => "flicker", _ => "frost",
+        WordAction.Flicker => "flicker", WordAction.Frost => "frost", WordAction.Bleed => "bleed", WordAction.Dark => "dark",
+        WordAction.Shatter => "shatter", WordAction.Melt => "melt", WordAction.Echo => "echo", WordAction.Pulse => "pulse",
+        WordAction.Wave => "wave", _ => "sink",
     };
 
-    public static readonly IReadOnlyList<WordAction> AllActions =
-        [WordAction.Spin, WordAction.Float, WordAction.Dip, WordAction.Shake, WordAction.Hop, WordAction.Grow,
-         WordAction.Shrink, WordAction.Dissolve, WordAction.Flicker, WordAction.Frost];
+    /// <summary>The action's title in the list editor (the Mac's <c>WordAction.title</c>).</summary>
+    public static string Title(this WordAction action) => action switch
+    {
+        WordAction.Spin => "Spin", WordAction.Float => "Float", WordAction.Dip => "Dip", WordAction.Shake => "Shake",
+        WordAction.Hop => "Hop", WordAction.Grow => "Grow", WordAction.Shrink => "Shrink", WordAction.Dissolve => "Dissolve",
+        WordAction.Flicker => "Burn", WordAction.Frost => "Freeze", WordAction.Bleed => "Bleed", WordAction.Dark => "Dark",
+        WordAction.Shatter => "Shatter", WordAction.Melt => "Melt", WordAction.Echo => "Echo", WordAction.Pulse => "Heartbeat",
+        WordAction.Wave => "Wave", _ => "Sink",
+    };
 
+    public static readonly IReadOnlyList<WordAction> AllActions = Enum.GetValues<WordAction>();
+
+    /// <summary>
+    /// An action as a word list stores it (the Mac's <c>WordAction(listValue:)</c>): its raw value, or, for a list saved by
+    /// hand or by an older build, its title or a former name. Unknown names and actions no longer offered (explode,
+    /// scream, whisper, ghost, glow, electric) give null, so the word is skipped rather than the list rewritten.
+    /// </summary>
     public static WordAction? ParseAction(string? name)
     {
         var trimmed = name?.Trim().ToLowerInvariant();
+        if (string.IsNullOrEmpty(trimmed)) return null;
         foreach (var action in AllActions)
             if (action.Name() == trimmed) return action;
-        return null;
+        return trimmed switch
+        {
+            "freeze" or "ice" => WordAction.Frost,
+            "warm flicker" or "burn" or "fire" => WordAction.Flicker,
+            "heartbeat" => WordAction.Pulse,
+            "fade" or "vanish" => WordAction.Dissolve,
+            "fall" => WordAction.Dip,
+            "jump" or "bounce" => WordAction.Hop,
+            "drown" => WordAction.Sink,
+            "break" => WordAction.Shatter,
+            "blood" => WordAction.Bleed,
+            "darkness" => WordAction.Dark,
+            "turn" or "rotate" => WordAction.Spin,
+            "fly" => WordAction.Float,
+            "tremble" => WordAction.Shake,
+            "ocean" => WordAction.Wave,
+            _ => null,
+        };
+    }
+
+    /// <summary>
+    /// An action word as its list keeps it (the Mac's <c>WordAccentsSection.actionKey</c>): English as matched, any other
+    /// language folded (accents and case), CJK as written. Null when nothing is left.
+    /// </summary>
+    public static string? ActionKey(string? word)
+    {
+        if (EnglishKey(word) is { } english) return english;
+        var folded = ActionLexicon.Fold(word);
+        return folded.Length == 0 ? null : folded;
     }
 
     /// <summary>
@@ -181,24 +268,23 @@ public static class WordAccents
         return null;
     }
 
-    public static WordAction? ActionFor(string word, WordAccentLists lists)
-    {
-        foreach (var form in EnglishForms(word))
-            if (lists.Actions.TryGetValue(form, out var action)) return action;
-        return null;
-    }
+    /// <summary>The action <paramref name="word"/> takes on its own (its line's script read from the word itself).</summary>
+    public static WordAction? ActionFor(string word, WordAccentLists lists) =>
+        ActionLexicon.Match(word, lists.Actions, new ActionLexicon.Script(word))?.Action;
 
     /// <summary>
     /// One line's accents, planned once in reading order: at most two symbols (a picture already in the line is not
-    /// repeated) and one action (the first listed action word). A run may take both. <paramref name="runs"/> are the
-    /// runs' texts, a glued run's tokens joined.
+    /// repeated) and one action (the first action word, from the user's list or the built-in lists for the line's
+    /// script). A run may take both. <paramref name="runs"/> are the runs' texts, a glued run's tokens joined.
+    /// <paramref name="gentle"/>: the line is a chorus repeat (<see cref="GentleLines"/>), so its action moves gently.
     /// </summary>
-    public static RunAccent[] Plan(IReadOnlyList<string> runs, bool symbols, bool actions, WordAccentLists lists)
+    public static RunAccent[] Plan(IReadOnlyList<string> runs, bool symbols, bool actions, WordAccentLists lists, bool gentle = false)
     {
         var plan = new RunAccent[runs.Count];
         if (!symbols && !actions) return plan;
         var shown = new List<string>(MaxSymbolsPerLine);
         var actionsLeft = MaxActionsPerLine;
+        var script = actions ? new ActionLexicon.Script(string.Join(' ', runs)) : default;
         for (var i = 0; i < runs.Count; i++)
         {
             string? symbol = null;
@@ -211,14 +297,46 @@ public static class WordAccents
                 symbol = found;
                 shown.Add(WordSymbolGlyphs.Glyph(found) ?? found);
             }
-            if (actions && actionsLeft > 0 && ActionFor(runs[i], lists) is { } act)
+            if (actions && actionsLeft > 0 && ActionLexicon.Match(runs[i], lists.Actions, script) is { } matched)
             {
-                action = act;
+                action = matched.Action;
                 actionsLeft--;
             }
-            plan[i] = new RunAccent(symbol, action);
+            plan[i] = new RunAccent(symbol, action, action is not null && gentle);
         }
         return plan;
+    }
+
+    /// <summary>The list key of the line's action word, if any (the same matching as <see cref="Plan"/>).</summary>
+    public static string? ActionKeyOf(IReadOnlyList<string> runs, WordAccentLists lists)
+    {
+        var script = new ActionLexicon.Script(string.Join(' ', runs));
+        foreach (var run in runs)
+        {
+            if (string.IsNullOrWhiteSpace(run)) continue;
+            if (ActionLexicon.Match(run, lists.Actions, script) is { } found) return found.Key;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Which lines of a song move gently (the Mac's <c>WordAccentPlan.gentleLines</c>): an action word acts in full the
+    /// first time it is sung, and its later repeats alternate gentle and full (2nd gentle, 3rd full, 4th gentle…), so a
+    /// chorus does not tire. A pure function of the song's lines (each line's lead runs, backing vocals already lifted
+    /// out; null for a line without words) and the lists, so seeking and layout changes always agree.
+    /// </summary>
+    public static HashSet<int> GentleLines(IReadOnlyList<IReadOnlyList<string>?> lines, WordAccentLists lists)
+    {
+        var heard = new Dictionary<string, int>(StringComparer.Ordinal);
+        var gentle = new HashSet<int>();
+        for (var index = 0; index < lines.Count; index++)
+        {
+            if (lines[index] is not { Count: > 0 } runs || ActionKeyOf(runs, lists) is not { } key) continue;
+            heard.TryGetValue(key, out var count);
+            if (count % 2 != 0) gentle.Add(index);
+            heard[key] = count + 1;
+        }
+        return gentle;
     }
 
     /// <summary>
@@ -240,8 +358,10 @@ public static class WordAccents
         if (stored is null) return [.. DefaultActions];
         var result = new List<KeyValuePair<string, WordAction>>();
         var defaults = DefaultActions.Select(pair => new KeyValuePair<string, string>(pair.Key, pair.Value.Name())).ToList();
+        // Keys: English words as EnglishKey, others folded (ActionLexicon.Fold). Values by raw value, title or former name;
+        // a word whose action is no longer offered is skipped, and the stored list itself is left alone.
         foreach (var (word, name) in Ordered(stored, defaults))
-            if (EnglishKey(word) is { } key && ParseAction(name) is { } action && result.All(pair => pair.Key != key))
+            if (ActionKey(word) is { } key && ParseAction(name) is { } action && result.All(pair => pair.Key != key))
                 result.Add(new(key, action));
         return result;
     }

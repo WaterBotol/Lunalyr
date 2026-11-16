@@ -28,16 +28,18 @@ internal static class WordListEditor
         new("globe", "Globe", ""), new("phone", "Phone", ""),
     ];
 
+    /// <summary>The 18 actions by their titles (the Mac's 16 Nov 2026 list: Burn is stored as flicker, Freeze as frost).</summary>
     public static readonly IReadOnlyList<Choice> ActionChoices =
-    [
-        new("spin", "Spin"), new("float", "Float"), new("dip", "Dip"), new("shake", "Shake"), new("hop", "Hop"),
-        new("grow", "Grow"), new("shrink", "Shrink"), new("dissolve", "Dissolve"), new("flicker", "Flicker"), new("frost", "Frost"),
-    ];
+        [.. WordAccents.AllActions.Select(action => new Choice(action.Name(), action.Title()))];
 
+    /// <param name="keyOf">The word as the list stores it, or null when it can't be listed.</param>
+    /// <param name="valueOf">A stored value as its choice's value (an old name read as today's), or null for one not offered.</param>
+    /// <param name="refusal">What the note says when a typed word can't be listed.</param>
     public static StackPanel Build(SettingsContext ctx, string itemName,
                                    Func<AppSettings, IReadOnlyDictionary<string, string>?> get,
                                    Func<AppSettings, IReadOnlyDictionary<string, string>?, AppSettings> set,
-                                   IReadOnlyList<KeyValuePair<string, string>> defaults, IReadOnlyList<Choice> choices, string newValue)
+                                   IReadOnlyList<KeyValuePair<string, string>> defaults, IReadOnlyList<Choice> choices, string newValue,
+                                   Func<string, string?> keyOf, Func<string, string?> valueOf, string refusal)
     {
         var panel = new StackPanel { Spacing = 6 };
         var rows = new StackPanel { Spacing = 4 };
@@ -68,9 +70,9 @@ internal static class WordListEditor
         void AddWord()
         {
             var typed = addBox.Text;
-            if (WordAccents.EnglishKey(typed) is not { } key)
+            if (keyOf(typed) is not { } key)
             {
-                note.Text = string.IsNullOrWhiteSpace(typed) ? "" : "Only English words (letters a–z and digits) can be listed.";
+                note.Text = string.IsNullOrWhiteSpace(typed) ? "" : refusal;
                 note.Visibility = note.Text.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
                 return;
             }
@@ -117,16 +119,18 @@ internal static class WordListEditor
                 picker.Items.Add(Item(choice));
                 values.Add(choice.Value);
             }
-            if (!values.Contains(value))
+            // A stored old name (Freeze, warm flicker) shows as today's choice; the list is only rewritten on a change.
+            var current = valueOf(value) is { } known && values.Contains(known) ? known : value;
+            if (!values.Contains(current))
             {
-                // A name Windows can't draw (set on the Mac, say): kept, shown as it is.
+                // A name Windows can't draw or an action no longer offered: kept, shown as it is.
                 picker.Items.Add(new ComboBoxItem { Content = $"{value} (not shown on Windows)" });
                 values.Add(value);
             }
-            picker.SelectedIndex = values.IndexOf(value);
+            picker.SelectedIndex = values.IndexOf(current);
             picker.SelectionChanged += (_, _) =>
             {
-                if (picker.SelectedIndex < 0 || values[picker.SelectedIndex] == value) return;
+                if (picker.SelectedIndex < 0 || values[picker.SelectedIndex] == current) return;
                 var chosen = values[picker.SelectedIndex];
                 Store(list => { list[word] = chosen; return true; });
             };

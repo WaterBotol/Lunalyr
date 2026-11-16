@@ -207,11 +207,13 @@ internal static class LyricStylePage
             .ShowWhen(ctx, s => s.PreviewsNextWordForControls())));
         page.Children.Add(Advanced(SettingsKit.Expander("Symbol words", "The words that take a symbol, and which.", "",
             WordListEditor.Build(ctx, "word symbol list", s => s.WordSymbolsWords, (s, v) => s with { WordSymbolsWords = v },
-                WordAccents.DefaultSymbols, WordListEditor.SymbolChoices, "star"))));
+                WordAccents.DefaultSymbols, WordListEditor.SymbolChoices, "star",
+                WordAccents.EnglishKey, value => value.Trim(), "Only English words (letters a–z and digits) can take a symbol."))));
         page.Children.Add(Advanced(SettingsKit.Expander("Action words", "The words that move, and how.", "",
             WordListEditor.Build(ctx, "action word list", s => s.ActionWordsWords, (s, v) => s with { ActionWordsWords = v },
                 WordAccents.DefaultActions.Select(pair => new KeyValuePair<string, string>(pair.Key, pair.Value.Name())).ToList(),
-                WordListEditor.ActionChoices, "spin"))));
+                WordListEditor.ActionChoices, "spin",
+                WordAccents.ActionKey, value => WordAccents.ParseAction(value)?.Name(), "Type a word made of letters or digits."))));
 
         // ---- Instrumental breaks ----
         Section(page, "Instrumental breaks");
