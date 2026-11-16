@@ -21,6 +21,8 @@ using Box = Lunalyr.Core.Motion.Box;
 using Double3 = Lunalyr.Core.Colour.Double3;
 using Segment = Lunalyr.Core.Motion.Segment;
 
+using Lunalyr.Render.Compositions.Stage;
+
 namespace Lunalyr.Render.Compositions;
 
 /// <summary>A lyric composition drawn on one surface. Pure in song time: the pixels depend only on the scene and the time.</summary>
@@ -133,6 +135,19 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
 
     /// <summary>The style of the scene shown (the default before the first).</summary>
     protected LyricStyle StyleShown => SceneShown?.Style ?? LyricStyle.Default;
+
+    /// <summary>
+    /// Whether line <paramref name="row"/>'s action word is a chorus repeat that moves gently (the Mac's
+    /// <c>gentleLines</c>): worked out from the whole song, the same for every layout.
+    /// </summary>
+    protected bool GentleRow(int row) =>
+        Sheet is { } sheet && StyleShown is { ActionWords: true } style && row >= 0 && row < sheet.Lines.Count
+        && ActionRepeats.Of(sheet.Lines, style.WordLists, Breaker, style.BackingVocals).Contains(row);
+
+    /// <summary>The whole-word pose of <paramref name="accent"/>'s action at <paramref name="time"/> for a word sung from <paramref name="onset"/> to <paramref name="end"/>.</summary>
+    protected LivelyPose ActionPose(in RunAccent accent, double onset, double end, double time) =>
+        accent.Action is null ? LivelyPose.Identity
+            : LivelyWord.Pose(accent, time - onset, end - onset, StyleShown.ActionStrength, ReduceMotion);
 
     /// <summary>The colours of a word at <paramref name="slot"/> along its line, sung around <paramref name="songSeconds"/>.</summary>
     protected LyricInkSample InkSample(double songSeconds, double slot, ulong seed) => InkAt(songSeconds).Sample(slot, seed);
@@ -837,7 +852,8 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
             // Word symbols and action words: lead lyric lines only, never a romanisation shown instead of the words.
             Symbols: _accentLine && StyleShown.WordSymbols,
             Actions: _accentLine && StyleShown.ActionWords,
-            WordLists: StyleShown.WordLists);
+            WordLists: StyleShown.WordLists,
+            GentleActions: _accentLine && StyleShown.ActionWords && GentleRow(lineIndex));
         var plan = LinePlans.Build(Kit!, words, glue, spec, runReadings, lineReading, runShares, translation);
         Decorate(plan, planKind, words, glue, lineEnd, lineIndex, baseSize, Stage, ink);
         if (groups is { Count: > 0 })
@@ -1044,12 +1060,16 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
             // A held word's letters swell only with motion (the Mac's HeldGlyphRenderer takes no sustain under Reduce Motion).
             var holding = !reduce && run.Sustain > 0.02 ? run.Sustain * Easing.Smoothstep(frame.Fill) : 0;
             var floatScale = drift.Scale * (1 - 0.04 * travel * presence.Out);
-            // An action word's motion (the Mac's cba108f), inside the word's slot so its anchor doesn't drift.
+            // An action word's motion (the Mac's lively pose, 16 Nov 2026), inside the word's slot so its anchor doesn't
+            // drift: about the unit's centre, travel in ems. A spin's turn in depth is drawn in perspective below.
             var action = ink.Action is { } act
-                ? WordActionMotion.Pose(act, time - tokens[run.TokenStart].Source.Start, reduce)
-                : WordActionPose.Identity;
+                ? ActionPose(new RunAccent(null, act, ink.Gentle), tokens[run.TokenStart].Source.Start,
+                             tokens[run.TokenStart + Math.Max(0, run.TokenCount - 1)].Source.End, time)
+                : LivelyPose.Identity;
+            var lively = action.IsIdentity ? Matrix4x4.Identity : LivelyWord.Transform(action, size, Vector2.Zero, ink.Unit);
+            var turning = !Homography.IsAffine(lively);
             var local =
-                (action.IsIdentity ? Matrix3x2.Identity : ActionMatrix(action, size))
+                (turning ? Matrix3x2.Identity : Homography.Flat(lively))
                 * Matrix3x2.CreateRotation(Radians(run.Metrics.Rotation))
                 * (ink.Symbol is null ? Matrix3x2.CreateScale((float)swellCap)
                     : Matrix3x2.CreateScale((float)swellCap, new Vector2(ink.LabelOffset.X, 0)))
@@ -1062,8 +1082,24 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
                 * Matrix3x2.CreateTranslation((float)(origin.X + ink.Centre.X), (float)(origin.Y + ink.Centre.Y + run.Metrics.WaveOffset))
                 * block;
             var heldUp = 1 + plan.HeldY[r] * holding;
-            var scale = contentScale * swell * swellCap * heldUp * transform.Scale * floatScale * action.Scale;
+            var scale = contentScale * swell * swellCap * heldUp * transform.Scale * floatScale * Math.Sqrt(Math.Abs(action.Sx * action.Sy));
             visibility *= action.Opacity;
+            if (turning)
+            {
+                // Mid-spin: the word, its symbol and its reading turn as one, in perspective (no tile, sweep or blur).
+                var depth = lively * Homography.Of(local);
+                var spinGlow = LivelyWord.Glow(action, new Vector4(ink.Glow.X, ink.Glow.Y, ink.Glow.Z, 1), size);
+                StageLayer.DrawInk(dc, ink.Label, depth, ink.LabelOffset, visibility, 0, (float)((0.28 + 0.24 * heat) / 0.52),
+                                   run.Boundaries, frame.RevealsByToken ? plan.TokenOpacities.AsSpan(run.TokenStart, run.TokenCount) : default,
+                                   run.RightToLeft, spinGlow);
+                if (ink.Symbol is { } spinning)
+                    StageLayer.DrawInk(dc, spinning, depth, ink.SymbolOffset,
+                                       visibility * WordActionMotion.SymbolOpacity(time - tokens[run.TokenStart].Source.Start));
+                if (ink.Reading is { } spunReading)
+                    StageLayer.DrawInk(dc, spunReading, depth, ink.ReadingOffset,
+                                       visibility * frame.ReadingOpacity(plan.TokenOpacities.AsSpan(run.TokenStart, run.TokenCount)));
+                continue;
+            }
             var blur = Combine(Points(motion.Blur(presentation.Progress, reduce) * presence.In), Points(2.4 * travel * presence.Out)) * (float)scale;
             // "Cutout · Highlight": the tiles behind this run's sung words, and how strong the strongest is.
             var tiled = 0.0;
@@ -1080,9 +1116,9 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
                                Points(10 + 22 * frame.Glow * presence.Glow) * (float)scale)
                 : GlowSpec.None;
             // An action's glow: a shadow in the word's own glow colour (the stronger of the two shows).
-            if (action.Glow > 0.002 && action.GlowOpacity > glow.Colour.W)
-                glow = new GlowSpec(new Vector4(ink.Glow.X, ink.Glow.Y, ink.Glow.Z, (float)action.GlowOpacity),
-                                    (float)(action.GlowRadius(size) * scale / Math.Max(1e-3, action.Scale)));
+            var actionGlow = LivelyWord.Glow(action, new Vector4(ink.Glow.X, ink.Glow.Y, ink.Glow.Z, 1), size);
+            if (actionGlow.Visible && actionGlow.Colour.W > glow.Colour.W)
+                glow = actionGlow with { Radius = (float)(actionGlow.Radius * scale) };
             var shadow = (float)((0.28 + 0.24 * heat) / 0.52);
             var tokenOpacities = frame.RevealsByToken ? plan.TokenOpacities.AsSpan(run.TokenStart, run.TokenCount) : default;
             // A held word grows about its foot: glyph by glyph it barely widens (the Mac swells each glyph in place).
@@ -1157,21 +1193,13 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
     }
 
     /// <summary>
-    /// An action word's pose as a matrix about the unit's centre: the scale (its width turned by the spin), then the
-    /// offset in ems of the word's size.
-    /// </summary>
-    private static Matrix3x2 ActionMatrix(in WordActionPose pose, double size) =>
-        Matrix3x2.CreateScale((float)(pose.TurnScale * pose.Scale), (float)pose.Scale)
-        * Matrix3x2.CreateTranslation((float)(pose.Dx * size), (float)(pose.Dy * size));
-
-    /// <summary>
     /// A run's word symbol and its action's colour cue (the Mac's ad5a6a6 and cba108f): the symbol fades in over 0.3 s
     /// from its word's onset in the word's own colour, crossing to the sung colour as a sweep fills the word; an action
     /// that warms or cools the word lays the multiplied colour over it (never lighter).
     /// </summary>
     private static void DrawAccent(ID2D1DeviceContext dc, EditorialRun run, IReadOnlyList<EditorialToken> tokens, RunInk ink,
                                    in Matrix3x2 labelWorld, in Matrix3x2 local, double scale, double visibility, float blur,
-                                   GlowSpec glow, float shadow, in WordActionPose action, double time, InkClip clip)
+                                   GlowSpec glow, float shadow, in LivelyPose action, double time, InkClip clip)
     {
         var onset = tokens[run.TokenStart].Source.Start;
         var sweep = ink.SymbolSung is not null || action.Tints ? SungSweep.Progress(run, tokens, time) : 0;

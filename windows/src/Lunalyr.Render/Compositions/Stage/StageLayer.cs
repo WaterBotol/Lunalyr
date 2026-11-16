@@ -46,6 +46,8 @@ internal sealed class StageWord : IDisposable
     public Vector2 SymbolOffset { get; init; }
     /// <summary>The word's action motion (the Mac's action words), if it takes one.</summary>
     public WordAction? Action { get; init; }
+    /// <summary>A chorus repeat of an action word already heard: it moves gently (the Mac's <c>WordAccent.gentle</c>).</summary>
+    public bool Gentle { get; init; }
     public Vector4[] Colours { get; init; } = [];
     /// <summary>The centre of the word and its symbol together: an action turns and scales about it.</summary>
     public Vector2 Pivot { get; init; }
@@ -661,7 +663,7 @@ internal abstract class StageLayer(CompositionKind kind, IWordBreaker breaker, L
                 SymbolOffset = symbols.Length == 0 ? default
                     : new Vector2(Aligned(wordWidth) + wordShift + side * (float)(w / 2 + symbolGap + symbolWidth / 2),
                                   (float)(-unitHeight / 2 + h / 2 + symbolDy)),
-                Action = spec.Colours.Length > 0 ? spec.Accent.Action : null,
+                Action = spec.Colours.Length > 0 ? spec.Accent.Action : null, Gentle = spec.Accent.Gentle,
                 Pivot = new Vector2(Aligned(wordWidth), (float)(-unitHeight / 2 + h / 2)),
                 FontSize = size,
                 Colours = spec.Colours,
@@ -716,7 +718,7 @@ internal abstract class StageLayer(CompositionKind kind, IWordBreaker breaker, L
             var actionsOn = shown && style.ActionWords;
             var texts = new string[source.Runs.Count];
             for (var i = 0; i < texts.Length; i++) texts[i] = source.Runs[i].Text;
-            _accents = symbolsOn || actionsOn ? WordAccents.Plan(texts, symbolsOn, actionsOn, style.WordLists) : [];
+            _accents = symbolsOn || actionsOn ? WordAccents.Plan(texts, symbolsOn, actionsOn, style.WordLists, actionsOn && GentleRow(source.Row)) : [];
         }
         return index >= 0 && index < _accents.Length ? _accents[index] : default;
     }
@@ -756,9 +758,9 @@ internal abstract class StageLayer(CompositionKind kind, IWordBreaker breaker, L
     /// the bitmaps through Direct2D's perspective transform (without blur).
     /// </summary>
     /// <param name="glow">A glow behind the ink (an action word's), its radius in unit layout pixels; flat transforms only.</param>
-    protected static void DrawInk(ID2D1DeviceContext dc, Ink ink, in Matrix4x4 unit, Vector2 offset, double opacity, float blur = 0,
-                                  float shadow = 1, ReadOnlySpan<double> boundaries = default,
-                                  ReadOnlySpan<double> opacities = default, bool rightToLeft = false, GlowSpec glow = default)
+    internal static void DrawInk(ID2D1DeviceContext dc, Ink ink, in Matrix4x4 unit, Vector2 offset, double opacity, float blur = 0,
+                                 float shadow = 1, ReadOnlySpan<double> boundaries = default,
+                                 ReadOnlySpan<double> opacities = default, bool rightToLeft = false, GlowSpec glow = default)
     {
         if (!(opacity > 0.002)) return;
         var world = Matrix4x4.CreateTranslation(offset.X, offset.Y, 0) * unit;
@@ -838,9 +840,7 @@ internal abstract class StageLayer(CompositionKind kind, IWordBreaker breaker, L
         if (!ReduceMotion && StyleShown.WordPresence > 1) blur = Math.Max(blur, Points(PresenceOf(run, time).Blur));
         // An action's glow (and Reduce Motion's cue): a shadow in the word's own colour.
         var tone = word.Colours[Math.Min(colour, word.Colours.Length - 1)];
-        var glow = pose.Glow > 0.002
-            ? new GlowSpec(new Vector4(tone.X, tone.Y, tone.Z, (float)pose.GlowOpacity), (float)pose.GlowRadius(word.FontSize))
-            : GlowSpec.None;
+        var glow = LivelyWord.Glow(pose, tone, word.FontSize);
         DrawInk(dc, word.Labels[colour], moved, word.LabelOffset + nudge, shown, blur, shadow, word.Boundaries, parts,
                 word.RightToLeft, glow);
         if (pose.Tints) DrawCue(dc, word.Labels[colour], word.Colours[Math.Min(colour, word.Colours.Length - 1)], pose, moved, word.LabelOffset + nudge, shown);
@@ -853,23 +853,26 @@ internal abstract class StageLayer(CompositionKind kind, IWordBreaker breaker, L
     }
 
     /// <summary>
-    /// <paramref name="unit"/> with <paramref name="word"/>'s action motion layered on it, about the word's centre (its
-    /// label at <paramref name="nudge"/>): the scale, its width turned by a spin, then the offset in ems of its size.
+    /// <paramref name="unit"/> with <paramref name="word"/>'s action motion layered on it (the Mac's lively pose, 16 Nov
+    /// 2026), about the word's centre (its label at <paramref name="nudge"/>): the scale about its anchor, a spin's turn
+    /// in perspective, the tilt, then the travel in ems of its size; word presence about the same centre after it.
     /// Unchanged when the word takes no action or its motion is over.
     /// </summary>
-    protected Matrix4x4 Acting(StageWord word, StageRun run, double time, in Matrix4x4 unit, Vector2 nudge, out WordActionPose pose)
+    protected Matrix4x4 Acting(StageWord word, StageRun run, double time, in Matrix4x4 unit, Vector2 nudge, out LivelyPose pose)
     {
-        pose = word.Action is { } action ? WordActionMotion.Pose(action, time - run.Start, ReduceMotion) : WordActionPose.Identity;
+        pose = word.Action is { } action ? ActionPose(new RunAccent(null, action, word.Gentle), run.Start, run.End, time) : LivelyPose.Identity;
         // Word presence (Mac queue item 5): a rise and grow as the word arrives, a swell while it is sung, a drift up
         // as the line leaves. None under Reduce Motion.
         var (presenceDy, presenceScale, _) = ReduceMotion ? (0.0, 1.0, 0.0) : PresenceOf(run, time);
         if (pose.IsIdentity && presenceDy == 0 && presenceScale == 1) return unit;
         var size = word.FontSize;
         var centre = (word.Symbols.Length > 0 ? word.Pivot : word.LabelOffset) + nudge;
-        var scale = pose.Scale * presenceScale;
-        return Matrix4x4.CreateTranslation(-centre.X, -centre.Y, 0)
-            * Matrix4x4.CreateScale((float)(pose.TurnScale * scale), (float)scale, 1)
-            * Matrix4x4.CreateTranslation(centre.X + (float)(pose.Dx * size), centre.Y + (float)((pose.Dy + presenceDy) * size), 0) * unit;
+        var box = word.Labels.Length > 0 ? word.Labels[0].Box : new Vector2((float)size, (float)size);
+        var lively = LivelyWord.Transform(pose, size, centre, new SizeD(box.X, box.Y));
+        var presence = presenceDy == 0 && presenceScale == 1 ? Matrix4x4.Identity
+            : Matrix4x4.CreateTranslation(-centre.X, -centre.Y, 0) * Matrix4x4.CreateScale((float)presenceScale, (float)presenceScale, 1)
+              * Matrix4x4.CreateTranslation(centre.X, centre.Y + (float)(presenceDy * size), 0);
+        return lively * presence * unit;
     }
 
     /// <summary>The line being drawn: how far it has left (0 while it stays).</summary>
@@ -886,15 +889,13 @@ internal abstract class StageLayer(CompositionKind kind, IWordBreaker breaker, L
     }
 
     /// <summary>An action's warm or cool colour cue: the ink's colour multiplied, laid over it (never lighter).</summary>
-    private static void DrawCue(ID2D1DeviceContext dc, Ink ink, Vector4 colour, in WordActionPose pose, in Matrix4x4 unit,
+    private static void DrawCue(ID2D1DeviceContext dc, Ink ink, Vector4 colour, in LivelyPose pose, in Matrix4x4 unit,
                                 Vector2 offset, double opacity)
     {
         if (!(opacity > 0.002)) return;
         var world = Matrix4x4.CreateTranslation(offset.X, offset.Y, 0) * unit;
         if (!Homography.IsAffine(world)) return;
-        var (r, g, b) = pose.Multiply;
-        ink.DrawTinted(dc, Homography.Flat(world), new Vector4(colour.X * (float)r, colour.Y * (float)g, colour.Z * (float)b,
-                                                               colour.W * (float)opacity), InkClip.None);
+        ink.DrawTinted(dc, Homography.Flat(world), LivelyWord.Tinted(pose, colour, opacity), InkClip.None);
     }
 
     /// <summary>

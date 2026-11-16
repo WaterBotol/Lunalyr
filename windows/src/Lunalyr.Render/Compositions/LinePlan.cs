@@ -35,6 +35,8 @@ internal sealed class RunInk : IDisposable
     public Vector2 SymbolOffset { get; init; }
     /// <summary>The run's action word motion, if it takes one.</summary>
     public WordAction? Action { get; init; }
+    /// <summary>A chorus repeat of an action word already heard: it moves gently (the Mac's <c>WordAccent.gentle</c>).</summary>
+    public bool Gentle { get; init; }
     /// <summary>The colours the label was baked in (the action's colour cue multiplies them).</summary>
     public Vector4 RestColour { get; init; } = Vector4.One;
     public Vector4 SungColour { get; init; } = Vector4.One;
@@ -131,7 +133,7 @@ internal readonly record struct PlanSpec(
     Vector4 ReadingColour, double LineReadingSize, double LineReadingWidth, ShadowSpec LineReadingShadow,
     LyricInk? Ink = null, CompositionKind Kind = CompositionKind.Editorial, double Spread = 1,
     double TranslationSize = 0, double EditorialAmount = 1, bool RandomFonts = false, SizeD? FillStage = null,
-    bool Symbols = false, bool Actions = false, WordAccentLists? WordLists = null);
+    bool Symbols = false, bool Actions = false, WordAccentLists? WordLists = null, bool GentleActions = false);
 
 internal static class LinePlans
 {
@@ -295,7 +297,7 @@ internal static class LinePlans
                     Symbol = symbolInk,
                     SymbolSung = symbolSung,
                     SymbolOffset = symbolOffset,
-                    Action = accents?[r].Action,
+                    Action = accents?[r].Action, Gentle = accents?[r].Gentle == true,
                     RestColour = colour,
                     SungColour = sungColour,
                 };
@@ -341,7 +343,7 @@ internal static class LinePlans
         if (!spec.WordTimed || !(spec.Symbols || spec.Actions) || spec.WordLists is not { } lists) return null;
         var texts = new string[typography.Runs.Count];
         for (var r = 0; r < texts.Length; r++) texts[r] = typography.Runs[r].Label;
-        var plan = WordAccents.Plan(texts, spec.Symbols, spec.Actions, lists);
+        var plan = WordAccents.Plan(texts, spec.Symbols, spec.Actions, lists, spec.GentleActions);
         foreach (var accent in plan)
             if (!accent.IsEmpty) return plan;
         return null;

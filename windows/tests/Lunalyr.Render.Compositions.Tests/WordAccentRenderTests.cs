@@ -79,10 +79,11 @@ public sealed class WordAccentRenderTests : IDisposable
     [MemberData(nameof(Layouts))]
     public void An_action_moves_its_word_only_while_it_runs(string id)
     {
-        // "spin" is sung at 12.25 s and turns for 0.8 s.
+        // "spin" is sung at 12.25 s for 0.4 s, so it turns for 1.75 s (the Mac's lively spin): at rest at 14.0 s, as
+        // "Falling" (now an action word too) begins.
         var turning = Differing(Frame(id, false, true, 12.6), Frame(id, false, false, 12.6));
         Assert.True(turning > 100, $"{id}: the spin changed {turning} pixels");
-        var done = Differing(Frame(id, false, true, 13.6), Frame(id, false, false, 13.6));
+        var done = Differing(Frame(id, false, true, 14.0), Frame(id, false, false, 14.0));
         Assert.True(done < 20, $"{id}: {done} pixels still differ after the spin");
     }
 }
