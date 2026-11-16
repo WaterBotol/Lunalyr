@@ -1840,7 +1840,7 @@ final class YouTubeMusicVideoCoordinator: NSObject, WKNavigationDelegate, WKScri
         let cues = MusicVideoCaptionSync.cues(from: data)
         guard !cues.isEmpty else {
             controller.logCaption(CaptionSyncLog.emptyLine(status: (body["status"] as? NSNumber)?.intValue ?? 0,
-                                                           bytes: data.count))
+                                                           bytes: data.count, type: body["type"] as? String ?? ""))
             return
         }
         capturedCaptions = videoID

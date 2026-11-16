@@ -55,8 +55,13 @@ enum CaptionSyncLog {
 
     static func ignoredLine(_ why: String) -> String { "captions: reply ignored (\(why))" }
 
-    static func emptyLine(status: Int, bytes: Int) -> String {
-        let why = status >= 400 ? "blocked or refused" : bytes == 0 ? "empty: no track" : "not timed text"
+    /// `type`: how the player read the reply ("fetch", or an XHR's
+    /// response type); one the capture script can't read arrives empty.
+    static func emptyLine(status: Int, bytes: Int, type: String = "text") -> String {
+        let readable = ["fetch", "text", "json", ""].contains(type)
+        let why = !readable ? "unreadable response type \(type)"
+            : status >= 400 ? "blocked or refused"
+            : bytes == 0 ? "empty (no track, or refused)" : "not timed text"
         return "captions: reply with no captions (HTTP \(status), \(bytes) bytes): \(why)"
     }
 

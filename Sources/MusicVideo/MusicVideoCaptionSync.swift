@@ -455,10 +455,11 @@ extension MusicVideoCaptionSync {
         (document.head || document.documentElement).appendChild(style);
       }
       if (document.documentElement) hide(); else document.addEventListener('DOMContentLoaded', hide);
-      function pass(url, text, status) {
+      function pass(url, text, status, type) {
         try {
           if (typeof text !== 'string' || text.length > \(maximumReply)) return;
-          window.webkit.messageHandlers.\(messageName).postMessage({url: String(url), text: text, status: status | 0});
+          window.webkit.messageHandlers.\(messageName).postMessage({url: String(url), text: text, status: status | 0,
+                                                                   type: String(type || '')});
         } catch (e) {}
       }
       function wanted(url) { return String(url || '').indexOf('/api/timedtext') >= 0; }
@@ -468,7 +469,7 @@ extension MusicVideoCaptionSync {
           var url = typeof input === 'string' ? input : (input && input.url) || '';
           var reply = originalFetch.apply(this, arguments);
           if (wanted(url)) {
-            reply.then(function (r) { r.clone().text().then(function (t) { pass(r.url || url, t, r.status); }); }).catch(function () {});
+            reply.then(function (r) { r.clone().text().then(function (t) { pass(r.url || url, t, r.status, 'fetch'); }); }).catch(function () {});
           }
           return reply;
         };
@@ -485,7 +486,7 @@ extension MusicVideoCaptionSync {
               else if (typeof request.response === 'string') text = request.response;
               else if (request.responseType === 'json') text = JSON.stringify(request.response);
             } catch (e) {}
-            pass(request.responseURL || request.__lunalyrURL, text, request.status);
+            pass(request.responseURL || request.__lunalyrURL, text, request.status, request.responseType || 'text');
           });
         }
         return send.apply(this, arguments);

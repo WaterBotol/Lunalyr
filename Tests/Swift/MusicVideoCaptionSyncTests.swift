@@ -529,7 +529,9 @@ final class MusicVideoCaptionSyncTests: XCTestCase {
         XCTAssertEqual(CaptionSyncLog.emptyLine(status: 429, bytes: 0),
                        "captions: reply with no captions (HTTP 429, 0 bytes): blocked or refused")
         XCTAssertEqual(CaptionSyncLog.emptyLine(status: 200, bytes: 0),
-                       "captions: reply with no captions (HTTP 200, 0 bytes): empty: no track")
+                       "captions: reply with no captions (HTTP 200, 0 bytes): empty (no track, or refused)")
+        XCTAssertEqual(CaptionSyncLog.emptyLine(status: 200, bytes: 0, type: "arraybuffer"),
+                       "captions: reply with no captions (HTTP 200, 0 bytes): unreadable response type arraybuffer")
         XCTAssertEqual(CaptionSyncLog.fetchedLine(automatic: true, language: "en", cues: 42, wordTimed: true),
                        "captions: fetched YouTube's automatic (auto-only) track, language en, 42 cues, word timing yes")
         XCTAssertEqual(CaptionSyncLog.askedLine(language: "ko"), "captions: asked the player for them (language ko)")
