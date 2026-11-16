@@ -224,8 +224,37 @@ enum MusicVideoCaptionSync {
         /// Two stretches with offsets a second or more apart, one after the
         /// other: a video with an extra scene mid-song. Empty otherwise.
         var segments: [Segment]
+        /// Why `offset` is there or not.
+        var verdict: Verdict = .noMatches
 
         static let none = Result(offset: nil, matches: [], agreeing: 0, spread: 0, segments: [])
+    }
+
+    /// Whether the captions' offset is trusted, and if not, why.
+    enum Verdict: Equatable {
+        case trusted
+        /// No lyric line was found in the captions.
+        case noMatches
+        /// Fewer than `minimumMatches` lines agree.
+        case tooFew
+        /// Enough lines agree, but under `minimumAgreement` of those matched.
+        case thinAgreement
+        /// Another offset (a chorus one repeat off) has `rival` lines
+        /// against the winner's `support`.
+        case ambiguous(rival: Int, support: Int)
+
+        /// For the log: a few words, no lyric text.
+        var summary: String {
+            switch self {
+            case .trusted: return "trusted"
+            case .noMatches: return "refused: no lyric line found in the captions"
+            case .tooFew: return "refused: too few agreeing lines (need \(MusicVideoCaptionSync.minimumMatches))"
+            case .thinAgreement:
+                return "refused: thin agreement (under \(Int(MusicVideoCaptionSync.minimumAgreement * 100))% of matched lines)"
+            case .ambiguous(let rival, let support):
+                return "refused: ambiguous, another offset has \(rival) lines against \(support) (a chorus shift)"
+            }
+        }
     }
 
     static let minimumMatches = 5
@@ -308,12 +337,19 @@ enum MusicVideoCaptionSync {
         let support = self.support(lines, center: center)
         let rival = lines.joined().map(\.offset).filter { abs($0 - center) > 1 }
             .map { self.support(lines, center: $0) }.max() ?? 0
-        let trusted = agreeing.count >= minimumMatches
-            && Double(agreeing.count) >= minimumAgreement * Double(chosen.count)
-            && Double(rival) < rivalShare * Double(support)
-        return Result(offset: trusted ? (refined * 20).rounded() / 20 : nil,
+        let verdict: Verdict
+        if agreeing.count < minimumMatches {
+            verdict = .tooFew
+        } else if Double(agreeing.count) < minimumAgreement * Double(chosen.count) {
+            verdict = .thinAgreement
+        } else if Double(rival) >= rivalShare * Double(support) {
+            verdict = .ambiguous(rival: rival, support: support)
+        } else {
+            verdict = .trusted
+        }
+        return Result(offset: verdict == .trusted ? (refined * 20).rounded() / 20 : nil,
                       matches: chosen.sorted { $0.songTime < $1.songTime }, agreeing: agreeing.count,
-                      spread: spread, segments: segments(lines, first: center))
+                      spread: spread, segments: segments(lines, first: center), verdict: verdict)
     }
 
     /// A rival offset with this share of the winner's lines makes it ambiguous.
@@ -419,10 +455,10 @@ extension MusicVideoCaptionSync {
         (document.head || document.documentElement).appendChild(style);
       }
       if (document.documentElement) hide(); else document.addEventListener('DOMContentLoaded', hide);
-      function pass(url, text) {
+      function pass(url, text, status) {
         try {
           if (typeof text !== 'string' || text.length > \(maximumReply)) return;
-          window.webkit.messageHandlers.\(messageName).postMessage({url: String(url), text: text});
+          window.webkit.messageHandlers.\(messageName).postMessage({url: String(url), text: text, status: status | 0});
         } catch (e) {}
       }
       function wanted(url) { return String(url || '').indexOf('/api/timedtext') >= 0; }
@@ -432,7 +468,7 @@ extension MusicVideoCaptionSync {
           var url = typeof input === 'string' ? input : (input && input.url) || '';
           var reply = originalFetch.apply(this, arguments);
           if (wanted(url)) {
-            reply.then(function (r) { r.clone().text().then(function (t) { pass(r.url || url, t); }); }).catch(function () {});
+            reply.then(function (r) { r.clone().text().then(function (t) { pass(r.url || url, t, r.status); }); }).catch(function () {});
           }
           return reply;
         };
@@ -449,7 +485,7 @@ extension MusicVideoCaptionSync {
               else if (typeof request.response === 'string') text = request.response;
               else if (request.responseType === 'json') text = JSON.stringify(request.response);
             } catch (e) {}
-            pass(request.responseURL || request.__lunalyrURL, text);
+            pass(request.responseURL || request.__lunalyrURL, text, request.status);
           });
         }
         return send.apply(this, arguments);

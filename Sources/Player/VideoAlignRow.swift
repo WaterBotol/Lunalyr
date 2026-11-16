@@ -297,7 +297,7 @@ struct VideoAlignControls: View {
                 .buttonStyle(.plain)
                 .foregroundStyle((canReset ? P.Ink.secondary : P.Ink.quaternary).color(look))
                 .disabled(!canReset)
-                .help("Forget your timing for this video and go back to the estimate")
+                .help("Forget your timing for this video and go back to the timing from captions or the estimate")
                 Spacer(minLength: 0)
                 Button(action: onCancel) {
                     Text("Cancel").font(P.TypeScale.rowTitle.weight(.medium))

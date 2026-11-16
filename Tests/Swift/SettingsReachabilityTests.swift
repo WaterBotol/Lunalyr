@@ -291,6 +291,7 @@ private enum SourceKeys {
         "custom.musicVideoLinks",
         "custom.musicVideoOffsetVideos",
         "custom.musicVideoOffsets",
+        "custom.musicVideoOffsetsOverCaptions",
         "custom.musicVideoOnline",
         "custom.musicVideoStill",
         "custom.nextWordPreviewByStyle",

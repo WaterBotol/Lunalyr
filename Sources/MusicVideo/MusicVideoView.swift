@@ -1145,6 +1145,9 @@ enum YouTubeEmbed {
     /// The captions are unloaded this long after the player is ready even
     /// if none were captured.
     static let captionWait: TimeInterval = 60
+    /// Added to `captionWait` before Lunalyr logs that no captions came:
+    /// the player's own readiness wait.
+    static let readyTimeoutForCaptions: TimeInterval = YouTubeEmbedSession.readyTimeout
 
     /// The page itself may load only its own HTML; YouTube's frames inside
     /// it load what they need. Nothing navigates the page away.
@@ -1379,6 +1382,8 @@ final class YouTubeMusicVideoCoordinator: NSObject, WKNavigationDelegate, WKScri
     private var navigation: WKNavigation?
     /// The video whose captions this page already passed on.
     private var capturedCaptions: String?
+    /// Logs that no captions came, if none have by then.
+    private var captionTimeout: DispatchWorkItem?
     private var blur: Double = -1
     /// Why the video is moving or not, as of the sync loop's last check.
     private var hold: MusicVideoHold = .other
@@ -1472,6 +1477,8 @@ final class YouTubeMusicVideoCoordinator: NSObject, WKNavigationDelegate, WKScri
 
     /// Closes the web view, and with it the page and its player.
     private func closeWebView() {
+        captionTimeout?.cancel()
+        captionTimeout = nil
         cancelPendingHide()
         playerVisible = false
         guard let view else { return }
@@ -1489,6 +1496,8 @@ final class YouTubeMusicVideoCoordinator: NSObject, WKNavigationDelegate, WKScri
     /// (`YouTubePlayerPark`): paused, hidden, out of the host, no longer
     /// talking to this coordinator.
     private func parkWebView() {
+        captionTimeout?.cancel()
+        captionTimeout = nil
         cancelPendingHide()
         playerVisible = false
         guard let view else { return }
@@ -1525,6 +1534,8 @@ final class YouTubeMusicVideoCoordinator: NSObject, WKNavigationDelegate, WKScri
             let controller = MusicVideoController.shared
             let captions = controller.wantsCaptions(for: .youTube(videoID))
                 ? (controller.captionLanguage() ?? YouTubeEmbed.playerLanguage()) : nil
+            controller.logCaption(CaptionSyncLog.askedLine(language: captions.map { YouTubeEmbed.captionLanguage($0) ?? $0 }))
+            watchForCaptions(videoID: videoID, wanted: captions != nil)
             if YouTubePlayerReuse.load(hasView: true, pageReady: pageReady) == .switchVideo {
                 // The same player, another video: hidden until it plays.
                 fade(visible: false, atOnce: true)
@@ -1808,17 +1819,55 @@ final class YouTubeMusicVideoCoordinator: NSObject, WKNavigationDelegate, WKScri
     /// for this view and video (`MusicVideoCaptionSync.capture`); the first
     /// one per page is used, then the player unloads its captions.
     private func receiveCaptions(_ message: WKScriptMessage) {
-        guard message.webView === view, let videoID, capturedCaptions != videoID,
-              let body = message.body as? [String: Any], let url = body["url"] as? String,
-              let text = body["text"] as? String, text.utf8.count <= MusicVideoCaptionSync.maximumReply else { return }
+        guard message.webView === view, let videoID, capturedCaptions != videoID else { return }
+        let controller = MusicVideoController.shared
+        guard let body = message.body as? [String: Any], let url = body["url"] as? String,
+              let text = body["text"] as? String else {
+            controller.logCaption(CaptionSyncLog.ignoredLine("unreadable message"))
+            return
+        }
+        guard text.utf8.count <= MusicVideoCaptionSync.maximumReply else {
+            controller.logCaption(CaptionSyncLog.ignoredLine("too large: \(text.utf8.count) bytes"))
+            return
+        }
         let origin = message.frameInfo.securityOrigin
-        guard MusicVideoCaptionSync.capture(frameHost: origin.host, frameScheme: origin.protocol, url: url,
-                                            videoID: videoID) != nil else { return }
+        guard let capture = MusicVideoCaptionSync.capture(frameHost: origin.host, frameScheme: origin.protocol, url: url,
+                                                          videoID: videoID) else {
+            controller.logCaption(CaptionSyncLog.ignoredLine("not YouTube's timed text for this video, or a translation"))
+            return
+        }
         let data = Data(text.utf8)
-        guard !MusicVideoCaptionSync.cues(from: data).isEmpty else { return }
+        let cues = MusicVideoCaptionSync.cues(from: data)
+        guard !cues.isEmpty else {
+            controller.logCaption(CaptionSyncLog.emptyLine(status: (body["status"] as? NSNumber)?.intValue ?? 0,
+                                                           bytes: data.count))
+            return
+        }
         capturedCaptions = videoID
+        captionTimeout?.cancel()
+        captionTimeout = nil
+        controller.logCaption(CaptionSyncLog.fetchedLine(automatic: capture.automatic, language: capture.language,
+                                                         cues: cues.count, wordTimed: cues.contains { $0.words != nil }))
         run("window.lunalyrCaptionsDone && window.lunalyrCaptionsDone()")
-        MusicVideoController.shared.noteCaptions(data, of: .youTube(videoID))
+        controller.noteCaptions(data, of: .youTube(videoID))
+    }
+
+    /// Once the player has had `captionWait` (and a little) to load the
+    /// video's captions, says so in the log if none came.
+    private func watchForCaptions(videoID: String, wanted: Bool) {
+        captionTimeout?.cancel()
+        captionTimeout = nil
+        guard wanted else { return }
+        let wait = YouTubeEmbed.captionWait + YouTubeEmbed.readyTimeoutForCaptions
+        let work = DispatchWorkItem { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self, self.videoID == videoID, self.capturedCaptions != videoID,
+                      MusicVideoController.shared.isShowing(.youTube(videoID)) else { return }
+                MusicVideoController.shared.logCaption(CaptionSyncLog.noneLine(after: wait))
+            }
+        }
+        captionTimeout = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + wait, execute: work)
     }
 
     // MARK: Navigation

@@ -206,6 +206,11 @@ final class MusicVideoCaptionSyncTests: XCTestCase {
         let cues = asrCues(Array(lines[3...]), offset: 5)
         let result = Sync.measure(cues: cues, lines: lines)
         XCTAssertNil(result.offset)
+        guard case .ambiguous(let rival, let support) = result.verdict else {
+            return XCTFail("\(result.verdict)")
+        }
+        XCTAssertGreaterThanOrEqual(Double(rival), Sync.rivalShare * Double(support))
+        XCTAssertTrue(CaptionSyncLog.measuredLine(result, userOffset: nil).contains("ambiguous"))
     }
 
     func testThreeAgreeingOfFiveIsNotEnough() {
@@ -358,53 +363,188 @@ final class MusicVideoCaptionSyncTests: XCTestCase {
         XCTAssertEqual(controller.currentOffset, 7, accuracy: 0.03)
     }
 
-    func testCaptionsWinOverSavedTimingAndANudgeAdjustsThisPlaybackOnly() async {
+    private var track: NowPlayingMonitor.Track {
+        NowPlayingMonitor.Track(title: song.title, artist: song.artist, duration: song.duration, album: song.album)
+    }
+    private var video: String { "yt:\(videoID)" }
+
+    /// Another song, then this one again: a new playback of the same video.
+    private func replay(_ controller: MusicVideoController) async {
+        controller.update(track: NowPlayingMonitor.Track(title: "Other", artist: "Someone", duration: 100, album: "X"),
+                          enabled: true, online: false)
+        controller.update(track: track, enabled: true, online: false)
+        await controller.settle()
+    }
+
+    /// The desktop player's film button: Align, ← (or →) `steps` times, Done.
+    private func alignInDesktopPlayer(_ controller: MusicVideoController, by delta: Double, steps: Int = 1) {
+        controller.reduceMotion = { false }
+        controller.noteVideoSample(time: 50, playing: true, of: .youTube(videoID))
+        XCTAssertTrue(controller.beginAlign(), "\(controller.alignAvailability)")
+        for _ in 0..<steps { controller.alignNudge(by: delta) }
+        controller.alignDone()
+        XCTAssertFalse(controller.isAligning)
+    }
+
+    func testTimingSavedBeforeCaptionsYieldsToThemButStaysForWhenTheyGiveNone() async {
+        // An offset saved before captions were matched (no over-captions mark).
+        defaults.set([song.key: 3.0], forKey: MusicVideoOffsets.key)
+        defaults.set([song.key: video], forKey: MusicVideoOffsets.manualVideoKey)
         let controller = await showing(lyrics: lyrics)
-        controller.offsets.set(3, for: song.key, video: "yt:\(videoID)")
         XCTAssertEqual(controller.offsetOrigin, .manual)
         XCTAssertTrue(controller.wantsCaptions(for: .youTube(videoID)), "loaded even for a video the user timed")
         controller.noteCaptions(json3(asrCues(lyrics, offset: 20.6)), of: .youTube(videoID))
-        XCTAssertEqual(controller.offsetOrigin, .captions, "captions win over the saved tap")
+        XCTAssertEqual(controller.offsetOrigin, .captions, "captions win over timing saved before them")
         XCTAssertEqual(controller.currentOffset, 20.6, accuracy: 0.03)
+        controller.resetOffset()
+        XCTAssertEqual(MusicVideoOffsets(defaults: defaults).values[song.key], 3,
+                       "Reset while captions are in force leaves the older timing alone")
+    }
 
-        controller.videoEarlier()
+    // The bug: a nudge made while captions set the timing was kept in memory
+    // for this playback only, so it was lost at the next song or replay and
+    // dropped whenever the captions were measured again.
+
+    func testANudgeFromTheDesktopPlayerOverCaptionsIsSavedAndWins() async {
+        let controller = await showing(lyrics: lyrics)
+        controller.noteCaptions(json3(asrCues(lyrics, offset: 20.6)), of: .youTube(videoID))
+        XCTAssertEqual(controller.offsetOrigin, .captions)
+
+        alignInDesktopPlayer(controller, by: MusicVideoAlignKey.step, steps: 3)
         XCTAssertEqual(controller.offsetOrigin, .manual)
-        XCTAssertEqual(controller.currentOffset, 20.85, accuracy: 0.03, "a nudge moves from the captions' offset")
-        XCTAssertEqual(MusicVideoOffsets(defaults: defaults).offset(for: song.key, video: "yt:\(videoID)"), 3,
-                       "not saved over captions: the old timing stays for when captions give nothing")
+        XCTAssertEqual(controller.currentOffset, 20.9, accuracy: 0.001, "moved from the captions' offset, once per press")
+        let saved = MusicVideoOffsets(defaults: defaults)
+        XCTAssertEqual(saved.offset(for: song.key, video: video), 20.9, accuracy: 0.001, "saved")
+        XCTAssertEqual(saved.manualEntry(song.key), .init(value: 20.9, video: video, overCaptions: true))
+        XCTAssertTrue(controller.captionLog.last?.contains("the user set +20.90 s over the captions' +20.60 s") == true,
+                      "\(controller.captionLog)")
+
+        // The player loads the captions again (a reload, or a track with
+        // word timing this time) and they measure a little differently.
+        controller.noteCaptions(json3(asrCues(lyrics, offset: 20.75)), of: .youTube(videoID))
+        XCTAssertEqual(controller.offsets.captionedOffset(song.key, video: video) ?? 0, 20.75, accuracy: 0.03)
+        XCTAssertEqual(controller.offsetOrigin, .manual, "captions measured again never undo the user's timing")
+        XCTAssertEqual(controller.currentOffset, 20.9, accuracy: 0.001)
+        XCTAssertTrue(controller.captionLog.last?.hasSuffix("skipped: the user's timing +20.90 s wins for this video") == true,
+                      "\(controller.captionLog)")
+
+        await replay(controller)
+        XCTAssertEqual(controller.offsetOrigin, .manual, "kept for the next playback")
+        XCTAssertEqual(controller.currentOffset, 20.9, accuracy: 0.001)
+        controller.noteCaptions(json3(asrCues(lyrics, offset: 20.6)), of: .youTube(videoID))
+        XCTAssertEqual(controller.currentOffset, 20.9, accuracy: 0.001, "and its captions don't undo it")
+    }
+
+    func testTheUsersTimingOverCaptionsSurvivesARelaunch() async {
+        let first = await showing(lyrics: lyrics)
+        first.noteCaptions(json3(asrCues(lyrics, offset: 20.6)), of: .youTube(videoID))
+        first.videoLater()
+        XCTAssertEqual(first.currentOffset, 20.35, accuracy: 0.001)
+
+        // A new run: nothing in memory, the same preferences, captions again.
+        let second = await showing(lyrics: lyrics)
+        XCTAssertEqual(second.offsetOrigin, .manual)
+        XCTAssertEqual(second.currentOffset, 20.35, accuracy: 0.001)
+        second.noteCaptions(json3(asrCues(lyrics, offset: 20.6)), of: .youTube(videoID))
+        XCTAssertEqual(second.offsetOrigin, .manual)
+        XCTAssertEqual(second.currentOffset, 20.35, accuracy: 0.001)
+    }
+
+    func testANudgeMadeBeforeTheCaptionsArriveStillWins() async {
+        let controller = await showing(lyrics: lyrics)
+        controller.noteVideoDuration(204.7, of: .youTube(videoID))
+        XCTAssertEqual(controller.offsetOrigin, .estimated)
+        controller.videoEarlier()
+        let mine = controller.currentOffset
+        controller.noteCaptions(json3(asrCues(lyrics, offset: 20.6)), of: .youTube(videoID))
+        XCTAssertEqual(controller.offsetOrigin, .manual, "the captions came after the user's nudge")
+        XCTAssertEqual(controller.currentOffset, mine, accuracy: 0.001)
+    }
+
+    func testSettingsAndMenuNudgesTakeTheSamePathAndResetGoesBackToCaptions() async {
+        let controller = await showing(lyrics: lyrics)
+        controller.noteCaptions(json3(asrCues(lyrics, offset: 20.6)), of: .youTube(videoID))
+        controller.nudgeOffset(by: 0.5)   // Settings' Video timing
+        controller.videoLater()           // the menu bar's Later
+        XCTAssertEqual(controller.currentOffset, 20.85, accuracy: 0.001)
+        XCTAssertEqual(MusicVideoOffsets(defaults: defaults).offset(for: song.key, video: video), 20.85, accuracy: 0.001)
         controller.resetOffset()
         XCTAssertEqual(controller.offsetOrigin, .captions, "Reset goes back to the timing from captions")
         XCTAssertEqual(controller.currentOffset, 20.6, accuracy: 0.03)
-        XCTAssertEqual(MusicVideoOffsets(defaults: defaults).offset(for: song.key, video: "yt:\(videoID)"), 3,
-                       "Reset over captions leaves the saved timing")
-
-        controller.videoLater()
-        XCTAssertEqual(controller.currentOffset, 20.35, accuracy: 0.03)
-        // Another song, then this one again: a new playback.
-        controller.update(track: NowPlayingMonitor.Track(title: "Other", artist: "Someone", duration: 100, album: "X"),
-                          enabled: true, online: false)
-        controller.update(track: NowPlayingMonitor.Track(title: song.title, artist: song.artist, duration: song.duration,
-                                                         album: song.album), enabled: true, online: false)
-        await controller.settle()
-        XCTAssertEqual(controller.offsetOrigin, .captions, "this playback's adjustment is gone")
-        XCTAssertEqual(controller.currentOffset, 20.6, accuracy: 0.03)
+        XCTAssertFalse(MusicVideoOffsets(defaults: defaults).hasManual(song.key), "and forgets the user's timing")
     }
 
-    func testAlignCancelOverCaptionsPutsBackTheAdjustment() {
+    func testAlignCancelOverCaptionsPutsBackExactlyWhatWasThere() async {
+        // Timing saved before captions: Esc after a nudge must not promote it.
+        defaults.set([song.key: 3.0], forKey: MusicVideoOffsets.key)
+        defaults.set([song.key: video], forKey: MusicVideoOffsets.manualVideoKey)
+        let controller = await showing(lyrics: lyrics)
+        controller.noteCaptions(json3(asrCues(lyrics, offset: 20.6)), of: .youTube(videoID))
+        controller.reduceMotion = { false }
+        controller.noteVideoSample(time: 50, playing: true, of: .youTube(videoID))
+        XCTAssertTrue(controller.beginAlign())
+        controller.alignNudge(by: 1)
+        XCTAssertEqual(controller.currentOffset, 21.6, accuracy: 0.001)
+        controller.alignCancel()
+        XCTAssertEqual(controller.offsetOrigin, .captions)
+        XCTAssertEqual(controller.currentOffset, 20.6, accuracy: 0.03)
+        XCTAssertEqual(MusicVideoOffsets(defaults: defaults).manualEntry(song.key),
+                       .init(value: 3, video: video, overCaptions: false))
+
+        // Nothing saved before: Esc forgets the nudge.
         let offsets = MusicVideoOffsets(defaults: defaults)
-        let video = "yt:\(videoID)"
-        offsets.set(3, for: song.key, video: video)
+        offsets.clearManual(song.key)
         offsets.setCaptioned(20.6, for: song.key, video: video)
-        XCTAssertNil(offsets.manualEntry(song.key, video: video), "no adjustment yet")
-        offsets.set(21, for: song.key, video: video)
-        let entry = offsets.manualEntry(song.key, video: video)
-        XCTAssertEqual(entry, .init(value: 21, video: video))
+        XCTAssertNil(offsets.manualEntry(song.key))
         offsets.set(25, for: song.key, video: video)
-        offsets.restoreManual(entry, for: song.key, video: video)
-        XCTAssertEqual(offsets.offset(for: song.key, video: video), 21)
-        offsets.restoreManual(nil, for: song.key, video: video)
+        offsets.restoreManual(nil, for: song.key)
         XCTAssertEqual(offsets.origin(for: song.key, video: video), .captions)
-        XCTAssertEqual(offsets.values[song.key], 3, "the saved timing is untouched")
+    }
+
+    func testTheCaptionLogSaysWhatWasDecidedWithoutLyricText() async {
+        var lines: [MusicVideoLyricLine]?
+        let resolver = MusicVideoResolver(library: NoVideoLibrary(), playability: AlwaysPlayable(), http: NoHTTP(),
+                                          cache: MusicVideoCache(defaults: defaults),
+                                          links: MusicVideoLinks(defaults: defaults))
+        resolver.links.set(videoID, for: song.key)
+        let controller = MusicVideoController(resolver: resolver, offsets: MusicVideoOffsets(defaults: defaults),
+                                              songClock: { (30, true) }, lyrics: { _ in lines })
+        controller.update(track: track, enabled: true, online: false)
+        await controller.settle()
+        controller.noteCaptions(json3(asrCues(lyrics, offset: 20.6)), of: .youTube(videoID))
+        controller.noteVideoSample(time: 40, playing: true, of: .youTube(videoID))
+        controller.noteVideoSample(time: 41, playing: true, of: .youTube(videoID))
+        XCTAssertEqual(controller.captionLog, [CaptionSyncLog.waitingLine], "once, not every sample")
+        lines = lyrics
+        controller.noteVideoSample(time: 42, playing: true, of: .youTube(videoID))
+        XCTAssertEqual(controller.captionLog.last, "captions: 8 lines matched, 8 agree (spread 0.00 s), offset +20.60 s, applied")
+
+        controller.noteCaptions(json3(asrCues(Array(lyrics.prefix(3)), offset: 5)), of: .youTube(videoID))
+        XCTAssertTrue(controller.captionLog.last?.hasSuffix(Sync.Verdict.tooFew.summary) == true, "\(controller.captionLog)")
+        for line in controller.captionLog {
+            for lyric in lyrics { XCTAssertFalse(line.contains(lyric.text)) }
+            XCTAssertFalse(line.contains(videoID))
+        }
+
+        XCTAssertEqual(CaptionSyncLog.emptyLine(status: 429, bytes: 0),
+                       "captions: reply with no captions (HTTP 429, 0 bytes): blocked or refused")
+        XCTAssertEqual(CaptionSyncLog.emptyLine(status: 200, bytes: 0),
+                       "captions: reply with no captions (HTTP 200, 0 bytes): empty: no track")
+        XCTAssertEqual(CaptionSyncLog.fetchedLine(automatic: true, language: "en", cues: 42, wordTimed: true),
+                       "captions: fetched YouTube's automatic (auto-only) track, language en, 42 cues, word timing yes")
+        XCTAssertEqual(CaptionSyncLog.askedLine(language: "ko"), "captions: asked the player for them (language ko)")
+        XCTAssertEqual(CaptionSyncLog.noneLine(after: 72),
+                       "captions: none arrived within 72 s (the video has none, or the player never loaded them)")
+    }
+
+    func testRefusalsSayWhy() {
+        XCTAssertEqual(Sync.measure(cues: [], lines: lyrics).verdict, .noMatches)
+        XCTAssertEqual(Sync.measure(cues: asrCues(lyrics, offset: 20.6), lines: lyrics).verdict, .trusted)
+        let three = Sync.measure(cues: asrCues(Array(lyrics.prefix(3)), offset: 20.6), lines: lyrics)
+        XCTAssertNil(three.offset)
+        XCTAssertEqual(three.verdict, .tooFew)
+        let line = CaptionSyncLog.measuredLine(three, userOffset: nil)
+        XCTAssertTrue(line.contains("3 lines matched") && line.contains("best +20.60 s") && line.contains("refused"), line)
     }
 
     func testWithoutTrustedCaptionsTheSavedTimingStillApplies() async {

@@ -30,6 +30,69 @@ enum SyncLog {
     }
 }
 
+/// What syncing a YouTube video from its captions decided
+/// (`MusicVideoCaptionSync`), one line per decision, in the same `sync`
+/// category: whether captions were asked for and arrived (and if not, what
+/// came back), how many lyric lines matched, the offset, and whether it was
+/// applied, refused, or outranked by the user's own timing. Counts, seconds
+/// and HTTP statuses only: no lyric or caption text, no video IDs. The
+/// lines are built by the `…Line` functions so tests can read them; nothing
+/// is logged in tests.
+enum CaptionSyncLog {
+    private static let logger = Logger(subsystem: "local.verso.custom", category: "sync")
+
+    static func note(_ line: String) {
+        guard !AppRuntime.isUnitTesting else { return }
+        logger.notice("\(line, privacy: .public)")
+    }
+
+    static func seconds(_ value: Double) -> String { String(format: "%+.2f s", value) }
+
+    static func askedLine(language: String?) -> String {
+        language.map { "captions: asked the player for them (language \($0))" }
+            ?? "captions: not asked for (not the video showing)"
+    }
+
+    static func ignoredLine(_ why: String) -> String { "captions: reply ignored (\(why))" }
+
+    static func emptyLine(status: Int, bytes: Int) -> String {
+        let why = status >= 400 ? "blocked or refused" : bytes == 0 ? "empty: no track" : "not timed text"
+        return "captions: reply with no captions (HTTP \(status), \(bytes) bytes): \(why)"
+    }
+
+    static func fetchedLine(automatic: Bool, language: String?, cues: Int, wordTimed: Bool) -> String {
+        "captions: fetched \(automatic ? "YouTube's automatic (auto-only)" : "the uploader's") track"
+            + ", language \(language ?? "?"), \(cues) cues, word timing \(wordTimed ? "yes" : "no")"
+    }
+
+    static func noneLine(after seconds: Double) -> String {
+        "captions: none arrived within \(Int(seconds)) s (the video has none, or the player never loaded them)"
+    }
+
+    static let waitingLine = "captions: waiting for the song's timed lyrics to measure"
+
+    /// The measurement and what became of it. `userOffset`: the user's own
+    /// timing for the video, which won over a trusted offset.
+    static func measuredLine(_ result: MusicVideoCaptionSync.Result, userOffset: Double?) -> String {
+        var line = "captions: \(result.matches.count) lines matched, \(result.agreeing) agree"
+        if result.agreeing > 0 { line += String(format: " (spread %.2f s)", result.spread) }
+        if !result.segments.isEmpty { line += ", \(result.segments.count) segments" }
+        guard let offset = result.offset else {
+            if !result.matches.isEmpty {
+                line += ", best \(seconds(MusicVideoCaptionSync.median(result.matches.map(\.offset))))"
+            }
+            return line + ", \(result.verdict.summary)"
+        }
+        line += ", offset \(seconds(offset))"
+        if let userOffset { return line + ", skipped: the user's timing \(seconds(userOffset)) wins for this video" }
+        return line + ", applied"
+    }
+
+    static func userLine(offset: Double, captions: Double) -> String {
+        "captions: the user set \(seconds(offset)) over the captions' \(seconds(captions)), kept for this video"
+    }
+}
+
 /// The desktop player's song clicks in Music, step by step, in the same
 /// system log (subsystem `local.verso.custom`, category `queue`): where the
 /// clicked song was found, each script of the "Lunalyr Queue" build with its

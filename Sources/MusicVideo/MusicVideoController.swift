@@ -71,6 +71,10 @@ final class MusicVideoController: ObservableObject {
     private var captionMeasured: Set<String> = []
     /// The last measurement, for the harness and tests.
     private(set) var lastCaptionResult: MusicVideoCaptionSync.Result?
+    /// Song and video pairs already logged as waiting for their lyrics.
+    private var captionWaitLogged: Set<String> = []
+    /// The latest `CaptionSyncLog` lines, for tests (the log is mute there).
+    private(set) var captionLog: [String] = []
 
     init(resolver: MusicVideoResolver, offsets: MusicVideoOffsets,
          songClock: @escaping @MainActor () -> (time: Double, playing: Bool) = {
@@ -133,7 +137,6 @@ final class MusicVideoController: ObservableObject {
         self.enabled = enabled
         self.online = online
         guard changed else { return }
-        if playing != playingKey { offsets.clearAdjustments() }
         playingKey = playing
         song = next
         stillCheck?.cancel()
@@ -399,8 +402,22 @@ final class MusicVideoController: ObservableObject {
     func nudgeOffset(by delta: Double) {
         guard let song else { return }
         offsets.nudge(by: delta, for: song.key, video: showingVideoKey)
+        noteUserTiming()
         resetTaps()
         objectWillChange.send()
+    }
+
+    /// Logs the user's timing when it was set over the captions' offset.
+    private func noteUserTiming() {
+        guard let song, let video = showingVideoKey,
+              let captions = offsets.captionedOffset(song.key, video: video) else { return }
+        logCaption(CaptionSyncLog.userLine(offset: offsets.offset(for: song.key, video: video), captions: captions))
+    }
+
+    func logCaption(_ line: String) {
+        CaptionSyncLog.note(line)
+        captionLog.append(line)
+        if captionLog.count > 20 { captionLog.removeFirst(captionLog.count - 20) }
     }
 
     /// The menu's fine step: "Video earlier" / "Video later".
@@ -411,7 +428,8 @@ final class MusicVideoController: ObservableObject {
     /// The video's moments come `fineNudge` later (it ran ahead).
     func videoLater() { nudgeOffset(by: -Self.fineNudge) }
 
-    /// Drops the user's nudge: back to the estimate.
+    /// Drops the user's timing for the video on screen: back to the timing
+    /// from captions, else the estimate.
     func resetOffset() {
         guard let song else { return }
         offsets.clearManual(song.key, video: showingVideoKey)
@@ -446,7 +464,8 @@ final class MusicVideoController: ObservableObject {
     // MARK: From captions
 
     /// Whether the player for `source` should load its captions: always,
-    /// for the video showing (even one the user timed: captions win).
+    /// for the YouTube video showing (even one the user timed: the
+    /// measurement is kept for Reset, while the user's timing stays).
     func wantsCaptions(for source: MusicVideoSource) -> Bool {
         guard song != nil, case .showing(let showing, _) = status, showing == source,
               case .youTube = source else { return false }
@@ -477,19 +496,29 @@ final class MusicVideoController: ObservableObject {
 
     /// Measures the offset once both the captions and the song's timed
     /// lyrics are here (whichever comes second), once per song and video.
-    /// Used only when trustworthy; then it wins over any saved timing
-    /// (`MusicVideoOffsets`).
+    /// Used only when trustworthy; then it sets the timing, unless the user
+    /// set their own for this video since (`MusicVideoOffsets`), which stays.
     func measureCaptions() {
         guard let song, let video = showingVideoKey, let captionCues,
               captionCues.video == video else { return }
         let attempt = song.key + "\u{1}" + video
-        guard !captionMeasured.contains(attempt), let lines = lyrics(song), !lines.isEmpty else { return }
+        guard !captionMeasured.contains(attempt) else { return }
+        guard let lines = lyrics(song), !lines.isEmpty else {
+            if captionWaitLogged.insert(attempt).inserted { logCaption(CaptionSyncLog.waitingLine) }
+            return
+        }
         captionMeasured.insert(attempt)
         let result = MusicVideoCaptionSync.measure(cues: captionCues.cues, lines: lines,
                                                    range: MusicVideoTiming.offsetRange)
         lastCaptionResult = result
-        guard let offset = result.offset else { return }
+        guard let offset = result.offset else {
+            logCaption(CaptionSyncLog.measuredLine(result, userOffset: nil))
+            return
+        }
         offsets.setCaptioned(offset, for: song.key, video: video)
+        let user = offsets.origin(for: song.key, video: video) == .manual
+            ? offsets.offset(for: song.key, video: video) : nil
+        logCaption(CaptionSyncLog.measuredLine(result, userOffset: user))
         objectWillChange.send()
     }
 
@@ -551,6 +580,7 @@ final class MusicVideoController: ObservableObject {
         taps.append(MusicVideoTapSync.offset(videoTimeAtTap: marked, lineStart: line.start, reaction: 0))
         let value = MusicVideoTapSync.averaged(taps) ?? 0
         offsets.set(value, for: song.key, video: showingVideoKey)
+        noteUserTiming()
         tapState = .done(offset: currentOffset, taps: taps.count, firstLine: firstLine)
         objectWillChange.send()
     }
@@ -661,7 +691,7 @@ final class MusicVideoController: ObservableObject {
         if isAligning { return true }
         guard alignAvailability.isAvailable, let song, let video = showingVideoKey else { return false }
         if case .armed = tapState { cancelTapSync() }
-        align = MusicVideoAlignSession(songKey: song.key, video: video, restore: offsets.manualEntry(song.key, video: video))
+        align = MusicVideoAlignSession(songKey: song.key, video: video, restore: offsets.manualEntry(song.key))
         alignDrag = nil
         alignTouched = false
         return true
@@ -709,6 +739,7 @@ final class MusicVideoController: ObservableObject {
         alignDrag = nil
         guard drag.changed else { return }
         offsets.set(drag.offset, for: song.key, video: showingVideoKey)
+        noteUserTiming()
         resetTaps()
         alignTouched = true
         objectWillChange.send()
@@ -742,7 +773,7 @@ final class MusicVideoController: ObservableObject {
             let restore = align.restore
             endAlign()
             if let restore {
-                offsets.restoreManual(restore, for: align.songKey, video: align.video)
+                offsets.restoreManual(restore, for: align.songKey)
                 resetTaps()
                 objectWillChange.send()
             } else {
