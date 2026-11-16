@@ -110,7 +110,7 @@ public sealed class LyricService
         var titles = new OriginalTitles(cacheFolder, options.TitleCatalogue ?? new ItunesCatalogue(http), options.Storefront,
             timeProvider: options.TimeProvider);
         var parse = options.Parse ?? options.Readings?.ParseOptions();
-        var sources = new LyricSourceSet([.. LyricSourceCatalog.CreateDefault(http), .. options.PlatformSources], aliases, parse, titles)
+        var sources = new LyricSourceSet([.. LyricSourceCatalog.CreateDefault(http, stateFolder: cacheFolder), .. options.PlatformSources], aliases, parse, titles)
         {
             UsesArtistAliases = options.UseArtistAliases,
             UsesOriginalTitles = options.UseOriginalTitles,

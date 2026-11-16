@@ -7,9 +7,13 @@ public static class LyricSourceCatalog
     /// Every source this library implements, in the Mac's recommended order (Apple Music's own lyrics, which are
     /// platform-specific, are left to the platform layer). The local source reads the folder each lookup names.
     /// </summary>
-    public static IReadOnlyList<ILyricSource> CreateDefault(LyricHttpClient http, ILyricPayloadProbe? probe = null) =>
+    /// <param name="stateFolder">Where sources keep what must outlive a run (Musixmatch's token and pause); null: memory only.</param>
+    public static IReadOnlyList<ILyricSource> CreateDefault(LyricHttpClient http, ILyricPayloadProbe? probe = null, string? stateFolder = null) =>
     [
         new LocalLyricsSource(probe),
+        // Musixmatch keeps its own, longer pause when it is turned away (MusixmatchState).
+        new MusixmatchSource(http, new MusixmatchState(stateFolder is null ? null : Path.Combine(stateFolder, "musixmatch-session.json"), http.Time),
+                             probe: probe),
         // Lyrics+ rests its own mirrors one by one; the other services rest whole after repeated failures.
         new LyricsPlusSource(http),
         Resting(new AmllSource(http, probe: probe), http),

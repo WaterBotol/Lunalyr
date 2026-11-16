@@ -22,6 +22,7 @@ public static class LyricSourceInfo
         LyricSourceId.Kuwo => "kuwo",
         LyricSourceId.LyricsOvh => "lyricsOVH",
         LyricSourceId.Amll => "amll",
+        LyricSourceId.Musixmatch => "musixmatch",
         _ => throw new ArgumentOutOfRangeException(nameof(source), source, null),
     };
 
@@ -53,6 +54,7 @@ public static class LyricSourceInfo
         LyricSourceId.LyricsOvh => "lyrics.ovh",
         LyricSourceId.Amll => "AMLL TTML DB",
         LyricSourceId.Lyrimuse => "Lyrimuse local files",
+        LyricSourceId.Musixmatch => "Musixmatch",
         _ => throw new ArgumentOutOfRangeException(nameof(source), source, null),
     };
 
@@ -64,7 +66,7 @@ public static class LyricSourceInfo
         LyricSourceId.NetEase => "Word or line timing",
         LyricSourceId.QQMusic or LyricSourceId.Kuwo => "Line timing",
         LyricSourceId.Kugou => "Word or line timing",
-        LyricSourceId.Lrclib => "Word or line timing",
+        LyricSourceId.Lrclib or LyricSourceId.Musixmatch => "Word or line timing",
         LyricSourceId.LyricsOvh => "Plain text fallback",
         LyricSourceId.Amll => "Word and syllable timing",
         LyricSourceId.Lyrimuse => "LRC, TTML or YRC files, with readings and translations",

@@ -91,6 +91,7 @@ public enum LyricSourceId
     Kuwo,
     LyricsOvh,
     Amll,
+    Musixmatch,
 }
 
 /// <summary>What a lyric lookup is for. Helpers (normalising, similarity, recording key) live in the ranking code.</summary>

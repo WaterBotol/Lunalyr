@@ -235,6 +235,39 @@ public sealed class TitlePlacementSettingsTests
     }
 }
 
+/// <summary>
+/// A lyric source added later is switched on once for someone who saved their sources before it existed, and stays off
+/// once they switch it off (the Mac's testMusixmatchJoinsSavedOrderAfterLyrimuseSwitchedOn, its stored-defaults half).
+/// </summary>
+public sealed class AddedLyricSourceTests
+{
+    private static AppSettings RoundTrip(AppSettings settings) =>
+        JsonSerializer.Deserialize(JsonSerializer.Serialize(settings.Normalized(), AppSettingsJsonContext.Default.AppSettings),
+                                   AppSettingsJsonContext.Default.AppSettings)!.Normalized();
+
+    [Fact]
+    public void MusixmatchIsSwitchedOnOnceAndStaysOffOnceSwitchedOff()
+    {
+        // Saved before Musixmatch existed: no record of it having been seen.
+        var before = new AppSettings { LyricSources = ["amll", "lrclib"], LyricSourceOrder = ["lrclib", "lyrimuse", "netEase"] };
+        var first = RoundTrip(before);
+        Assert.Contains("musixmatch", first.LyricSources);
+        Assert.Contains("musixmatch", first.LyricSourcesSeen!);
+        var order = first.SourceSnapshot();
+        Assert.True(order.IsEnabled(Core.Lyrics.LyricSourceId.Musixmatch));
+        // It joins the saved order right after Lyrimuse.
+        var listed = SettingsCopy.SourceOrder(first);
+        Assert.Equal(listed.ToList().IndexOf(Core.Lyrics.LyricSourceId.Lyrimuse) + 1, listed.ToList().IndexOf(Core.Lyrics.LyricSourceId.Musixmatch));
+        // Still on at the next launch; off for good once switched off.
+        Assert.Contains("musixmatch", RoundTrip(first).LyricSources);
+        var off = RoundTrip(SettingsCopy.SetSourceEnabled(first, "musixmatch", false));
+        Assert.DoesNotContain("musixmatch", off.LyricSources);
+        Assert.DoesNotContain("musixmatch", RoundTrip(off).LyricSources);
+        // A fresh install has it on.
+        Assert.Contains("musixmatch", new AppSettings().Normalized().LyricSources);
+    }
+}
+
 public sealed class ShellOptionsTests
 {
     [Fact]

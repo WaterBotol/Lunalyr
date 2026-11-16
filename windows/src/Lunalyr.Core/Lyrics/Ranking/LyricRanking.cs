@@ -148,28 +148,30 @@ public static class LyricRanking
         !candidate.LanguageMismatch && VersionTags.Mismatch(query, candidate.Title).Count == 0;
 
     /// <summary>
-    /// Where a source stands ahead of the configured order within a timing tier (ranking decisions of 12 Nov 2026,
-    /// the same leads as the Mac): 0 Apple Music's own lyrics and 1 Apple Music's lyrics relayed by Lyrics+, both at
-    /// any timing; 2 LRCLIB, only with word-by-word or mixed timing; 3 every other source.
+    /// Where a source stands ahead of the configured order within a timing tier (the same leads as the Mac): 0 Apple
+    /// Music's own lyrics and 1 Apple Music's lyrics relayed by Lyrics+, both at any timing; 2 Musixmatch at any timing
+    /// (the owner's order, 16 Nov 2026: Apple Music, then Musixmatch, then LRCLIB; the Mac's 1ab6d1c); 3 LRCLIB, only
+    /// with word-by-word or mixed timing; 4 every other source.
     /// </summary>
     /// <param name="source">The source that answered (or may still answer).</param>
     /// <param name="rankingAs">The source it ranks as (<see cref="LyricCandidate.RankingSource"/>).</param>
-    private static int Lead(LyricSourceId source, LyricSourceId rankingAs, int timing)
+    internal static int Lead(LyricSourceId source, LyricSourceId rankingAs, int timing)
     {
         if (timing >= 1 && rankingAs == LyricSourceId.AppleMusicCache)
         {
             return source == LyricSourceId.AppleMusicCache ? 0 : 1;
         }
-        return source == LyricSourceId.Lrclib && timing == 2 ? 2 : 3;
+        if (timing >= 1 && source == LyricSourceId.Musixmatch) return 2;
+        return source == LyricSourceId.Lrclib && timing == 2 ? 3 : 4;
     }
 
     /// <summary>
     /// The lead for a match. LRCLIB's timing is made by listeners: when two other services agree on the timing and
-    /// LRCLIB's disagrees with both (<see cref="LyricAgreement.TimingOutlier"/>), it takes lead 4, after every other
+    /// LRCLIB's disagrees with both (<see cref="LyricAgreement.TimingOutlier"/>), it takes lead 5, after every other
     /// source at its timing tier. It keeps its tier, so its word timing still beats a pair that agree on line timing.
     /// </summary>
     private static int Lead(LyricCandidate candidate, int timing) =>
-        candidate.Source == LyricSourceId.Lrclib && candidate.Agreement.TimingOutlier ? 4 : Lead(candidate.Source, candidate.RankingSource, timing);
+        candidate.Source == LyricSourceId.Lrclib && candidate.Agreement.TimingOutlier ? 5 : Lead(candidate.Source, candidate.RankingSource, timing);
 
     /// <summary>The highest confidence: both names exact and, when the playing length is known, the same length.</summary>
     private static double ClosestMatch(LyricQuery query) => query.Duration > 0 ? 2.25 : 2;

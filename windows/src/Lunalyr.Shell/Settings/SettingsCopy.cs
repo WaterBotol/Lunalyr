@@ -159,12 +159,13 @@ public static class SettingsCopy
         return [.. order.Select((id, i) => new SourceRow(id.RawValue(), id.Title(), id.TimingDescription(), enabled.Contains(id), i == 0, i == order.Count - 1))];
     }
 
-    /// <summary>Every known source in the configured order (unknown names dropped, new sources at the end).</summary>
+    /// <summary>
+    /// Every known source in the configured order (unknown names dropped, a new source after the one it is placed after,
+    /// others at the end).
+    /// </summary>
     public static IReadOnlyList<LyricSourceId> SourceOrder(AppSettings settings)
     {
-        var order = new List<LyricSourceId>();
-        foreach (var raw in (settings.LyricSourceOrder ?? []).Concat(LyricSourceSnapshot.RecommendedOrder.Select(s => s.RawValue())))
-            if (LyricSourceInfo.TryParseRaw(raw, out var id) && !order.Contains(id)) order.Add(id);
+        var order = LyricSourceSnapshot.OrderFor(settings.LyricSourceOrder);
         foreach (var id in LyricSourceInfo.All)
             if (!order.Contains(id)) order.Add(id);
         return order;

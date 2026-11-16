@@ -69,7 +69,12 @@ public sealed class LyricServiceEndToEndTests : IDisposable
         .Set("music.163.com/api/search/get", Reply.Text(200, ServiceReplies.NetEaseNoSongs))
         .Set("c.y.qq.com/soso/fcgi-bin/client_search_cp", Reply.Text(200, ServiceReplies.QQNoSongs))
         .Set("mobileservice.kugou.com/api/v3/search/song", Reply.Text(200, ServiceReplies.KugouNoSongs))
-        .Set("search.kuwo.cn/r.s", Reply.Text(200, ServiceReplies.KuwoNoSongs));
+        .Set("search.kuwo.cn/r.s", Reply.Text(200, ServiceReplies.KuwoNoSongs))
+        // Musixmatch: a token, then its matcher finds no track.
+        .Set("apic-appmobile.musixmatch.com/ws/1.1/token.get",
+             Reply.Text(200, """{"message":{"header":{"status_code":200},"body":{"user_token":"2511abcdef0123456789"}}}"""))
+        .Set("apic-appmobile.musixmatch.com/ws/1.1/macro.subtitles.get",
+             Reply.Text(200, """{"message":{"header":{"status_code":200},"body":{"macro_calls":{"matcher.track.get":{"message":{"header":{"status_code":404},"body":[]}}}}}}"""));
 
     private LyricService Service(FixtureHandler handler, ILyricSource? apple = null, bool online = true, IArtistAliasSearch? aliases = null,
         string? cacheFolder = null, LyricLookupTiming? timing = null, string storefront = "us") =>
@@ -430,7 +435,7 @@ public sealed class LyricServiceEndToEndTests : IDisposable
         Assert.False(report.Offline);
         Assert.True(report.IsComplete);
         Assert.Equal(0, report.Revision);
-        foreach (var id in new[] { Lrclib, LyricsPlus, NetEase, QQMusic, Kugou, Kuwo, Amll })
+        foreach (var id in new[] { Lrclib, LyricsPlus, NetEase, QQMusic, Kugou, Kuwo, Amll, LyricSourceId.Musixmatch })
         {
             Assert.Equal(LyricLookup.NoUsableMatch, report.States[id]);
         }

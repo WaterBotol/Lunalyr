@@ -90,10 +90,63 @@ public sealed record LyricSourceSnapshot(
     /// <summary>The order a fresh install uses.</summary>
     public static IReadOnlyList<LyricSourceId> RecommendedOrder { get; } =
     [
-        LyricSourceId.AppleMusicCache, LyricSourceId.Lyrimuse, LyricSourceId.LyricsPlus, LyricSourceId.Amll,
+        LyricSourceId.AppleMusicCache, LyricSourceId.Lyrimuse, LyricSourceId.Musixmatch, LyricSourceId.LyricsPlus, LyricSourceId.Amll,
         LyricSourceId.NetEase, LyricSourceId.Lrclib, LyricSourceId.QQMusic, LyricSourceId.Kugou, LyricSourceId.Kuwo,
         LyricSourceId.LyricsOvh,
     ];
+
+    /// <summary>
+    /// Sources added after people saved an order, and the source each joins that order after (the Mac's
+    /// <c>placedAfter</c>). Others missing from a saved order go at the end.
+    /// </summary>
+    public static IReadOnlyDictionary<LyricSourceId, LyricSourceId> PlacedAfter { get; } = new Dictionary<LyricSourceId, LyricSourceId>
+    {
+        [LyricSourceId.Musixmatch] = LyricSourceId.Lyrimuse,
+    };
+
+    /// <summary>Listed but off until switched on (the Mac's <c>offByDefault</c>).</summary>
+    public static IReadOnlySet<LyricSourceId> OffByDefault { get; } = new HashSet<LyricSourceId>();
+
+    /// <summary>
+    /// Sources added after people saved their choices: each starts switched on once, for everyone, and is then
+    /// remembered as seen, so switching it off again sticks (the Mac's <c>switchedOnOnce</c> and <c>addedLater</c>).
+    /// </summary>
+    public static IReadOnlyList<LyricSourceId> AddedLater { get; } = [LyricSourceId.Musixmatch];
+
+    /// <summary>
+    /// The order to show for a saved one (by raw value; null: never saved): every source once, a newer source after the
+    /// one it is <see cref="PlacedAfter"/>, any other missing one at the end (the Mac's <c>order(saved:)</c>).
+    /// </summary>
+    public static List<LyricSourceId> OrderFor(IEnumerable<string>? saved)
+    {
+        if (saved is null) return [.. RecommendedOrder];
+        var order = new List<LyricSourceId>();
+        foreach (var raw in saved)
+            if (LyricSourceInfo.TryParseRaw(raw, out var id) && !order.Contains(id)) order.Add(id);
+        foreach (var id in RecommendedOrder)
+        {
+            if (order.Contains(id)) continue;
+            if (PlacedAfter.TryGetValue(id, out var anchor) && order.IndexOf(anchor) is var at and >= 0) order.Insert(at + 1, id);
+            else order.Add(id);
+        }
+        return order;
+    }
+
+    /// <summary>
+    /// The switched-on sources for saved ones, each <see cref="AddedLater"/> source not yet in <paramref name="seen"/>
+    /// switched on (unless it is <see cref="OffByDefault"/>), and the sources now seen.
+    /// </summary>
+    public static (List<string> Enabled, List<string> Seen) WithAddedSources(IEnumerable<string> enabled, IEnumerable<string>? seen)
+    {
+        var on = new SortedSet<string>(enabled, StringComparer.Ordinal);
+        var known = new SortedSet<string>(seen ?? [], StringComparer.Ordinal);
+        foreach (var id in AddedLater)
+        {
+            if (!known.Add(id.RawValue())) continue;
+            if (!OffByDefault.Contains(id)) on.Add(id.RawValue());
+        }
+        return ([.. on], [.. known]);
+    }
 
     /// <summary>The snapshot for a configured order and the set of switched-on sources.</summary>
     public static LyricSourceSnapshot From(IEnumerable<LyricSourceId> order, IReadOnlySet<LyricSourceId> enabled,
@@ -129,8 +182,9 @@ public sealed record LyricSourceSnapshot(
         {
             var music = LyricSourceId.AppleMusicCache.Title();
             var lrclib = LyricSourceId.Lrclib.Title();
-            return $"Word-by-word and Mixed timing lyrics come first: {music}, then {lrclib}, then your other sources. "
-                + $"Line-synced lyrics come next, again with {music} first."
+            var musixmatch = LyricSourceId.Musixmatch.Title();
+            return $"Word-by-word and Mixed timing lyrics come first: {music}, then Apple Music’s lyrics from Lyrics+, then {musixmatch}, then {lrclib}, then your other sources. "
+                + $"Line-synced lyrics come next, again with {music} first, then Apple Music’s from Lyrics+, then {musixmatch}."
                 + " Timed lyrics for another version of the song (Live, Remix, Acoustic, English Version…), or in another language than the song’s, come after timed lyrics for the version playing.";
         }
     }

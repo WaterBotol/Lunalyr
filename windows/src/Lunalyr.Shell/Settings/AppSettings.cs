@@ -196,7 +196,22 @@ public sealed partial record AppSettings
     /// except the local folder and Apple Music's own lyrics.
     /// </summary>
     public IReadOnlyList<string> LyricSources { get; init; } =
-        [.. LyricSourceInfo.All.Where(s => s is not (LyricSourceId.Lyrimuse or LyricSourceId.AppleMusicCache)).Select(s => s.RawValue()).Order(StringComparer.Ordinal)];
+        [.. LyricSourceInfo.All.Where(s => s is not (LyricSourceId.Lyrimuse or LyricSourceId.AppleMusicCache) && !LyricSourceSnapshot.OffByDefault.Contains(s))
+            .Select(s => s.RawValue()).Order(StringComparer.Ordinal)];
+
+    /// <summary>
+    /// The sources added later (<see cref="LyricSourceSnapshot.AddedLater"/>) already switched on once (Mac
+    /// <c>custom.lyricSourcesSeen</c>), so a source switched off again stays off. Unset in a file from before.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<string>? LyricSourcesSeen { get; init; }
+
+    /// <summary>With each source added since <see cref="LyricSourcesSeen"/> switched on, once.</summary>
+    private AppSettings WithAddedSources()
+    {
+        var (enabled, seen) = LyricSourceSnapshot.WithAddedSources(LyricSources ?? [], LyricSourcesSeen);
+        return LyricSourcesSeen is { } known && known.SequenceEqual(seen) ? this : this with { LyricSources = enabled, LyricSourcesSeen = seen };
+    }
 
     /// <summary>"smart" (Accuracy first) or "priority" (Source order) (Mac <c>custom.lyricMatchMode</c>).</summary>
     public string LyricMatchMode { get; init; } = "smart";
@@ -284,18 +299,17 @@ public sealed partial record AppSettings
             RotateLayoutsCursor = Math.Max(0, RotateLayoutsCursor),
             Player = Core.NowPlaying.PlayerChoice.Normalize(Player),
             OpeningTitleStrength = Core.Compositions.OpeningTitle.KeptStrength(OpeningTitleStrength),
-        }).WithTitlePlacement(TitlePlacement()).WithTitleRow(TitleRow()).NormalizedWindowSettings().NormalizedLyricTools().NormalizedWallpaper().NormalizedFloating()
+        }).WithTitlePlacement(TitlePlacement()).WithTitleRow(TitleRow()).WithAddedSources().NormalizedWindowSettings().NormalizedLyricTools().NormalizedWallpaper().NormalizedFloating()
             .NormalizedDiscord().NormalizedLyricExtras();
     }
 
-    /// <summary>What the lyric lookup asks: the configured order (unknown names dropped, new sources appended) and the switched-on set.</summary>
+    /// <summary>
+    /// What the lyric lookup asks: the configured order (unknown names dropped, a new source after the one it is placed
+    /// after, others appended) and the switched-on set.
+    /// </summary>
     public LyricSourceSnapshot SourceSnapshot()
     {
-        var order = new List<LyricSourceId>();
-        foreach (var raw in (LyricSourceOrder ?? []).Concat(LyricSourceSnapshot.RecommendedOrder.Select(s => s.RawValue())))
-        {
-            if (LyricSourceInfo.TryParseRaw(raw, out var id) && !order.Contains(id)) order.Add(id);
-        }
+        var order = LyricSourceSnapshot.OrderFor(LyricSourceOrder);
 
         var enabled = new HashSet<LyricSourceId>();
         foreach (var raw in LyricSources ?? [])
