@@ -63,8 +63,8 @@ extension StageLyricView {
 
     func torque(_ runs: [StageRun], shown: [StageRun]) -> some View {
         let plan = Self.torquePlan(runs)
-        let rho = Self.torqueRotation(plan, at: time, shownCount: shown.count, reduceMotion: reduceMotion)
-        let swing = Self.torqueSwing(plan, at: time, exitStart: exitStart, reduceMotion: reduceMotion)
+        let rho = Self.torqueRotation(plan, at: time, shownCount: shown.count, reduceMotion: reduceMotion, carry: carry)
+        let swing = Self.torqueSwing(plan, at: time, exitStart: exitStart, reduceMotion: reduceMotion, carry: carry)
         let stage = stageSize
         // Inside the 5 % title-safe margins.
         let available = CGSize(width: stage.width * 0.9, height: stage.height * 0.9)
@@ -86,7 +86,7 @@ extension StageLyricView {
         // The turn accelerates away (`torqueLeaving`); the fade eases out to
         // nothing, so a face -- a highlight tile above all -- never drops
         // its last third in one frame.
-        .opacity(1 - Self.torqueFade(at: time, exitStart: exitStart))
+        .opacity(carry?.outgoing == nil ? 1 - Self.torqueFade(at: time, exitStart: exitStart) : 1)
         .frame(width: stage.width, height: stage.height)
     }
 
@@ -228,28 +228,48 @@ extension StageLyricView {
     /// How far the column has turned, in faces: 0 facing the first phrase, 1
     /// the second, and so on (a little past during the overshoot). Under
     /// Reduce Motion it steps to the face of the newest shown word.
-    static func torqueRotation(_ plan: TorquePlan, at time: Double, shownCount: Int, reduceMotion: Bool) -> Double {
+    ///
+    /// Inside a run (`carry`) the column does not stop between lines: the
+    /// line before turns on past its last face as this line's first face
+    /// turns in, one more face of the same column on the same turn
+    /// (`torqueHandoverTurn`). This line starts a face back (-1) and turns to
+    /// its first; its last face turns on (+1) into the next line's.
+    static func torqueRotation(_ plan: TorquePlan, at time: Double, shownCount: Int, reduceMotion: Bool,
+                               carry: StageCarry? = nil) -> Double {
         if reduceMotion {
             guard shownCount > 0, plan.faceOfRun.indices.contains(shownCount - 1) else { return 0 }
             return Double(plan.faceOfRun[shownCount - 1])
         }
         var rho = 0.0
+        if let hand = carry?.incoming { rho += torqueHandoverTurn(hand, at: time) - 1 }
         for face in plan.faces.dropFirst() {
             let p = (time - face.turnStart) / (3 * StageMotion.torqueUnit)
             if p <= 0 { break }
             rho += StageMotion.torqueTurn(p)
         }
+        if let hand = carry?.outgoing { rho += torqueHandoverTurn(hand, at: time) }
         return rho
+    }
+
+    /// The column's turn from one line to the next in a run, in faces
+    /// (0...1, a little past during the overshoot): the turn between two
+    /// faces of a line, from `StageMotion.torqueHandover`. The two lines
+    /// draw it from the same hand-over, so they turn as one column.
+    static func torqueHandoverTurn(_ hand: StageCarry.Hand, at time: Double) -> Double {
+        StageMotion.torqueTurn((time - StageMotion.torqueHandover(hand)) / (3 * StageMotion.torqueUnit))
     }
 
     /// The whole column's extra turn, in degrees: a new line enters already
     /// turning (+45 degrees to 0, picking up the turn the last line left
     /// with), and leaves by turning on to the left (0 to -60).
-    static func torqueSwing(_ plan: TorquePlan, at time: Double, exitStart: Double, reduceMotion: Bool) -> Double {
+    /// Inside a run the hand-over turn (`torqueRotation`) does both instead.
+    static func torqueSwing(_ plan: TorquePlan, at time: Double, exitStart: Double, reduceMotion: Bool,
+                            carry: StageCarry? = nil) -> Double {
         guard !reduceMotion, let first = plan.faces.first else { return 0 }
         let enter = (time - (first.start - StageMotion.lead)) / (2 * StageMotion.torqueUnit)
-        let entering = plan.lineTimed || enter < 1 ? 45 * (1 - StageMotion.torqueOut(enter)) : 0
-        return entering - 60 * torqueLeaving(at: time, exitStart: exitStart)
+        let entering = carry?.incoming == nil && (plan.lineTimed || enter < 1) ? 45 * (1 - StageMotion.torqueOut(enter)) : 0
+        let leaving = carry?.outgoing == nil ? 60 * torqueLeaving(at: time, exitStart: exitStart) : 0
+        return entering - leaving
     }
 
     /// The line leaving, 0...1, on the in-ease.

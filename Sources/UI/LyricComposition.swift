@@ -222,6 +222,10 @@ struct LyricLineView: View {
     /// planned by the caller once for the whole line. Empty draws none:
     /// backing vocals, credits and the title wear none.
     var accents: WordAccentPlan = .none
+    /// The line's place in its run (`StageCarry`): carrying stage layouts
+    /// hand over to the next line through it, and Echo's repeats drift on
+    /// one path through a run. Nil draws the line on its own.
+    var carry: StageCarry? = nil
     @StateObject private var echoText = RenderMemo<EchoPhrase, (text: String, rightToLeft: Bool)>()
     @SurfaceStyle private var style
 
@@ -264,7 +268,7 @@ struct LyricLineView: View {
             if composition.fillsStage {
                 StageLyricView(words: words, glue: glue, time: time, stageSize: stageSize, baseSize: baseSize, mood: mood,
                                composition: composition, seed: seed, exitStart: exitStart, firstRunOnly: firstRunOnly,
-                               readings: readings, settings: style.settings)
+                               readings: readings, carry: carry, settings: style.settings)
             } else if composition.arrivalOnly {
                 SpokenTypographyView(words: words, time: time, baseSize: baseSize, mood: mood,
                                      composition: composition, seed: seed, accent: accent, energy: energy, readings: readings,
@@ -323,6 +327,7 @@ struct LyricLineView: View {
             baseSize: baseSize,
             stageSize: stageSize,
             seed: seed,
+            driftSeed: carry?.seed,
             presence: presence,
             time: time,
             lineHeight: lineHeight
@@ -432,6 +437,10 @@ struct EchoBackdrop: View {
     let baseSize: CGFloat
     let stageSize: CGSize
     let seed: Int
+    /// The run's seed (`StageCarry.seed`): every line of a run drifts its
+    /// repeats on the same path, so the drift runs on through a hand-over
+    /// instead of jumping to a new one. Nil drifts on the line's own.
+    var driftSeed: Int? = nil
     /// Rises as the line is sung, so the echoes arrive with the vocal.
     let presence: Double
     /// Drives a slow, seeded drift so the reflections never sit frozen.
@@ -500,7 +509,7 @@ struct EchoBackdrop: View {
         ZStack {
             ForEach(0..<Self.variants.count, id: \.self) { slot in
                 let ghost = Self.variants[slot]
-                let wander = Self.wanderSeed(seed, slot: slot)
+                let wander = Self.wanderSeed(driftSeed ?? seed, slot: slot)
                 let x = baseSize * ghost.dx * side + CGFloat(drift * vc_noise2(wander, time * 0.09)) * baseSize * 0.08
                 let edge = (ghost.dy < 0 ? -lineHeight : lineHeight) / 2
                 let y = edge + baseSize * ghost.dy + CGFloat(drift * vc_noise2(wander ^ 0x5EED, time * 0.07)) * baseSize * 0.03

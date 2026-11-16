@@ -315,7 +315,7 @@ struct LyricLayer: View {
                 // Where the renderer starts the exit, which for most layouts
                 // is earlier than the phrase's: measured from the phrase's,
                 // those exits played at 12 or 24 fps.
-                let exit = renderedExitStart(row, in: lines)
+                let exit = renderedExitStart(row, in: lines, fingerprint: key.fingerprint)
                 if time >= exit - 0.2, time <= exit + LyricPhraseTiming.exitSpan(for: composition(at: row)) + 0.1 {
                     return .active
                 }
@@ -539,7 +539,7 @@ struct LyricLayer: View {
     private func instrumentalGap(at time: Double, windows: [VCVocalWindow], duration: Double) -> VCVocalGap? {
         var gap = VCVocalGap()
         let found = windows.withUnsafeBufferPointer {
-            vc_vocal_gap($0.baseAddress, Int32($0.count), time, duration, 2.4, &gap)
+            vc_vocal_gap($0.baseAddress, Int32($0.count), time, duration, LyricPhraseRuns.breakGap, &gap)
         }
         return found != 0 ? gap : nil
     }
@@ -659,7 +659,7 @@ struct LyricLayer: View {
     @ViewBuilder
     private func earlierLine(_ row: Int, current: Int, scene: SceneLines, time: TimeInterval, stageSize: CGSize,
                              energy: Double, live: Bool, lyricOpacity: Double) -> some View {
-        if leaving(row, current: current, in: scene.lines, time: time) {
+        if leaving(row, current: current, in: scene, time: time) {
             let shift = heldShift(row, in: scene.lines, time: time)
             let crossFades = reduceMotion && (shift ?? 0) > 0 && (shift ?? 0) < 1
             let travel = shift.map { reduceMotion ? ($0 >= 1 ? 1 : 0) : $0 }
@@ -698,24 +698,43 @@ struct LyricLayer: View {
     }
 
     /// Whether an earlier line is still being sung or finishing its exit.
-    private func leaving(_ line: Int, current: Int, in lines: [LyricsFetcher.Line], time: Double) -> Bool {
-        Self.isLeaving(line, current: current, lines: lines, time: time,
-                       span: { LyricPhraseTiming.exitSpan(for: composition(at: $0)) }) {
+    private func leaving(_ line: Int, current: Int, in scene: SceneLines, time: Double) -> Bool {
+        let lines = scene.lines
+        return Self.isLeaving(line, current: current, lines: lines, time: time,
+                              span: { LyricPhraseTiming.exitSpan(for: composition(at: $0)) },
+                              heldUntil: { heldUntil($0, lines: lines, fingerprint: scene.fingerprint) }) {
             lines[$0].wordTimed && composition(at: $0).arrivalOnly
         }
+    }
+
+    /// What line `row`'s stage carries across from and into its neighbours
+    /// in its run (`StageCarry`); nil under Reduce Motion, which fades every
+    /// line in and out on its own.
+    private func stageCarry(_ row: Int, lines: [LyricsFetcher.Line], fingerprint: Int) -> StageCarry? {
+        guard !reduceMotion else { return nil }
+        let runs = cache.phraseRuns(for: lines, fingerprint: fingerprint)
+        let style = composition(at: row)
+        return StageCarry.make(row, runs: runs, lines: lines) { composition(at: $0) == style }
+    }
+
+    /// When a carrying stage line is held until (`StageCarry.heldUntil`).
+    private func heldUntil(_ row: Int, lines: [LyricsFetcher.Line], fingerprint: Int) -> Double? {
+        StageCarry.heldUntil(stageCarry(row, lines: lines, fingerprint: fingerprint), composition: composition(at: row))
     }
 
     /// `leaving`, given which lines roll (`rolls`) and how long each takes
     /// to leave (`span`).
     static func isLeaving(_ line: Int, current: Int, lines: [LyricsFetcher.Line], time: Double,
                           span: (Int) -> Double = { _ in LyricPhraseTiming.exitSpan },
+                          heldUntil: (Int) -> Double? = { _ in nil },
                           rolls: (Int) -> Bool) -> Bool {
         guard line >= 0, line < current, lines.indices.contains(current) else { return false }
         // An earlier renderer cannot reappear after a short intervening line.
         guard !changesTiming(lines[line], lines[current]),
               !(line..<current).contains(where: { changesTiming(lines[$0], lines[$0 + 1]) }) else { return false }
         let handOver = Self.handOver(after: line, in: lines, rolls: rolls)
-        guard LyricPhraseTiming.stillLeaving(lines[line], nextStart: handOver, time: time, span: span(line)) else {
+        guard LyricPhraseTiming.stillLeaving(lines[line], nextStart: handOver, time: time, span: span(line),
+                                             heldUntil: heldUntil(line)) else {
             return false
         }
         // A rolling line followed by another rolling line has no exit of its
@@ -770,10 +789,11 @@ struct LyricLayer: View {
     }
 
     /// When line `row` starts to leave as drawn (`renderedExitStart(_:in:handOver:rolls:fillsStage:)`).
-    private func renderedExitStart(_ row: Int, in lines: [LyricsFetcher.Line]) -> Double {
+    private func renderedExitStart(_ row: Int, in lines: [LyricsFetcher.Line], fingerprint: Int) -> Double {
         let style = composition(at: row)
         return Self.renderedExitStart(row, in: lines, handOver: handOver(after: row, in: lines),
-                                      rolls: lines[row].wordTimed && style.arrivalOnly, fillsStage: style.fillsStage)
+                                      rolls: lines[row].wordTimed && style.arrivalOnly, fillsStage: style.fillsStage,
+                                      heldUntil: heldUntil(row, lines: lines, fingerprint: fingerprint))
     }
 
     /// The exit the renderer actually draws: word-timed lines that do not
@@ -781,11 +801,11 @@ struct LyricLayer: View {
     /// their last word (`stageExitStart`); everything else at the phrase's
     /// own exit.
     static func renderedExitStart(_ row: Int, in lines: [LyricsFetcher.Line], handOver: Double, rolls: Bool,
-                                  fillsStage: Bool) -> Double {
+                                  fillsStage: Bool, heldUntil: Double? = nil) -> Double {
         let line = lines[row]
-        let phrase = LyricPhraseTiming.exitStart(of: line, nextStart: handOver)
+        let phrase = LyricPhraseTiming.exitStart(of: line, nextStart: handOver, heldUntil: heldUntil)
         guard !rolls, line.wordTimed || fillsStage else { return phrase }
-        return min(phrase, stageHeldUntil(line))
+        return heldUntil == nil ? min(phrase, stageHeldUntil(line)) : phrase
     }
 
     /// A layout remembered for this song or artist wins; "automatic" there
@@ -814,6 +834,10 @@ struct LyricLayer: View {
         // A stage layout draws nothing for a line-timed preview, so the
         // line being sung would only dim for nothing.
         guard lines[next].wordTimed || !style.fillsStage else { return nil }
+        // A carrying stage brings the next line in itself, by its hand-over:
+        // a preview of it would sit where the hand-over then draws it again.
+        guard !style.carriesStage || stageCarry(next, lines: lines, fingerprint: scene.fingerprint)?.incoming == nil
+        else { return nil }
         guard settings.previewsNextWord(in: style),
               !lines[next].wordTimed || settings.revealsWords(in: style),
               !(lines[index].wordTimed && lines[next].wordTimed && style.arrivalOnly
@@ -846,8 +870,21 @@ struct LyricLayer: View {
         let lines = scene.lines
         if lines.indices.contains(index), !lines[index].words.isEmpty, previewing || time >= lines[index].start {
             let line = lines[index]
-            let pose = LyricPhraseTiming(line: line, nextStart: handOver(after: index, in: lines), time: time)
             let composition = composition(at: index)
+            // Inside a run the stage carries on from the line before and into
+            // the line after (`StageCarry`); a preview is drawn on its own.
+            let carry = previewing ? nil : stageCarry(index, lines: lines, fingerprint: scene.fingerprint)
+            let held = StageCarry.heldUntil(carry, composition: composition)
+            let pose = LyricPhraseTiming(line: line, nextStart: handOver(after: index, in: lines), time: time,
+                                         heldUntil: held)
+            // A carrying layout's own hand-over is the line's entrance and
+            // exit: the line does not also fade, rise or swell in and out.
+            let carriedIn = composition.carriesStage && carry?.incoming != nil
+            let carriedOut = composition.carriesStage && carry?.outgoing != nil
+            // A translation or whole-line reading leaves as the hand-over
+            // starts, not once it is over: the next line's fades in there.
+            let textExit: Double = StageCarry.handoverStart(carry, composition: composition)
+                .map { vc_settle(time - $0, LyricPhraseTiming.exitDuration) } ?? pose.exit
             let rolls = line.wordTimed && composition.arrivalOnly
             let handsOffPreview = line.wordTimed && !outgoing && settings.revealsWords(in: composition)
                 && settings.previewsNextWord(in: composition)
@@ -861,7 +898,7 @@ struct LyricLayer: View {
                 && self.composition(at: index + 1).arrivalOnly
             let stagePresence: Double = previewing ? 1
                 : rolls ? Self.rollingPresence(nextRolls: nextRolls, outgoing: outgoing, exit: pose.exit)
-                : line.wordTimed ? (handsOffPreview ? 1 : pose.progress)
+                : line.wordTimed ? (handsOffPreview || carriedIn ? 1 : pose.progress)
                 : pose.presence
             let readings = scene.romanized[index]
             // A reading that cannot be split by word goes once under the
@@ -902,7 +939,7 @@ struct LyricLayer: View {
                 VStack(spacing: baseSize * 0.2) {
                 if !rolls, place == .above, let translation, !translation.isEmpty {
                     TranslationLine(text: translation, font: translationFont, width: stageSize.width * 0.8)
-                        .opacity(pose.progress * (1 - pose.exit))
+                        .opacity(pose.progress * (1 - textExit))
                 }
                 Group {
                     if line.wordTimed {
@@ -922,7 +959,8 @@ struct LyricLayer: View {
                         let lineBase: CGFloat = rolls ? baseSize * 0.75 * userScale
                             : composition.fillsStage ? baseSize * 0.8 * userScale : baseSize * densityScale
                         let lineSeed = rolls ? trackSeed : index
-                        let lineExit: Double = rolls || previewing ? .infinity : Self.stageExitStart(line, pose: pose)
+                        let lineExit: Double = rolls || previewing ? .infinity
+                            : Self.stageExitStart(line, pose: pose, heldUntil: held)
                         let lineView = LyricLineView(words: words, time: time, stageSize: stageSize,
                             baseSize: lineBase,
                             mood: mood, composition: composition,
@@ -933,14 +971,17 @@ struct LyricLayer: View {
                             glue: glue,
                             bottomInset: band, following: rolling?.following, ordinals: rolling?.ordinals ?? [:],
                             rollingLineEnds: rolling?.lineEnds ?? [:], parts: rolling?.parts ?? [:],
-                            accents: wordAccents(index, words: words, glue: glue, rolling: rolling, scene: scene))
+                            accents: wordAccents(index, words: words, glue: glue, rolling: rolling, scene: scene),
+                            carry: carry)
                             .environment(\.lyricActionStrength, settings.actionWordStrength.amount)
-                        let swell: CGFloat = still ? 1 : 0.965 + 0.035 * pose.arrival - 0.012 * pose.exit
+                        let arrived: Double = carriedIn ? 1 : pose.arrival
+                        let gone: Double = carriedOut ? 0 : pose.exit
+                        let swell: CGFloat = still ? 1 : 0.965 + 0.035 * arrived - 0.012 * gone
                         // A line leaving lifts away as the next one rises
                         // into the same place, rather than sitting under it.
                         let makesWay: Double = outgoing && !composition.fillsStage
                             ? Self.incomingArrival(after: index, in: lines, time: time) { handOver(after: $0, in: lines) } : 0
-                        let travel: Double = (1 - pose.arrival) * 0.20 - pose.exit * 0.10 - 0.30 * makesWay
+                        let travel: Double = (1 - arrived) * 0.20 - gone * 0.10 - 0.30 * makesWay
                         let slide: CGFloat = still ? 0 : CGFloat(travel) * baseSize
                         lineView
                             .opacity(stagePresence)
@@ -951,7 +992,7 @@ struct LyricLayer: View {
                         let glue = glue(index, words: words, scene: scene, live: live)
                         lineTimedLyric(line, words: words, time: time, pose: pose,
                             stageSize: stageSize, composition: composition, seed: index, previewing: previewing,
-                            previewSince: previewSince, glue: glue,
+                            previewSince: previewSince, glue: glue, carry: carry, heldUntil: held,
                             annotations: readingDisplay == .below
                                 ? readingPairs(index, readings: readings, words: line.words,
                                                glue: composition.fillsStage ? StageRun.glue(words, glue: glue) : glue,
@@ -966,7 +1007,7 @@ struct LyricLayer: View {
                     TranslationLine(text: lineReading,
                                     font: settings.lyricFont(size: baseSize * 0.38 * densityScale, hero: false, mood: mood),
                                     width: stageSize.width * 0.8)
-                        .opacity(pose.progress * (1 - pose.exit))
+                        .opacity(pose.progress * (1 - textExit))
                 }
                 // A translation from the lyric source sits under its line as
                 // a quieter second voice, arriving and leaving with it. A
@@ -974,7 +1015,7 @@ struct LyricLayer: View {
                 // rests over the stage's foot instead of resizing the stage.
                 if !rolls, place == .below, let translation, !translation.isEmpty {
                     TranslationLine(text: translation, font: translationFont, width: stageSize.width * 0.8)
-                        .opacity(pose.progress * (1 - pose.exit))
+                        .opacity(pose.progress * (1 - textExit))
                 }
                 }
                 // A rolling stage keeps its band at the foot, or at the head
@@ -985,7 +1026,7 @@ struct LyricLayer: View {
                         TranslationLine(text: translation,
                                         font: settings.lyricFont(size: translationSize, hero: false, mood: mood),
                                         width: stageSize.width * 0.8, lines: 2)
-                            .opacity(pose.progress * (1 - pose.exit))
+                            .opacity(pose.progress * (1 - textExit))
                             .padding(place.overWords ? .top : .bottom, baseSize * 0.2)
                     }
                 }
@@ -993,7 +1034,7 @@ struct LyricLayer: View {
                 .preference(key: EdgeTranslations.self, value: !rolls && place.atEdge
                     && !previewing && translation?.isEmpty == false
                     ? [EdgeTranslations.Item(id: index, text: translation ?? "", top: place == .top,
-                                             opacity: pose.progress * (1 - pose.exit), size: baseSize * 0.34 * userScale)] : [])
+                                             opacity: pose.progress * (1 - textExit), size: baseSize * 0.34 * userScale)] : [])
                 .opacity(Self.timingHandoffPresence(after: index, in: lines, time: time))
                 .modifier(FittedLyricStage(available: fit.available, userScale: fit.userScale, neutral: fit.neutral))
                 // Set no wider than the stage, and placed, by `LyricLineStack`.
@@ -1027,8 +1068,10 @@ struct LyricLayer: View {
     /// the line's start: counted from the start, a word sung more than about
     /// nine seconds into a line was already gone at its onset and never
     /// appeared, and a held last word faded while still being sung.
-    static func stageExitStart(_ line: LyricsFetcher.Line, pose: LyricPhraseTiming) -> Double {
-        min(pose.exitStart, stageHeldUntil(line))
+    /// A carrying line held until its hand-over (`heldUntil`, already in
+    /// `pose`) leaves then: the hand-over is its exit.
+    static func stageExitStart(_ line: LyricsFetcher.Line, pose: LyricPhraseTiming, heldUntil: Double? = nil) -> Double {
+        heldUntil == nil ? min(pose.exitStart, stageHeldUntil(line)) : pose.exitStart
     }
 
     /// When a stage layout's line has been sung and held long enough.
@@ -1042,7 +1085,8 @@ struct LyricLayer: View {
     private func lineTimedLyric(_ line: LyricsFetcher.Line, words: [LyricsFetcher.Word], time: Double,
                                 pose: LyricPhraseTiming, stageSize: CGSize, composition: LyricComposition,
                                 seed: Int, previewing: Bool,
-                                previewSince: Double, glue: [Bool], annotations: [TimedWordKey: String],
+                                previewSince: Double, glue: [Bool], carry: StageCarry? = nil, heldUntil: Double? = nil,
+                                annotations: [TimedWordKey: String],
                                 yield: Double, heldPreview: Bool = false) -> some View {
         let phrase = LyricsFetcher.Word(text: line.text, start: line.start, end: line.end)
         // A line sung as one has no words to highlight one by one; it
@@ -1055,7 +1099,10 @@ struct LyricLayer: View {
         let previewOpacity = vc_word_visibility(time, line.start, line.end, 1, 1, settings.nextWordPreviewLead)
             * Easing.smoothstep((time - previewSince) / 0.16)
         let stage = composition.fillsStage
-        let visibility = pose.presence * (1 - 0.5 * yield)
+        // A carrying layout's hand-over brings the line in (`StageCarry`).
+        let carriedIn = stage && composition.carriesStage && carry?.incoming != nil
+        let progress = carriedIn ? 1 : pose.progress
+        let visibility = progress * (1 - pose.exit) * (1 - 0.5 * yield)
         // The previewed first word stays where the preview showed it, at
         // least as strong, while the rest of the line makes its entrance:
         // restarting it with the line blinked it out for a frame or two
@@ -1067,14 +1114,15 @@ struct LyricLayer: View {
                 baseSize: stage ? baseSize * 0.8 * CGFloat(min(1.5, max(0.7, self.settings.lyricScale))) : base,
                 mood: self.mood, composition: stage ? composition : .scattered, seed: seed, presence: pose.presence,
                 readings: annotations, wordTimed: false, phraseSweep: LyricPhraseTiming.sweep(of: line, at: time),
-                exitStart: stage && !previewing ? Self.stageExitStart(line, pose: pose) : .infinity,
-                glue: glue, firstRunOnly: firstRun, heldFirstRun: held, hidesFirstRun: hides)
+                exitStart: stage && !previewing ? Self.stageExitStart(line, pose: pose, heldUntil: heldUntil) : .infinity,
+                glue: glue, firstRunOnly: firstRun, heldFirstRun: held, hidesFirstRun: hides,
+                carry: stage ? carry : nil)
         }
         return ZStack {
             lineView(previewing ? previewOpacity : nil, false, holdsFirstRun)
-                .modifier(WordEntrance(progress: previewing ? 1 : pose.progress, style: entrance, size: pointSize,
+                .modifier(WordEntrance(progress: previewing ? 1 : progress, style: entrance, size: pointSize,
                     direction: seed.isMultiple(of: 2) ? 1 : -1, visibility: previewing ? 1 : visibility,
-                    arrival: previewing ? 1 : pose.arrival))
+                    arrival: previewing || carriedIn ? 1 : pose.arrival))
             if holdsFirstRun {
                 lineView(Self.heldFirstRunOpacity(presence: pose.presence) * (1 - 0.5 * yield), true, false)
             }
@@ -1421,6 +1469,19 @@ final class LyricLayerCache: ObservableObject {
 
     private var indexFingerprint: Int?
     private var index = LyricLineIndex(lines: [])
+    private var runs: [Int: LyricPhraseRuns] = [:]
+    private(set) var phraseRunBuilds = 0
+
+    /// A scene's phrase runs (`LyricPhraseRuns`), worked out once per song,
+    /// never per frame. Two scenes cross-fading each keep theirs.
+    func phraseRuns(for lines: [LyricsFetcher.Line], fingerprint: Int) -> LyricPhraseRuns {
+        if let hit = runs[fingerprint], hit.lines.count == lines.count { return hit }
+        let value = LyricPhraseRuns(lines: lines)
+        if runs.count > 4 { runs.removeAll() }
+        runs[fingerprint] = value
+        phraseRunBuilds += 1
+        return value
+    }
 
     /// A line index for a captured scene, built once per scene.
     func lineIndex(for lines: [LyricsFetcher.Line], fingerprint: Int) -> LyricLineIndex {
