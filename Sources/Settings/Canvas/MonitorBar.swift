@@ -49,6 +49,9 @@ struct MonitorBar: View {
             twoRows(compact: false)
             twoRows(compact: true)
         }
+        .onAppear(perform: followShows)
+        .onChange(of: floating.choice(for: editing)) { _, _ in followShows() }
+        .onChange(of: editing) { _, _ in followShows() }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didChangeScreenParametersNotification)) { _ in
             screens = FloatingDisplayChoice.connected()
         }
@@ -81,8 +84,26 @@ struct MonitorBar: View {
         }
     }
 
+    /// The style a monitor showing one kind of lyrics has to edit; nil when
+    /// it shows both (the switch picks) or none (the last one stays).
+    static func impliedStyle(_ choice: DisplayLyrics) -> LyricsSurface? {
+        switch choice {
+        case .desktop: return .desktop
+        case .floating: return .floating
+        case .both, .none: return nil
+        }
+    }
+
+    /// Only a monitor showing both kinds of lyrics has two styles to choose
+    /// between; otherwise "Shows" already says which one these settings edit.
+    private func followShows() {
+        if let implied = Self.impliedStyle(floating.choice(for: editing)), floating.surface != implied {
+            floating.surface = implied
+        }
+    }
+
     @ViewBuilder private func styleSwitch(compact: Bool) -> some View {
-        if showsStyleSwitch {
+        if showsStyleSwitch && floating.choice(for: editing) == .both {
             CanvasSegments(title: "Editing", selection: $floating.surface,
                            options: LyricsSurface.allCases.map { ($0, compact ? $0.styleName : $0.title) }, small: true)
                 .help("Which of this monitor’s lyric styles these settings change: its desktop lyrics’ or its floating lyrics’")

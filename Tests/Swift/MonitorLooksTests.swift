@@ -361,3 +361,13 @@ final class MonitorLooksTests: XCTestCase {
         XCTAssertTrue(AudioCapturePreferences.current(pattern, wallpapers: [pattern, visualiser]).visualiserChosen)
     }
 }
+
+final class MonitorBarStyleTests: XCTestCase {
+    @MainActor
+    func testShowsDecidesTheEditedStyleUnlessBoth() {
+        XCTAssertEqual(MonitorBar.impliedStyle(.desktop), .desktop)
+        XCTAssertEqual(MonitorBar.impliedStyle(.floating), .floating)
+        XCTAssertNil(MonitorBar.impliedStyle(.both))
+        XCTAssertNil(MonitorBar.impliedStyle(.none))
+    }
+}
