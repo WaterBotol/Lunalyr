@@ -258,7 +258,9 @@ final class QueueLookAheadTests: XCTestCase {
         await until { log.started == ["A"] }
         XCTAssertEqual(ahead.working?.title, "A")
         ahead.update(upcoming: [queued("D"), queued("E")], current: playing("Now"), conditions: .init())
-        await until { log.started.contains("D") }
+        // A's cancelled task notes it as it wakes, which on a slow machine
+        // can be just after D has started.
+        await until { log.started.contains("D") && !log.cancelled.isEmpty }
         XCTAssertEqual(log.cancelled, ["A"])
         XCTAssertNil(ahead.lookedUp(playing("A")), "cancelled work is not taken as done")
         // Going offline stops it too.
