@@ -118,7 +118,7 @@ public class StageReadingTests
     {
         LyricWord[] words = [new("過ぎてゆく", 14.88, 16.11), new("時間", 16.33, 17.23), new("の", 17.23, 17.45), new("中", 17.45, 18.2)];
         var line = new LyricLine { Start = 14.88, End = 18.2, Text = "過ぎてゆく時間の中", Words = words, WordTimed = true };
-        var runs = StageRun.Make(line.Words, LyricRuns.Glue(line, line.Words));
+        var runs = StageRun.Make(line.Words, LyricRuns.Glue(line, line.Words), SimpleWordBreaker.Instance);
         Assert.Single(StageRun.Shown(runs, 15.0));
         Assert.Equal(2, StageRun.Shown(runs, 16.4).Count);
         Assert.Equal(3, StageRun.Shown(runs, 17.5).Count);

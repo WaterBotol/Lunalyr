@@ -165,7 +165,8 @@ public class StagePhrasesTests
         AssertWellFormed(p, runs);
         Assert.Equal(["君の", "名前を", "呼んで", "夜空に", "消えた"],
                      runs.Select(run => run.Text));
-        Assert.Equal([[0, 3], [3, 5]], Spans(p));
+        // Unspaced words carry more each: at most two to a phrase (StagePhraseRules.UnspacedMaxRuns, the Mac's 7c2493a3).
+        Assert.Equal([[0, 2], [2, 3], [3, 5]], Spans(p));
         Assert.DoesNotContain(p.Words, word => word.IsFunction);
         Assert.DoesNotContain(p.Words, word => word.RunGroup is not null); // Glued characters are one run, not a quick run
         // The analysis through the stage's inputs gives the same.

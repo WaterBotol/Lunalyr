@@ -199,9 +199,11 @@ public class StageMotionTests
     [Fact]
     public void UnspacedRunsStayShortEnoughToReadAsWords()
     {
-        LyricWord[] words = [new("今", 1, 1.2), new("日", 1.2, 1.4), new("も", 1.4, 1.6), new("晴", 1.6, 1.8)];
-        var runs = StageRun.Make(words, [false, true, true, true]);
-        Assert.Equal(["今日も", "晴"], runs.Select(r => r.Text));
-        Assert.Equal([false, true, true, false], StageRun.Glue(words, [false, true, true, true]));
+        // At most StageRun.UnspacedWordLimit (6) characters to a run (the Mac's 7c2493a3; it was 3).
+        LyricWord[] words = [.. "今日も晴れて嬉しい".Select((c, i) => new LyricWord(c.ToString(), 1 + i * 0.2, 1.2 + i * 0.2))];
+        bool[] glue = [false, .. Enumerable.Repeat(true, words.Length - 1)];
+        var runs = StageRun.Make(words, glue);
+        Assert.Equal(["今日も晴れて", "嬉しい"], runs.Select(r => r.Text));
+        Assert.Equal([false, true, true, true, true, true, false, true, true], StageRun.Glue(words, glue));
     }
 }

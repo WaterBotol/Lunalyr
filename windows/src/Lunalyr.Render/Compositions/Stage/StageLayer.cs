@@ -412,10 +412,10 @@ internal abstract class StageLayer(CompositionKind kind, IWordBreaker breaker, L
     protected abstract StageLine Build(StageSource source);
 
     /// <summary>The runs a line is set in: the shared runs (<see cref="StageRun.Make"/>), or a layout's own (Portal's whole words).</summary>
-    protected virtual List<StageRun> MakeRuns(IReadOnlyList<LyricWord> words, IReadOnlyList<bool> glue) => StageRun.Make(words, glue);
+    protected virtual List<StageRun> MakeRuns(IReadOnlyList<LyricWord> words, IReadOnlyList<bool> glue) => StageRun.Make(words, glue, Breaker);
 
     /// <summary>The glue of the runs <see cref="MakeRuns"/> makes, so word-by-word readings pair with the runs drawn.</summary>
-    protected virtual IReadOnlyList<bool> RunGlue(IReadOnlyList<LyricWord> words, IReadOnlyList<bool> glue) => StageRun.Glue(words, glue);
+    protected virtual IReadOnlyList<bool> RunGlue(IReadOnlyList<LyricWord> words, IReadOnlyList<bool> glue) => StageRun.Glue(words, glue, Breaker);
 
     /// <summary>
     /// Whether the layout draws Reduce Motion itself (the Mac's <c>ownsReduceMotion</c>: Hinge cross-fades its pages and

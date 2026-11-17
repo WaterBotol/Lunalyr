@@ -111,6 +111,9 @@ public sealed record StagePhraseRules
     public double Gap { get; init; } = 0.35;
     /// <summary>The most runs in a phrase.</summary>
     public int MaxRuns { get; init; } = 4;
+
+    /// <summary>The most words in a phrase of a line written without spaces (the Mac's <c>unspacedMaxRuns</c>, 7c2493a3).</summary>
+    public const int UnspacedMaxRuns = 2;
     /// <summary>Sung at least this long (s), a word is held.</summary>
     public double Held { get; init; } = 0.8;
     /// <summary>Onsets closer than this (s) chain into a quick run…</summary>
@@ -316,6 +319,10 @@ public static class StagePhrases
             if (EndsPhrase(runs[index - 1].Text)) breaks[index] = StagePhraseBreak.Punctuation;
             else if (!untimed && gaps[index] >= rules.Gap) breaks[index] = StagePhraseBreak.Gap;
         }
+        // A word of an unspaced script (思い描いた, 想要和你) carries as much as two or three English ones, so a phrase holds
+        // fewer of them: by English counts a whole Japanese line was one phrase, one page, and Hinge's book never opened.
+        var unspaced = runs.Count(run => Lyrics.Readings.LyricRuns.WrittenWithoutSpaces(run.Text)) * 2 > count;
+        var maxRuns = unspaced ? Math.Min(rules.MaxRuns, StagePhraseRules.UnspacedMaxRuns) : rules.MaxRuns;
         // Each stretch between hard breaks, cut to length.
         var starts = new List<int>();
         var at = 0;
@@ -324,7 +331,7 @@ public static class StagePhrases
             var end = at + 1;
             while (end < count && breaks[end] is null) end++;
             starts.Add(at);
-            foreach (var cut in LengthCuts(at, end, function, runGroups, gaps, rules.MaxRuns))
+            foreach (var cut in LengthCuts(at, end, function, runGroups, gaps, maxRuns))
             {
                 starts.Add(cut);
                 breaks[cut] = StagePhraseBreak.Length;

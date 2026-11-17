@@ -477,8 +477,8 @@ public class StageReadingRevealTests
         var line = Lines[index];
         var readings = _t.Song(Lines, Options).GetValueOrDefault(index);
         var glue = LyricRuns.Glue(line, line.Words);
-        var pairs = LyricReadingPairs.Parts(readings, line.Words, StageRun.Glue(line.Words, glue));
-        return StageRun.Make(line.Words, glue).Select(run => StageRun.Reading(run, pairs)).ToArray();
+        var pairs = LyricReadingPairs.Parts(readings, line.Words, StageRun.Glue(line.Words, glue, _t.Services.WordBreaker));
+        return StageRun.Make(line.Words, glue, _t.Services.WordBreaker).Select(run => StageRun.Reading(run, pairs)).ToArray();
     }
 
     /// <summary>The part of run <paramref name="runIndex"/>'s reading that shows at <paramref name="time"/>: each part's
@@ -488,8 +488,8 @@ public class StageReadingRevealTests
         var line = Lines[index];
         var readings = _t.Song(Lines, Options).GetValueOrDefault(index);
         var glue = LyricRuns.Glue(line, line.Words);
-        var pairs = LyricReadingPairs.Parts(readings, line.Words, StageRun.Glue(line.Words, glue));
-        var run = StageRun.Make(line.Words, glue)[runIndex];
+        var pairs = LyricReadingPairs.Parts(readings, line.Words, StageRun.Glue(line.Words, glue, _t.Services.WordBreaker));
+        var run = StageRun.Make(line.Words, glue, _t.Services.WordBreaker)[runIndex];
         if (ReadingShares.Of(run, pairs) is not { } shares) return "";
         if (!shares.Reveals) return StageRun.PartOpacity(0, run.Parts, time) > 0 ? shares.Text : "";
         return string.Concat(shares.Shares.Where((_, i) => StageRun.PartOpacity(i, run.Parts, time) > 0).Select(share => share.Text));
@@ -514,9 +514,10 @@ public class StageReadingRevealTests
     public void EachRunCarriesOnlyItsOwnReading()
     {
         Assert.Equal(["sugite yuku", "toki no", "naka"], StageReadings(0));
-        Assert.Equal(["anata o", "omoida", "su"], StageReadings(1));
+        Assert.Equal(["anata o", "omoidasu"], StageReadings(1));
         Assert.Equal(["monou ge ni", "nagameru", "gamen ni", "utsutta", "futari"], StageReadings(2));
-        Assert.Equal(["wara", "tteta"], StageReadings(3));
+        // A word is one run (笑っていた, not 笑って|いた), so its reading is whole (the Mac's 7c2493a3).
+        Assert.Equal(["waratteta"], StageReadings(3));
     }
 
     // Ported from StageReadingRevealTests.swift: testAPhraseIsSharedOverTheWordsItIsSungAcross
@@ -539,6 +540,6 @@ public class StageReadingRevealTests
         var readings = _t.Song(Lines, Options).GetValueOrDefault(0);
         var glue = LyricRuns.Glue(line, line.Words);
         var pairs = LyricReadingPairs.Match(readings, line.Words, glue);
-        Assert.Equal(["sugite yuku toki no naka", null, null], StageRun.Make(line.Words, glue).Select(run => StageRun.Reading(run, pairs)));
+        Assert.Equal(["sugite yuku toki no naka", null, null], StageRun.Make(line.Words, glue, _t.Services.WordBreaker).Select(run => StageRun.Reading(run, pairs)));
     }
 }

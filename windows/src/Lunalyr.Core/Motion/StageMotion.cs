@@ -1,6 +1,7 @@
 using Lunalyr.Core.Lyrics;
 using Lunalyr.Core.Lyrics.Timing;
 using Lunalyr.Core.Lyrics.Parsing;
+using Lunalyr.Core.Lyrics.Readings;
 
 namespace Lunalyr.Core.Motion;
 
@@ -13,12 +14,18 @@ public sealed record StageRun(int Id, string Text, double Start, double End, IRe
     /// <summary>One sung piece of a run, with the lyric word it was cut from (for its reading).</summary>
     public readonly record struct Part(string Text, double Start, TimedWordKey? Source = null);
 
+    /// <summary>The longest unspaced word kept as one run; a longer one is cut (the Mac's 7c2493a3; it was 3 characters).</summary>
+    public const int UnspacedWordLimit = 6;
+
     /// <summary>
     /// Glued syllables join into one run, but never into a run too long to read as a word: an unspaced Chinese,
-    /// Japanese or Korean line, or a romanised one, is cut into short runs that arrive one by one.
+    /// Japanese or Korean line, or a romanised one, is cut into short runs that arrive one by one. With a
+    /// <paramref name="breaker"/>, an unspaced run is parted at its real words first (the Mac's 7c2493a3), so a run is a
+    /// word as a reader takes it in (思い描いた 未来の 自分には), not three characters at a time (思い描 いた未 来の自).
     /// </summary>
-    public static List<StageRun> Make(IReadOnlyList<LyricWord> words, IReadOnlyList<bool> glue)
+    public static List<StageRun> Make(IReadOnlyList<LyricWord> words, IReadOnlyList<bool> glue, IWordBreaker? breaker = null)
     {
+        glue = WordGlue(words, glue, breaker);
         var runs = new List<StageRun>();
         for (var index = 0; index < words.Count; index++)
         {
@@ -49,15 +56,20 @@ public sealed record StageRun(int Id, string Text, double Start, double End, IRe
     private static bool Joins(string text, int index, IReadOnlyList<bool> glue, string? previous)
     {
         if (index <= 0 || index >= glue.Count || !glue[index] || previous is null) return false;
-        return TextElements.Count(previous) + TextElements.Count(text) <= (LyricScript.KeepsSyllables(text) ? 3 : 12);
+        return TextElements.Count(previous) + TextElements.Count(text) <= (LyricScript.KeepsSyllables(text) ? UnspacedWordLimit : 12);
     }
+
+    /// <summary><paramref name="glue"/> with each unspaced run parted at its real words (none without a breaker).</summary>
+    private static IReadOnlyList<bool> WordGlue(IReadOnlyList<LyricWord> words, IReadOnlyList<bool> glue, IWordBreaker? breaker) =>
+        breaker is null ? glue : LyricRuns.SplittingWords(words, glue, breaker, LyricRuns.Parting.Words);
 
     /// <summary>
     /// The glue of the runs <see cref="Make"/> builds: true where a word joins the run before it (a blank word belongs to
     /// no run of its own). Readings are paired by this, so each run carries its own reading.
     /// </summary>
-    public static bool[] Glue(IReadOnlyList<LyricWord> words, IReadOnlyList<bool> glue)
+    public static bool[] Glue(IReadOnlyList<LyricWord> words, IReadOnlyList<bool> glue, IWordBreaker? breaker = null)
     {
+        glue = WordGlue(words, glue, breaker);
         var result = new bool[words.Count];
         string? last = null;
         for (var index = 0; index < words.Count; index++)
