@@ -180,7 +180,8 @@ public sealed partial class SettingsWindow : Window
         {
             "Lyrics" => LyricStylePage.Build(_ctx, InstalledFonts.Families, () => _host.ReduceMotion, Preview(),
                 new FloatingHooks(AppHost.FloatingDisplays, () => _host.FloatingEditing, _host.SetFloatingEditing), () => _host.Controller),
-            "Wallpaper" => WallpaperPage.Build(_ctx, Importer(), ChooseWallpaperFileAsync, () => _host.ReduceMotion, () => _host.Controller),
+            "Wallpaper" => WallpaperPage.Build(_ctx, Importer(), ChooseWallpaperFileAsync, () => _host.ReduceMotion, () => _host.Controller,
+                new FloatingHooks(AppHost.FloatingDisplays, () => _host.FloatingEditing, _host.SetFloatingEditing)),
             "Lyrics & timing" => TimingPage.Build(_ctx, () => _host.Controller, ChooseFolderAsync, new TimingTools(_host.ToggleTapSync, ChooseLyricsFileAsync)),
             "Readings & translations" => ReadingsPage.Build(_ctx, () => _host.Controller, ChooseReadingFileAsync),
             "Sharing" => SharingPage.Build(_ctx, _host.DiscordHooks),

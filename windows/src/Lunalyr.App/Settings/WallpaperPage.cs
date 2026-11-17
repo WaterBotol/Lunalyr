@@ -22,9 +22,11 @@ internal static partial class WallpaperPage
     /// <param name="reduceMotion">Windows' "Animation effects" are off.</param>
     /// <param name="controller">For the animated covers in Custom Mix (once the Covers page).</param>
     public static StackPanel Build(SettingsContext ctx, WallpaperImporter importer, Func<Task<string?>> chooseFile, Func<bool> reduceMotion,
-                                   Func<AppController?> controller)
+                                   Func<AppController?> controller, FloatingHooks? monitors = null)
     {
         var page = Page();
+        // The monitor whose wallpaper the page edits (the Mac's monitor bar).
+        if (monitors is not null) MonitorBar.Add(page, ctx, monitors);
 
         // ---- The type (no heading: the page's title already says Wallpaper) ----
         async void Import()

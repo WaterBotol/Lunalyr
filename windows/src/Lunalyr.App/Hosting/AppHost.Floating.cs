@@ -12,15 +12,23 @@ internal sealed partial class AppHost
     /// <summary>The displays the floating lyrics can go on, main display first (for the settings page).</summary>
     public static IReadOnlyList<DisplayChoice> FloatingDisplays()
     {
+        // Read again at most once a second: Settings asks on every refresh (a slider drag refreshes many times).
+        var now = Environment.TickCount64;
+        if (s_displays is { } known && now - known.At < 1000) return known.Displays;
+        IReadOnlyList<DisplayChoice> displays;
         try
         {
-            return DisplayIdentity.Connected();
+            displays = DisplayIdentity.Connected();
         }
         catch (Exception)
         {
-            return [];
+            displays = [];
         }
+        s_displays = (displays, now);
+        return displays;
     }
+
+    private static (IReadOnlyList<DisplayChoice> Displays, long At)? s_displays;
 
     /// <summary>The connected displays' keys as the controller knows them, the main display first (for the tray's Floating toggle).</summary>
     public IReadOnlyList<string> DisplayKeysNow => _controller?.DisplayKeys ?? [];

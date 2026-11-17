@@ -48,6 +48,17 @@ public static class DisplayLyricsChoices
     /// <summary>The wallpaper on this display draws lyrics.</summary>
     public static bool OnDesktop(this DisplayLyrics choice) => choice is DisplayLyrics.Desktop or DisplayLyrics.Both;
 
+    /// <summary>
+    /// The lyric style a monitor showing one kind of lyrics has to edit (the Mac's <c>MonitorBar.impliedStyle</c>); null
+    /// when it shows both (the switch picks) or none (the last one stays).
+    /// </summary>
+    public static LyricsSurface? ImpliedStyle(this DisplayLyrics choice) => choice switch
+    {
+        DisplayLyrics.Desktop => LyricsSurface.Desktop,
+        DisplayLyrics.Floating => LyricsSurface.Floating,
+        _ => null,
+    };
+
     /// <summary>A floating window goes on this display.</summary>
     public static bool Floats(this DisplayLyrics choice) => choice is DisplayLyrics.Floating or DisplayLyrics.Both;
 

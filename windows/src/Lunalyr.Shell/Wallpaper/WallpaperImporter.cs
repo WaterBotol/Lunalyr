@@ -51,7 +51,9 @@ public sealed class WallpaperImporter(string dataRoot, Func<AppSettings> current
             var imported = await CustomWallpaperStore.ImportAsync(path, Folder, cancellationToken);
             var replaced = current().WallpaperPath;
             update(s => s with { WallpaperPath = imported.Path, WallpaperName = imported.OriginalName, BackgroundMode = "custom" });
-            CustomWallpaperStore.DiscardReplaced(replaced, imported.Path, Folder);
+            // Another monitor's look may still draw the file replaced here (the Mac's per-monitor looks): it stays then.
+            if (replaced is null || !Settings.MonitorLooks.KeepsWallpaperFile(current(), replaced, null))
+                CustomWallpaperStore.DiscardReplaced(replaced, imported.Path, Folder);
             return true;
         }
         catch (WallpaperImportException ex)

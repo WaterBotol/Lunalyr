@@ -25,8 +25,15 @@ internal static class FloatingLyricsSection
     public const string SectionTag = "floating-lyrics";
 
     /// <summary>"Editing": the Desktop style or the Floating style; the style controls below edit the chosen one (the Mac's 4f9b1454).</summary>
-    public static void AddSurface(StackPanel page, SettingsContext ctx)
+    public static void AddSurface(StackPanel page, SettingsContext ctx, FloatingHooks? hooks = null)
     {
+        // Only a monitor showing both kinds of lyrics has two styles to choose between (the monitor bar's rule); with no
+        // display known the switch always shows.
+        bool ShowsBoth(AppSettings s)
+        {
+            if (hooks?.Displays() is not { Count: > 0 } displays) return true;
+            return s.DisplayChoice(s.EditingSlot(displays[0].Key).Display) == DisplayLyrics.Both;
+        }
         // The row is its own heading.
         var choice = new RadioButtons { MaxColumns = 2 };
         foreach (var surface in LyricsSurfaces.All) choice.Items.Add(new RadioButton { Content = surface.Title(), Tag = surface.Raw() });
@@ -40,7 +47,7 @@ internal static class FloatingLyricsSection
         AutomationProperties.SetHelpText(choice, FloatingCopy.SurfaceHelp);
         var card = Card("Editing", null, "", choice);
         ctx.OnRefresh(s => card.Description = FloatingCopy.SurfaceCaption(s.Surface));
-        page.Children.Add(card);
+        page.Children.Add(card.ShowWhen(ctx, ShowsBoth));
     }
 
     /// <summary>"Displays": a menu per connected display, listed by name, saying what it shows (the Mac's DisplayLyricsSection).</summary>
@@ -81,7 +88,7 @@ internal static class FloatingLyricsSection
                         menu.SelectionChanged += (_, _) =>
                         {
                             if (filling || menu.SelectedItem is not ComboBoxItem { Tag: string raw } || DisplayLyricsChoices.Parse(raw) is not { } picked) return;
-                            if (ctx.Current.DisplayChoice(key) != picked) ctx.Update(c => c.WithDisplayChosen(key, picked, main));
+                            if (ctx.Current.DisplayChoice(key) != picked) ctx.Update(c => c.WithDisplayShows(key, picked, main));
                         };
                         rows.Children.Add(Card(title, null, null, menu));
                         menus.Add((key, menu));

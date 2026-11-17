@@ -59,6 +59,27 @@ public sealed partial record AppSettings
         return choice.Floats() ? MonitorLooks.KeepFloatingStyle(settings, [display], main) : settings;
     }
 
+    /// <summary>
+    /// The style Settings edits follows what the edited monitor shows (the Mac's <c>MonitorBar.followShows</c>): only a
+    /// monitor showing both has two styles to choose between.
+    /// </summary>
+    public AppSettings FollowingShows(string? main) =>
+        DisplayChoice(EditingSlot(main).Display).ImpliedStyle() is { } implied && implied != Surface ? WithLyricsSurface(implied) : this;
+
+    /// <summary>Settings edits <paramref name="display"/>'s look from now on (the monitor bar's Monitor menu).</summary>
+    public AppSettings WithEditedMonitor(string display, string? main) =>
+        display == EditingSlot(main).Display ? this : MonitorLooks.Edit(this, display, main).FollowingShows(main);
+
+    /// <summary>
+    /// What <paramref name="display"/> shows, picked in Settings (its menu under Displays, or Shows on the monitor bar); on
+    /// the edited monitor the style edited follows it.
+    /// </summary>
+    public AppSettings WithDisplayShows(string display, DisplayLyrics choice, string? main)
+    {
+        var settings = WithDisplayChosen(display, choice, main);
+        return display == settings.EditingSlot(main).Display ? settings.FollowingShows(main) : settings;
+    }
+
     /// <summary>The displays among <paramref name="connected"/> that get a floating window.</summary>
     public List<string> FloatingDisplays(IEnumerable<string> connected) => [.. connected.Where(d => DisplayChoice(d).Floats())];
 

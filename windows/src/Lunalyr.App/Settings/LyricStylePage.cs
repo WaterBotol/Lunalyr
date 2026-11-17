@@ -32,7 +32,9 @@ internal static class LyricStylePage
         if (preview is not null) page.Children.Add(preview);
 
         // ---- Show lyrics: on the desktop or floating, and which one's style the rest edits ----
-        FloatingLyricsSection.AddSurface(page, ctx);
+        // ---- The monitor these settings edit, what it shows, and which of its styles ----
+        MonitorBar.Add(page, ctx, floating);
+        FloatingLyricsSection.AddSurface(page, ctx, floating);
         FloatingLyricsSection.AddDisplays(page, ctx, floating);
         FloatingLyricsSection.AddFloating(page, ctx, floating);
 

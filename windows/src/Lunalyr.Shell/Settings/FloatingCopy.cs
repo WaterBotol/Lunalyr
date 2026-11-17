@@ -19,6 +19,26 @@ public static class FloatingCopy
     public static string? EditingNote(LyricsSurface surface) =>
         surface == LyricsSurface.Floating ? "These settings change the Floating style; the desktop lyrics keep their own." : null;
 
+    // ---- The monitor bar (the Mac's MonitorBar.swift) ----
+
+    public const string Monitor = "Monitor";
+    public const string MonitorHelp = "The monitor these settings change; each monitor keeps its own look";
+    public const string MonitorSameHelp = "Same on every monitor is on: every monitor shows this look";
+    public const string Shows = "Shows";
+    public const string BothStylesHelp = "Which of this monitor’s lyric styles these settings change: its desktop lyrics’ or its floating lyrics’";
+    public const string CopyToAll = "Copy to All Monitors…";
+    public const string CopyToAllAction = "Copy to All Monitors";
+    public const string CopyToAllMessage = "Every monitor takes this monitor’s wallpaper and its Desktop and Floating styles.";
+    public const string SameEverywhere = "Same on every monitor";
+    public const string MoreHelp = "Give every monitor this look";
+
+    /// <summary>The copy's confirmation title.</summary>
+    public static string CopyToAllQuestion(string monitor) => $"Copy {monitor}’s look to every monitor?";
+
+    /// <summary>The monitor menu's label: the edited monitor's name, numbered when two share one.</summary>
+    public static string MonitorName(string key, IReadOnlyList<(string Key, string Name)> named) =>
+        named.FirstOrDefault(d => d.Key == key).Name ?? (named.Count > 0 ? named[0].Name : ThisDisplay);
+
     /// <summary>The Displays section (the Mac's DisplayLyricsSection).</summary>
     public const string DisplaysTitle = "Displays";
 
