@@ -123,6 +123,19 @@ public sealed class AppControllerDisplayLyricsTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task ASongsRememberedStyleReachesEverySurface()
+    {
+        // The Mac applies style memory when drawing, to every surface: the parked Floating style takes the song's colour too.
+        var controller = await PlayingWithLyrics(Showing(DisplayLyrics.Both, DisplayLyrics.Desktop));
+        await controller.WhenIdleAsync();
+        var song = controller.CurrentQuery!;
+        controller.ApplySettings(StyleMemory.Remember(controller.Settings, new RememberedStyle("cascade", "musicReactive"), song, StyleScope.Artist));
+        var looks = _renderer.Looks!.Value;
+        Assert.Equal(Core.Colour.LyricColourMode.MusicReactive, looks.Floating[Main].Style!.ColourMode);
+        Assert.Equal(Core.Colour.LyricColourMode.MusicReactive, looks.Desktop[@"\\.\DISPLAY2"].Style!.ColourMode);
+    }
+
+    [Fact]
     public async Task EditPositionWorksWhileAnyDisplayFloats()
     {
         var controller = await PlayingWithLyrics(Showing(DisplayLyrics.Desktop, DisplayLyrics.Floating));

@@ -29,7 +29,7 @@ public sealed partial class AppController
     // The parked looks worked out for one state of the settings, the displays and the song's layout (reading a look
     // copies its settings, so this is not done again for every scene published).
     private sealed record LooksCache(AppSettings Settings, IReadOnlyList<ConnectedDisplay> Displays, string? Layout,
-        Dictionary<string, SurfaceLook> Floating, Dictionary<string, SurfaceLook> Desktop);
+        RememberedStyle? Remembered, Dictionary<string, SurfaceLook> Floating, Dictionary<string, SurfaceLook> Desktop);
 
     /// <summary>The options last handed to the renderer (the first floating window's, once displays are known).</summary>
     public FloatingLyricsOptions Floating
@@ -204,13 +204,15 @@ public sealed partial class AppController
 
     /// <summary>
     /// Each surface's parked look: every floating window's and every desktop's but the slot being edited, which draws
-    /// the scene's own style. A parked copy reads its style keys from its kept look and every other key through.
-    /// Must hold _gate.
+    /// the scene's own style. A parked copy reads its style keys from its kept look and every other key through. The
+    /// song's remembered style (style memory) applies to every surface, as on the Mac. Must hold _gate.
     /// </summary>
     private LooksCache LooksFor(AppSettings settings, IReadOnlyList<ConnectedDisplay> displays)
     {
         var layout = _layout;
-        if (_looks is { } cached && ReferenceEquals(cached.Settings, settings) && ReferenceEquals(cached.Displays, displays) && cached.Layout == layout)
+        var remembered = RememberedLocked(settings)?.Style;
+        if (_looks is { } cached && ReferenceEquals(cached.Settings, settings) && ReferenceEquals(cached.Displays, displays) && cached.Layout == layout
+            && Equals(cached.Remembered, remembered))
             return cached;
         var main = displays[0].Key;
         var editing = settings.EditingSlot(main);
@@ -218,7 +220,7 @@ public sealed partial class AppController
         Dictionary<string, SurfaceLook> floating = new(StringComparer.Ordinal), desktop = new(StringComparer.Ordinal);
         SurfaceLook Parked(string display, LyricsSurface surface)
         {
-            var look = settings.LookFor(display, surface, main);
+            var look = StyleMemory.Applied(settings.LookFor(display, surface, main), remembered);
             var chosen = look.LyricComposition == AutomaticComposition ? layout ?? "constellation" : look.LyricComposition;
             return new SurfaceLook(look.Style(), available.Contains(chosen) ? chosen : null);
         }
@@ -228,7 +230,7 @@ public sealed partial class AppController
             if (choice.Floats() && editing != new LookSlot(d.Key, LyricsSurface.Floating)) floating[d.Key] = Parked(d.Key, LyricsSurface.Floating);
             if (choice.OnDesktop() && editing != new LookSlot(d.Key, LyricsSurface.Desktop)) desktop[d.Device] = Parked(d.Key, LyricsSurface.Desktop);
         }
-        return new LooksCache(settings, displays, layout, floating, desktop);
+        return new LooksCache(settings, displays, layout, remembered, floating, desktop);
     }
 
     /// <summary>The Mac's <c>visibilityInput</c>: what the window's rule needs, with how long the song has been paused.</summary>
