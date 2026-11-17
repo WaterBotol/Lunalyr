@@ -36,7 +36,8 @@ internal sealed partial class AppHost
         var text = new StringBuilder();
         var settings = _settings.Current;
         text.AppendLine($"Lunalyr {Version} on Windows {Environment.OSVersion.Version} ({(Environment.Is64BitOperatingSystem ? "64-bit" : "32-bit")})");
-        text.AppendLine($"Wallpaper: {settings.BackgroundMode}{(settings.WallpaperPaused ? " (paused)" : "")}; lyrics {settings.LyricsSurface}, layout {settings.LyricComposition}; "
+        text.AppendLine($"Wallpaper: {settings.BackgroundMode}{(settings.WallpaperPaused ? " (paused)" : "")}; editing the {settings.LyricsSurface} style, layout {settings.LyricComposition}; "
+            + $"displays {(DisplayKeysNow is { Count: > 0 } keys ? string.Join(", ", keys.Select((k, i) => $"{i + 1}: {Core.Floating.DisplayLyricsChoices.Raw(settings.DisplayChoice(k))}")) : "unknown")}; "
             + $"Animation effects {(SystemReducesMotion ? "off" : "on")}{(SystemReducesMotion && !ReduceMotion ? " (animating anyway)" : "")}; "
             + $"attach {_wallpaper?.Engine.AttachMode?.ToString() ?? "none"}");
         string webView;
