@@ -141,24 +141,45 @@ public sealed class LyricCardExporter(IEnumerable<IRenderLayerFactory> factories
     }
 
     /// <summary>
-    /// The card as a looping GIF at its full size. <paramref name="progress"/> runs 0 to
-    /// <see cref="LyricCardFrames.GifDrawingShare"/> while the frames are drawn (each is encoded as it comes), then
-    /// <paramref name="encoding"/> is called while the file is finished.
+    /// The card as a looping GIF at its full size, encoded by the card's own GIF encoder (the Mac's 7767ef6) while the next
+    /// frame is drawn: 25 fps (10 over a moving background), under <paramref name="byteBudget"/> (made again with fewer
+    /// frames per second, then smaller, when over). <paramref name="progress"/> runs 0 to
+    /// <see cref="LyricCardFrames.GifDrawingShare"/> while the frames are drawn, then <paramref name="encoding"/> is called and
+    /// the rest of the bar follows the file being finished.
     /// </summary>
     public byte[]? Gif(LyricCardJob job, double scale = LyricCardFrames.GifScale, Action<double>? progress = null, Action? encoding = null,
-                       CancellationToken cancellationToken = default)
+                       CancellationToken cancellationToken = default, int? byteBudget = LyricCardFrames.GifByteBudget)
     {
         var size = job.Content.Size;
-        using var gif = new GifWriter((int)Math.Round(size.Width * scale), (int)Math.Round(size.Height * scale));
-        var ok = RenderFrames(job, scale, LyricCardFrames.GifCadence, LyricCardFrames.GifFrameBudget(job.Content.Pages.Count), null,
+        int width = (int)Math.Round(size.Width * scale), height = (int)Math.Round(size.Height * scale);
+        var writer = new GifCardWriter(byteBudget);
+        using var registration = cancellationToken.Register(writer.Cancel);
+        var cadence = job.Content.Background?.IsAnimated == true ? LyricCardFrames.GifMovingBackgroundCadence : LyricCardFrames.GifCadence;
+        // Each frame is encoded while the next is drawn; the sink waits for the one before, so two buffers take turns.
+        byte[][] buffers = [new byte[width * height * 4], new byte[width * height * 4]];
+        var turn = 0;
+        Task<bool>? pending = null;
+        var ok = RenderFrames(job, scale, cadence, null, null,
             (pixels, delay, _) =>
             {
-                gif.Add(pixels, delay);
+                if (pending is not null && !pending.GetAwaiter().GetResult()) return false;
+                var buffer = buffers[turn];
+                turn ^= 1;
+                pixels.AsSpan(0, buffer.Length).CopyTo(buffer);
+                pending = Task.Run(() => writer.Add(buffer, width, height, delay));
                 return !cancellationToken.IsCancellationRequested;
             }, value => progress?.Invoke(value * LyricCardFrames.GifDrawingShare), cancellationToken);
-        if (!ok || cancellationToken.IsCancellationRequested) return null;
+        var encoded = pending?.GetAwaiter().GetResult() ?? false;
+        if (!ok || !encoded || cancellationToken.IsCancellationRequested)
+        {
+            writer.Cancel();
+            return null;
+        }
         encoding?.Invoke();
-        return gif.Finish();
+        var data = writer.Finish(fraction => progress?.Invoke(LyricCardFrames.GifDrawingShare + (1 - LyricCardFrames.GifDrawingShare) * fraction));
+        if (writer.Written is { } written && written.Passes > 1)
+            _log.Info($"Lyric card GIF: over {byteBudget / 1_000_000} MB, made again at {100 / Math.Max(1, written.Gap)} fps, scale {written.Scale:0.##} ({written.Bytes / 1000} KB).");
+        return data;
     }
 
     // ---- Sound ----

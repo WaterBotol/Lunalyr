@@ -36,14 +36,23 @@ public static class LyricCardFrames
     /// <summary>GIFs are drawn at the card's full size (1080 on the short side).</summary>
     public const double GifScale = 1;
 
-    /// <summary>The GIF's shortest frame.</summary>
-    public const double GifCadence = 0.08;
+    /// <summary>
+    /// Seconds between GIF frames: 25 fps, so the lyrics move as smoothly as a GIF allows (4 cs; browsers slow anything
+    /// under 2 cs to 10). The Mac's 7767ef6; before, 12.5 fps capped at 90 or 120 frames.
+    /// </summary>
+    public const double GifCadence = 0.04;
 
-    /// <summary>The most frames a GIF of <paramref name="pages"/> lines is drawn with.</summary>
-    public static int GifFrameBudget(int pages) => pages == 1 ? 90 : 120;
+    /// <summary>A moving background changes every pixel of every frame, so it is drawn at 10 fps to stay in budget.</summary>
+    public const double GifMovingBackgroundCadence = 0.1;
 
-    /// <summary>The share of a GIF's progress its frames take; encoding them takes the rest.</summary>
-    public const double GifDrawingShare = 0.8;
+    /// <summary>
+    /// The most a GIF should weigh: under Discord's 10 MB upload limit with room to spare. Over it, the GIF is made again with
+    /// fewer frames per second, then smaller (<see cref="GifCardWriter"/>).
+    /// </summary>
+    public const int GifByteBudget = 8_000_000;
+
+    /// <summary>The share of a GIF's progress its frames take (encoded as they are drawn); finishing the file takes the rest.</summary>
+    public const double GifDrawingShare = 0.85;
 
     /// <summary>How many frames <see cref="Schedule"/> expects to hand out (for the progress bar).</summary>
     public static int Expected(LyricCardContent content, double minimumCadence, int? budget, ClipPlan? plan)
@@ -197,7 +206,8 @@ public static class LyricCardExportPlan
                     var drawing = frames * LyricCardFrames.VideoScale * LyricCardFrames.VideoScale;
                     return hasSound ? drawing / (1 - MixShare) : drawing;
                 case CardFormat.Gif:
-                    var gifFrames = Math.Min(LyricCardFrames.GifFrameBudget(pages), seconds / LyricCardFrames.GifCadence + pages);
+                    // Drawn and encoded together, at most GifByteBudget deep.
+                    var gifFrames = seconds / LyricCardFrames.GifCadence + pages;
                     return gifFrames * LyricCardFrames.GifScale * LyricCardFrames.GifScale / LyricCardFrames.GifDrawingShare;
                 default:
                     // One frame at twice the card's size.

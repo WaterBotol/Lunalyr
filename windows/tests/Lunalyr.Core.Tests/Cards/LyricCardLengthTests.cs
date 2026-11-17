@@ -209,10 +209,14 @@ public class LyricCardLengthTests
             Pages = [new CardPage(["Before"]), new CardPage([word.Text], CardAnimation.Create(line, CompositionKind.Cutout, 0)), new CardPage(["After"])],
             Title = "A Song", Artist = "An Artist", ReduceMotion = true,
         };
-        var frames = LyricCardFrames.Schedule(content, LyricCardFrames.GifCadence, LyricCardFrames.GifFrameBudget(3)).ToList();
-        Assert.Equal(12, frames.Count);
+        // 25 fps with no frame cap (the Mac's 7767ef6).
+        var frames = LyricCardFrames.Schedule(content, LyricCardFrames.GifCadence, null).ToList();
+        Assert.True(frames.Count > 3, "the sung line moves between the two held lines");
         Assert.Equal(1.8, frames[0].Delay, 2);
-        Assert.Equal(0.08, frames[5].Delay, 2);
+        var sung = frames.Skip(1).Take(frames.Count - 2).Select(f => f.Delay).ToList();
+        Assert.All(sung, delay => Assert.True(delay >= 0.02, $"{delay}"));
+        Assert.Equal(0.04, sung.Min(), 0.011);
+        Assert.Equal(0.8, sung.Sum(), 0.02);
         Assert.Equal(1.8, frames[^1].Delay, 2);
     }
 

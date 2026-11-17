@@ -87,7 +87,10 @@ public class LyricCardLayoutTests
         Assert.Equal(mp4.To, gif.From);
         Assert.Equal(gif.To, png.From);
         Assert.Equal(1, png.To);
-        Assert.True(mp4.To - mp4.From > 0.5); // 20 s of video is most of the work
+        // The GIF is drawn at full size at 25 fps, the video at two-thirds size at 30 (the Mac's 7767ef6).
+        Assert.True(gif.To - gif.From > mp4.To - mp4.From);
+        var videoAndStill = LyricCardExportPlan.ProgressShares([CardFormat.Mp4, CardFormat.Png], 20, 4, hasSound: true);
+        Assert.True(videoAndStill[CardFormat.Mp4].To > 0.9); // 20 s of video is most of the work
         Assert.True(png.To - png.From < 0.05); // one still is a sliver
         Assert.Equal((0.0, 1.0), LyricCardExportPlan.ProgressShares([CardFormat.Png], 3, 1, hasSound: false)[CardFormat.Png]);
         Assert.Empty(LyricCardExportPlan.ProgressShares([], 3, 1, hasSound: false));

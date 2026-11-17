@@ -137,9 +137,13 @@ public class LyricCardExportTests
         var path = media.File("excerpt.gif");
         File.WriteAllBytes(path, gif!);
         var info = CardImages.ReadGif(path)!;
-        Assert.Equal(12, info.Frames.Count);
+        Assert.True(info.Frames.Count > 3, "the sung line moves between the two held lines");
         Assert.Equal(1.8, info.Frames[0].Delay, 2);
-        Assert.Equal(0.08, info.Frames[5].Delay, 2);
+        // 25 fps (the Mac's 7767ef6).
+        var sung = info.Frames.Skip(1).Take(info.Frames.Count - 2).Select(f => f.Delay).ToList();
+        Assert.All(sung, delay => Assert.True(delay >= 0.02, $"{delay}"));
+        Assert.Equal(0.04, sung.Min(), 0.011);
+        Assert.Equal(0.8, sung.Sum(), 0.02);
         Assert.Equal(1.8, info.Frames[^1].Delay, 2);
     }
 
@@ -184,8 +188,10 @@ public class LyricCardExportTests
         var info = CardImages.ReadGif(path)!;
         Assert.Equal(0, info.LoopCount);
         Assert.True(info.Frames.Count > 12);
-        Assert.Equal(0.08, info.Frames[0].Delay, 2);
-        Assert.True(info.Frames.Count * info.Frames[0].Delay >= line.End - line.Start);
+        // Frames still before the first word are one longer frame; the line moves at 25 fps (the Mac's 7767ef6).
+        Assert.True(info.Frames[0].Delay >= 0.04 - 0.001);
+        Assert.Equal(0.04, info.Frames.Min(f => f.Delay), 3);
+        Assert.True(info.Frames.Sum(f => f.Delay) >= line.End - line.Start - 0.01);
         Assert.Equal((540, 675), (info.Frames[0].Width, info.Frames[0].Height));
     }
 
@@ -247,16 +253,30 @@ public class LyricCardExportTests
         return maxX < 0 ? (0, 0, -1) : (maxX - minX + 1, maxY - minY + 1, maxX);
     }
 
-    private static List<byte[]> GifFrames(Lunalyr.Shell.Cards.LyricCardJob job)
+    private static List<byte[]> GifFrames(Lunalyr.Shell.Cards.LyricCardJob job) => [.. TimedGifFrames(job).Select(f => f.Pixels)];
+
+    private static List<(byte[] Pixels, double Delay)> TimedGifFrames(Lunalyr.Shell.Cards.LyricCardJob job)
     {
-        var frames = new List<byte[]>();
-        Assert.True(CardMedia.Exporter().RenderFrames(job, 0.5, LyricCardFrames.GifCadence, LyricCardFrames.GifFrameBudget(job.Content.Pages.Count), null,
-            (pixels, _, _) =>
+        var frames = new List<(byte[], double)>();
+        Assert.True(CardMedia.Exporter().RenderFrames(job, 0.5, LyricCardFrames.GifCadence, null, null,
+            (pixels, delay, _) =>
             {
-                frames.Add((byte[])pixels.Clone());
+                frames.Add(((byte[])pixels.Clone(), delay));
                 return true;
             }, cancellationToken: TestContext.Current.CancellationToken));
         return frames;
+    }
+
+    /// <summary>The frame showing <paramref name="seconds"/> into the GIF (the Mac's frame(at:), 7767ef6).</summary>
+    private static byte[] FrameAt(List<(byte[] Pixels, double Delay)> frames, double seconds)
+    {
+        var elapsed = 0.0;
+        foreach (var (pixels, delay) in frames)
+        {
+            elapsed += delay;
+            if (elapsed > seconds) return pixels;
+        }
+        return frames[^1].Pixels;
     }
 
     // Ported from LyricExtrasTests.swift: testLongLinkedGIFKeepsTheFullCoverAndLyricsAtBothEnds (the GIF's first and last
@@ -311,8 +331,8 @@ public class LyricCardExportTests
             Pages = [new CardPage([word.Text], CardAnimation.Create(line, CompositionKind.Spoken, 0))],
             Title = "A Song", Artist = "An Artist", HasArtwork = true, ReduceMotion = true,
         };
-        var frames = GifFrames(WithCover(content, cover));
-        var ink = WhiteBounds(frames[8], 540, 165, 540, 30, 510, 0.72);
+        // The frame showing 0.64 s in.
+        var ink = WhiteBounds(FrameAt(TimedGifFrames(WithCover(content, cover)), 0.64), 540, 165, 540, 30, 510, 0.72);
         Assert.True(ink.Height >= 42, $"text ink {ink.Height} px high in the 540 px wide card");
         Assert.True(ink.Width >= 350, $"the focus word, {ink.Width} px wide, should fill most of the 540 px card");
     }
@@ -397,14 +417,15 @@ public class LyricCardExportTests
         var info = CardImages.ReadGif(path)!;
         Assert.Equal((size, size), (info.Frames[0].Width, info.Frames[0].Height));
         Assert.True(info.Frames[1].Width <= 20 && info.Frames[1].Height <= 20, $"{info.Frames[1]}");
-        Assert.Equal((1, 1), (info.Frames[2].Width, info.Frames[2].Height)); // nothing changed
-        Assert.All(info.Frames, f => Assert.Equal(0.1, f.Delay, 2));
+        // A frame identical to the last only lengthens it (the Mac's 7767ef6).
+        Assert.Equal([0.1, 0.2, 0.1], info.Frames.Select(f => Math.Round(f.Delay, 2)));
         using var read = AnimatedPicture.Open(path)!;
-        for (var i = 0; i < frames.Length; i++)
+        int[] shown = [0, 1, 3];
+        for (var i = 0; i < shown.Length; i++)
         {
             var art = read.Frame(i);
             var worst = 0;
-            for (var p = 0; p < art.Pixels.Length; p++) worst = Math.Max(worst, Math.Abs(art.Pixels[p] - frames[i][p]));
+            for (var p = 0; p < art.Pixels.Length; p++) worst = Math.Max(worst, Math.Abs(art.Pixels[p] - frames[shown[i]][p]));
             Assert.True(worst < 40, $"frame {i} differs by {worst}");
         }
     }
