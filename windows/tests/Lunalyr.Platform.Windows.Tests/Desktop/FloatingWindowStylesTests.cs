@@ -31,7 +31,7 @@ public class FloatingWindowStylesTests
     [Fact]
     public void ClicksPassThroughExceptInEditMode()
     {
-        Assert.Equal(WS_EX_TRANSPARENT, FloatingWindowStyles.ExStyle(editing: false) & WS_EX_TRANSPARENT);
-        Assert.Equal(0u, FloatingWindowStyles.ExStyle(editing: true) & WS_EX_TRANSPARENT);
+        Assert.Equal(WS_EX_TRANSPARENT, FloatingWindowStyles.ExStyle(takesPointer: false) & WS_EX_TRANSPARENT);
+        Assert.Equal(0u, FloatingWindowStyles.ExStyle(takesPointer: true) & WS_EX_TRANSPARENT);
     }
 }

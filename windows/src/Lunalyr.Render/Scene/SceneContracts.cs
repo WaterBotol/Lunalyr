@@ -160,6 +160,12 @@ public sealed record LyricStyle
     /// </summary>
     public bool Translations { get; init; }
 
+    /// <summary>
+    /// A floating window's see-through margin round its box, in pixels: the stage is laid out in the box and may draw
+    /// into the margin (the Mac's 7e2b22b9). 0 elsewhere.
+    /// </summary>
+    public double FloatingInset { get; init; }
+
     /// <summary>Where a shown translation sits (the Mac's <c>custom.translationPlacement</c>): under its line by default.</summary>
     public Core.Compositions.TranslationPlacement TranslationPlacement { get; init; }
 

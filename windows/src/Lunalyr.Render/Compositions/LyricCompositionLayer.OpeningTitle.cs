@@ -383,7 +383,7 @@ internal abstract partial class LyricCompositionLayer
         ShadowSpec[] glows = [new((float)(0.45 * glow * key.Accent.W), (float)(size * 0.3 * 0.5), 0, accent)];
         var gap = size * 0.2;
         var wordsGap = size * 0.16;
-        var room = SurfaceSize.X * 0.9 - (key.Cover ? side + gap : 0);
+        var room = BoxSize.X * 0.9 - (key.Cover ? side + gap : 0);
 
         var titleText = key.Title;
         // Each sized in its own face, as the card's lines are.
@@ -436,7 +436,9 @@ internal abstract partial class LyricCompositionLayer
         var height = Math.Max(key.Cover ? side : 0, wordsHeight);
         var baseline = (height - wordsHeight) / 2 + wordsAbove;
         var width = (key.Cover ? side + gap : 0) + titleInk.Box.X + (artistInk is null ? 0 : wordsGap + artistInk.Box.X);
-        var frame = OpeningTitle.RowFrame(SurfaceSize.X, SurfaceSize.Y, width, height, BaseSize, key.RowPlace.Centre, key.RowPlace.Bottom);
+        // In the floating window's box, not its see-through margin.
+        var frame = OpeningTitle.RowFrame(BoxSize.X, BoxSize.Y, width, height, BaseSize, key.RowPlace.Centre, key.RowPlace.Bottom);
+        frame = frame with { X = frame.X + BoxInset, Y = frame.Y + BoxInset };
 
         Ink? coverShadow = null;
         if (key.Cover)

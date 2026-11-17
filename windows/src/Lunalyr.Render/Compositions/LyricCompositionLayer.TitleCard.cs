@@ -55,7 +55,7 @@ internal abstract partial class LyricCompositionLayer
         var showsReading = key.Reading is not null && !compact;
         var titleSize = nominal * OpeningTitle.LengthScale(key.Title) * titleMetrics.Scale;
         var step = new OpeningTitle.Spacing(nominal);
-        var width = floating ? SurfaceSize.X * 0.9 : box.Width;
+        var width = floating ? BoxSize.X * 0.9 : box.Width;
         var centred = floating && !key.Cover;
         var side = key.Cover ? nominal * OpeningTitle.CoverShare(compact) : 0;
         var gap = step.Group;

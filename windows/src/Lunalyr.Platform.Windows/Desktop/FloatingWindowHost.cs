@@ -84,10 +84,11 @@ public static class FloatingWindowStyles
     /// <summary>
     /// Never activated (no foreground, no keyboard), out of Alt+Tab and the taskbar (a tool window, never an app window),
     /// above every app, and drawn through DirectComposition with per-pixel alpha. Click-through (layered and transparent)
-    /// except while editing, when it takes the pointer only.
+    /// except while it takes the pointer: in edit position, with the pointer over its box (the margin round the box lets
+    /// clicks through, the Mac's 7e2b22b9).
     /// </summary>
-    public static uint ExStyle(bool editing) =>
-        WS_EX_NOREDIRECTIONBITMAP | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_LAYERED | (editing ? 0 : WS_EX_TRANSPARENT);
+    public static uint ExStyle(bool takesPointer) =>
+        WS_EX_NOREDIRECTIONBITMAP | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_LAYERED | (takesPointer ? 0 : WS_EX_TRANSPARENT);
 
     /// <summary>The style bits that must be on in every mode.</summary>
     public static uint Always => WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | WS_EX_TOPMOST;
@@ -122,7 +123,11 @@ public sealed unsafe class FloatingWindowHost : IDisposable
     private bool _visible, _pointerOver, _editingStyle;
     private DisplayChoice? _display;
     private FloatingDisplay _geometry;
+    // The box (where the lyrics are laid out, and what a drag acts on), in screen pixels; the window is it grown by
+    // _margin on every side (FloatingFrame.SpillMargin).
     private MBox _rect;
+    private int _margin;
+    private bool _takesPointer;
     private nint _foregroundHook;
     private (MBox Start, POINT Cursor, FloatingEdges Edges)? _drag;
     private bool _donePressed;
@@ -215,11 +220,13 @@ public sealed unsafe class FloatingWindowHost : IDisposable
             var options = _options;
             var rect = Resolve(options) ?? new MBox(0, 0, 640, 200);
             _editingStyle = options.Editing;
-            nint hwnd = CreateWindowEx(FloatingWindowStyles.ExStyle(_editingStyle), cls, title, FloatingWindowStyles.Style,
-                (int)rect.X, (int)rect.Y, Math.Max(1, (int)rect.Width), Math.Max(1, (int)rect.Height), 0, 0, inst, 0);
+            _rect = rect;
+            _margin = MarginFor(options);
+            var window = WindowRect;
+            nint hwnd = CreateWindowEx(FloatingWindowStyles.ExStyle(false), cls, title, FloatingWindowStyles.Style,
+                (int)window.X, (int)window.Y, Math.Max(1, (int)window.Width), Math.Max(1, (int)window.Height), 0, 0, inst, 0);
             if (hwnd == 0) throw new InvalidOperationException($"CreateWindowEx failed: {Marshal.GetLastPInvokeError()}");
             _hwnd = hwnd;
-            _rect = rect;
         }
         _foregroundHook = SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND, 0, &OnForeground, 0, 0, WINEVENT_OUTOFCONTEXT);
         ReadLook();
@@ -293,9 +300,8 @@ public sealed unsafe class FloatingWindowHost : IDisposable
         {
             _editingStyle = options.Editing;
             if (!options.Editing) EndDrag(store: false);
-            SetWindowLongPtr(_hwnd, GWL_EXSTYLE, (nint)FloatingWindowStyles.ExStyle(_editingStyle));
-            SetWindowPos(_hwnd, 0, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED | SWP_NOOWNERZORDER);
-            _log.Info(options.Editing ? "Floating lyrics: edit position (takes the pointer, never the keyboard)" : "Floating lyrics: locked; clicks pass through");
+            UpdatePointerTaking();
+            _log.Info(options.Editing ? "Floating lyrics: edit position (takes the pointer over the lyrics, never the keyboard)" : "Floating lyrics: locked; clicks pass through");
         }
         if (_drag is null) Place();
         bool wanted = options.Enabled && options.Shown;
@@ -308,29 +314,59 @@ public sealed unsafe class FloatingWindowHost : IDisposable
         var previous = _display?.Monitor;
         if (_applied is null || Resolve(_applied) is not { } rect) return;
         bool monitorChanged = previous is null || previous.DeviceName != _display!.Monitor.DeviceName || previous.Dpi != _display.Monitor.Dpi;
-        if (rect == _rect && !monitorChanged) return;
-        Move(rect, handOver: monitorChanged);
+        var margin = MarginFor(_applied);
+        if (rect == _rect && margin == _margin && !monitorChanged) return;
+        Move(rect, handOver: monitorChanged, margin: margin);
     }
 
+    /// <summary>The see-through margin round the box for these options, in pixels (FloatingFrame.SpillMargin).</summary>
+    private int MarginFor(FloatingLyricsOptions options) =>
+        (int)Math.Ceiling(FloatingFrame.SpillMargin(options.TextSize) * (_display?.Monitor.Scale ?? 1));
+
+    /// <summary>The window round the box, in screen pixels.</summary>
+    private MBox WindowRect => new(_rect.X - _margin, _rect.Y - _margin, _rect.Width + 2 * _margin, _rect.Height + 2 * _margin);
+
     /// <param name="handOver">The window went to another monitor (or scale): its swap chain follows even at the same size.</param>
-    private void Move(MBox rect, bool handOver = false)
+    private void Move(MBox rect, bool handOver = false, int? margin = null)
     {
-        bool resized = rect.Width != _rect.Width || rect.Height != _rect.Height;
+        var newMargin = margin ?? _margin;
+        bool resized = rect.Width != _rect.Width || rect.Height != _rect.Height || newMargin != _margin;
         _rect = rect;
-        SetWindowPos(_hwnd, 0, (int)rect.X, (int)rect.Y, (int)rect.Width, (int)rect.Height, SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOOWNERZORDER);
+        _margin = newMargin;
+        var window = WindowRect;
+        SetWindowPos(_hwnd, 0, (int)window.X, (int)window.Y, (int)window.Width, (int)window.Height, SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOOWNERZORDER);
         if (resized || handOver) HandOver();
     }
 
-    /// <summary>Tells the renderer the window's size and monitor (its swap chain follows).</summary>
+    /// <summary>Tells the renderer the window's size, monitor and margin (its swap chain follows).</summary>
     private void HandOver()
     {
         if (_display is null) return;
-        _sink.SetWindow(new SurfaceWindow(_hwnd, _display.Monitor, Math.Max(1, (int)_rect.Width), Math.Max(1, (int)_rect.Height), AttachMode.Floating));
+        var window = WindowRect;
+        _sink.SetWindow(new SurfaceWindow(_hwnd, _display.Monitor, Math.Max(1, (int)window.Width), Math.Max(1, (int)window.Height),
+            AttachMode.Floating, _margin));
+    }
+
+    /// <summary>
+    /// Takes the pointer only in edit position and only while it is over the box, so clicks in the margin round it reach
+    /// what is underneath (the Mac's 7e2b22b9). Never switched mid-press: a click or drag ends where it began.
+    /// </summary>
+    private void UpdatePointerTaking()
+    {
+        bool takes;
+        if (!(_applied?.Editing ?? false) || !_visible) takes = false;
+        else if (_drag is not null || _donePressed || (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0) return;
+        else takes = GetCursorPos(out var p) && p.X >= _rect.X && p.X < _rect.X + _rect.Width && p.Y >= _rect.Y && p.Y < _rect.Y + _rect.Height;
+        if (takes == _takesPointer) return;
+        _takesPointer = takes;
+        SetWindowLongPtr(_hwnd, GWL_EXSTYLE, (nint)FloatingWindowStyles.ExStyle(takes));
+        SetWindowPos(_hwnd, 0, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED | SWP_NOOWNERZORDER);
     }
 
     private void Show()
     {
-        SetWindowPos(_hwnd, HWND_TOPMOST, (int)_rect.X, (int)_rect.Y, (int)_rect.Width, (int)_rect.Height, SWP_NOACTIVATE | SWP_SHOWWINDOW);
+        var window = WindowRect;
+        SetWindowPos(_hwnd, HWND_TOPMOST, (int)window.X, (int)window.Y, (int)window.Width, (int)window.Height, SWP_NOACTIVATE | SWP_SHOWWINDOW);
         _visible = true;
         _sink.WindowShown(true);
         _log.Info("Floating lyrics shown");
@@ -355,7 +391,8 @@ public sealed unsafe class FloatingWindowHost : IDisposable
     private void UpdateTimers()
     {
         var options = _applied;
-        bool pointer = _visible && options is { FadesUnderPointer: true, Editing: false };
+        // The pointer is followed for the fade, and in edit position for which part of the window takes it.
+        bool pointer = _visible && options is { FadesUnderPointer: true } or { Editing: true };
         if (pointer) SetTimer(_hwnd, TimerPointer, PointerPollMs, 0);
         else
         {
@@ -408,8 +445,9 @@ public sealed unsafe class FloatingWindowHost : IDisposable
 
     // ---- Edit mode: the pointer only ----
 
+    // Points in the window's client area are the box's less the margin.
     private FloatingHit HitAt(int x, int y) =>
-        FloatingEditChrome.HitTest(x, y, _rect.Width, _rect.Height, _display?.Monitor.Scale ?? 1);
+        FloatingEditChrome.HitTest(x - _margin, y - _margin, _rect.Width, _rect.Height, _display?.Monitor.Scale ?? 1);
 
     private void OnButtonDown(int x, int y)
     {
@@ -422,7 +460,7 @@ public sealed unsafe class FloatingWindowHost : IDisposable
         else
         {
             if (!GetCursorPos(out var cursor)) return;
-            var edges = FloatingEditChrome.EdgesAt(x, y, _rect.Width, _rect.Height, _display?.Monitor.Scale ?? 1);
+            var edges = FloatingEditChrome.EdgesAt(x - _margin, y - _margin, _rect.Width, _rect.Height, _display?.Monitor.Scale ?? 1);
             _drag = (_rect, cursor, edges);
             _log.Info(edges == FloatingEdges.None
                 ? $"Floating lyrics: moving from {_rect.X},{_rect.Y} ({_rect.Width}x{_rect.Height})"
@@ -476,7 +514,7 @@ public sealed unsafe class FloatingWindowHost : IDisposable
         var id = IDC_ARROW;
         if (_applied is { Editing: true })
         {
-            var edges = _drag?.Edges ?? FloatingEditChrome.EdgesAt(x, y, _rect.Width, _rect.Height, _display?.Monitor.Scale ?? 1);
+            var edges = _drag?.Edges ?? FloatingEditChrome.EdgesAt(x - _margin, y - _margin, _rect.Width, _rect.Height, _display?.Monitor.Scale ?? 1);
             id = _drag is null && HitAt(x, y) == FloatingHit.Done ? IDC_HAND : edges switch
             {
                 FloatingEdges.Left or FloatingEdges.Right => IDC_SIZEWE,
@@ -559,7 +597,8 @@ public sealed unsafe class FloatingWindowHost : IDisposable
                 EndDrag(store: true);
                 return 0;
             case WM_TIMER when w == TimerPointer:
-                CheckPointer();
+                if (_applied is { Editing: true }) UpdatePointerTaking();
+                else CheckPointer();
                 return 0;
             case WM_TIMER when w == TimerTopmost:
                 KeepOnTop();

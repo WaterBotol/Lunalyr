@@ -43,6 +43,12 @@ internal static unsafe partial class FloatingNative
     [LibraryImport("user32.dll")]
     public static partial nint SetCapture(nint hwnd);
 
+    /// <summary>The left mouse button (for <see cref="GetAsyncKeyState"/>: never switch mid-press).</summary>
+    public const int VK_LBUTTON = 0x01;
+
+    [LibraryImport("user32.dll")]
+    public static partial short GetAsyncKeyState(int key);
+
     [LibraryImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static partial bool ReleaseCapture();

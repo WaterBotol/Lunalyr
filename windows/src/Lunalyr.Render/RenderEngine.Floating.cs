@@ -57,7 +57,7 @@ internal sealed class FloatingPanel(string display)
     public bool WasShown, FadeOutReported;
     public SceneSnapshot? SceneSource;
     public SceneSnapshot? Scene;
-    public (double TextSize, double Backdrop, bool Reduce, double Behind) SceneKey;
+    public (double TextSize, double Backdrop, bool Reduce, double Behind, int Inset) SceneKey;
 
     // Stall diagnostics (render thread).
     public double TraceLast, TraceSong = double.NaN, SongStill, LastStallWarning = double.NegativeInfinity;
@@ -454,11 +454,11 @@ public sealed partial class RenderEngine
         var o = p.Options;
         var look = p.Look;
         var drawer = s.FloatingDrawer ??= new FloatingFrameDrawer();
-        drawer.Prepare(dc, _dwrite, frame.Size, frame.Scale);
+        drawer.Prepare(dc, _dwrite, frame.Size, frame.Scale, s.Window.Inset);
         bool hasStage = false;
         if (p.Opacity > 0.002 && s.Lyric is { Broken: false, HasResources: true } lyric)
         {
-            var stageFrame = frame with { Scene = FloatingScene(p, frame.Scene, o, look) };
+            var stageFrame = frame with { Scene = FloatingScene(p, frame.Scene, o, look, s.Window.Inset) };
             drawer.BeginStage(dc);
             DrawLayer(s, lyric, stageFrame, 1);
             FloatingFrameDrawer.EndStage(dc, s.Target!);
@@ -512,16 +512,16 @@ public sealed partial class RenderEngine
     }
 
     /// <summary>A floating stage's scene, made again only when its scene or the shade changes (never per frame).</summary>
-    private SceneSnapshot FloatingScene(FloatingPanel p, SceneSnapshot scene, FloatingLyricsOptions o, FloatingLook look)
+    private SceneSnapshot FloatingScene(FloatingPanel p, SceneSnapshot scene, FloatingLyricsOptions o, FloatingLook look, int inset)
     {
         // What the shade lies over, in steps of 0.05 so the scene is not made again every frame.
         var behind = Math.Round(FloatingBehind(p) * 20) / 20;
-        var key = (o.TextSize, o.Backdrop, look.ReduceTransparency, behind);
+        var key = (o.TextSize, o.Backdrop, look.ReduceTransparency, behind, inset);
         if (!ReferenceEquals(scene, p.SceneSource) || key != p.SceneKey || p.Scene is null)
         {
             p.SceneSource = scene;
             p.SceneKey = key;
-            p.Scene = FloatingFrameDrawer.SceneFor(scene, o.TextSize, o.Backdrop, look.ReduceTransparency, behind);
+            p.Scene = FloatingFrameDrawer.SceneFor(scene, o.TextSize, o.Backdrop, look.ReduceTransparency, behind, inset);
         }
         return p.Scene;
     }

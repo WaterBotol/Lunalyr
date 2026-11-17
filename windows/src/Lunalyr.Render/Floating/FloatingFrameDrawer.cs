@@ -38,14 +38,22 @@ public sealed class FloatingFrameDrawer : IDisposable
     private ID2D1StrokeStyle? _dash;
     private IDWriteTextFormat? _hintFormat, _doneFormat, _placeholderFormat;
     private Vector2 _size;
+    // The box inside the window (the shade, the chrome), and the see-through margin round it (the Mac's 7e2b22b9).
+    private Vector2 _box;
+    private float _inset;
     private float _scale = 1;
 
     /// <summary>The lyric stage, drawn first, then shadowed and laid over the shade. Null before <see cref="BeginStage"/>.</summary>
     public ID2D1Bitmap1? Stage => _stage;
 
-    /// <summary>Makes (or keeps) the resources for a surface of <paramref name="size"/> pixels at <paramref name="scale"/>.</summary>
-    public void Prepare(ID2D1DeviceContext dc, IDWriteFactory dwrite, Vector2 size, float scale)
+    /// <summary>
+    /// Makes (or keeps) the resources for a surface of <paramref name="size"/> pixels at <paramref name="scale"/>, its box
+    /// <paramref name="inset"/> pixels in from every edge (the margin the lyrics may spill into).
+    /// </summary>
+    public void Prepare(ID2D1DeviceContext dc, IDWriteFactory dwrite, Vector2 size, float scale, float inset = 0)
     {
+        _inset = Math.Max(0, Math.Min(inset, Math.Min(size.X, size.Y) / 2));
+        _box = new Vector2(Math.Max(0, size.X - 2 * _inset), Math.Max(0, size.Y - 2 * _inset));
         if (!ReferenceEquals(dc, _dc)) ReleaseResources();
         if (_dc is null)
         {
@@ -115,7 +123,10 @@ public sealed class FloatingFrameDrawer : IDisposable
             }, null!);
         try
         {
+            // The shade covers the box only; the stage (laid out in the box) may draw into the margin round it.
+            dc.Transform = Matrix3x2.CreateTranslation(_inset, _inset);
             DrawBackdrop(dc, backdrop, reduceTransparency);
+            dc.Transform = Matrix3x2.Identity;
             if (hasStage && _stage is not null)
             {
                 // One soft shadow for the whole stage, so thin type still reads where the shade fades out.
@@ -125,7 +136,12 @@ public sealed class FloatingFrameDrawer : IDisposable
                 dc.DrawImage(_shadowOut!, new Vector2(0, _scale), null, InterpolationMode.Linear, CompositeMode.SourceOver);
                 dc.DrawBitmap(_stage, whole, 1, InterpolationMode.NearestNeighbor, null, null);
             }
-            if (editing) DrawEditChrome(dc, dwrite, accent, placeholder);
+            if (editing)
+            {
+                dc.Transform = Matrix3x2.CreateTranslation(_inset, _inset);
+                DrawEditChrome(dc, dwrite, accent, placeholder);
+                dc.Transform = Matrix3x2.Identity;
+            }
         }
         finally
         {
@@ -144,13 +160,13 @@ public sealed class FloatingFrameDrawer : IDisposable
             var panel = FloatingBackdrop.Panel(strength);
             if (panel <= 0) return;
             var inset = 4 * _scale;
-            var corner = (float)Math.Min(22 * _scale, (_size.Y - 2 * inset) * 0.2);
+            var corner = (float)Math.Min(22 * _scale, (_box.Y - 2 * inset) * 0.2);
             _brush!.Color = new Color4(0, 0, 0, (float)panel);
-            dc.FillRoundedRectangle(new RoundedRectangle(new RawRectF(inset, inset, _size.X - inset, _size.Y - inset), corner, corner), _brush);
+            dc.FillRoundedRectangle(new RoundedRectangle(new RawRectF(inset, inset, _box.X - inset, _box.Y - inset), corner, corner), _brush);
             return;
         }
         if (strength <= FloatingBackdrop.Off) return;
-        dc.DrawBitmap(_shade!, new RawRectF(0, 0, _size.X, _size.Y), (float)(FloatingBackdrop.MaximumShade * Math.Min(1, strength)),
+        dc.DrawBitmap(_shade!, new RawRectF(0, 0, _box.X, _box.Y), (float)(FloatingBackdrop.MaximumShade * Math.Min(1, strength)),
             InterpolationMode.Linear, null, null);
     }
 
@@ -184,7 +200,7 @@ public sealed class FloatingFrameDrawer : IDisposable
         var accentColour = new Color4(accent.X, accent.Y, accent.Z, 1);
         var radius = (float)(FloatingEditChrome.CornerRadius * s);
         var line = (float)(FloatingEditChrome.OutlineWidth * s);
-        var outline = new RoundedRectangle(new RawRectF(line / 2, line / 2, _size.X - line / 2, _size.Y - line / 2), radius, radius);
+        var outline = new RoundedRectangle(new RawRectF(line / 2, line / 2, _box.X - line / 2, _box.Y - line / 2), radius, radius);
         brush.Color = new Color4(0, 0, 0, 0.18f);
         dc.FillRoundedRectangle(outline, brush);
         brush.Color = accentColour;
@@ -192,7 +208,7 @@ public sealed class FloatingFrameDrawer : IDisposable
 
         if (placeholder)
         {
-            using var layout = dwrite.CreateTextLayout(FloatingEditChrome.Placeholder, _placeholderFormat!, _size.X, _size.Y);
+            using var layout = dwrite.CreateTextLayout(FloatingEditChrome.Placeholder, _placeholderFormat!, _box.X, _box.Y);
             layout.TextAlignment = TextAlignment.Center;
             layout.ParagraphAlignment = ParagraphAlignment.Center;
             brush.Color = new Color4(0, 0, 0, 0.6f);
@@ -202,10 +218,10 @@ public sealed class FloatingFrameDrawer : IDisposable
         }
 
         // The hint, top left.
-        using (var hint = dwrite.CreateTextLayout(FloatingEditChrome.Hint, _hintFormat!, _size.X, 100))
+        using (var hint = dwrite.CreateTextLayout(FloatingEditChrome.Hint, _hintFormat!, _box.X, 100))
         {
             var box = FloatingEditChrome.HintBox(hint.Metrics.WidthIncludingTrailingWhitespace, s);
-            var done = FloatingEditChrome.Done(_size.X, _size.Y, s);
+            var done = FloatingEditChrome.Done(_box.X, _box.Y, s);
             // A narrow window keeps the hint clear of Done.
             if (box.X + box.Width <= done.X - 6 * s)
             {
@@ -219,7 +235,7 @@ public sealed class FloatingFrameDrawer : IDisposable
 
         // Done, top right.
         {
-            var done = FloatingEditChrome.Done(_size.X, _size.Y, s);
+            var done = FloatingEditChrome.Done(_box.X, _box.Y, s);
             var r = (float)(6 * s);
             brush.Color = accentColour;
             dc.FillRoundedRectangle(new RoundedRectangle(Rect(done), r, r), brush);
@@ -232,7 +248,7 @@ public sealed class FloatingFrameDrawer : IDisposable
 
         // The grip: a circle with a two-way diagonal arrow.
         {
-            var grip = FloatingEditChrome.Grip(_size.X, _size.Y, s);
+            var grip = FloatingEditChrome.Grip(_box.X, _box.Y, s);
             var centre = new Vector2((float)(grip.X + grip.Width / 2), (float)(grip.Y + grip.Height / 2));
             brush.Color = accentColour;
             dc.FillEllipse(new Ellipse(centre, (float)(grip.Width / 2), (float)(grip.Height / 2)), brush);
@@ -284,10 +300,10 @@ public sealed class FloatingFrameDrawer : IDisposable
     /// <param name="behind">What the shade lies over (<see cref="FloatingBackdrop.Behind"/>): an unknown app, or a music
     /// video wallpaper as its own lyrics take it.</param>
     public static SceneSnapshot SceneFor(SceneSnapshot scene, double textSize, double backdrop, bool reduceTransparency,
-                                         double behind = Core.Colour.LyricLegibility.UnknownBackdropLuminance) =>
+                                         double behind = Core.Colour.LyricLegibility.UnknownBackdropLuminance, double inset = 0) =>
         scene with
         {
-            Style = scene.Style with { FloatingTextSize = textSize },
+            Style = scene.Style with { FloatingTextSize = textSize, FloatingInset = inset },
             Palette = scene.Palette with { TextBackdrop = FloatingBackdrop.Luminance(backdrop, reduceTransparency, behind), TextUnbacked = null },
         };
 }

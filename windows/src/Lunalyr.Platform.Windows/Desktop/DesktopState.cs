@@ -9,7 +9,8 @@ public readonly record struct SystemVisibility(bool DisplayOff, bool Locked, boo
 /// <summary>A wallpaper (or preview) window the host created for one monitor.</summary>
 /// <param name="Hwnd">The window; owned by the host thread. Valid until the next <see cref="IDesktopSurfaceSink.ReleaseSurfaces"/>.</param>
 /// <param name="Width">Client width in physical pixels.</param>
-public sealed record SurfaceWindow(nint Hwnd, MonitorInfo Monitor, int Width, int Height, AttachMode Mode);
+/// <param name="Inset">A floating window's see-through margin round its box, in pixels on every side (0 for a wallpaper).</param>
+public sealed record SurfaceWindow(nint Hwnd, MonitorInfo Monitor, int Width, int Height, AttachMode Mode, int Inset = 0);
 
 /// <summary>Everything the renderer needs to decide whether each surface draws.</summary>
 /// <param name="Generation">Which <see cref="IDesktopSurfaceSink.SetSurfaces"/> call <paramref name="Monitors"/> lines up with.</param>

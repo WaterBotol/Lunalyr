@@ -426,8 +426,11 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
         SceneShown = scene;
         Kit!.SetFamily(scene.Style.FontFamily);
         // The floating window keeps room for the kept song title's row (the Mac's d849c49).
+        // The stage is laid out in the floating window's box; centred in the window, it lands on the box, and what it draws
+        // may reach into the margin round it (the Mac's 7e2b22b9).
+        var inset = (float)Math.Max(0, scene.Style.FloatingInset);
         Metrics = scene.Style.FloatingTextSize is { } textSize
-            ? ViewportMetrics.ForText(SurfaceSize.X, SurfaceSize.Y, Scale, textSize, scene.Style.SizeFraction,
+            ? ViewportMetrics.ForText(Math.Max(1, SurfaceSize.X - 2 * inset), Math.Max(1, SurfaceSize.Y - 2 * inset), Scale, textSize, scene.Style.SizeFraction,
                                       titleRow: scene.Style is { OpeningTitle: true, OpeningTitleKeep: true },
                                       rowScale: scene.Style.OpeningTitleRow.Scale, rowAtBottom: scene.Style.OpeningTitleRow.Bottom)
             : ViewportMetrics.For(SurfaceSize.X, SurfaceSize.Y, Scale, scene.Style.SizeFraction);
@@ -521,6 +524,12 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
     protected SizeD Stage => Metrics.Stage;
     /// <summary>The stage's middle: the surface's, moved clear of the floating window's title row when it has one.</summary>
     protected Vector2 StageCentre => new(SurfaceSize.X / 2, (float)(SurfaceSize.Y / 2 + Metrics.CentreShift));
+
+    /// <summary>A floating window's see-through margin round its box, in pixels (0 elsewhere).</summary>
+    protected float BoxInset => (float)Math.Max(0, SceneShown?.Style.FloatingInset ?? 0);
+
+    /// <summary>The surface less that margin: the floating window's box, or the whole surface elsewhere.</summary>
+    protected Vector2 BoxSize => new(Math.Max(1, SurfaceSize.X - 2 * BoxInset), Math.Max(1, SurfaceSize.Y - 2 * BoxInset));
     protected Vector2 StageOrigin => new((float)((SurfaceSize.X - Stage.Width) / 2), (float)((SurfaceSize.Y - Stage.Height) / 2 + Metrics.CentreShift));
     protected float Points(double points) => (float)(points * Scale);
     protected bool ReadingsShown => SceneShown?.Style.Readings == ReadingPlacement.Below || SceneShown?.Style.Readings == ReadingPlacement.Instead;

@@ -228,6 +228,25 @@ public static class FloatingFrame
     }
 
     /// <summary>A frame relative to a display's frame, to keep across rearrangements.</summary>
+    // ---- The box and the window round it (the Mac's 7e2b22b9) ----
+
+    /// <summary>
+    /// Every frame here, saved or placed, is the box: where the lyrics are laid out, the shade, and what a drag, a resize
+    /// or the pointer acts on. The window is bigger by this see-through margin on every side (points), so what is drawn
+    /// (pills, glows, letters that spin, hop or drip) can spill past the box instead of being cut off at its edge. The
+    /// margin takes no clicks and may run off the screen.
+    /// </summary>
+    public static double SpillMargin(double textSize) =>
+        Math.Ceiling(Math.Max(160, double.IsFinite(textSize) ? Math.Max(0, textSize) * 1.5 : 0));
+
+    /// <summary>The window's frame for a box: the box grown by <paramref name="margin"/> on every side.</summary>
+    public static FloatingRect Window(FloatingRect box, double margin) =>
+        new(box.X - margin, box.Y - margin, box.Width + 2 * margin, box.Height + 2 * margin);
+
+    /// <summary>The box inside a window made by <see cref="Window"/>.</summary>
+    public static FloatingRect Box(FloatingRect window, double margin) =>
+        new(window.X + margin, window.Y + margin, window.Width - 2 * margin, window.Height - 2 * margin);
+
     public static FloatingRect Relative(FloatingRect frame, FloatingRect screenFrame) =>
         frame.OffsetBy(-screenFrame.MinX, -screenFrame.MinY);
 
