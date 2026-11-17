@@ -165,13 +165,37 @@ public sealed class MusicVideoMatchTests
         var html = YouTubeEmbed.Html("4NRXx6U8ABQ", 0);
         foreach (var needle in new[] { "player.unloadModule('captions')", "player.unloadModule('cc')", "player.setOption('captions', 'track', {})" })
             Assert.Contains(needle, html);
-        Assert.Contains("onReady: function (event) { ready = true; event.target.mute(); hideCaptions();", html);
+        Assert.Contains("ready = true; event.target.mute(); hideCaptions();", html);
         Assert.Contains("if (state === -1 || state === 1 || state === 5) { hideCaptions(); }", html);
         Assert.Contains("onApiChange: function () { hideCaptions(); }", html);
         Assert.DoesNotContain("host:", html);
         Assert.Contains("new YT.Player('player'", html);
         Assert.Equal("fr", YouTubeEmbed.PlayerLanguage(new System.Globalization.CultureInfo("fr-FR")));
         Assert.Equal("en", YouTubeEmbed.PlayerLanguage(new System.Globalization.CultureInfo("en-AU")));
+    }
+
+    // Ported from MusicVideoCaptionSyncTests.swift: testTheCaptureScriptOnlyWorksInYouTubesFrameAndTheEmbedAsksForCaptionsOnlyWhenWanted
+    // (the captions load unseen only for caption sync; Windows reads the replies from WebView2, so the page only asks)
+    [Fact]
+    public void TheEmbedAsksForCaptionsOnlyWhenWanted()
+    {
+        var plain = YouTubeEmbed.Html("wIgmyE5Juzw", 0);
+        Assert.Contains("cc_load_policy=0", plain);
+        Assert.Contains("var captionsWanted = false", plain);
+        var wanted = YouTubeEmbed.Html("wIgmyE5Juzw", 0, captions: "en-GB");
+        Assert.Contains("cc_load_policy=1", wanted);
+        Assert.Contains("cc_lang_pref=en", wanted);
+        Assert.Contains("var captionsWanted = true, captionTrack = 'en'", wanted);
+        Assert.Contains("mute=1", wanted); // still muted
+        Assert.Contains("player.loadModule('captions')", wanted);
+        Assert.Contains("window.lunalyrCaptionsDone = function", wanted);
+        // The video's own track when the lyrics' language isn't known: loaded, but no language asked for.
+        var any = YouTubeEmbed.Html("wIgmyE5Juzw", 0, captions: "");
+        Assert.Contains("cc_load_policy=1", any);
+        Assert.DoesNotContain("cc_lang_pref", any);
+        Assert.Null(YouTubeEmbed.CaptionLanguage("en'); alert(1"));
+        Assert.Equal("ko", YouTubeEmbed.CaptionLanguage("ko"));
+        Assert.Null(YouTubeEmbed.CaptionLanguage(null));
     }
 
     // Ported from MusicVideoMatchTests.swift: testPlayerIsVisibleOnlyWhilePlaying (and Windows' HasPlayer: the page's window

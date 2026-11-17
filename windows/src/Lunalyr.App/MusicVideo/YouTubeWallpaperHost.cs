@@ -61,6 +61,10 @@ internal sealed partial class YouTubeWallpaperHost : IMusicVideoPlaybackSurface,
     private bool _opening;
     private string? _videoId;
     private string? _pageVideo;
+    /// <summary>The page whose captions were asked for (caption sync), and whether a reply for it came.</summary>
+    private string? _captionsAsked;
+    private bool _captionsCaptured;
+    private DispatcherQueueTimer? _captionsWait;
     private int _pageNumber;
     private double _pageStart;
     private MusicVideoHold _hold = MusicVideoHold.Other;
@@ -81,6 +85,7 @@ internal sealed partial class YouTubeWallpaperHost : IMusicVideoPlaybackSurface,
         _userData = userDataFolder;
         _settings = settings;
         _log = log.App;
+        _video.CaptionLogged += LogCaption;
         _idle = new MusicVideoIdlePlayer(schedule: (delay, work) =>
         {
             var timer = ui.CreateTimer();
@@ -190,6 +195,8 @@ internal sealed partial class YouTubeWallpaperHost : IMusicVideoPlaybackSurface,
                     return;
                 }
                 Configure(controller);
+                // Caption sync: inside YouTube's own frame only, the captions it loads stay unseen.
+                await controller.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(MusicVideoCaptionSync.HideScript);
                 _controller = controller;
             }
             if (_controller is null) return;
@@ -245,6 +252,7 @@ internal sealed partial class YouTubeWallpaperHost : IMusicVideoPlaybackSurface,
             if (!e.IsSuccess) Perform(_session.NavigationFailed(e.WebErrorStatus == CoreWebView2WebErrorStatus.OperationCanceled));
         };
         core.ProcessFailed += (_, _) => Perform(_session.ContentProcessTerminated());
+        core.WebResourceResponseReceived += (sender, e) => _ = CaptureCaptionsAsync(e);
     }
 
     /// <summary>The page itself, from memory, for the current video and page; nothing else on the virtual host exists.</summary>
@@ -255,12 +263,97 @@ internal sealed partial class YouTubeWallpaperHost : IMusicVideoPlaybackSurface,
         if (uri?.AbsolutePath == "/player.html" && _pageVideo is { } video && YouTubeVideoId.IsValid(video))
         {
             var (framing, box, _) = Look();
-            var html = Encoding.UTF8.GetBytes(YouTubeEmbed.Html(video, _pageStart, _pageNumber, overscan: framing.YouTubeOverscan(), box: box));
+            var captions = AskCaptions(video);
+            var html = Encoding.UTF8.GetBytes(YouTubeEmbed.Html(video, _pageStart, _pageNumber, overscan: framing.YouTubeOverscan(), box: box,
+                captions: captions));
             e.Response = _environment.CreateWebResourceResponse(Stream(html), 200, "OK",
                 "Content-Type: text/html; charset=utf-8\r\nCache-Control: no-store\r\nReferrer-Policy: strict-origin-when-cross-origin");
             return;
         }
         e.Response = _environment.CreateWebResourceResponse(null, 404, "Not Found", "");
+    }
+
+    // ---- Caption sync (the Mac's deb366e, 3c6c931, 1384242) ----
+
+    private void LogCaption(string line) => _log.Info("Music video " + line);
+
+    /// <summary>
+    /// The caption language to ask the page for <paramref name="video"/> ("" for the video's own track), or null when the
+    /// controller doesn't want its captions. Logs that they were asked for, and that none came if none do in time.
+    /// </summary>
+    private string? AskCaptions(string video)
+    {
+        if (!_video.WantsCaptions(new MusicVideoSource.YouTube(video))) return null;
+        var language = YouTubeEmbed.CaptionLanguage(_video.CaptionLanguage());
+        _video.LogCaption(MusicVideoCaptionLog.AskedLine(language ?? "the video's own"));
+        _captionsAsked = video;
+        _captionsCaptured = false;
+        _captionsWait?.Stop();
+        var wait = YouTubeEmbed.CaptionWait + 12;
+        var timer = _ui.CreateTimer();
+        timer.Interval = TimeSpan.FromSeconds(wait);
+        timer.IsRepeating = false;
+        timer.Tick += (_, _) =>
+        {
+            timer.Stop();
+            if (!_disposed && _captionsAsked == video && !_captionsCaptured) _video.LogCaption(MusicVideoCaptionLog.NoneLine(wait));
+        };
+        timer.Start();
+        _captionsWait = timer;
+        return language ?? "";
+    }
+
+    /// <summary>
+    /// A timed-text reply YouTube's player loaded, read from WebView2 (which sees the embed's own frame): believed only from
+    /// YouTube's own host, for the video on the page, never a machine translation; then passed to the controller and the
+    /// captions unloaded again. Counts only are logged.
+    /// </summary>
+    private async Task CaptureCaptionsAsync(CoreWebView2WebResourceResponseReceivedEventArgs e)
+    {
+        try
+        {
+            if (_disposed || _pageVideo is not { } video || _captionsAsked != video
+                || MusicVideoCaptionSync.CaptureOf(e.Request.Uri, video) is not { } capture)
+            {
+                return;
+            }
+            var status = e.Response.StatusCode;
+            byte[] body = [];
+            var content = await e.Response.GetContentAsync();
+            if (content is not null)
+            {
+                using var read = content.AsStreamForRead();
+                using var copy = new MemoryStream();
+                var buffer = new byte[64 * 1024];
+                int count;
+                while ((count = await read.ReadAsync(buffer)) > 0)
+                {
+                    copy.Write(buffer, 0, count);
+                    if (copy.Length > MusicVideoCaptionSync.MaximumReply) break;
+                }
+                body = copy.ToArray();
+            }
+            if (_disposed || _pageVideo != video) return;
+            if (body.Length > MusicVideoCaptionSync.MaximumReply)
+            {
+                _video.LogCaption(MusicVideoCaptionLog.IgnoredLine("too large"));
+                return;
+            }
+            var cues = MusicVideoCaptionSync.Cues(body);
+            if (cues.Count == 0)
+            {
+                _video.LogCaption(MusicVideoCaptionLog.EmptyLine(status, body.Length));
+                return;
+            }
+            _captionsCaptured = true;
+            _video.LogCaption(MusicVideoCaptionLog.FetchedLine(capture.Automatic, capture.Language, cues.Count, cues.Any(c => c.Words is not null)));
+            _video.NoteCaptions(body, new MusicVideoSource.YouTube(video));
+            Run(YouTubeEmbed.CaptionsDoneScript);
+        }
+        catch (Exception ex) when (ex is COMException or IOException or ObjectDisposedException or InvalidOperationException)
+        {
+            // The page or its reply went away; captions just don't sync this time.
+        }
     }
 
     private static IRandomAccessStream Stream(byte[] bytes)
@@ -592,6 +685,8 @@ internal sealed partial class YouTubeWallpaperHost : IMusicVideoPlaybackSurface,
     {
         if (_disposed) return;
         _disposed = true;
+        _video.CaptionLogged -= LogCaption;
+        _captionsWait?.Stop();
         void Teardown()
         {
             Close();

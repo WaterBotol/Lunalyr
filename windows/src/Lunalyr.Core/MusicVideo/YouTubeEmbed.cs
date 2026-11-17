@@ -134,14 +134,37 @@ public static class YouTubeEmbed
         return code.Length is 2 or 3 && code.All(char.IsAsciiLetter) ? code : "en";
     }
 
-    /// <summary>The embed's address: youtube-nocookie's privacy-enhanced player with only documented parameters.</summary>
-    public static string EmbedSource(string videoId, double start, string language)
+    /// <summary>
+    /// The caption language to ask the player for: the first part of a language tag ("en-GB" gives "en"), two or three
+    /// ASCII letters; null for anything else, so nothing but a plain code reaches the page.
+    /// </summary>
+    public static string? CaptionLanguage(string? language)
+    {
+        if (string.IsNullOrEmpty(language)) return null;
+        var code = language.Split('-', '_')[0].ToLowerInvariant();
+        return code.Length is 2 or 3 && code.All(char.IsAsciiLetter) ? code : null;
+    }
+
+    /// <summary>How long after the player is ready its captions stay loaded when none were captured (the Mac's captionWait).</summary>
+    public const double CaptionWait = 60;
+
+    /// <summary>The script that unloads the captions once captured (<c>lunalyrCaptionsDone</c>).</summary>
+    public const string CaptionsDoneScript = "window.lunalyrCaptionsDone && window.lunalyrCaptionsDone()";
+
+    /// <summary>
+    /// The embed's address: youtube-nocookie's privacy-enhanced player with only documented parameters. With
+    /// <paramref name="captions"/> (a language, or "" for the video's own track) the player loads the video's captions,
+    /// unseen (<see cref="MusicVideoCaptionSync.HideScript"/>), for caption sync; otherwise they stay unloaded.
+    /// </summary>
+    public static string EmbedSource(string videoId, double start, string language, string? captions = null)
     {
         if (!YouTubeVideoId.IsValid(videoId)) throw new ArgumentException("Not a YouTube video ID.", nameof(videoId));
         var second = Math.Max(0, (int)(double.IsFinite(start) ? start : 0));
         language = SafeLanguage(language);
         return $"https://www.youtube-nocookie.com/embed/{videoId}?enablejsapi=1&autoplay=0&mute=1&controls=0&disablekb=1&fs=0"
-            + $"&iv_load_policy=3&rel=0&playsinline=1&loop=0&cc_load_policy=0&hl={language}&start={second}"
+            + $"&iv_load_policy=3&rel=0&playsinline=1&loop=0&cc_load_policy={(captions is null ? 0 : 1)}"
+            + (CaptionLanguage(captions) is { } wanted ? $"&cc_lang_pref={wanted}" : "")
+            + $"&hl={language}&start={second}"
             + $"&origin={Uri.EscapeDataString(BaseUrl.GetLeftPart(UriPartial.Authority))}";
     }
 
@@ -153,9 +176,14 @@ public static class YouTubeEmbed
     /// <paramref name="box"/> the player's size within the page when shown whole (null: it covers the page). Both can change
     /// later without a reload (<see cref="OverscanScript"/>, <see cref="BoxScript"/>).
     /// </summary>
-    public static string Html(string videoId, double start, int page = 0, string? language = null, double overscan = Overscan, Box? box = null)
+    /// <param name="captions">Load the video's captions, unseen, in this language ("" for the video's own track); null leaves them unloaded.</param>
+    public static string Html(string videoId, double start, int page = 0, string? language = null, double overscan = Overscan, Box? box = null,
+        string? captions = null)
     {
-        var source = EmbedSource(videoId, start, language ?? PlayerLanguage());
+        var source = EmbedSource(videoId, start, language ?? PlayerLanguage(), captions);
+        var captionTrack = CaptionLanguage(captions) is { } track ? $"'{track}'" : "null";
+        var captionsWanted = captions is null ? "false" : "true";
+        var captionWait = ((int)(CaptionWait * 1000)).ToString(CultureInfo.InvariantCulture);
         var pageText = page.ToString(CultureInfo.InvariantCulture);
         var zoom = Number(ClampOverscan(overscan));
         var boxText = box?.Script ?? "null";
@@ -172,6 +200,7 @@ public static class YouTubeEmbed
             allow="autoplay; encrypted-media" referrerpolicy="strict-origin-when-cross-origin"></iframe></div>
             <script>
             var player = null, ready = false, blurPx = 0, overscan = {{zoom}}, box = {{boxText}};
+            var captionsWanted = {{captionsWanted}}, captionTrack = {{captionTrack}}, captionsLoaded = false, captionTimer = null;
             function post(type, value) {
               try { window.chrome.webview.postMessage({type: type, value: value, video: '{{videoId}}', page: {{pageText}}}); } catch (e) {}
             }
@@ -182,7 +211,7 @@ public static class YouTubeEmbed
               document.getElementById('frame').style.opacity = visibleFor(state) ? '1' : '0';
             }
             function hideCaptions() {
-              if (!player) return;
+              if (!player || captionsWanted) return;
               try { player.unloadModule('captions'); } catch (e) {}
               try { player.unloadModule('cc'); } catch (e) {}
               try { player.setOption('captions', 'track', {}); } catch (e) {}
@@ -190,13 +219,22 @@ public static class YouTubeEmbed
             function onYouTubeIframeAPIReady() {
               player = new YT.Player('player', {
                 events: {
-                  onReady: function (event) { ready = true; event.target.mute(); hideCaptions(); show(-1); post('ready', 0); },
+                  onReady: function (event) {
+                    ready = true; event.target.mute(); hideCaptions(); show(-1); post('ready', 0);
+                    if (captionsWanted) captionTimer = setTimeout(window.lunalyrCaptionsDone, {{captionWait}});
+                  },
                   onError: function (event) { show(-1); post('error', event.data); },
                   onApiChange: function () { hideCaptions(); },
                   onStateChange: function (event) {
                     var state = event.data;
                     if (state === 1 || state === 3) { player.mute(); }
                     if (state === -1 || state === 1 || state === 5) { hideCaptions(); }
+                    // Caption sync: the captions module is loaded (unseen) once the video plays, in the lyrics' language.
+                    if (state === 1 && captionsWanted && !captionsLoaded) {
+                      captionsLoaded = true;
+                      try { player.loadModule('captions'); } catch (e) {}
+                      if (captionTrack) { try { player.setOption('captions', 'track', {languageCode: captionTrack}); } catch (e) {} }
+                    }
                     show(state);
                     post('state', state);
                   }
@@ -208,6 +246,11 @@ public static class YouTubeEmbed
               // Checked on every sample too: the video must never be heard.
               try { if (player.isMuted && !player.isMuted()) player.mute(); } catch (e) {}
               return {time: player.getCurrentTime(), state: player.getPlayerState(), duration: player.getDuration()};
+            };
+            window.lunalyrCaptionsDone = function () {
+              captionsWanted = false;
+              if (captionTimer) { clearTimeout(captionTimer); captionTimer = null; }
+              hideCaptions();
             };
             window.lunalyrPlay = function () { if (ready) { player.mute(); player.playVideo(); } };
             window.lunalyrPause = function () { if (ready) player.pauseVideo(); };
