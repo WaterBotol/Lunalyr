@@ -78,7 +78,7 @@ public sealed class AppSettingsTests
             "lyricsHidden",
             // Discord status and the tray lyric (discordSongButton is written only once it is set)
             "discordPresence", "discordStatusText", "discordLyric", "discordCover", "discordButton", "discordProgress", "discordPaused",
-            "discordLyricLead", "trayLyric", "trayLyricLength",
+            "discordLyricLead", "translationPlacement", "trayLyric", "trayLyricLength",
             "lyricCardComposition", "lyricCardLinesBefore", "lyricCardLinesAfter", "lyricCardAspect", "lyricCardFormats",
             "lyricCardBackgroundPath", "lyricCardUseSong", "lyricCardTextScale",
             // Updates and the first-run welcome (milestone 8)

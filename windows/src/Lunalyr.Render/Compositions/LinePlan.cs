@@ -133,7 +133,8 @@ internal readonly record struct PlanSpec(
     Vector4 ReadingColour, double LineReadingSize, double LineReadingWidth, ShadowSpec LineReadingShadow,
     LyricInk? Ink = null, CompositionKind Kind = CompositionKind.Editorial, double Spread = 1,
     double TranslationSize = 0, double EditorialAmount = 1, bool RandomFonts = false, SizeD? FillStage = null,
-    bool Symbols = false, bool Actions = false, WordAccentLists? WordLists = null, bool GentleActions = false);
+    bool Symbols = false, bool Actions = false, WordAccentLists? WordLists = null, bool GentleActions = false,
+    bool TranslationAbove = false);
 
 internal static class LinePlans
 {
@@ -243,9 +244,19 @@ internal static class LinePlans
                                                ScriptDirection.IsRightToLeft(text), (float)spec.LineReadingWidth);
                 var m = translationLayout.Metrics;
                 var gap = spec.BaseSize * LineTranslations.Gap;
-                var top = content.Height + gap;
-                content = new SizeD(Math.Max(content.Width, m.Width), top + m.Height);
-                translationCentre = new PointD(content.Width / 2, top + m.Height / 2);
+                if (spec.TranslationAbove)
+                {
+                    // Over the line (Translation sits › Above the line): the line keeps its place and the translation
+                    // rests above it.
+                    content = new SizeD(Math.Max(content.Width, m.Width), content.Height);
+                    translationCentre = new PointD(content.Width / 2, -(gap + m.Height / 2));
+                }
+                else
+                {
+                    var top = content.Height + gap;
+                    content = new SizeD(Math.Max(content.Width, m.Width), top + m.Height);
+                    translationCentre = new PointD(content.Width / 2, top + m.Height / 2);
+                }
                 // The line and its reading stay centred over the wider stack.
                 readingCentre = readingCentre with { X = content.Width / 2 };
             }

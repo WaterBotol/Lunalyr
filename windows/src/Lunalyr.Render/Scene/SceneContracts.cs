@@ -160,6 +160,9 @@ public sealed record LyricStyle
     /// </summary>
     public bool Translations { get; init; }
 
+    /// <summary>Where a shown translation sits (the Mac's <c>custom.translationPlacement</c>): under its line by default.</summary>
+    public Core.Compositions.TranslationPlacement TranslationPlacement { get; init; }
+
     /// <summary>
     /// Show the song's credits on the wallpaper: its "Title - Artist" as it starts, then any production credits that
     /// came with the lyrics, one after another in a band at the top or foot of the stage (the Mac's credits layer,

@@ -11,4 +11,10 @@ public sealed partial record AppSettings
     /// default): a bilingual LRC, a TTML's translation, NetEase's or QQ's, or a local <c>.tr.lrc</c>.
     /// </summary>
     public bool ShowTranslations { get; init; } = true;
+
+    /// <summary>
+    /// Where a line's translation sits (Mac <c>custom.translationPlacement</c>, 5783d638): "below" (under the line, the
+    /// default), "above", "bottom" or "top" (of the screen, or the floating window). Part of a lyric style.
+    /// </summary>
+    public string TranslationPlacement { get; init; } = "below";
 }

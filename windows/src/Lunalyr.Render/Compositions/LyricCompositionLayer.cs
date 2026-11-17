@@ -731,7 +731,11 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
         if (Rules.FillsStage)
         {
             // A stage layout draws nothing for a preview (the Mac's firstRunOnly is a clear stage).
-            if (!drawn.Previewing) DrawStage(dc, row, time, pose, stagePresence, opacity, drawn.Yield);
+            if (!drawn.Previewing)
+            {
+                DrawStage(dc, row, time, pose, stagePresence, opacity, drawn.Yield);
+                DrawEdgeTranslation(dc, row, pose.Progress * (1 - pose.Exit) * opacity);
+            }
             return;
         }
         var heldScale = 1 - LineStack.HeldShrink * Math.Min(1, drawn.Held ?? 0);
@@ -750,6 +754,7 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
             DrawWordTimed(dc, plan, time, exitStart, drawn.PreviewSince, content, plan.Fit * heldScale,
                           stagePresence * opacity, swell, slide, stagePresence * (1 - pose.Exit));
             DrawLineReading(dc, plan, content, plan.Fit * heldScale, pose.Progress * (1 - pose.Exit) * opacity);
+            if (!drawn.Previewing) DrawEdgeTranslation(dc, row, pose.Progress * (1 - pose.Exit) * opacity);
         }
         else
         {
@@ -758,6 +763,7 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
             var heldPreview = !drawn.Previewing && row > 0 && time - line.Start < 1
                 && LineFlow.NextLinePreview(row - 1, Sheet!, Math.BitDecrement(line.Start), Rules) == row;
             DrawPhrase(dc, plan, line, row, time, pose, drawn, heldPreview, offset, heldScale, opacity);
+            if (!drawn.Previewing) DrawEdgeTranslation(dc, row, pose.Progress * (1 - pose.Exit) * opacity);
         }
     }
 
@@ -845,7 +851,7 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
         {
             return BuildPlan(words, mainGlue, lineBase, row, line.Start, wordTimed: true, editorial: Kind.HasEditorialTypography(),
                              runReadings, lineReading, FitFor(row), Stage.Width, groups, row, kind: Kind, lineEnd: line.End,
-                             runShares: runShares, translation: TranslationOf(row));
+                             runShares: runShares, translation: LineTranslationOf(row));
         }
         finally
         {
@@ -922,6 +928,7 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
             Kind: FlowKind(planKind), Spread: StyleShown.ConstellationSpread, EditorialAmount: editorialAmount,
             RandomFonts: StyleShown.RandomFonts,
             TranslationSize: BaseSize * LineTranslations.LineSize * Metrics.UserScale,
+            TranslationAbove: TranslationPlace == TranslationPlacement.Above,
             FillStage: Stage,
             // Word symbols and action words: lead lyric lines only, never a romanisation shown instead of the words.
             Symbols: _accentLine && StyleShown.WordSymbols,
@@ -1584,7 +1591,7 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
             var (runReadings, lineReading) = set is not null ? (set.RunReadings(words, glue), set.LineReading) : Readings(row, words, glue);
             var phraseBase = BaseSize * (Kind == CompositionKind.Spoken ? 1.26 : 1.06);
             var plan = BuildPlan(words, glue, phraseBase, row, line.Start, wordTimed: false, editorial: false, runReadings, lineReading,
-                                 FitFor(row), Stage.Width, translation: TranslationOf(row));
+                                 FitFor(row), Stage.Width, translation: LineTranslationOf(row));
             plan.LastUsed = Frame;
             _phrases[row] = plan;
             return plan;

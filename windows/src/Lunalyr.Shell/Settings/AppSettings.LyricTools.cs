@@ -26,10 +26,18 @@ public sealed partial record AppSettings
         _ => NoLyricsDisplay.Notice,
     };
 
-    private AppSettings NormalizedLyricTools() =>
-        NoLyricsValues.Contains(NoLyrics) ? this : this with { NoLyrics = new AppSettings().NoLyrics };
+    private AppSettings NormalizedLyricTools()
+    {
+        var settings = NoLyricsValues.Contains(NoLyrics) ? this : this with { NoLyrics = new AppSettings().NoLyrics };
+        var place = Core.Compositions.TranslationPlacements.Raw(Core.Compositions.TranslationPlacements.Parse(TranslationPlacement));
+        return place == TranslationPlacement ? settings : settings with { TranslationPlacement = place };
+    }
 
     // Show translations under lyrics (AppSettings.Translations.cs) reaches the renderer here too.
     private LyricStyle WithLyricToolsStyle(LyricStyle style) =>
-        style with { NoLyrics = NoLyricsShown(), Translations = ShowTranslations };
+        style with
+        {
+            NoLyrics = NoLyricsShown(), Translations = ShowTranslations,
+            TranslationPlacement = Core.Compositions.TranslationPlacements.Parse(TranslationPlacement),
+        };
 }

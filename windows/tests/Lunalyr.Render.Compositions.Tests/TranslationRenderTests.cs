@@ -96,6 +96,49 @@ public sealed class TranslationRenderTests : IDisposable
         Assert.True(differing > 60, $"{id}: no translation was drawn ({differing} pixels differ)");
     }
 
+    private static int DifferingRows(byte[] a, byte[] b, int fromRow, int toRow)
+    {
+        var differing = 0;
+        for (var i = fromRow * Width * 4; i < Math.Min(a.Length, toRow * Width * 4); i += 4)
+            if (Math.Abs(a[i] - b[i]) + Math.Abs(a[i + 1] - b[i + 1]) + Math.Abs(a[i + 2] - b[i + 2]) > 24) differing++;
+        return differing;
+    }
+
+    private static SceneSnapshot Placed(TranslationPlacement place)
+    {
+        var scene = Translated();
+        return scene with { Style = scene.Style with { TranslationPlacement = place } };
+    }
+
+    // The Mac's 5783d638: Translation sits under or over its line, or at the bottom or top of the screen.
+    [Theory]
+    [InlineData("editorial", TranslationPlacement.Above)]
+    [InlineData("editorial", TranslationPlacement.Bottom)]
+    [InlineData("editorial", TranslationPlacement.Top)]
+    [InlineData("spoken", TranslationPlacement.Above)]
+    [InlineData("spoken", TranslationPlacement.Top)]
+    [InlineData("hinge", TranslationPlacement.Above)]
+    [InlineData("hinge", TranslationPlacement.Top)]
+    [InlineData("cutout", TranslationPlacement.Bottom)]
+    public void EveryPlaceDrawsTheTranslation(string id, TranslationPlacement place)
+    {
+        var (a, b) = Pair(id, Placed(place), 21.4);
+        var differing = Differing(a, b);
+        Assert.True(differing > 60, $"{id} {place}: no translation was drawn ({differing} pixels differ)");
+    }
+
+    [Theory]
+    [InlineData("editorial")]
+    [InlineData("hinge")]
+    public void AtTheScreensEdgeTheTranslationSitsThere(string id)
+    {
+        // At the top, the frames differ in the stage's top fifth; at the bottom, in its bottom fifth.
+        var (topWith, topWithout) = Pair(id, Placed(TranslationPlacement.Top), 21.4);
+        Assert.True(DifferingRows(topWith, topWithout, 0, Height / 5) > 60, $"{id}: nothing was drawn at the top");
+        var (bottomWith, bottomWithout) = Pair(id, Placed(TranslationPlacement.Bottom), 21.4);
+        Assert.True(DifferingRows(bottomWith, bottomWithout, Height * 4 / 5, Height) > 60, $"{id}: nothing was drawn at the bottom");
+    }
+
     [Theory]
     [InlineData("editorial")]
     [InlineData("spoken")]

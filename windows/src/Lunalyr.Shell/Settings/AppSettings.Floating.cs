@@ -226,7 +226,7 @@ public static class LyricStyleProfiles
         // Layout rotation, backing vocals, credits, the opening title
         "rotateLayouts", "backingVocalsLayer", "backingVocalStyle", "creditsLayer", "openingTitle", "openingTitleCover",
         // Readings and translations shown (the Mac's FloatingLyrics.swift lists Show translations right after them)
-        "romanizationDisplay", "showTranslations",
+        "romanizationDisplay", "showTranslations", "translationPlacement",
         // Text and highlight colours
         "lyricColourMode", "lyricColourSpeed", "lyricColourStrength", "lyricColourCustom", "lyricColourPastel",
         "lyricHighlightMode", "lyricHighlightCustom",

@@ -213,6 +213,8 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger, Composit
             order[j + 1] = member;
         }
         var origin = StageOrigin;
+        // The band sits at the head when the translation sits over the words: the words move down by it.
+        if (TranslationPlace.OverWords()) origin.Y += (float)TranslationBand;
         // Title-safe: kept about 5% in from every edge of the stage.
         var (margin, marginY) = RollingStack.Margins(stage, lineBase);
         foreach (var m in order)

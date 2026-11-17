@@ -300,7 +300,7 @@ internal abstract class StageLayer(CompositionKind kind, IWordBreaker breaker, L
             line.LineReading = Kit.Bake(layout, LyricInks.Vector(InkAt(source.Start).Base.Reading), 1,
                                         new ShadowSpec(0.3f, Points(6) * 0.5f, Points(2)));
         }
-        if (TranslationOf(row) is { } translation)
+        if (LineTranslationOf(row) is { } translation)
         {
             using var layout = Kit!.Layout(translation, Face.Quiet, (float)(BaseSize * LineTranslations.LineSize * Metrics.UserScale),
                                            TextKit.LocaleFor(translation), ScriptDirection.IsRightToLeft(translation),
@@ -473,12 +473,16 @@ internal abstract class StageLayer(CompositionKind kind, IWordBreaker breaker, L
         var fit = 1.0;
         var lift = 0.0;
         var gap = BaseSize * 0.2;
-        var below = (line.LineReading is { } reading ? gap + reading.Box.Y : 0) + (line.Translation is { } translated ? gap + translated.Box.Y : 0);
-        if (below > 0)
+        // Translation sits › Above the line: the translation rests over the stage instead of under its reading.
+        var over = TranslationPlace == TranslationPlacement.Above;
+        var translationHeight = line.Translation is { } translated ? gap + translated.Box.Y : 0;
+        var below = (line.LineReading is { } reading ? gap + reading.Box.Y : 0) + (over ? 0 : translationHeight);
+        var above = over ? translationHeight : 0;
+        if (below + above > 0)
         {
-            var total = Stage.Height + below;
+            var total = Stage.Height + below + above;
             fit = Math.Min(1, Stage.Height / total);
-            lift = -below / 2 * fit;
+            lift = (above - below) / 2 * fit;
         }
         var origin = StageOrigin;
         var toDevice = local
@@ -508,7 +512,8 @@ internal abstract class StageLayer(CompositionKind kind, IWordBreaker breaker, L
         }
         if (line.Translation is { } translation)
         {
-            var world = Matrix3x2.CreateTranslation(centre.X, (float)(top + gap + translation.Box.Y / 2)) * toDevice;
+            var y = over ? -(gap + translation.Box.Y / 2) : top + gap + translation.Box.Y / 2;
+            var world = Matrix3x2.CreateTranslation(centre.X, (float)y) * toDevice;
             translation.Draw(dc, world, (float)fit, underOpacity, 0, GlowSpec.None, 1);
         }
     }

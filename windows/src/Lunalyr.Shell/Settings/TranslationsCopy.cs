@@ -6,7 +6,13 @@ namespace Lunalyr.Shell.Settings;
 
 public static class TranslationsCopy
 {
-    public const string Title = "Show translations under lyrics";
+    /// <summary>The switch (the Mac's 5783d638 renamed it from "Show translations under lyrics").</summary>
+    public const string Title = "Show translations";
+
+    /// <summary>Where they sit (the Mac's "Translation sits" menu).</summary>
+    public const string PlacementTitle = "Translation sits";
+
+    public const string PlacementHelp = "Under or over its line, or at the bottom or top of the screen (the floating window\u2019s, for floating lyrics)";
 
     /// <summary>Settings › Readings' caption under the switch.</summary>
     public const string Description =

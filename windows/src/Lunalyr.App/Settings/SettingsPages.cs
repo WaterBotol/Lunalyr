@@ -147,6 +147,13 @@ internal static class ReadingsPage
         // Mac's controls for translating on the Mac have no counterpart (docs/READINGS-WINDOWS.md).
         page.Children.Add(Card(TranslationsCopy.Title, TranslationsCopy.Description, "",
             Toggle(ctx, s => s.ShowTranslations, (s, v) => s with { ShowTranslations = v })));
+        // Where they sit (the Mac's 5783d638): part of the lyric style, so each style and monitor keeps its own.
+        var placements = Core.Compositions.TranslationPlacements.All
+            .Select(p => new SettingsChoice(Core.Compositions.TranslationPlacements.Raw(p), Core.Compositions.TranslationPlacements.Title(p))).ToList();
+        var placement = Combo(ctx, placements, s => s.TranslationPlacement, (s, v) => s with { TranslationPlacement = v });
+        ToolTipService.SetToolTip(placement, TranslationsCopy.PlacementHelp);
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetHelpText(placement, TranslationsCopy.PlacementHelp);
+        page.Children.Add(Indented(Card(TranslationsCopy.PlacementTitle, null, null, placement)).ShowWhen(ctx, s => s.ShowTranslations));
         return page;
     }
 }

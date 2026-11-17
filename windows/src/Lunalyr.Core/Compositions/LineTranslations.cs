@@ -9,8 +9,60 @@ using Lunalyr.Core.Lyrics;
 
 namespace Lunalyr.Core.Compositions;
 
+/// <summary>
+/// Where a line's translation sits (the Mac's <c>TranslationPlacement</c>, 5783d638): under or over its line, or at the
+/// foot or head of the stage (the floating window's, in floating lyrics).
+/// </summary>
+public enum TranslationPlacement
+{
+    Below,
+    Above,
+    Bottom,
+    Top,
+}
+
+public static class TranslationPlacements
+{
+    public static IReadOnlyList<TranslationPlacement> All { get; } =
+        [TranslationPlacement.Below, TranslationPlacement.Above, TranslationPlacement.Bottom, TranslationPlacement.Top];
+
+    public static string Raw(this TranslationPlacement place) => place switch
+    {
+        TranslationPlacement.Above => "above",
+        TranslationPlacement.Bottom => "bottom",
+        TranslationPlacement.Top => "top",
+        _ => "below",
+    };
+
+    /// <summary>A stored value; anything unknown is <see cref="TranslationPlacement.Below"/>.</summary>
+    public static TranslationPlacement Parse(string? raw) => raw switch
+    {
+        "above" => TranslationPlacement.Above,
+        "bottom" => TranslationPlacement.Bottom,
+        "top" => TranslationPlacement.Top,
+        _ => TranslationPlacement.Below,
+    };
+
+    public static string Title(this TranslationPlacement place) => place switch
+    {
+        TranslationPlacement.Above => "Above the line",
+        TranslationPlacement.Bottom => "Bottom of the screen",
+        TranslationPlacement.Top => "Top of the screen",
+        _ => "Under the line",
+    };
+
+    /// <summary>At an edge of the stage rather than with its line.</summary>
+    public static bool AtEdge(this TranslationPlacement place) => place is TranslationPlacement.Bottom or TranslationPlacement.Top;
+
+    /// <summary>Above the words, with its line or at the top.</summary>
+    public static bool OverWords(this TranslationPlacement place) => place is TranslationPlacement.Above or TranslationPlacement.Top;
+}
+
 public static class LineTranslations
 {
+    /// <summary>A translation at the stage's edge sits this share of the base size in from it (the Mac's padding of 0.5).</summary>
+    public const double EdgeInset = 0.5;
+
     /// <summary>A translation under its line: this share of the base size, times the size slider.</summary>
     public const double LineSize = 0.34;
 
