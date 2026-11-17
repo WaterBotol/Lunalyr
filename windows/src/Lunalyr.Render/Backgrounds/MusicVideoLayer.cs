@@ -297,9 +297,9 @@ public sealed class MusicVideoLayer : PlacedLayer
         {
             if (inputs.FileFraming.ShowsBackdrop())
             {
-                // Shown whole: the width matched (the Mac's videoGravity: a fit for a wider picture, a fill for a taller one,
-                // grown by the bleed), over the stand-in and the cover's blurred backdrop, which show in the bands; with an
-                // ambient glow, the glow over the backdrop.
+                // Shown whole: fitted inside the surface (the Mac's videoGravity, cbd7216: never cropped, grown by the
+                // bleed), over the stand-in and the cover's blurred backdrop, which show in the bands; with an ambient
+                // glow, the glow over the backdrop.
                 _standIn.Draw(dc, frame.Scene.Palette, Size);
                 _backdrop.Draw(dc, frame.Scene.Cover, Size, frame.WallSeconds);
                 if (inputs.FileFraming.FollowsVideo())
@@ -815,7 +815,7 @@ public sealed class YouTubeVideoLayer : IRenderLayer, ISeeThroughLayer, IMeasure
     }
 
     /// <summary>
-    /// Shown whole (the Mac's WholeYouTubeVideo): the picture's width matched to the surface, its own shape from oEmbed
+    /// Shown whole (the Mac's WholeYouTubeVideo): the picture fitted inside the surface, its own shape from oEmbed
     /// (16:9 until known). The bands above and below show the stand-in and the blurred backdrop (the still, else the cover).
     /// The visible picture is see-through over the player's window when the player is uncovered; otherwise the still is
     /// drawn there at the 16:9 player's size and clipped, so YouTube's letterbox bars baked into the still fall outside.

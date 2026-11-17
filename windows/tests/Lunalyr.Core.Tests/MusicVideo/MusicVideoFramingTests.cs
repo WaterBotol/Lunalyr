@@ -72,33 +72,33 @@ public sealed class MusicVideoFramingTests
         Assert.True(MusicVideoFraming.Whole.BackdropShare(Hd, Tall) > 0.6);
     }
 
-    // Ported from MusicVideoFramingTests.swift: testWholeMatchesTheWidthEvenWhenTheVideoIsNarrower
+    // Ported from MusicVideoFramingTests.swift: testWholeNeverCropsANarrowerVideo (cbd7216)
     [Fact]
-    public void WholeMatchesTheWidthEvenWhenTheVideoIsNarrower()
+    public void WholeNeverCropsANarrowerVideo()
     {
-        foreach (var screen in Screens)
+        foreach (var screen in new[] { Laptop, Wide })
         {
             var rect = MusicVideoFraming.Whole.Rect(4.0 / 3.0, screen);
-            Assert.Equal(screen.Width * MusicVideoFramings.WholeBleed, rect.Width, 0.01); // the picture's width is the screen's
+            Assert.Equal(screen.Height * MusicVideoFramings.WholeBleed, rect.Height, 0.01); // the picture's height is the screen's
+            Assert.True(rect.Width < screen.Width, "space at the sides for the backdrop");
             Assert.Equal(4.0 / 3.0, rect.Width / rect.Height, 3);
-            Assert.Equal(screen.Height / 2, rect.MidY, 3); // centred; top and bottom lose alike
+            Assert.Equal(screen.Width / 2, rect.MidX, 3);
+            Assert.True(MusicVideoFraming.Whole.CroppedShare(4.0 / 3.0, screen) <= 0.021, "only the hairline bleed");
+            Assert.True(MusicVideoFraming.Whole.BackdropShare(4.0 / 3.0, screen) > 0.05);
         }
-        var onLaptop = MusicVideoFraming.Whole.Rect(4.0 / 3.0, Laptop);
-        Assert.True(onLaptop.Height > Laptop.Height, "4:3 on a 16:10 screen runs past the top and bottom");
-        Assert.Equal(0, MusicVideoFraming.Whole.BackdropShare(4.0 / 3.0, Laptop), 0.0001); // no side bands
         var cinema = MusicVideoFraming.Whole.Rect(2.39, Laptop);
         Assert.True(cinema.Height < Laptop.Height, "a wider picture leaves bands above and below");
+        Assert.Equal(MusicVideoFraming.Whole.Rect(4.0 / 3.0, Laptop), MusicVideoFraming.Ambient.Rect(4.0 / 3.0, Laptop));
     }
 
-    // Ported from MusicVideoFramingTests.swift: testLibraryGravityMatchesTheWidth
+    // Ported from MusicVideoFramingTests.swift: testLibraryGravityFitsTheWholePicture (cbd7216)
     [Fact]
-    public void LibraryGravityMatchesTheWidth()
+    public void LibraryGravityFitsTheWholePicture()
     {
         var whole = MusicVideoFraming.Whole;
         Assert.Equal(MusicVideoGravity.Fit, whole.VideoGravity(Hd, Laptop)); // wider: bands above and below
-        Assert.Equal(MusicVideoGravity.Fill, whole.VideoGravity(4.0 / 3.0, Laptop)); // taller: width matched, top and bottom cut
+        Assert.Equal(MusicVideoGravity.Fit, whole.VideoGravity(4.0 / 3.0, Laptop)); // narrower: bands at the sides
         Assert.Equal(MusicVideoGravity.Fit, whole.VideoGravity(null, Laptop)); // unknown yet
-        Assert.Equal(MusicVideoGravity.Fit, whole.VideoGravity(Hd, Tall));
         Assert.Equal(MusicVideoGravity.Fill, MusicVideoFraming.Fill.VideoGravity(Hd, Laptop));
         Assert.Equal(MusicVideoGravity.Fill, MusicVideoFraming.Fill.VideoGravity(null, Laptop));
     }
@@ -312,7 +312,9 @@ public sealed class MusicVideoFramingTests
                 var layout = MusicVideoFramings.WholeLayoutFor(aspect, screen);
                 Assert.True(layout.Visible.Width <= screen.Width + 0.001, $"{screen} {aspect}");
                 Assert.True(layout.Visible.Height <= screen.Height + 0.001, $"{screen} {aspect}");
-                Assert.Equal(screen.Width * MusicVideoFramings.WholeBleed, layout.Frame.Width, 0.01); // the width is matched
+                var fitted = Math.Max(layout.Frame.Width / (screen.Width * MusicVideoFramings.WholeBleed),
+                    layout.Frame.Height / (screen.Height * MusicVideoFramings.WholeBleed));
+                Assert.Equal(1, fitted, 4); // fitted: width or height matched, never cut
                 var box = layout.Box;
                 Assert.NotNull(box);
                 Assert.True(box.Width >= 99.9, "the player covers the view across");
@@ -325,7 +327,7 @@ public sealed class MusicVideoFramingTests
         Assert.Equal(100, hdOnLaptop.Box!.Height, 0.1);
         // A 4:3 video: the player is wider than the view, so its own side bars fall outside.
         var square = MusicVideoFramings.WholeLayoutFor(4.0 / 3.0, Laptop);
-        Assert.Equal(Laptop.Height, square.Visible.Height, 0.01); // top and bottom cut
+        Assert.True(square.Visible.Width < Laptop.Width, "bands at the sides, nothing cut");
         Assert.True(square.Box!.Width > 130);
     }
 
@@ -336,7 +338,7 @@ public sealed class MusicVideoFramingTests
     {
         Assert.Equal((0, 54, 1920, 1091), MusicVideoFramings.VisiblePixels(Hd, 1920, 1200)); // 1920 × 1.01 × 9 / 16
         Assert.Equal((0, 0, 1920, 1080), MusicVideoFramings.VisiblePixels(Hd, 1920, 1080));
-        Assert.Equal((0, 0, 1920, 1200), MusicVideoFramings.VisiblePixels(4.0 / 3.0, 1920, 1200));
+        Assert.Equal((152, 0, 1616, 1200), MusicVideoFramings.VisiblePixels(4.0 / 3.0, 1920, 1200)); // 1200 × 1.01 × 4 / 3: bands at the sides (cbd7216)
         var (x, y, w, h) = MusicVideoFramings.VisiblePixels(2.39, 2560, 1440);
         Assert.Equal(0, x);
         Assert.Equal(2560, w);

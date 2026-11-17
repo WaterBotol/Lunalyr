@@ -38,11 +38,11 @@ internal static partial class WallpaperPage
 
     /// <summary>The Mac's framingCaption (MusicVideoSettings.swift, Test Build 88).</summary>
     public const string FramingCaption =
-        "Fill the screen crops the video’s edges. Show the whole video matches its width to the screen, with a blurred copy of the cover above and below.";
+        "Fill the screen crops the video’s edges. Show the whole video fits it inside the screen, with a blurred copy of the cover in the space around it.";
 
     /// <summary>The Mac's framingDetail.</summary>
     public const string FramingDetail =
-        "Filled YouTube videos are zoomed a little further so YouTube’s title and logo stay off-screen. Shown whole, nothing is cut from the sides; a squarer video (4:3) loses a little of its top and bottom. To leave out YouTube’s own black bars, Lunalyr asks YouTube for the video’s shape (only its ID is sent). Shown whole, a YouTube video appears as soon as it plays; while YouTube draws its title and buttons over the first seconds, those strips are covered with the video’s blurred still.";
+        "Filled YouTube videos are zoomed a little further so YouTube’s title and logo stay off-screen. Shown whole, nothing is cut off: a wider video leaves space above and below, a squarer one (4:3) at the sides. To leave out YouTube’s own black bars, Lunalyr asks YouTube for the video’s shape (only its ID is sent). Shown whole, a YouTube video appears as soon as it plays; while YouTube draws its title and buttons over the first seconds, those strips are covered with the video’s blurred still.";
 
     public const string TimingDetail =
         "Official videos often open with a scene, or are a different edit from the album track. A video longer than the song is guessed to have that much intro (Estimated); when searching, an official video as long as the song is preferred, as it needs no guess. Tap to sync: click it, then press any key (or Tap now) the moment the singing starts in the video; later in the song, tap when the next line is sung in the video. Tap again to refine: the taps are averaged. A tap, nudge or Align is kept for the video it was made on. Reset goes back to the estimate.";

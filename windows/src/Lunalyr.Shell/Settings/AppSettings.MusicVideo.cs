@@ -39,7 +39,7 @@ public sealed partial record AppSettings
 
     /// <summary>
     /// How a YouTube video sits on the screen: <c>fill</c> ("Fill the screen", cropped and zoomed past YouTube's overlays) or
-    /// <c>whole</c> ("Show the whole video", its width matched over a blurred backdrop). Anything else reads as fill. Mac
+    /// <c>whole</c> ("Show the whole video", fitted inside the screen over a blurred backdrop). Anything else reads as fill. Mac
     /// <c>custom.musicVideoFraming</c> (Test Build 88).
     /// </summary>
     public string MusicVideoFraming { get; init; } = "fill";

@@ -17,10 +17,11 @@ public enum MusicVideoFraming
     Fill,
 
     /// <summary>
-    /// The picture's width matched to the screen's (grown by <see cref="MusicVideoFramings.WholeBleed"/>): nothing is cut from
-    /// its sides. A picture wider than the screen leaves space above and below, which shows a blurred, darkened copy of the
-    /// album cover or the video's own still, never black bars; a taller one (4:3 on a 16:10 screen) loses a little of its
-    /// top and bottom. A YouTube player shows as soon as it plays; YouTube's controls over its first seconds are covered
+    /// The whole picture fitted inside the screen (grown by <see cref="MusicVideoFramings.WholeBleed"/>): nothing is ever cut
+    /// off (the Mac's cbd7216). A picture wider than the screen leaves space above and below, a narrower one (4:3 on a laptop)
+    /// space at the sides; it shows a blurred, darkened copy of the album cover or the video's own still (or the ambient
+    /// glow), never black bars. (Until 16 Nov 2026 the width was matched, so a narrower picture lost its top and bottom.) A
+    /// YouTube player shows as soon as it plays; YouTube's controls over its first seconds are covered
     /// (<see cref="MusicVideoOverlayMask"/>, the Mac's e7e50f7).
     /// </summary>
     Whole,
@@ -112,15 +113,10 @@ public static class MusicVideoFramings
 
     /// <summary>
     /// How a video file of <paramref name="contentAspect"/> (null until known) is drawn in <paramref name="container"/>:
-    /// whole matches the width, which is a fit for a wider picture and a fill for a taller one.
+    /// whole always fits the whole picture inside it (the Mac's cbd7216), filled covers it.
     /// </summary>
-    public static MusicVideoGravity VideoGravity(this MusicVideoFraming framing, double? contentAspect, VideoSize container)
-    {
-        if (!framing.IsWhole()) return MusicVideoGravity.Fill;
-        if (contentAspect is not { } aspect || aspect <= 0 || !double.IsFinite(aspect) || container.Width <= 0 || container.Height <= 0)
-            return MusicVideoGravity.Fit;
-        return aspect >= container.Width / container.Height ? MusicVideoGravity.Fit : MusicVideoGravity.Fill;
-    }
+    public static MusicVideoGravity VideoGravity(this MusicVideoFraming framing, double? contentAspect, VideoSize container) =>
+        framing.IsWhole() ? MusicVideoGravity.Fit : MusicVideoGravity.Fill;
 
     /// <summary>The extra scale of a fitted picture (none when filled).</summary>
     public static double BleedScale(this MusicVideoFraming framing) => framing.IsWhole() ? WholeBleed : 1;
@@ -139,7 +135,8 @@ public static class MusicVideoFramings
         var byWidth = new VideoSize(container.Width, container.Width / aspect);
         var byHeight = new VideoSize(container.Height * aspect, container.Height);
         var fits = byWidth.Height <= container.Height;
-        var size = framing.IsWhole() ? byWidth : fits ? byHeight : byWidth;
+        // Filled covers the container; whole fits inside it, its width or its height matched, never cut (cbd7216).
+        var size = framing.IsWhole() ? (fits ? byWidth : byHeight) : fits ? byHeight : byWidth;
         var grow = framing.BleedScale();
         size = new VideoSize(size.Width * grow, size.Height * grow);
         return new VideoRect((container.Width - size.Width) / 2, (container.Height - size.Height) / 2, size.Width, size.Height);
@@ -158,7 +155,7 @@ public static class MusicVideoFramings
     }
 
     /// <summary>
-    /// A YouTube video shown whole in a container: the picture's frame (the width matched), the part of it on screen (the
+    /// A YouTube video shown whole in a container: the picture's frame (fitted inside), the part of it on screen (the
     /// web view's size, never larger than the container), the 16:9 player's size, and the player's size within the visible
     /// part in per cent (for the page).
     /// </summary>
