@@ -525,6 +525,24 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
     /// <summary>The stage's middle: the surface's, moved clear of the floating window's title row when it has one.</summary>
     protected Vector2 StageCentre => new(SurfaceSize.X / 2, (float)(SurfaceSize.Y / 2 + Metrics.CentreShift));
 
+    private LyricPhraseRuns? _phraseRuns;
+    private LyricSheet? _phraseRunsSheet;
+
+    /// <summary>
+    /// The seed of the phrase run line <paramref name="row"/> is in (LyricPhraseRuns, worked out once per song from the
+    /// lyrics alone), or null when it is in none.
+    /// </summary>
+    protected long? RunSeed(int row)
+    {
+        if (Sheet is not { } sheet) return null;
+        if (!ReferenceEquals(sheet, _phraseRunsSheet))
+        {
+            _phraseRunsSheet = sheet;
+            _phraseRuns = new LyricPhraseRuns(sheet.Lines);
+        }
+        return _phraseRuns?[row]?.Seed;
+    }
+
     /// <summary>A floating window's see-through margin round its box, in pixels (0 elsewhere).</summary>
     protected float BoxInset => (float)Math.Max(0, SceneShown?.Style.FloatingInset ?? 0);
 
@@ -946,6 +964,8 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
             GentleActions: _accentLine && StyleShown.ActionWords && GentleRow(lineIndex));
         var plan = LinePlans.Build(Kit!, words, glue, spec, runReadings, lineReading, runShares, translation);
         Decorate(plan, planKind, words, glue, lineEnd, lineIndex, baseSize, Stage, ink);
+        // Echo: every line of a phrase run drifts its repeats on the run's path (the Mac's ddb1a3c5).
+        if (plan.Echo is { } echoPlan) echoPlan.DriftSeed = RunSeed(lineIndex);
         if (groups is { Count: > 0 })
         {
             var box = BackingVocalLayout.Box(Stage);
@@ -1354,7 +1374,7 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
         for (var slot = 0; slot < EchoBackdrop.Repeats.Count; slot++)
         {
             // The repeats step off the live line's top and bottom edges, so they need its height.
-            var pose = EchoBackdrop.Pose(slot, echo.Seed, time, echo.BaseSize, ReduceMotion, plan.Block.Height);
+            var pose = EchoBackdrop.Pose(slot, echo.Seed, time, echo.BaseSize, ReduceMotion, plan.Block.Height, echo.DriftSeed);
             var ghost = pose.Repeat;
             var alpha = EchoBackdrop.Opacity(ghost, presence, StyleShown.EchoStrength);
             if (!(alpha > 0.002)) continue;

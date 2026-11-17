@@ -59,12 +59,15 @@ public static class EchoBackdrop
 
     /// <summary>
     /// The repeat in <paramref name="slot"/> at <paramref name="time"/>: its place, stepped off the line's top or bottom
-    /// edge (<paramref name="lineHeight"/> tall), and a slow seeded wander (none under Reduce Motion).
+    /// edge (<paramref name="lineHeight"/> tall), and a slow seeded wander (none under Reduce Motion). With
+    /// <paramref name="driftSeed"/> (the line's phrase run's seed, the Mac's ddb1a3c5) every line of a run drifts its
+    /// repeats on the same path, so the drift runs on through a hand-over instead of jumping to a new one.
     /// </summary>
-    public static EchoRepeatPose Pose(int slot, long seed, double time, double baseSize, bool reduceMotion, double lineHeight = 0)
+    public static EchoRepeatPose Pose(int slot, long seed, double time, double baseSize, bool reduceMotion, double lineHeight = 0,
+                                      long? driftSeed = null)
     {
         var repeat = Repeats[Math.Clamp(slot, 0, Repeats.Count - 1)];
-        var wander = WanderSeed(seed, slot);
+        var wander = WanderSeed(driftSeed ?? seed, slot);
         var drift = reduceMotion || !double.IsFinite(time) ? 0.0 : 1.0;
         var height = double.IsFinite(lineHeight) ? Math.Max(0, lineHeight) : 0;
         var edge = (repeat.Down < 0 ? -height : height) / 2;

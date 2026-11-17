@@ -373,5 +373,7 @@ internal sealed class EchoPlan(Ink phrase, double bakedScale, bool rightToLeft) 
     public double BaseSize { get; init; }
     public SizeD Stage { get; init; }
     public int Seed { get; init; }
+    /// <summary>The line's phrase run's seed (LyricPhraseRuns): the repeats drift on the run's path; null drifts on the line's own.</summary>
+    public long? DriftSeed { get; set; }
     public void Dispose() => Phrase.Dispose();
 }
