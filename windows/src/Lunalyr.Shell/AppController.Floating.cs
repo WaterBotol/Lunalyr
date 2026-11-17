@@ -177,16 +177,14 @@ public sealed partial class AppController
                             : looks.Value.Floating[d.Key].LyricId ?? CompositionFor(settings);
                         var window = Window(true, d.Key, layout);
                         windows.Add(window);
-                        // The song title card in a window of its own beside the lyrics' box (the Mac's b11a1ab3), while
-                        // that display's style shows the title, or always in Edit Position so it can be placed.
+                        // The song title card in a window of its own beside the lyrics' box (the Mac's b11a1ab3), shown
+                        // with them; it draws what that display's style's opening title would, and its shade goes with it.
                         if (settings.FloatingTitleCard)
                         {
-                            var title = looks.Value.Floating.TryGetValue(d.Key, out var look) && look.Style is { } style
-                                ? style.OpeningTitle : settings.OpeningTitle;
                             windows.Add(window with
                             {
                                 TitleCard = true,
-                                Shown = FloatingTitleVisibility.Shows(shown, card: true, title, editingPosition),
+                                Shown = FloatingTitleVisibility.Shows(shown, card: true),
                                 Placeholder = false,
                                 TitleFrames = settings.FloatingTitleFrames,
                                 TitleStart = settings.TitleStart(),

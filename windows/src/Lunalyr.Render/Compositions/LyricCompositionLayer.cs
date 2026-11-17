@@ -248,6 +248,12 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
 
     public bool IsAnimating { get; private set; }
 
+    /// <summary>
+    /// In the floating title card's own window, how far its card is up this frame (0 to 1): the window's shade goes with it,
+    /// so it never sits empty once a start-of-song card has left (the Mac's b11a1ab3).
+    /// </summary>
+    public double TitlePresence { get; private set; }
+
     /// <summary>The render-thread time spent setting lines up (for the line-setup benchmark).</summary>
     internal Diagnostics.SetupMeter Meter { get; } = new();
 
@@ -354,6 +360,7 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
         {
             Sync(Measured(frame.Scene, frame.StageUnbacked));
             IsAnimating = false;
+            TitlePresence = 0;
             var opening = PrepareOpening(frame);
             var time = frame.SongSeconds;
             // The floating song title card's own window draws only the card.

@@ -207,14 +207,8 @@ public sealed class AppControllerDisplayLyricsTests : IAsyncDisposable
         Assert.Equal([30.0, 600, 300, 66], _renderer.TitleCardWindows![0].TitleFrames[Main]);
         controller.ApplySettings(controller.Settings.WithTitleFramesReset());
         Assert.Empty(_renderer.TitleCardWindows![0].TitleFrames);
-        // The style shows no song title: the card hides, but can still be placed in Edit Position.
-        controller.ApplySettings(controller.Settings with { OpeningTitle = false });
-        Assert.False(_renderer.TitleCardWindows!.Single(w => w.Display == Main).Shown);
-        controller.SetFloatingEditing(true);
-        Assert.True(_renderer.TitleCardWindows!.Single(w => w.Display == Main).Shown);
-        controller.SetFloatingEditing(false);
         // "Show the song title card" off: no card windows; the lyrics' windows stay.
-        controller.ApplySettings(controller.Settings with { FloatingTitleCard = false, OpeningTitle = true });
+        controller.ApplySettings(controller.Settings with { FloatingTitleCard = false });
         Assert.Empty(_renderer.TitleCardWindows!);
         Assert.Equal(2, _renderer.FloatingWindows!.Count);
     }

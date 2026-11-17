@@ -221,6 +221,8 @@ internal abstract partial class LyricCompositionLayer
             // The card's own window: the desktop's stacked card scaled to its box, or one row once that box is too small for a
             // readable stacked title (the Mac's FloatingTitleFrame.layout).
             var titleCompact = phase.Size == OpeningSize.Compact;
+            var arrived = OpeningReveal.At(phase.Age, phase.Size, ReduceMotion).Title;
+            TitlePresence = Math.Clamp(Math.Min(1, arrived * 1.6) * (1 - Easing.Smoothstep(phase.Exit)), 0, 1);
             var layout = TitleLayout(titleCompact);
             if (!layout.Stacked)
             {

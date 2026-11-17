@@ -43,9 +43,11 @@ public static class FloatingTitleVisibility
 {
     /// <param name="lyrics">The floating lyrics' window shows on that display.</param>
     /// <param name="card">"Show the song title card" is on.</param>
-    /// <param name="title">The style shows the song's title (the opening title is on).</param>
-    /// <param name="editing">Edit position: the card can be placed even when its style shows no title.</param>
-    public static bool Shows(bool lyrics, bool card, bool title, bool editing) => lyrics && card && (title || editing);
+    /// <remarks>
+    /// What it draws follows the style, as the desktop's opening title does: kept, the card stays the whole song; not kept,
+    /// the song's start card comes and goes, and then the window draws nothing (its shade goes with the card).
+    /// </remarks>
+    public static bool Shows(bool lyrics, bool card) => lyrics && card;
 }
 
 public static class FloatingTitleFrame

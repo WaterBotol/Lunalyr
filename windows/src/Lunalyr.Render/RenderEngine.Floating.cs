@@ -52,6 +52,9 @@ internal sealed class FloatingPanel(string display, bool titleCard = false)
     /// <summary>The song title card's window on that display, rather than the lyrics' (the Mac's b11a1ab3).</summary>
     public bool TitleCard { get; } = titleCard;
 
+    /// <summary>The title card's shade last traced (LUNALYR_FLOAT_TRACE).</summary>
+    public double TraceShade = -1;
+
     public volatile FloatingLyricsOptions Options = FloatingLyricsOptions.Off;
     public FloatingWindowHost? Host;
     public volatile bool Shown, PointerOver;
@@ -473,7 +476,15 @@ public sealed partial class RenderEngine
             hasStage = true;
         }
         dc.Clear(new Color4(0, 0, 0, 0));
-        drawer.Compose(dc, _dwrite, p.Opacity, o.Backdrop, look.ReduceTransparency, hasStage, o.Editing, o.Placeholder, look.Accent);
+        // The title card's shade comes and goes with its card (none drawn: none at all).
+        var backdrop = !p.TitleCard ? o.Backdrop
+            : hasStage && s.Lyric?.Layer is Compositions.LyricCompositionLayer { TitlePresence: var presence } ? o.Backdrop * presence : 0;
+        if (FloatTrace && p.TitleCard && Math.Abs(backdrop - p.TraceShade) > 0.1)
+        {
+            p.TraceShade = backdrop;
+            _log.Info($"FLOATTRACE title card shade {backdrop:0.00} at song {frame.SongSeconds:0.00}");
+        }
+        drawer.Compose(dc, _dwrite, p.Opacity, backdrop, look.ReduceTransparency, hasStage, o.Editing, o.Placeholder, look.Accent);
     }
 
     private static readonly bool FloatTrace = Environment.GetEnvironmentVariable("LUNALYR_FLOAT_TRACE") == "1";

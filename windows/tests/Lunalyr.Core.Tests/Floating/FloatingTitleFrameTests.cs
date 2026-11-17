@@ -66,11 +66,9 @@ public sealed class FloatingTitleFrameTests
     [Fact]
     public void TheTitleCardShowsWithTheFloatingLyrics()
     {
-        Assert.True(FloatingTitleVisibility.Shows(lyrics: true, card: true, title: true, editing: false));
-        Assert.False(FloatingTitleVisibility.Shows(lyrics: false, card: true, title: true, editing: false)); // only where floating lyrics show
-        Assert.False(FloatingTitleVisibility.Shows(lyrics: true, card: false, title: true, editing: false)); // Show the song title card off
-        Assert.False(FloatingTitleVisibility.Shows(lyrics: true, card: true, title: false, editing: false)); // the style shows no song title
-        Assert.True(FloatingTitleVisibility.Shows(lyrics: true, card: true, title: false, editing: true)); // but it can still be placed
+        Assert.True(FloatingTitleVisibility.Shows(lyrics: true, card: true));
+        Assert.False(FloatingTitleVisibility.Shows(lyrics: false, card: true)); // only where floating lyrics show
+        Assert.False(FloatingTitleVisibility.Shows(lyrics: true, card: false)); // Show the song title card off
     }
 
     [Fact]
