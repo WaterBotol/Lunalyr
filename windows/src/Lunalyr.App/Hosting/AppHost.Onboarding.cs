@@ -70,6 +70,21 @@ internal sealed partial class AppHost
     }
 
     /// <summary>The welcome's window closed, saying how it ended. Captures record nothing.</summary>
+    private volatile bool _firstRunWelcomeOpen;
+
+    /// <summary>A first run's welcome is on screen: System audio waits until it is over (the Mac's rule for a new install).</summary>
+    internal bool FirstRunWelcomeOpen
+    {
+        get => _firstRunWelcomeOpen;
+        set
+        {
+            if (_firstRunWelcomeOpen == value) return;
+            _firstRunWelcomeOpen = value;
+            // Look again at whether to capture (the welcome's end also marks it seen, a settings change).
+            _systemAudio?.SettingsChanged(_settings.Current, _settings.Current);
+        }
+    }
+
     internal void WelcomeEnded(OnboardingEnding ending, bool firstRun, bool capture)
     {
         if (capture) return;

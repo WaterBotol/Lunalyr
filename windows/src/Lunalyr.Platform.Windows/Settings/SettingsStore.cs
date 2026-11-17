@@ -512,7 +512,7 @@ public sealed class SettingsStore<T> : IAsyncDisposable
             // Lay the file over the serialized defaults, so keys the file doesn't have (settings added in a later
             // version) get their default values whatever shape T has. (The source generator fills missing init-only
             // properties with default(T), not with their initialisers.)
-            var merged = JsonSerializer.SerializeToNode(_options.CreateDefaults(), _options.TypeInfo) as JsonObject ?? [];
+            var merged = JsonSerializer.SerializeToNode((_options.MissingKeyDefaults ?? _options.CreateDefaults)(), _options.TypeInfo) as JsonObject ?? [];
             MergeInto(merged, obj);
             value = merged.Deserialize(_options.TypeInfo);
         }

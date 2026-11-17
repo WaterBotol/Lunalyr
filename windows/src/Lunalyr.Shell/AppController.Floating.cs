@@ -114,62 +114,72 @@ public sealed partial class AppController
             List<FloatingLyricsOptions> windows = [];
             List<string> without = [];
             (Dictionary<string, SurfaceLook> Floating, Dictionary<string, SurfaceLook> Desktop)? looks = null;
-            bool perDisplay;
+            bool perDisplay, shown, hasWords, editingPosition;
+            AppSettings settings;
+            IReadOnlyList<ConnectedDisplay> displays;
+            LooksCache? parked = null;
+            string? songLayout;
             lock (_gate)
             {
                 if (_disposed) return;
-                var settings = _settings;
-                var displays = _displays;
+                settings = _settings;
+                displays = _displays;
                 perDisplay = displays.Count > 0;
                 bool floats = FloatsAnywhere(settings);
                 if (!floats) _floatEditing = false;
                 var input = VisibilityInput(settings, _scene, perDisplay ? (floats ? LyricsSurface.Floating : LyricsSurface.Desktop) : settings.Surface);
                 hidesAfter = FloatingVisibility.HidesAfter(input);
-                bool hasWords = input.HasTrack && ((input.HasTimedLines && !input.AllInstrumental) || input.HasPlainLines);
-                bool shown = FloatingVisibility.Shows(input);
-                FloatingLyricsOptions Window(bool enabled, string display, string layout) => new()
+                hasWords = input.HasTrack && ((input.HasTimedLines && !input.AllInstrumental) || input.HasPlainLines);
+                shown = FloatingVisibility.Shows(input);
+                editingPosition = _floatEditing;
+                songLayout = _layout;
+                if (perDisplay)
                 {
-                    Enabled = enabled,
-                    Shown = shown,
-                    Editing = _floatEditing,
-                    Placeholder = _floatEditing && !hasWords,
-                    // Each layout keeps its own floating size and text size once resized.
-                    TextSize = settings.FloatingTextSizeFor(layout),
-                    Layout = layout,
-                    LayoutSize = settings.LayoutSize(layout),
-                    Backdrop = settings.FloatingBackdrop,
-                    FadesUnderPointer = settings.FloatingFadeUnderPointer,
-                    Placement = settings.PlacementFor(display),
-                    Display = display,
-                    Frames = settings.FloatingFrames,
-                    Sizes = settings.FloatingSizes,
-                };
-                if (!perDisplay)
-                {
-                    // Lock is re-entrant: CompositionFor takes _gate again.
-                    single = Window(settings.IsFloating, settings.FloatingDisplay, settings.IsFloating ? CompositionFor(settings) : "");
-                }
-                else
-                {
-                    var parked = LooksFor(settings, displays);
+                    parked = LooksFor(settings, displays);
                     _looks = parked;
-                    looks = SurfaceLooks(settings, displays, parked);
-                    var main = displays[0].Key;
-                    var editing = settings.EditingSlot(main);
-                    foreach (var d in displays)
-                    {
-                        var choice = settings.DisplayChoice(d.Key);
-                        if (choice.Floats())
-                        {
-                            // The window drawing the style being edited draws the scene's own; the others their parked copy.
-                            var layout = editing == new LookSlot(d.Key, LyricsSurface.Floating) ? CompositionFor(settings)
-                                : looks.Value.Floating[d.Key].LyricId ?? CompositionFor(settings);
-                            windows.Add(Window(true, d.Key, layout));
-                        }
-                        if (!choice.OnDesktop()) without.Add(d.Device);
-                    }
-                    single = windows.FirstOrDefault() ?? FloatingLyricsOptions.Off;
                 }
+            }
+            FloatingLyricsOptions Window(bool enabled, string display, string layout) => new()
+            {
+                Enabled = enabled,
+                Shown = shown,
+                Editing = editingPosition,
+                Placeholder = editingPosition && !hasWords,
+                // Each layout keeps its own floating size and text size once resized.
+                TextSize = settings.FloatingTextSizeFor(layout),
+                Layout = layout,
+                LayoutSize = settings.LayoutSize(layout),
+                Backdrop = settings.FloatingBackdrop,
+                FadesUnderPointer = settings.FloatingFadeUnderPointer,
+                Placement = settings.PlacementFor(display),
+                Display = display,
+                Frames = settings.FloatingFrames,
+                Sizes = settings.FloatingSizes,
+            };
+            // Worked out outside _gate: a background reads the player's monitor, then the controller's lock, as
+            // PublishLayers does (CompositionFor takes _gate itself).
+            if (!perDisplay)
+            {
+                single = Window(settings.IsFloating, settings.FloatingDisplay, settings.IsFloating ? CompositionFor(settings) : "");
+            }
+            else
+            {
+                looks = SurfaceLooks(settings, displays, parked!, songLayout);
+                var main = displays[0].Key;
+                var editing = settings.EditingSlot(main);
+                foreach (var d in displays)
+                {
+                    var choice = settings.DisplayChoice(d.Key);
+                    if (choice.Floats())
+                    {
+                        // The window drawing the style being edited draws the scene's own; the others their parked copy.
+                        var layout = editing == new LookSlot(d.Key, LyricsSurface.Floating) ? CompositionFor(settings)
+                            : looks.Value.Floating[d.Key].LyricId ?? CompositionFor(settings);
+                        windows.Add(Window(true, d.Key, layout));
+                    }
+                    if (!choice.OnDesktop()) without.Add(d.Device);
+                }
+                single = windows.FirstOrDefault() ?? FloatingLyricsOptions.Off;
             }
             // A pause hides the windows once its grace has run out: look again then.
             _floatPauseTimer?.Dispose();
@@ -242,14 +252,18 @@ public sealed partial class AppController
         return new LooksCache(settings, displays, remembered, floating, desktop);
     }
 
-    /// <summary>What each surface with a parked look draws now: its style and layout, and a wallpaper's background and adjustments. Must hold _gate.</summary>
+    /// <summary>
+    /// What each surface with a parked look draws now: its style and layout (<paramref name="songLayout"/>, the song's
+    /// match, for Custom Mix), and a wallpaper's background and adjustments. Never under _gate: a background reads the
+    /// player's monitor first (BackgroundLayerFor).
+    /// </summary>
     private (Dictionary<string, SurfaceLook> Floating, Dictionary<string, SurfaceLook> Desktop) SurfaceLooks(AppSettings settings,
-        IReadOnlyList<ConnectedDisplay> displays, LooksCache parked)
+        IReadOnlyList<ConnectedDisplay> displays, LooksCache parked, string? songLayout)
     {
         var available = AvailableCompositions();
         string? Composition(AppSettings look)
         {
-            var chosen = look.LyricComposition == AutomaticComposition ? _layout ?? "constellation" : look.LyricComposition;
+            var chosen = look.LyricComposition == AutomaticComposition ? songLayout ?? "constellation" : look.LyricComposition;
             return available.Contains(chosen) ? chosen : null;
         }
         var floating = parked.Floating.ToDictionary(p => p.Key, p => new SurfaceLook(p.Value.Style, Composition(p.Value.Look)), StringComparer.Ordinal);

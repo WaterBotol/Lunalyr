@@ -37,8 +37,10 @@ public partial class App
             var window = new OnboardingWindow(_host, firstRun, step, capturePath is not null, _host.IsLaunchAtLoginOn, _host.SetLaunchAtLogin,
                 page?.LookPart ?? OnboardingLookPart.Wallpaper, page?.Opening ?? false);
             _onboarding = window;
+            if (firstRun && capturePath is null) _host.FirstRunWelcomeOpen = true;
             window.Ended += ending =>
             {
+                _host.FirstRunWelcomeOpen = false;
                 // Gone before the host acts on the ending, so Open Settings opens Settings rather than bringing it back.
                 if (ReferenceEquals(_onboarding, window)) _onboarding = null;
                 _host.WelcomeEnded(ending, window.FirstRun, capturePath is not null);

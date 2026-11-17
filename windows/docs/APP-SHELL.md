@@ -309,7 +309,13 @@ reads it.
 ## Settings v1 (`{data}\settings.json`)
 
 Keys follow the Mac's `UserDefaults` keys without `custom.` where the setting means the same; values are the Mac's
-raw values. The file also has `schemaVersion` (1). Unknown or out-of-range values are reset to the default on load.
+raw values. The file also has `schemaVersion` (2). Unknown or out-of-range values are reset to the default on load.
+
+A new install (no file yet) starts with the owner's look of November 2026 (`ShippedDefaults`, the Mac's 2fe4dd7b): the Star
+Trails visualiser with system audio on (captured only once the welcome is finished), 93 pt floating text without a shade,
+the title card always shown, Custom Mix layouts, sung-sweep colour and the owner's Floating style (Hinge). A key an
+existing file lacks reads the record's own (older) default, never the new install's (`MissingKeyDefaults`), and the
+schema 1 -> 2 step writes those old defaults into a file from before (the Mac's `ownerDefaults2026`).
 
 | Key | Default | Values | Mac key |
 |---|---|---|---|
@@ -330,7 +336,8 @@ raw values. The file also has `schemaVersion` (1). Unknown or out-of-range value
 | `romanizationLanguage` | `"automatic"` | `automatic`, `japanese`, `mandarin`, `cantonese`, `korean`, `other` | `custom.romanizationLanguage` |
 | `romanizationTones` | `true` | | `custom.romanizationTones` |
 | `romanizationSaved` | `true` | prefer readings that came with the lyrics | `custom.romanizationSaved` |
-| `showTranslations` | `true` | Readings › Show translations under lyrics (and the welcome's checkbox): a translation that came with the lyrics sits under its line; a rolling stage keeps a band at its foot for it. Nothing is ever translated on Windows | `custom.showTranslations` |
+| `showTranslations` | `true` | Readings › Show translations (and the welcome's checkbox): a translation that came with the lyrics shows with its line; a rolling stage keeps a band for it. Nothing is ever translated on Windows | `custom.showTranslations` |
+| `translationPlacement` | `"below"` | "Translation sits": `below`, `above` (the line), `bottom`, `top` (of the screen, or the floating window); part of a lyric style | `custom.translationPlacement` |
 | `backgroundMode` | `"auto"` | the Mac's types: `auto` (Match the music), `pattern`, `shader`, `colourOnly`, `visualizer`, `desktop`, `custom`, `musicVideo`. Windows' old `gradient` reads as `colourOnly` with `albumGradientWallpaper: false`; `colour`/`colorOnly` as `colourOnly`; unknown as `auto` (see "Wallpaper types") | `backgroundMode` |
 | `albumGradientWallpaper` | `true` | Colour only › Album gradient (off: the album colour field) | `custom.albumGradientWallpaper` |
 | `shaderStyle` | `""` | a GPU effect's id, `""` = Match the music | `shaderStyle` |
@@ -418,7 +425,12 @@ raw values. The file also has `schemaVersion` (1). Unknown or out-of-range value
 | `floatingBackdrop` | `0.6` | 0–1, "Shade behind lyrics" | `custom.floating.backdrop` |
 | `floatingFadeUnderPointer` | `true` | fade to 18% while the pointer is over them | `custom.floating.fadeUnderPointer` |
 | `floatingPlacement` | `"bottom"` | `topLeft`, `top`, `topRight`, `centre`, `bottomLeft`, `bottom`, `bottomRight`, `custom` | `custom.floating.placement` |
-| `floatingDisplay` | `""` | a display's lasting key (its DisplayConfig device path), `""` = the main display; a display not connected falls back to the main one | `custom.floating.display` |
+| `floatingDisplay` | `""` | where the one floating window went before each display had a choice: read once to migrate (`displayLyrics`), and while no display is known | `custom.floating.display` |
+| `floatingPlacementsByDisplay` | none | display key → a place: dragging one display's window makes only that display Custom; picking a place clears them | `custom.floating.placements` |
+| `displayLyrics` | none until displays are known | display key → `desktop`, `floating`, `both` or `none` ("Displays" on the Lyrics page, the tray's Floating toggle); migrated once from `lyricsSurface` and `floatingDisplay` | `custom.displayLyrics` |
+| `looks` | none | `<display>.desktop` / `<display>.floating` → that slot's lyric style (and, for `.desktop`, its monitor's wallpaper) while Settings is not editing it | `custom.look.<display>.<surface>` |
+| `lookMonitor` | none | the display whose look Settings edits (the monitor bar's Monitor menu) | `custom.lookMonitor` |
+| `lookSameEverywhere` | `false` | Same on every monitor: every monitor draws the edited look | `custom.lookSameEverywhere` |
 | `floatingFrames`, `floatingSizes` | `{}` | display key → `[x, y, width, height]` in points, relative to the display, y up (the Mac's convention): the frame dragged into place, and the size the presets keep | `custom.floating.frames`, `custom.floating.sizes` |
 | `trayLyric` | `false` | the line being sung in a strip beside the taskbar's clock (see "Tray lyric and Discord status") | `custom.menuBarLyric` (the menu-bar line; Windows has no menu bar) |
 | `trayLyricLength` | `36` | 16–64 characters, "Longest line" | `custom.menuBarLyricLength` |
@@ -527,7 +539,7 @@ DIPs (docs/sweep/settings.md).
 - **App theme** (General): follow Windows, light or dark, for Lunalyr's windows only (`Root.RequestedTheme` and the
   title bar's caption buttons). `--theme` overrides it for one run.
 
-## Onboarding (milestone 8; eight steps since the Mac's Test Build 88)
+## Onboarding (milestone 8; eight steps since the Mac's Test Build 88, nine with "Pick a typeface" since 17 Nov 2026)
 
 The Mac's first-run welcome (`Sources/UI/Onboarding/`), adapted; reworked on 14 Nov 2026 to the Mac's Test Build 88
 (eight steps, a glass logo opening, real recordings). The flow, its words and the rules for its moving pictures are in

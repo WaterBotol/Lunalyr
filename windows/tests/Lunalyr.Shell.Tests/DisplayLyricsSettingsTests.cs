@@ -54,6 +54,27 @@ public sealed class DisplayLyricsSettingsTests
     }
 
     [Fact]
+    public void TheBarFollowsWhatTheEditedMonitorShowsAfterAToggleOrAnUnplug()
+    {
+        var settings = MonitorLooks.DisplaysChanged(new AppSettings(), ["a", "b"]);
+        // The tray's Floating toggle changes what the main display shows and leaves the style edited alone (as on the
+        // Mac); the monitor bar follows it when Settings shows it (FollowingShows).
+        var floating = settings.WithFloatingToggled(["a", "b"], "a");
+        Assert.Equal(DisplayLyrics.Floating, floating.DisplayChoice("a"));
+        Assert.Equal(LyricsSurface.Desktop, floating.Surface);
+        Assert.Equal(LyricsSurface.Floating, floating.FollowingShows("a").Surface);
+        // Unplugging the edited monitor moves editing to the main one; the bar follows what that one shows.
+        var side = settings.WithDisplayChoice("b", DisplayLyrics.Floating).WithEditedMonitor("b", "a");
+        Assert.Equal(LyricsSurface.Floating, side.Surface);
+        var unplugged = MonitorLooks.DisplaysChanged(side, ["a"]);
+        Assert.Equal("a", unplugged.LookMonitor);
+        Assert.Equal(LyricsSurface.Desktop, unplugged.FollowingShows("a").Surface);
+        // Both: nothing to follow.
+        var both = settings.WithDisplayChoice("a", DisplayLyrics.Both);
+        Assert.Same(both, both.FollowingShows("a"));
+    }
+
+    [Fact]
     public void PickingAnotherMonitorEditsItsLook()
     {
         var settings = MonitorLooks.DisplaysChanged(new AppSettings { LyricComposition = "spoken" }, ["a", "b"]);
@@ -74,6 +95,19 @@ public sealed class DisplayLyricsSettingsTests
         Assert.Equal("Studio Display 1", FloatingCopy.MonitorName("gone", named));
         Assert.Equal("This display", FloatingCopy.MonitorName("a", []));
         Assert.Equal("Copy Studio Display 2’s look to every monitor?", FloatingCopy.CopyToAllQuestion("Studio Display 2"));
+    }
+
+    [Fact]
+    public void AVisualiserOnAnyMonitorNeedsSystemAudio()
+    {
+        var settings = MonitorLooks.DisplaysChanged(new AppSettings { BackgroundMode = "auto" }, ["a", "b"]);
+        Assert.False(Visualisers.SystemAudioService.DrawsVisualiser(settings, ["a", "b"]));
+        // The other monitor's own look is the visualiser; Settings edits the first.
+        var side = MonitorLooks.Store(settings, MonitorLooks.Top(new AppSettings { BackgroundMode = "visualizer" }, MonitorLookKeys.All),
+            new LookSlot("b", LyricsSurface.Desktop));
+        Assert.True(Visualisers.SystemAudioService.DrawsVisualiser(side, ["a", "b"]));
+        // Unplugged, it no longer counts.
+        Assert.False(Visualisers.SystemAudioService.DrawsVisualiser(side, ["a"]));
     }
 
     [Fact]

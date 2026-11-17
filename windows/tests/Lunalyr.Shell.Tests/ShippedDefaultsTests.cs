@@ -118,6 +118,30 @@ public sealed class ShippedDefaultsTests
     }
 
     [Fact]
+    public async Task AnExistingInstallStillKeepsItsLookAfterASaveAndAnotherLaunch()
+    {
+        using var temp = new TempFolder();
+        // A file from before, with empty maps stored (as every save wrote them) and no kept Floating style.
+        await File.WriteAllTextAsync(Path.Combine(temp.Path, "settings.json"),
+            """{ "schemaVersion": 1, "lyricComposition": "spoken", "rotateLayoutCounts": {}, "wordArrivalByStyle": {} }""",
+            TestContext.Current.CancellationToken);
+        await using (var store = AppSettingsStore.Open(temp.Path, Logger.Null))
+        {
+            store.Update(s => s with { LyricOffset = 0.25 });
+            Assert.True(await store.FlushAsync());
+        }
+        await using var again = AppSettingsStore.Open(temp.Path, Logger.Null);
+        var s = again.Current;
+        Assert.Null(s.LyricStyleFloating);
+        Assert.Null(s.OpeningTitleLeft);
+        Assert.Null(s.OpeningTitleLift);
+        Assert.Empty(s.RotateLayoutCounts);
+        Assert.Empty(s.WordArrivalByStyle);
+        Assert.Equal("auto", s.BackgroundMode);
+        Assert.Equal(0.25, s.LyricOffset);
+    }
+
+    [Fact]
     public void EveryNewDefaultSurvivesNormalising()
     {
         // A value the settings would reset as unknown would quietly undo the owner's look.

@@ -143,6 +143,15 @@ public sealed class AppControllerDisplayLyricsTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task SameOnEveryMonitorDrawsTheEditedWallpaperEverywhere()
+    {
+        var settings = WithSideWallpaper(Showing(DisplayLyrics.Desktop, DisplayLyrics.Desktop) with { LookMonitor = Main, BackgroundMode = "desktop" },
+            new AppSettings { BackgroundMode = "colourOnly" });
+        await PlayingWithLyrics(settings with { LookSameEverywhere = true });
+        Assert.Equal("desktop", _renderer.Looks!.Value.Desktop[@"\\.\DISPLAY2"].BackgroundId);
+    }
+
+    [Fact]
     public async Task AMusicVideoPlaysOnThePrimaryDisplayOnly()
     {
         var settings = WithSideWallpaper(Showing(DisplayLyrics.Desktop, DisplayLyrics.Desktop) with { LookMonitor = Main },

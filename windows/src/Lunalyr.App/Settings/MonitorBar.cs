@@ -43,6 +43,11 @@ internal static class MonitorBar
 
         List<(string Key, string Name)> shown = [];
         var filling = false;
+        // The edited monitor's choice as last seen, so the style edited follows it when the bar appears and whenever it
+        // changes while the bar is open (the Mac's followShows on appear and on change; a tray toggle or an unplug
+        // while Settings was closed is followed when it opens).
+        DisplayLyrics? followed = null;
+        string? followedMonitor = null;
         string? Main() => shown.Count > 0 ? shown[0].Key : null;
         string Editing(AppSettings s) => s.EditingSlot(Main()).Display;
 
@@ -82,6 +87,16 @@ internal static class MonitorBar
             AutomationProperties.SetHelpText(shows, showsHelp);
             copy.IsEnabled = !s.LookSameEverywhere;
             if (same.IsChecked != s.LookSameEverywhere) same.IsChecked = s.LookSameEverywhere;
+
+            var edited = Editing(s);
+            var choice = s.DisplayChoice(edited);
+            if (shown.Count > 0 && (choice != followed || edited != followedMonitor))
+            {
+                followed = choice;
+                followedMonitor = edited;
+                if (!ReferenceEquals(s.FollowingShows(Main()), s))
+                    bar.DispatcherQueue.TryEnqueue(() => ctx.Update(current => current.FollowingShows(Main())));
+            }
         });
 
         monitors.SelectionChanged += (_, _) =>

@@ -19,6 +19,9 @@ public static class AppSettingsStore
             TypeInfo = AppSettingsJsonContext.Default.AppSettings,
             // A new install (no file yet) starts with the owner's look (ShippedDefaults); an existing file keeps its own values.
             CreateDefaults = ShippedDefaults.ForNewInstall,
+            // A key an existing file lacks keeps the default it had (the record's own), never the new install's: the file
+            // is laid over these, maps included, so a stored empty map must not pick up the new install's entries.
+            MissingKeyDefaults = () => new AppSettings(),
             SchemaVersion = AppSettings.SchemaVersion,
             Migrations = [ShippedDefaults.KeepOldDefaults],
             Logger = logger,

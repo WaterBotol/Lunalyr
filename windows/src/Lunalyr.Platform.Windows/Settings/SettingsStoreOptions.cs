@@ -27,6 +27,13 @@ public sealed class SettingsStoreOptions<T>
     /// <summary>Creates the default settings, used on first run or when nothing on disk can be read.</summary>
     public required Func<T> CreateDefaults { get; init; }
 
+    /// <summary>
+    /// What a key a settings file lacks reads (the file is laid over these), when that differs from a first run's
+    /// <see cref="CreateDefaults"/>: an existing install keeps the defaults it had while a new one starts with newer ones.
+    /// Null uses <see cref="CreateDefaults"/>.
+    /// </summary>
+    public Func<T>? MissingKeyDefaults { get; init; }
+
     /// <summary>The schema version this build writes. Files with a lower version are migrated on load.</summary>
     public int SchemaVersion { get; init; } = 1;
 
