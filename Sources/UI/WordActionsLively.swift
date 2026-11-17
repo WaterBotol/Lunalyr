@@ -1177,7 +1177,12 @@ struct LivelyGlyphRenderer: TextRenderer {
         let cp = CGPoint(x: g.rect.midX + CGFloat((L.rnd(seed, g.index, 1) - 0.5) * 0.3) * g.rect.width,
                          y: g.baseline - CGFloat(size * (0.25 + 0.2 * L.rnd(seed, g.index, 2))))
         let theta0 = L.rnd(seed, g.index, 3) * 2 * .pi
-        var angles: [Double] = (0..<4).map { k in theta0 + Double(k) * .pi / 2 + (L.rnd(seed, g.index, 10 + k) - 0.5) * 0.6 }
+        var angles: [Double] = []
+        for k in 0..<4 {
+            let jitter: Double = (L.rnd(seed, g.index, 10 + k) - 0.5) * 0.6
+            let quarter: Double = Double(k) * Double.pi / 2
+            angles.append(theta0 + quarter + jitter)
+        }
         angles.append(angles[0] + 2 * .pi)
         let far = CGFloat(size * 2)
         func point(_ a: Double) -> CGPoint { CGPoint(x: cp.x + far * CGFloat(cos(a)), y: cp.y + far * CGFloat(sin(a))) }
