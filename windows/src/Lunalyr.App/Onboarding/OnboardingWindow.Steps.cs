@@ -1,4 +1,4 @@
-// The eight steps (the Mac's OnboardingSteps.swift at Test Build 88, Lunalyr's own lines, in Windows' controls and words).
+// The nine steps (the Mac's OnboardingSteps.swift at Test Build 88, the typeface step from 2ed3445d, Lunalyr's own lines, in Windows' controls and words).
 // Each reads the settings through its own SettingsContext, so the choices made here are the real settings and the running
 // wallpaper follows them at once. A content step's title sits at the same height on every step with its line under it;
 // the welcome and the end are centred. The Mac's music-video framing menus belong to "Show the whole video", another
@@ -45,6 +45,7 @@ internal sealed partial class OnboardingWindow
         OnboardingStep.Welcome => WelcomeStep(),
         OnboardingStep.Music => MusicStep(ctx),
         OnboardingStep.Look => LookStep(ctx),
+        OnboardingStep.Typeface => TypefaceStep(ctx),
         OnboardingStep.Videos => VideosStep(ctx),
         OnboardingStep.Lyrics => LyricsStep(ctx),
         OnboardingStep.Extras => ExtrasStep(ctx),

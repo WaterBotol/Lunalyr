@@ -80,6 +80,28 @@ public sealed partial record AppSettings
         return display == settings.EditingSlot(main).Display ? settings.FollowingShows(main) : settings;
     }
 
+    /// <summary>
+    /// The typeface of every lyric style (the Mac's <c>LyricStyleProfiles.setTypeface</c>, for the welcome's typeface step):
+    /// the one being edited, each kept style, and every monitor's own, so the floating lyrics and every monitor match.
+    /// </summary>
+    public AppSettings WithTypefaceEverywhere(string fontChoice, string fontFamily)
+    {
+        ArgumentNullException.ThrowIfNull(fontChoice);
+        ArgumentNullException.ThrowIfNull(fontFamily);
+        var choice = JsonSerializer.SerializeToElement(fontChoice, AppSettingsJsonContext.Default.String);
+        var family = JsonSerializer.SerializeToElement(fontFamily, AppSettingsJsonContext.Default.String);
+        IReadOnlyDictionary<string, JsonElement>? Retyped(IReadOnlyDictionary<string, JsonElement>? style) => style is null ? null
+            : new Dictionary<string, JsonElement>(style, StringComparer.Ordinal) { ["fontChoice"] = choice, ["fontFamily"] = family };
+        return this with
+        {
+            FontChoice = fontChoice,
+            FontFamily = fontFamily,
+            LyricStyleDesktop = Retyped(LyricStyleDesktop),
+            LyricStyleFloating = Retyped(LyricStyleFloating),
+            Looks = Looks?.ToDictionary(p => p.Key, p => Retyped(p.Value)!, StringComparer.Ordinal),
+        };
+    }
+
     /// <summary>The displays among <paramref name="connected"/> that get a floating window.</summary>
     public List<string> FloatingDisplays(IEnumerable<string> connected) => [.. connected.Where(d => DisplayChoice(d).Floats())];
 

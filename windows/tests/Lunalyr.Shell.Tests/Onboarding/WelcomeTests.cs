@@ -59,18 +59,18 @@ public sealed class WelcomeTests
             visited.Add(flow.Step);
         }
         Assert.Equal(OnboardingSteps.All, visited);
-        Assert.Equal([OnboardingStep.Welcome, OnboardingStep.Music, OnboardingStep.Look, OnboardingStep.Videos, OnboardingStep.Lyrics,
+        Assert.Equal([OnboardingStep.Welcome, OnboardingStep.Music, OnboardingStep.Look, OnboardingStep.Typeface, OnboardingStep.Videos, OnboardingStep.Lyrics,
                       OnboardingStep.Extras, OnboardingStep.Tray, OnboardingStep.Done], visited);
         // The Mac's "The menu bar" is Windows' tray.
-        Assert.Equal(["Welcome", "Your music", "Pick a look", "Music videos", "Lyrics & readings", "Extras", "The tray", "Done"],
+        Assert.Equal(["Welcome", "Your music", "Pick a look", "Pick a typeface", "Music videos", "Lyrics & readings", "Extras", "The tray", "Done"],
                      visited.Select(s => s.Title()));
         flow.Advance();
         Assert.Equal(OnboardingStep.Done, flow.Step); // Continue stops at the end
         flow.Back();
         Assert.Equal(OnboardingStep.Tray, flow.Step);
         Assert.True(flow.CanGoBack);
-        Assert.Equal("Step 2 of 8", OnboardingStep.Music.Position());
-        Assert.Equal("Step 8 of 8", OnboardingStep.Done.Position());
+        Assert.Equal("Step 2 of 9", OnboardingStep.Music.Position());
+        Assert.Equal("Step 9 of 9", OnboardingStep.Done.Position());
     }
 
     // Ported from WelcomeTests.swift: testFinishingTheFirstRunCountsAndOnlyOpenSettingsOpensSettings
@@ -193,9 +193,9 @@ public sealed class WelcomeTests
     {
         var flow = new OnboardingFlow(firstRun: true, OnboardingStep.Look);
         Assert.Equal("Back to Your music (Alt+Left)", OnboardingCopy.Help(OnboardingButton.Back, flow));
-        Assert.Equal("On to Music videos (Enter)", OnboardingCopy.Help(OnboardingButton.Continue, flow));
+        Assert.Equal("On to Pick a typeface (Enter)", OnboardingCopy.Help(OnboardingButton.Continue, flow));
         Assert.Equal("Close and leave Lunalyr in the tray", OnboardingCopy.Help(OnboardingButton.Done, new OnboardingFlow(true, OnboardingStep.Done)));
-        Assert.Equal("Step 3 of 8, Pick a look", OnboardingCopy.Announcement(OnboardingStep.Look));
+        Assert.Equal("Step 3 of 9, Pick a look", OnboardingCopy.Announcement(OnboardingStep.Look));
     }
 
     [Theory]
@@ -207,15 +207,17 @@ public sealed class WelcomeTests
     [InlineData("videos", OnboardingStep.Videos)]
     [InlineData("Music videos", OnboardingStep.Videos)]
     [InlineData("extras", OnboardingStep.Extras)]
-    [InlineData("6", OnboardingStep.Extras)]
-    [InlineData("8", OnboardingStep.Done)]
+    [InlineData("7", OnboardingStep.Extras)]
+    [InlineData("9", OnboardingStep.Done)]
+    [InlineData("typeface", OnboardingStep.Typeface)]
+    [InlineData("4", OnboardingStep.Typeface)]
     [InlineData("1", OnboardingStep.Welcome)]
     public void StepsAreFoundByNameTitleOrNumber(string text, OnboardingStep step) => Assert.Equal(step, OnboardingSteps.Parse(text));
 
     [Theory]
     [InlineData("")]
     [InlineData("0")]
-    [InlineData("9")]
+    [InlineData("10")]
     [InlineData("settings")]
     [InlineData(null)]
     public void UnknownStepsAreNone(string? text) => Assert.Null(OnboardingSteps.Parse(text));
@@ -372,7 +374,7 @@ public sealed class WelcomeTests
         Assert.Equal(OnboardingStep.Welcome, opening.OnboardingStep);
         Assert.True(opening.OnboardingPage!.Opening);
         Assert.Equal("opening", opening.OnboardingPage.Name);
-        Assert.Equal("extras", ShellOptions.Parse(["--onboarding-capture", "x.png", "--onboarding-step", "6"]).OnboardingPage!.Name);
+        Assert.Equal("extras", ShellOptions.Parse(["--onboarding-capture", "x.png", "--onboarding-step", "7"]).OnboardingPage!.Name);
     }
 
     [Fact]

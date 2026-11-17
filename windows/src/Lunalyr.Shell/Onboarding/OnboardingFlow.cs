@@ -19,12 +19,13 @@ public enum OnboardingEnding
     Closed,
 }
 
-/// <summary>The eight steps, in order.</summary>
+/// <summary>The nine steps, in order (the typeface step came in with the Mac's 2fe4dd7b).</summary>
 public enum OnboardingStep
 {
     Welcome,
     Music,
     Look,
+    Typeface,
     Videos,
     Lyrics,
     Extras,
@@ -50,6 +51,7 @@ public static class OnboardingSteps
         OnboardingStep.Welcome => "Welcome",
         OnboardingStep.Music => "Your music",
         OnboardingStep.Look => "Pick a look",
+        OnboardingStep.Typeface => "Pick a typeface",
         OnboardingStep.Videos => "Music videos",
         OnboardingStep.Lyrics => "Lyrics & readings",
         OnboardingStep.Extras => "Extras",
@@ -60,11 +62,11 @@ public static class OnboardingSteps
     /// <summary>"Step 2 of 8": the step dots, to Narrator.</summary>
     public static string Position(this OnboardingStep step) => $"Step {(int)step + 1} of {All.Count}";
 
-    /// <summary>The short name <c>--onboarding-step</c> takes and the capture files use: welcome, music, look, videos, lyrics, extras, tray, done.</summary>
+    /// <summary>The short name <c>--onboarding-step</c> takes and the capture files use: welcome, music, look, typeface, videos, lyrics, extras, tray, done.</summary>
     public static string Name(this OnboardingStep step) => step.ToString().ToLowerInvariant();
 
     /// <summary>
-    /// A step from <c>--onboarding-step</c>: its short name, its title, or its number (1–8), in any case; null when it is
+    /// A step from <c>--onboarding-step</c>: its short name, its title, or its number (1–9), in any case; null when it is
     /// none of them.
     /// </summary>
     public static OnboardingStep? Parse(string? text)

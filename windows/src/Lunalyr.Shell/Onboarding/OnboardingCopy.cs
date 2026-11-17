@@ -86,6 +86,17 @@ public static class OnboardingCopy
 
     public const string Importing = "Importing…";
 
+    // ---- 4. Pick a typeface ----
+
+    public const string TypefaceTitle = "Pick a typeface";
+
+    public const string Typeface = "The lyrics are set large and bold in it, on the desktop and in the floating lyrics.";
+
+    public const string TypefaceLater = "You can change this later in Settings › Lyrics › Text.";
+
+    /// <summary>The line each tile sets in its face (the Mac's sample, two lines).</summary>
+    public static IReadOnlyList<string> TypefaceSample { get; } = ["Static on", "the radio,"];
+
     public const string ImportFailed = "Couldn’t use that file";
 
     public const string ChooseAnother = "Choose another image or video…";
