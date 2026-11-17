@@ -8,7 +8,7 @@ public sealed class FloatingTitleFrameTests
 {
     private static readonly FloatingRect Area = new(0, 70, 1512, 874);
 
-    // After the Mac\'s b11a1ab3 (OpeningTitleTests.swift covers this; its test names were not relayed)
+    // Ported from OpeningTitleTests.swift: testTheCardStartsJustAboveTheLyricsCentred
     [Fact]
     public void TheCardStartsJustAboveTheLyricsCentred()
     {
@@ -25,7 +25,7 @@ public sealed class FloatingTitleFrameTests
         Assert.True(Area.Contains(under));
     }
 
-    // After the Mac\'s b11a1ab3 (OpeningTitleTests.swift covers this; its test names were not relayed)
+    // Ported from OpeningTitleTests.swift: testTheOldRowsPlaceBecomesTheCardsStart
     [Fact]
     public void TheOldRowsPlaceBecomesTheCardsStart()
     {
@@ -40,7 +40,7 @@ public sealed class FloatingTitleFrameTests
         Assert.Null(FloatingTitleStart.Decode([1]));
     }
 
-    // After the Mac\'s b11a1ab3 (OpeningTitleTests.swift covers this; its test names were not relayed)
+    // Ported from OpeningTitleTests.swift: testTheCardIsStackedUntilItIsTooSmall
     [Fact]
     public void TheCardIsStackedUntilItIsTooSmall()
     {
@@ -62,7 +62,7 @@ public sealed class FloatingTitleFrameTests
         Assert.True(FloatingTitleFrame.MinimumSize.Height <= line); // small enough to reach the row
     }
 
-    // After the Mac\'s b11a1ab3 (FloatingLyricsTests.swift covers this; its test names were not relayed)
+    // Ported from FloatingLyricsTests.swift: testTheTitleCardShowsWithTheFloatingLyrics
     [Fact]
     public void TheTitleCardShowsWithTheFloatingLyrics()
     {
@@ -71,16 +71,23 @@ public sealed class FloatingTitleFrameTests
         Assert.False(FloatingTitleVisibility.Shows(lyrics: true, card: false)); // Show the song title card off
     }
 
+    // Ported from OpeningTitleTests.swift: testDraggingTheCardOnThePictureMovesItFreely
     [Fact]
-    public void TheCardIsDraggedNoSmallerThanItsLeast()
+    public void DraggingTheCardOnThePictureMovesItFreely()
     {
-        var start = new FloatingRect(400, 400, 316, 70);
-        // A quarter-size picture's (-60, -20), y down there: (-240, +80) on the desktop, y up.
-        var resized = FloatingFrame.Dragged(start, -240, 80, resizing: true, Area, FloatingTitleFrame.MinimumSize);
-        Assert.Equal(FloatingTitleFrame.MinimumSize.Width, resized.Width); // no smaller than the least
-        Assert.Equal(start.MaxY, resized.MaxY); // the top left stays put
-        Assert.Equal(FloatingTitleFrame.MinimumSize.Height, resized.Height);
-        var far = FloatingFrame.Dragged(start, 9_000, 0, resizing: false, Area, FloatingTitleFrame.MinimumSize);
-        Assert.Equal(Area.MaxX, far.MaxX); // kept on the display
+        var screen = new FloatingRect(0, 0, 1512, 982);
+        var start = new FloatingRect(600, 400, 316, 70);
+        // A quarter-size picture (378 × 245.5): 50 px right and 25 px up there is 200 points right and 100 up, y up.
+        var moved = FloatingTitleFrame.DraggedOnPicture(start, screen, Area, 50, -25, 378, 245.5, resizing: false);
+        Assert.Equal(new FloatingRect(800, 500, 316, 70), moved);
+        // Anywhere on the display, far from the lyrics: into a corner, kept on it.
+        var corner = FloatingTitleFrame.DraggedOnPicture(start, screen, Area, -9_000, 9_000, 378, 245.5, resizing: false);
+        Assert.Equal(Area.MinX, corner.MinX);
+        Assert.Equal(Area.MinY, corner.MinY);
+        // Its corner: resized from its top left, no smaller than its least.
+        var resized = FloatingTitleFrame.DraggedOnPicture(start, screen, Area, -60, -20, 378, 245.5, resizing: true);
+        Assert.Equal(FloatingTitleFrame.MinimumSize, resized.Size);
+        Assert.Equal(start.MinX, resized.MinX);
+        Assert.Equal(start.MaxY, resized.MaxY);
     }
 }

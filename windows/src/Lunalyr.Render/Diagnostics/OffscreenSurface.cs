@@ -107,6 +107,48 @@ public sealed class OffscreenSurface : IDisposable
         Context.EndDraw().CheckError();
     }
 
+    private ID2D1Bitmap1? _inset;
+
+    /// <summary>
+    /// Draws <paramref name="layer"/> (prepared for <paramref name="width"/> × <paramref name="height"/> at
+    /// <paramref name="scale"/>) on its own transparent bitmap, then over the surface at (<paramref name="x"/>,
+    /// <paramref name="y"/>): a window inside the picture, such as the floating title card on the Settings picture.
+    /// </summary>
+    public void DrawInset(IRenderLayer layer, SceneSnapshot scene, int x, int y, int width, int height, float scale,
+                          double songSeconds, bool playing, double wallSeconds, double deltaSeconds)
+    {
+        ArgumentNullException.ThrowIfNull(layer);
+        if (width < 1 || height < 1) return;
+        if (_inset is null || _inset.PixelSize.Width != width || _inset.PixelSize.Height != height)
+        {
+            _inset?.Dispose();
+            _inset = Context.CreateBitmap(new SizeI(width, height), IntPtr.Zero, 0,
+                new BitmapProperties1(new D2DPixelFormat(Format.B8G8R8A8_UNorm, AlphaMode.Premultiplied), 96, 96, BitmapOptions.Target));
+        }
+        Context.Target = _inset;
+        try
+        {
+            Context.BeginDraw();
+            Context.Transform = Matrix3x2.Identity;
+            Context.Clear(new Color4(0, 0, 0, 0));
+            var frame = new FrameContext
+            {
+                Dc = Context, DWrite = DWrite, D2DFactory = Factory, Size = new Vector2(width, height), Scale = scale,
+                WallSeconds = wallSeconds, SongSeconds = songSeconds, IsPlaying = playing, Scene = scene, DeltaSeconds = deltaSeconds,
+            };
+            layer.Render(frame);
+            Context.EndDraw().CheckError();
+        }
+        finally
+        {
+            Context.Target = _target;
+        }
+        Context.BeginDraw();
+        Context.Transform = Matrix3x2.Identity;
+        Context.DrawBitmap(_inset, new Vortice.RawRectF(x, y, x + width, y + height), 1, Vortice.Direct2D1.BitmapInterpolationMode.NearestNeighbor, null);
+        Context.EndDraw().CheckError();
+    }
+
     /// <summary>The surface's pixels: premultiplied BGRA, top row first, <see cref="Width"/> × 4 bytes a row.</summary>
     public byte[] ReadPixels()
     {
@@ -157,6 +199,7 @@ public sealed class OffscreenSurface : IDisposable
     public void Dispose()
     {
         Context.Target = null;
+        _inset?.Dispose();
         _readback.Dispose();
         _target.Dispose();
         Context.Dispose();

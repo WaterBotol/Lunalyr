@@ -95,6 +95,16 @@ public static class FloatingTitleFrame
     /// <summary>The smallest title the stacked card is drawn with; below it the card is a single row: cover, title, artist.</summary>
     public const double MinimumStackedTitle = 14;
 
+    /// <summary>
+    /// The card's window moved (or, from its lower-right corner, resized) by a drag of (<paramref name="dx"/>,
+    /// <paramref name="dy"/>) pixels on a picture of its display (the Mac's FloatingTitleHandles, b11a1ab3): anywhere on the
+    /// display, not tied to the lyrics' box; no smaller than <see cref="MinimumSize"/>, kept on <paramref name="area"/>.
+    /// </summary>
+    /// <param name="screen">The display's frame (points, y up), which the picture shows whole.</param>
+    public static FloatingRect DraggedOnPicture(FloatingRect start, FloatingRect screen, FloatingRect area, double dx, double dy,
+                                                double pictureWidth, double pictureHeight, bool resizing) =>
+        FloatingFrame.Dragged(start, dx / pictureWidth * screen.Width, -dy / pictureHeight * screen.Height, resizing, area, MinimumSize);
+
     /// <summary>Seconds the card and its row cross-fade for as the window crosses <see cref="MinimumStackedTitle"/>.</summary>
     public const double CrossFade = 0.25;
 

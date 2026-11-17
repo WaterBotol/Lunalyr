@@ -172,6 +172,12 @@ public sealed record LyricStyle
     /// </summary>
     public bool FloatingTitleOnly { get; init; }
 
+    /// <summary>
+    /// With <see cref="FloatingTitleOnly"/>: the card settled, whatever the song's clock (the Settings picture's, the
+    /// Mac's FloatingScene: an <c>OpeningTitleCard</c> at age 10, not leaving, full size, still).
+    /// </summary>
+    public bool FloatingTitleSettled { get; init; }
+
     /// <summary>Where a shown translation sits (the Mac's <c>custom.translationPlacement</c>): under its line by default.</summary>
     public Core.Compositions.TranslationPlacement TranslationPlacement { get; init; }
 

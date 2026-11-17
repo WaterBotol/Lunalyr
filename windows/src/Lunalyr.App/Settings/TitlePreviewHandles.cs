@@ -214,13 +214,9 @@ internal sealed class TitlePreviewHandles
     /// The title card's window moved or resized by a drag on the picture (the Mac's FloatingTitleHandles): picture pixels to
     /// points on the display, y up; no smaller than its least, kept on the display.
     /// </summary>
-    internal static FloatingRect CardDragged(FloatingRect start, FloatingDisplay geometry, double dx, double dy, double pictureWidth,
-                                             double pictureHeight, bool resizing)
-    {
-        var screen = geometry.ScreenFrame;
-        return FloatingFrame.Dragged(start, dx / pictureWidth * screen.Width, -dy / pictureHeight * screen.Height, resizing, geometry.Area,
-                                     FloatingTitleFrame.MinimumSize);
-    }
+    private static FloatingRect CardDragged(FloatingRect start, FloatingDisplay geometry, double dx, double dy, double pictureWidth,
+                                            double pictureHeight, bool resizing) =>
+        FloatingTitleFrame.DraggedOnPicture(start, geometry.ScreenFrame, geometry.Area, dx, dy, pictureWidth, pictureHeight, resizing);
 
     /// <summary>
     /// The desktop the picture stands for, in points: the preview lays the wallpaper out as a 1080-line display
@@ -242,10 +238,27 @@ internal sealed class TitlePreviewHandles
             _framesFor = settings.FloatingTitleFrames;
             _startFor = settings.FloatingTitleStart;
             _windowAt = DateTime.UtcNow;
-            var card = options with { TitleCard = true, TitleFrames = settings.FloatingTitleFrames, TitleStart = settings.TitleStart() };
-            _window = FloatingWindowHost.Where(card) is { } found ? (found.Display.Key, found.Geometry, found.Frame) : null;
+            _window = CardWhere(options, settings);
         }
         return _window;
+    }
+
+    /// <summary>Where the title card's window beside <paramref name="options"/>' lyrics is: its display and frame (any thread).</summary>
+    internal static (string Display, FloatingDisplay Geometry, FloatingRect Frame)? CardWhere(FloatingLyricsOptions options,
+                                                                                         Shell.Settings.AppSettings settings)
+    {
+        var card = options with { TitleCard = true, TitleFrames = settings.FloatingTitleFrames, TitleStart = settings.TitleStart() };
+        return FloatingWindowHost.Where(card) is { } found ? (found.Display.Key, found.Geometry, found.Frame) : null;
+    }
+
+    /// <summary>The title card's window on a picture of <paramref name="width"/> × <paramref name="height"/> pixels, to draw it there.</summary>
+    internal static Shell.Rendering.SettingsPreviewRenderer.PictureCard CardOnPicture(FloatingDisplay geometry, FloatingRect frame, double textSize,
+                                                                                     int width, int height)
+    {
+        var box = WindowOnPicture(geometry, frame, width, height);
+        // The picture is laid out from its height, as the wallpaper's picture is.
+        var scale = (float)(height / geometry.ScreenFrame.Height);
+        return new((int)Math.Round(box.X), (int)Math.Round(box.Y), (int)Math.Round(box.Width), (int)Math.Round(box.Height), scale, textSize);
     }
 
     /// <summary>The floating window's frame (points on its display, y up) on the picture.</summary>

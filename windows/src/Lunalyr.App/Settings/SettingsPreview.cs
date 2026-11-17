@@ -149,7 +149,11 @@ internal sealed class SettingsPreview : IDisposable
                         var pixels = _buffers[buffer];
                         renderer.Use(controller.CustomWallpaper);
                         renderer.Use(controller.MotionCover);
-                        renderer.Render(scene, controller.BackgroundLayer, composition, seconds, playing, clock.Elapsed.TotalSeconds, pixels);
+                        // Floating: the picture stands for the floating scene, with the song title card in its window's box.
+                        var floating = controller.Floating is { Enabled: true } options ? options : null;
+                        var card = floating is not null && settings.FloatingTitleCard ? CardFor(floating, settings) : null;
+                        renderer.Render(scene, controller.BackgroundLayer, composition, seconds, playing, clock.Elapsed.TotalSeconds, pixels,
+                                        floating is not null, card);
                         Show(pixels, NoteFor(scene, settings.WallpaperPaused));
                         buffer = 1 - buffer;
                     }
@@ -168,6 +172,30 @@ internal sealed class SettingsPreview : IDisposable
         {
             renderer?.Dispose();
         }
+    }
+
+    private Platform.Desktop.FloatingLyricsOptions? _cardFor;
+    private object? _cardFrames, _cardStart;
+    private TimeSpan _cardAt = TimeSpan.MinValue;
+    private SettingsPreviewRenderer.PictureCard? _card;
+    private readonly System.Diagnostics.Stopwatch _cardClock = System.Diagnostics.Stopwatch.StartNew();
+
+    /// <summary>The title card's box on the picture: found again when the options or its place change, or every couple of seconds.</summary>
+    private SettingsPreviewRenderer.PictureCard? CardFor(Platform.Desktop.FloatingLyricsOptions options, Shell.Settings.AppSettings settings)
+    {
+        var now = _cardClock.Elapsed;
+        if (!ReferenceEquals(options, _cardFor) || !ReferenceEquals(settings.FloatingTitleFrames, _cardFrames)
+            || !ReferenceEquals(settings.FloatingTitleStart, _cardStart) || now - _cardAt > TimeSpan.FromSeconds(2))
+        {
+            _cardFor = options;
+            _cardFrames = settings.FloatingTitleFrames;
+            _cardStart = settings.FloatingTitleStart;
+            _cardAt = now;
+            _card = TitlePreviewHandles.CardWhere(options, settings) is { } where
+                ? TitlePreviewHandles.CardOnPicture(where.Geometry, where.Frame, options.TextSize, PixelWidth, PixelHeight)
+                : null;
+        }
+        return _card;
     }
 
     private static string NoteFor(SceneSnapshot scene, bool paused)

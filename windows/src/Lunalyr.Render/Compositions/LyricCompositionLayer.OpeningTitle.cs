@@ -202,6 +202,14 @@ internal abstract partial class LyricCompositionLayer
     private void DrawOpening(ID2D1DeviceContext dc, OpeningSchedule? schedule, in FrameContext frame)
     {
         var time = frame.SongSeconds;
+        if (SceneShown is { Style: { FloatingTitleOnly: true, FloatingTitleSettled: true, OpeningTitle: true } } still
+            && !string.IsNullOrWhiteSpace(still.Title) && Kit is not null && _paint is not null)
+        {
+            // The Settings picture's card: settled, as it rests through a song.
+            var settled = new OpeningPhase(SettledAge, 0, OpeningSize.Full, false) { Stays = true, Kept = true };
+            DrawTitleOnly(dc, still, settled, frame, FloatingStage);
+            return;
+        }
         if (schedule is null || !double.IsFinite(time) || SceneShown is not { } scene || Kit is null || _paint is null)
         {
             ReleaseCardVideo();
@@ -223,8 +231,27 @@ internal abstract partial class LyricCompositionLayer
         var floating = FloatingStage;
         if (scene.Style.FloatingTitleOnly)
         {
-            // The card's own window: the desktop's stacked card scaled to its box, or one row once that box is too small for a
-            // readable stacked title (the Mac's FloatingTitleFrame.layout), the two cross-fading as it crosses the line.
+            DrawTitleOnly(dc, scene, phase, frame, floating);
+            return;
+        }
+        if (floating && phase.Kept)
+        {
+            DrawRow(dc, scene, phase, frame.WallSeconds);
+            return;
+        }
+        DrawStackedCard(dc, scene, phase, frame, floating, floating || phase.Size == OpeningSize.Compact);
+    }
+
+    /// <summary>The card's age once settled (the Mac's FloatingScene draws it 10 s in).</summary>
+    private const double SettledAge = 10;
+
+    /// <summary>
+    /// The title card's own window: the desktop's stacked card scaled to its box, or one row once that box is too small for
+    /// a readable stacked title (the Mac's FloatingTitleFrame.layout), the two cross-fading as it crosses the line.
+    /// </summary>
+    private void DrawTitleOnly(ID2D1DeviceContext dc, SceneSnapshot scene, in OpeningPhase phase, in FrameContext frame, bool floating)
+    {
+        {
             var titleCompact = phase.Size == OpeningSize.Compact;
             var arrived = OpeningReveal.At(phase.Age, phase.Size, ReduceMotion).Title;
             TitlePresence = Math.Clamp(Math.Min(1, arrived * 1.6) * (1 - Easing.Smoothstep(phase.Exit)), 0, 1);
@@ -253,14 +280,7 @@ internal abstract partial class LyricCompositionLayer
             {
                 _titleFade = 1;
             }
-            return;
         }
-        if (floating && phase.Kept)
-        {
-            DrawRow(dc, scene, phase, frame.WallSeconds);
-            return;
-        }
-        DrawStackedCard(dc, scene, phase, frame, floating, floating || phase.Size == OpeningSize.Compact);
     }
 
     /// <summary>The stacked card: its cover, title, reading, artist and album, as it arrives, rests and leaves.</summary>

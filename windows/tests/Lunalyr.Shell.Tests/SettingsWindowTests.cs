@@ -419,6 +419,58 @@ public sealed class SettingsPreviewRendererTests
         Assert.True(Coloured(Draw(new SceneSnapshot(), "colourOnly", "echo", double.NaN, playing: false)) > 320 * 180 / 2);
     }
 
+    // Ported from OpeningTitlePreviewTests.swift (b11a1ab3): the placed-row shots became card shots, stacked and one row.
+    [Fact]
+    public void TheFloatingPictureDrawsTheCardInItsBox()
+    {
+        var song = Lunalyr.Shell.Demo.DemoSongs.Songs[0];
+        var style = new AppSettings { OpeningTitleAlways = true } .Style();
+        var scene = new SceneSnapshot { Title = song.Title, Artist = song.Artist, Lyrics = song.Lyrics, Style = style, TrackKey = "demo" };
+        const int width = 640, height = 360;
+        // The picture stands for a 1512 × 982 point display: a 316 × 70 point card is stacked; at 31 points tall, one row.
+        const float scale = height / 982f;
+        var stackedBox = new SizeD(316, 70);
+        var rowBox = new SizeD(316, 31);
+        Assert.True(Lunalyr.Core.Floating.FloatingTitleFrame.Layout(stackedBox).Stacked);
+        Assert.False(Lunalyr.Core.Floating.FloatingTitleFrame.Layout(rowBox).Stacked);
+        using var renderer = new Lunalyr.Shell.Rendering.SettingsPreviewRenderer(width, height,
+            Lunalyr.Shell.Rendering.WallpaperLayers.Factories(Lunalyr.Core.Lyrics.Readings.ReadingServices.Basic.WordBreaker), hardware: false);
+        byte[] Picture(bool floating, Lunalyr.Shell.Rendering.SettingsPreviewRenderer.PictureCard? card)
+        {
+            var pixels = new byte[width * height * 4];
+            renderer.Render(scene, "colourOnly", "editorial", 15.5, true, wallSeconds: 1, pixels, floating, card);
+            return pixels;
+        }
+        Lunalyr.Shell.Rendering.SettingsPreviewRenderer.PictureCard Card(SizeD points) =>
+            new(200, 230, (int)Math.Round(points.Width * scale), (int)Math.Round(points.Height * scale), scale, 44);
+
+        var desktop = Picture(floating: false, null);
+        var bare = Picture(floating: true, null);
+        // Floating: the desktop's own title card is not drawn.
+        Assert.True(Differing(desktop, bare) > 200, $"{Differing(desktop, bare)}");
+        foreach (var points in new[] { stackedBox, rowBox })
+        {
+            var card = Card(points);
+            var drawn = Picture(floating: true, card);
+            // The card, inside its box and nowhere else.
+            Assert.True(Differing(drawn, bare, card) > 20, $"{points}: {Differing(drawn, bare, card)}");
+            Assert.Equal(Differing(drawn, bare), Differing(drawn, bare, card));
+        }
+    }
+
+    /// <summary>Pixels that differ within a card's box on a 640-wide picture.</summary>
+    private static int Differing(byte[] a, byte[] b, Lunalyr.Shell.Rendering.SettingsPreviewRenderer.PictureCard box)
+    {
+        var count = 0;
+        for (var y = box.Y; y < box.Y + box.Height; y++)
+        for (var x = box.X; x < box.X + box.Width; x++)
+        {
+            var i = (y * 640 + x) * 4;
+            if (Math.Abs(a[i] - b[i]) + Math.Abs(a[i + 1] - b[i + 1]) + Math.Abs(a[i + 2] - b[i + 2]) > 30) count++;
+        }
+        return count;
+    }
+
     private static byte[] Draw(SceneSnapshot scene, string background, string composition, double time, bool playing = true)
     {
         using var renderer = new Lunalyr.Shell.Rendering.SettingsPreviewRenderer(320, 180,

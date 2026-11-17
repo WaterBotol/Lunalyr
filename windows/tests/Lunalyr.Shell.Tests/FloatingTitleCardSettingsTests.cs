@@ -7,7 +7,7 @@ namespace Lunalyr.Shell.Tests;
 /// <summary>After the Mac's b11a1ab3 (FloatingLyricsTests.swift): the song title card's settings.</summary>
 public sealed class FloatingTitleCardSettingsTests
 {
-    // After the Mac\'s b11a1ab3 (FloatingLyricsTests.swift covers this; its test names were not relayed)
+    // Ported from FloatingLyricsTests.swift: testTitleCardFramesAreKeptPerDisplayAndReset
     [Fact]
     public void TitleCardFramesAreKeptPerDisplayAndReset()
     {
@@ -26,7 +26,7 @@ public sealed class FloatingTitleCardSettingsTests
         Assert.False(s.TitleIsPlacedByHand);
     }
 
-    // After the Mac\'s b11a1ab3 (FloatingLyricsTests.swift covers this; its test names were not relayed)
+    // Ported from FloatingLyricsTests.swift: testTheOldTitleRowIsCarriedOverOnce
     [Fact]
     public void TheOldTitleRowIsCarriedOverOnce()
     {
@@ -38,5 +38,17 @@ public sealed class FloatingTitleCardSettingsTests
         Assert.Equal(s.TitleStart(), s.Normalized().TitleStart()); // kept, and read again
         // A row left at its standard place starts the card at its standard place.
         Assert.True(new AppSettings().Normalized().TitleStart().IsStandard);
+    }
+
+    // Ported from OpeningTitleTests.swift: testTheRowPlacementIsReadForTheMigration
+    [Fact]
+    public void TheRowPlacementIsReadForTheMigration()
+    {
+        // A settings file from before the card: the row's keys as they were written.
+        const string json = """{ "floatingTitleCentre": 0.3, "floatingTitleEdge": "bottom", "floatingTitleScale": 1.2 }""";
+        var read = System.Text.Json.JsonSerializer.Deserialize(json, AppSettingsJsonContext.Default.AppSettings)!.Normalized();
+        Assert.Equal(new FloatingTitleStart(0.3, true, 1.2), read.TitleStart());
+        Assert.Null(read.FloatingTitleEdge); // the row's own place is gone
+        Assert.True(read.TitleRow().IsStandard);
     }
 }

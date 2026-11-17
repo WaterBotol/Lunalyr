@@ -19,6 +19,15 @@ public sealed class SettingsPreviewRenderer : IDisposable
     private readonly Dictionary<string, IRenderLayer> _layers = new(StringComparer.Ordinal);
     private readonly IRenderLayer[] _drawn = new IRenderLayer[2];
     private double _lastWall = double.NaN;
+    private IRenderLayer? _card;
+    private string? _cardId;
+    private (int Width, int Height, float Scale) _cardSize;
+
+    /// <summary>
+    /// The floating song title card's window on the picture (the Mac's FloatingScene, b11a1ab3): its box in picture pixels,
+    /// the picture pixels to a point of its display, and the floating lyrics' text size.
+    /// </summary>
+    public sealed record PictureCard(int X, int Y, int Width, int Height, float Scale, double TextSize);
 
     /// <param name="width">Preview width in pixels.</param>
     /// <param name="height">Preview height in pixels.</param>
@@ -54,16 +63,46 @@ public sealed class SettingsPreviewRenderer : IDisposable
     /// <paramref name="composition"/> (unknown ids fall back to the album colours and Editorial, as on the desktop) and
     /// reads it into <paramref name="pixels"/> (premultiplied BGRA, <see cref="Width"/> × <see cref="Height"/> × 4).
     /// </summary>
+    /// <param name="floating">
+    /// The lyrics float: the desktop's title card is not drawn (the picture stands for the floating scene), and
+    /// <paramref name="card"/>, when given, is drawn settled in its window's box.
+    /// </param>
     public void Render(SceneSnapshot scene, string background, string composition, double songSeconds, bool playing,
-                       double wallSeconds, byte[] pixels)
+                       double wallSeconds, byte[] pixels, bool floating = false, PictureCard? card = null)
     {
         ArgumentNullException.ThrowIfNull(scene);
         var delta = double.IsFinite(_lastWall) ? Math.Clamp(wallSeconds - _lastWall, 0, 0.25) : 1.0 / 15;
         _lastWall = wallSeconds;
         _drawn[0] = Layer(EngineWallpaperRenderer.BackgroundLayerFor(background), "gradient");
         _drawn[1] = Layer(composition, "editorial");
-        _surface.Draw(_drawn, scene, songSeconds, playing, wallSeconds, delta);
+        var shown = floating && scene.Style.OpeningTitle ? scene with { Style = scene.Style with { OpeningTitle = false } } : scene;
+        _surface.Draw(_drawn, shown, songSeconds, playing, wallSeconds, delta);
+        if (floating && card is { Width: >= 4, Height: >= 4 }) DrawCard(scene, composition, card, songSeconds, playing, wallSeconds, delta);
         _surface.ReadPixels(pixels);
+    }
+
+    /// <summary>The title card settled (at its desktop size, scaled to the picture), stacked or as one row, in its box.</summary>
+    private void DrawCard(SceneSnapshot scene, string composition, PictureCard card, double songSeconds, bool playing, double wallSeconds,
+                          double delta)
+    {
+        var id = _factories.ContainsKey(composition) ? composition : "editorial";
+        var size = (card.Width, card.Height, card.Scale);
+        if (_card is null || _cardId != id)
+        {
+            _card?.Dispose();
+            _card = _factories[id].Create();
+            _cardId = id;
+            _card.CreateResources(_surface.Context, _surface.DWrite, new System.Numerics.Vector2(card.Width, card.Height), card.Scale);
+            _cardSize = size;
+        }
+        else if (_cardSize != size)
+        {
+            _card.Resize(new System.Numerics.Vector2(card.Width, card.Height), card.Scale);
+            _cardSize = size;
+        }
+        var style = scene.Style with { FloatingTextSize = card.TextSize, FloatingInset = 0, FloatingTitleOnly = true, FloatingTitleSettled = true };
+        _surface.DrawInset(_card, scene with { Style = style }, card.X, card.Y, card.Width, card.Height, card.Scale, songSeconds, playing,
+                           wallSeconds, delta);
     }
 
     /// <summary>Uses <paramref name="factory"/> for its id from now on (the imported picture or video), dropping any instance made from another.</summary>
@@ -88,6 +127,8 @@ public sealed class SettingsPreviewRenderer : IDisposable
     {
         foreach (var layer in _layers.Values) layer.Dispose();
         _layers.Clear();
+        _card?.Dispose();
+        _card = null;
         _surface.Dispose();
     }
 }
