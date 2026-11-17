@@ -299,7 +299,7 @@ public sealed partial record AppSettings
             RotateLayoutsCursor = Math.Max(0, RotateLayoutsCursor),
             Player = Core.NowPlaying.PlayerChoice.Normalize(Player),
             OpeningTitleStrength = Core.Compositions.OpeningTitle.KeptStrength(OpeningTitleStrength),
-        }).WithTitlePlacement(TitlePlacement()).WithTitleRow(TitleRow()).WithAddedSources().NormalizedWindowSettings().NormalizedLyricTools().NormalizedWallpaper().NormalizedFloating()
+        }).WithTitlePlacement(TitlePlacement()).WithTitleRow(TitleRow()).WithTitleRowCarriedOver().WithAddedSources().NormalizedWindowSettings().NormalizedLyricTools().NormalizedWallpaper().NormalizedFloating()
             .NormalizedDiscord().NormalizedLyricExtras();
     }
 

@@ -59,7 +59,7 @@ public sealed class AppSettingsTests
             "pauseWhenCovered", "pauseOnBatterySaver", "pauseWhenFullScreen", "lyricOffset", "repairQQGaps", "songOffsets",
             "lyricSourceOrder", "lyricSources", "lyricMatchMode", "lyrimuseFolder", "artistAliases", "creditsLayer", "openingTitle", "openingTitleCover", "openingTitleAlways", "openingTitleStrength",
             // The title's place (openingTitleLeft/Lift and floatingTitleEdge are written only once it is moved)
-            "openingTitleScale", "floatingTitleCentre", "floatingTitleScale", "showInterludes", "thinkingOrbStyle",
+            "openingTitleScale", "floatingTitleCard", "floatingTitleCentre", "floatingTitleFrames", "floatingTitleScale", "showInterludes", "thinkingOrbStyle",
             "lyricHighlightMode", "lyricHighlightCustom", "rotateLayouts", "rotateLayoutCounts", "rotateLayoutsCursor",
             "constellationSpread", "constellationLinkOpacity", "echoStrength", "wordEntranceMix", "wordArrivalByStyle", "appTheme",
             "showControlsOnHover", "desktopPlayerTimeMode", "player",
@@ -228,14 +228,15 @@ public sealed class TitlePlacementSettingsTests
         var row = new Lunalyr.Core.Compositions.OpeningTitleRow(0.2, true, 1.3);
         var saved = RoundTrip(settings.WithTitlePlacement(placed).WithTitleRow(row));
         Assert.Equal(placed, saved.TitlePlacement());
-        Assert.Equal(row, saved.TitleRow());
         Assert.Equal(placed, saved.Style().OpeningTitlePlacement);
-        Assert.Equal(row, saved.Style().OpeningTitleRow);
+        // The floating title row is now the card's start beside the lyrics (the Mac's b11a1ab3), carried over once.
+        Assert.True(saved.TitleRow().IsStandard);
+        Assert.Equal(Lunalyr.Core.Floating.FloatingTitleStart.FromRow(row), saved.TitleStart());
         // Out of range: kept in range.
         var wild = RoundTrip(settings with { OpeningTitleScale = 40, FloatingTitleScale = 9, FloatingTitleCentre = -3 });
         Assert.Equal(1.6, wild.TitlePlacement().Scale);
-        Assert.Equal(1.6, wild.TitleRow().Scale);
-        Assert.Equal(0, wild.TitleRow().Centre);
+        Assert.Equal(1.6, wild.TitleStart().Scale);
+        Assert.Equal(0, wild.TitleStart().Centre);
         // Reset: the standard place, with nothing of the corner or edge left in the file.
         var reset = saved.WithTitlePlacement(Lunalyr.Core.Compositions.OpeningTitlePlacement.Standard)
                          .WithTitleRow(Lunalyr.Core.Compositions.OpeningTitleRow.Standard);

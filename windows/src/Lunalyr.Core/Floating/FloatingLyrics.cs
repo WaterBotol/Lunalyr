@@ -198,18 +198,19 @@ public static class FloatingFrame
         return new FloatingRect(Round(x), Round(y), size.Width, size.Height);
     }
 
-    /// <summary>A size no smaller than the minimum and no larger than the area.</summary>
-    public static SizeD Fitted(SizeD size, FloatingRect area)
+    /// <summary>A size no smaller than the minimum (<see cref="MinimumSize"/> unless given) and no larger than the area.</summary>
+    public static SizeD Fitted(SizeD size, FloatingRect area, SizeD? minimum = null)
     {
-        var width = Math.Min(Math.Max(size.Width, MinimumSize.Width), Math.Max(MinimumSize.Width, area.Width));
-        var height = Math.Min(Math.Max(size.Height, MinimumSize.Height), Math.Max(MinimumSize.Height, area.Height));
+        var least = minimum ?? MinimumSize;
+        var width = Math.Min(Math.Max(size.Width, least.Width), Math.Max(least.Width, area.Width));
+        var height = Math.Min(Math.Max(size.Height, least.Height), Math.Max(least.Height, area.Height));
         return new SizeD(width, height);
     }
 
     /// <summary>Keeps a frame on the area: shrunk to fit, then moved inside it.</summary>
-    public static FloatingRect Clamped(FloatingRect frame, FloatingRect area)
+    public static FloatingRect Clamped(FloatingRect frame, FloatingRect area, SizeD? minimum = null)
     {
-        var size = Fitted(frame.Size, area);
+        var size = Fitted(frame.Size, area, minimum);
         var x = Math.Min(Math.Max(frame.MinX, area.MinX), area.MaxX - size.Width);
         var y = Math.Min(Math.Max(frame.MinY, area.MinY), area.MaxY - size.Height);
         return new FloatingRect(x, y, size.Width, size.Height);
@@ -254,18 +255,19 @@ public static class FloatingFrame
     /// A move or resize by hand: <paramref name="dx"/>, <paramref name="dy"/> is how far the pointer went since the
     /// drag began, y up. Resizing pins the top left corner, as dragging a window's bottom-right corner does.
     /// </summary>
-    public static FloatingRect Dragged(FloatingRect start, double dx, double dy, bool resizing, FloatingRect area)
+    public static FloatingRect Dragged(FloatingRect start, double dx, double dy, bool resizing, FloatingRect area, SizeD? minimum = null)
     {
+        var least = minimum ?? MinimumSize;
         if (resizing)
         {
-            var width = Math.Max(MinimumSize.Width, start.Width + dx);
-            var height = Math.Max(MinimumSize.Height, start.Height - dy);
+            var width = Math.Max(least.Width, start.Width + dx);
+            var height = Math.Max(least.Height, start.Height - dy);
             double maxWidth = area.MaxX - start.MinX, maxHeight = start.MaxY - area.MinY;
-            var size = new SizeD(Math.Min(width, Math.Max(MinimumSize.Width, maxWidth)),
-                                  Math.Min(height, Math.Max(MinimumSize.Height, maxHeight)));
+            var size = new SizeD(Math.Min(width, Math.Max(least.Width, maxWidth)),
+                                  Math.Min(height, Math.Max(least.Height, maxHeight)));
             return new FloatingRect(start.MinX, start.MaxY - size.Height, size.Width, size.Height);
         }
-        return Clamped(start.OffsetBy(dx, dy), area);
+        return Clamped(start.OffsetBy(dx, dy), area, least);
     }
 
     /// <summary>
@@ -273,14 +275,15 @@ public static class FloatingFrame
     /// <paramref name="dy"/> are the pointer's movement in points, y up. Each moving edge stays inside
     /// <paramref name="area"/> and keeps the window at least <see cref="MinimumSize"/>; the other edges stay put.
     /// </summary>
-    public static FloatingRect Resized(FloatingRect start, double dx, double dy, FloatingEdges edges, FloatingRect area)
+    public static FloatingRect Resized(FloatingRect start, double dx, double dy, FloatingEdges edges, FloatingRect area, SizeD? minimum = null)
     {
+        var least = minimum ?? MinimumSize;
         double left = start.MinX, right = start.MaxX, bottom = start.MinY, top = start.MaxY;
-        if (edges.HasFlag(FloatingEdges.Right)) right = Between(right + dx, left + MinimumSize.Width, Math.Max(area.MaxX, left + MinimumSize.Width));
-        else if (edges.HasFlag(FloatingEdges.Left)) left = Between(left + dx, Math.Min(area.MinX, right - MinimumSize.Width), right - MinimumSize.Width);
+        if (edges.HasFlag(FloatingEdges.Right)) right = Between(right + dx, left + least.Width, Math.Max(area.MaxX, left + least.Width));
+        else if (edges.HasFlag(FloatingEdges.Left)) left = Between(left + dx, Math.Min(area.MinX, right - least.Width), right - least.Width);
         // On screen, Top is the frame's MaxY (y up) and Bottom its MinY.
-        if (edges.HasFlag(FloatingEdges.Top)) top = Between(top + dy, bottom + MinimumSize.Height, Math.Max(area.MaxY, bottom + MinimumSize.Height));
-        else if (edges.HasFlag(FloatingEdges.Bottom)) bottom = Between(bottom + dy, Math.Min(area.MinY, top - MinimumSize.Height), top - MinimumSize.Height);
+        if (edges.HasFlag(FloatingEdges.Top)) top = Between(top + dy, bottom + least.Height, Math.Max(area.MaxY, bottom + least.Height));
+        else if (edges.HasFlag(FloatingEdges.Bottom)) bottom = Between(bottom + dy, Math.Min(area.MinY, top - least.Height), top - least.Height);
         return new FloatingRect(left, bottom, right - left, top - bottom);
     }
 
