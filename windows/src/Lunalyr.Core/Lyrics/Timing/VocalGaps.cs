@@ -82,7 +82,9 @@ public readonly record struct InstrumentalCue(double Elapsed, double Opacity, do
 /// </remarks>
 public static class VocalGaps
 {
-    public const double DefaultMinimum = 2.4;
+    // The same pause that breaks a phrase run (the Mac's e6959bca): the cue's dots dim every line, so a hand-over across a
+    // longer pause would play half-hidden behind them, and the two always agree.
+    public const double DefaultMinimum = Motion.LyricPhraseRuns.BreakGap;
 
     /// <summary>The break at <paramref name="time"/>, or null. Allocation-free: call it every frame.</summary>
     public static VocalGap? Find(ReadOnlySpan<VocalWindow> vocals, double time, double trackDuration,
