@@ -25,11 +25,18 @@ public sealed partial class AppController
     private readonly Lock _floatGate = new();
     private IReadOnlyList<ConnectedDisplay> _displays = [];
     private LooksCache? _looks;
+    private (Dictionary<string, SurfaceLook> Floating, Dictionary<string, SurfaceLook> Desktop)? _looksSent;
+    // The imported files other monitors draw, each registered once under its own layer id.
+    private readonly HashSet<string> _ownCustoms = new(StringComparer.Ordinal);
 
-    // The parked looks worked out for one state of the settings, the displays and the song's layout (reading a look
-    // copies its settings, so this is not done again for every scene published).
-    private sealed record LooksCache(AppSettings Settings, IReadOnlyList<ConnectedDisplay> Displays, string? Layout,
-        RememberedStyle? Remembered, Dictionary<string, SurfaceLook> Floating, Dictionary<string, SurfaceLook> Desktop);
+    // One parked slot: the settings it draws with, and its style and adjustments worked out once.
+    private sealed record ParkedSlot(AppSettings Look, Render.Scene.LyricStyle Style, Render.Scene.WallpaperAdjustments Adjustments);
+
+    // The parked slots worked out for one state of the settings, the displays and the song's remembered style (reading
+    // a look copies its settings, so this is not done again for every scene published). Floating by display key, desktop
+    // by monitor device name.
+    private sealed record LooksCache(AppSettings Settings, IReadOnlyList<ConnectedDisplay> Displays, RememberedStyle? Remembered,
+        Dictionary<string, ParkedSlot> Floating, Dictionary<string, ParkedSlot> Desktop);
 
     /// <summary>The options last handed to the renderer (the first floating window's, once displays are known).</summary>
     public FloatingLyricsOptions Floating
@@ -106,7 +113,7 @@ public sealed partial class AppController
             FloatingLyricsOptions single;
             List<FloatingLyricsOptions> windows = [];
             List<string> without = [];
-            LooksCache? looks = null;
+            (Dictionary<string, SurfaceLook> Floating, Dictionary<string, SurfaceLook> Desktop)? looks = null;
             bool perDisplay;
             lock (_gate)
             {
@@ -144,7 +151,9 @@ public sealed partial class AppController
                 }
                 else
                 {
-                    looks = LooksFor(settings, displays);
+                    var parked = LooksFor(settings, displays);
+                    _looks = parked;
+                    looks = SurfaceLooks(settings, displays, parked);
                     var main = displays[0].Key;
                     var editing = settings.EditingSlot(main);
                     foreach (var d in displays)
@@ -154,7 +163,7 @@ public sealed partial class AppController
                         {
                             // The window drawing the style being edited draws the scene's own; the others their parked copy.
                             var layout = editing == new LookSlot(d.Key, LyricsSurface.Floating) ? CompositionFor(settings)
-                                : looks.Floating[d.Key].LyricId ?? CompositionFor(settings);
+                                : looks.Value.Floating[d.Key].LyricId ?? CompositionFor(settings);
                             windows.Add(Window(true, d.Key, layout));
                         }
                         if (!choice.OnDesktop()) without.Add(d.Device);
@@ -175,6 +184,7 @@ public sealed partial class AppController
                     // The displays went unknown again: back to one surface choice.
                     _windowsSent = null;
                     _withoutSent = null;
+                    _looksSent = null;
                     _renderer.SetLooks(new Dictionary<string, SurfaceLook>(), new Dictionary<string, SurfaceLook>());
                     _floatSent = null;
                 }
@@ -184,10 +194,10 @@ public sealed partial class AppController
                 return;
             }
             _floatSent = single;
-            if (looks is not null && !ReferenceEquals(looks, _looks))
+            if (looks is { } now && (_looksSent is not { } sent || !SameLooks(sent.Floating, now.Floating) || !SameLooks(sent.Desktop, now.Desktop)))
             {
-                _looks = looks;
-                _renderer.SetLooks(looks.Floating, looks.Desktop);
+                _looksSent = now;
+                _renderer.SetLooks(now.Floating, now.Desktop);
             }
             if (_withoutSent is null || !without.SequenceEqual(_withoutSent))
             {
@@ -204,34 +214,77 @@ public sealed partial class AppController
 
     /// <summary>
     /// Each surface's parked look: every floating window's and every desktop's but the slot being edited, which draws
-    /// the scene's own style. A parked copy reads its style keys from its kept look and every other key through. The
-    /// song's remembered style (style memory) applies to every surface, as on the Mac. Must hold _gate.
+    /// the scene's own. A parked copy reads its style keys from its kept look and every other key through, and a
+    /// desktop's carries its monitor's wallpaper. The song's remembered style (style memory) applies to every surface,
+    /// as on the Mac. Must hold _gate.
     /// </summary>
     private LooksCache LooksFor(AppSettings settings, IReadOnlyList<ConnectedDisplay> displays)
     {
-        var layout = _layout;
         var remembered = RememberedLocked(settings)?.Style;
-        if (_looks is { } cached && ReferenceEquals(cached.Settings, settings) && ReferenceEquals(cached.Displays, displays) && cached.Layout == layout
+        if (_looks is { } cached && ReferenceEquals(cached.Settings, settings) && ReferenceEquals(cached.Displays, displays)
             && Equals(cached.Remembered, remembered))
             return cached;
         var main = displays[0].Key;
         var editing = settings.EditingSlot(main);
-        var available = AvailableCompositions();
-        Dictionary<string, SurfaceLook> floating = new(StringComparer.Ordinal), desktop = new(StringComparer.Ordinal);
-        SurfaceLook Parked(string display, LyricsSurface surface)
+        Dictionary<string, ParkedSlot> floating = new(StringComparer.Ordinal), desktop = new(StringComparer.Ordinal);
+        ParkedSlot Parked(string display, LyricsSurface surface)
         {
             var look = StyleMemory.Applied(settings.LookFor(display, surface, main), remembered);
-            var chosen = look.LyricComposition == AutomaticComposition ? layout ?? "constellation" : look.LyricComposition;
-            return new SurfaceLook(look.Style(), available.Contains(chosen) ? chosen : null);
+            return new ParkedSlot(look, look.Style(), look.Adjustments());
         }
         foreach (var d in displays)
         {
-            var choice = settings.DisplayChoice(d.Key);
-            if (choice.Floats() && editing != new LookSlot(d.Key, LyricsSurface.Floating)) floating[d.Key] = Parked(d.Key, LyricsSurface.Floating);
-            if (choice.OnDesktop() && editing != new LookSlot(d.Key, LyricsSurface.Desktop)) desktop[d.Device] = Parked(d.Key, LyricsSurface.Desktop);
+            if (settings.DisplayChoice(d.Key).Floats() && editing != new LookSlot(d.Key, LyricsSurface.Floating))
+                floating[d.Key] = Parked(d.Key, LyricsSurface.Floating);
+            // Every monitor draws its own wallpaper, whatever its lyrics do.
+            if (editing != new LookSlot(d.Key, LyricsSurface.Desktop)) desktop[d.Device] = Parked(d.Key, LyricsSurface.Desktop);
         }
-        return new LooksCache(settings, displays, layout, remembered, floating, desktop);
+        return new LooksCache(settings, displays, remembered, floating, desktop);
     }
+
+    /// <summary>What each surface with a parked look draws now: its style and layout, and a wallpaper's background and adjustments. Must hold _gate.</summary>
+    private (Dictionary<string, SurfaceLook> Floating, Dictionary<string, SurfaceLook> Desktop) SurfaceLooks(AppSettings settings,
+        IReadOnlyList<ConnectedDisplay> displays, LooksCache parked)
+    {
+        var available = AvailableCompositions();
+        string? Composition(AppSettings look)
+        {
+            var chosen = look.LyricComposition == AutomaticComposition ? _layout ?? "constellation" : look.LyricComposition;
+            return available.Contains(chosen) ? chosen : null;
+        }
+        var floating = parked.Floating.ToDictionary(p => p.Key, p => new SurfaceLook(p.Value.Style, Composition(p.Value.Look)), StringComparer.Ordinal);
+        var desktop = new Dictionary<string, SurfaceLook>(StringComparer.Ordinal);
+        for (var i = 0; i < displays.Count; i++)
+        {
+            var d = displays[i];
+            if (!parked.Desktop.TryGetValue(d.Device, out var p)) continue;
+            var lyrics = settings.DisplayChoice(d.Key).OnDesktop();
+            desktop[d.Device] = new SurfaceLook(lyrics ? p.Style : null, lyrics ? Composition(p.Look) : null,
+                WallpaperOf(settings, p.Look, primary: i == 0), p.Adjustments);
+        }
+        return (floating, desktop);
+    }
+
+    /// <summary>
+    /// The background a monitor's own look draws. A music video plays on the primary display only (one YouTube player,
+    /// as the Mac keeps it to the main display): another monitor draws its "Without a video" type. An imported file
+    /// other than the edited monitor's gets a layer of its own.
+    /// </summary>
+    private string WallpaperOf(AppSettings settings, AppSettings look, bool primary)
+    {
+        if (!primary && look.BackgroundMode == "musicVideo") look = look with { BackgroundMode = look.MusicVideoFallback };
+        var id = BackgroundLayerFor(look);
+        if (id != "custom" || (look.WallpaperPath == settings.WallpaperPath && look.WallpaperPlacement == settings.WallpaperPlacement)) return id;
+        var own = "custom." + Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
+            System.Text.Encoding.UTF8.GetBytes(look.WallpaperPath + "\n" + look.WallpaperPlacement)))[..12].ToLowerInvariant();
+        if (_ownCustoms.Add(own))
+            _renderer.ReplaceLayer(new Render.Backgrounds.CustomLayerFactory(look.WallpaperPath,
+                Core.Colour.WallpaperPlacements.Parse(look.WallpaperPlacement), log: _logger, id: own));
+        return own;
+    }
+
+    private static bool SameLooks(IReadOnlyDictionary<string, SurfaceLook> a, IReadOnlyDictionary<string, SurfaceLook> b) =>
+        a.Count == b.Count && a.All(p => b.TryGetValue(p.Key, out var other) && p.Value == other);
 
     /// <summary>The Mac's <c>visibilityInput</c>: what the window's rule needs, with how long the song has been paused.</summary>
     private FloatingVisibility.Input VisibilityInput(AppSettings settings, Render.Scene.SceneSnapshot scene, LyricsSurface surface)

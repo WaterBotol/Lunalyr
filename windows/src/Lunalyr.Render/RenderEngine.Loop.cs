@@ -568,7 +568,7 @@ public sealed partial class RenderEngine
             {
                 _log.Error($"Couldn't create a swap chain for {s.Window.Monitor.DeviceName}", ex);
             }
-            var background = NewSlot(_backgroundId);
+            var background = NewSlot(BackgroundIdFor(s));
             // A wallpaper fades in from its black window once it can draw (the Mac's first-layer fade).
             s.Backgrounds = background is null ? null : new LayerCrossfade<LayerSlot>(background, ready: HasFirstFrame(background), fadingInAt: now);
             s.Lyric = LyricIdFor(s) is { } lyricId ? NewSlot(lyricId) : null;
@@ -777,21 +777,9 @@ public sealed partial class RenderEngine
                 if (lyricChanged) RefreshLyricSlot(s);
                 continue;
             }
-            if (backgroundChanged && NewSlot(backgroundId) is { } slot)
-            {
-                if (s.Backgrounds is null)
-                {
-                    s.Backgrounds = new LayerCrossfade<LayerSlot>(slot, ready: HasFirstFrame(slot), fadingInAt: now);
-                }
-                else
-                {
-                    var before = s.Backgrounds.Entries.Select(e => e.Layer).ToArray();
-                    // A paused wallpaper can't run a fade: the still frame shows the new layer at once.
-                    s.Backgrounds.Change(slot, ready: HasFirstFrame(slot), s.State == SurfaceState.Drawing ? now : double.NegativeInfinity,
-                        _options.BackgroundFadeSeconds);
-                    DisposeDropped(s, before);
-                }
-            }
+            // A monitor with a look of its own keeps its own background (SurfaceLook.BackgroundId).
+            var wanted = BackgroundIdFor(s);
+            if (backgroundChanged && (s.Backgrounds?.Current.Id != wanted || (renew && wanted == backgroundId))) ChangeBackground(s, wanted, now);
             if (lyricChanged && s.Lyric?.Id != LyricIdFor(s))
             {
                 if (s.Lyric is { } old) DisposeSlot(old);
@@ -801,6 +789,40 @@ public sealed partial class RenderEngine
             s.NeedsFrame = true;
         }
         _log.Info($"Layers: background \"{backgroundId}\", lyrics \"{lyricId ?? "none"}\"");
+    }
+
+    /// <summary>Crossfades <paramref name="s"/>'s background into a new instance of <paramref name="id"/>.</summary>
+    private void ChangeBackground(RenderSurface s, string id, double now)
+    {
+        if (NewSlot(id) is not { } slot) return;
+        if (s.Backgrounds is null)
+        {
+            s.Backgrounds = new LayerCrossfade<LayerSlot>(slot, ready: HasFirstFrame(slot), fadingInAt: now);
+            return;
+        }
+        var before = s.Backgrounds.Entries.Select(e => e.Layer).ToArray();
+        // A paused wallpaper can't run a fade: the still frame shows the new layer at once.
+        s.Backgrounds.Change(slot, ready: HasFirstFrame(slot), s.State == SurfaceState.Drawing ? now : double.NegativeInfinity,
+            _options.BackgroundFadeSeconds);
+        DisposeDropped(s, before);
+    }
+
+    /// <summary>
+    /// Each wallpaper's background as its look says now; <paramref name="renewed"/> (a factory just replaced) crossfades
+    /// into a new instance wherever it is drawn.
+    /// </summary>
+    private void RefreshBackgrounds(string? renewed = null)
+    {
+        double now = Now();
+        foreach (var s in _surfaces)
+        {
+            if (s.Panel is not null) continue;
+            var id = BackgroundIdFor(s);
+            if (s.Backgrounds?.Current.Id == id && id != renewed) continue;
+            ChangeBackground(s, id, now);
+            CreateLayerResources(s);
+            s.NeedsFrame = true;
+        }
     }
 
     private void DisposeDropped(RenderSurface s, LayerSlot[] before)

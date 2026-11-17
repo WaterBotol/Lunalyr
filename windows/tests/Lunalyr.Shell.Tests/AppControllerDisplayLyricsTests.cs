@@ -122,6 +122,56 @@ public sealed class AppControllerDisplayLyricsTests : IAsyncDisposable
         Assert.True(looks.Desktop.ContainsKey(@"\\.\DISPLAY1"));
     }
 
+    // ---- Each monitor's own wallpaper (the Mac's per-monitor looks, item B) ----
+
+    private static AppSettings WithSideWallpaper(AppSettings settings, AppSettings side) =>
+        MonitorLooks.Store(settings, MonitorLooks.Top(side, MonitorLookKeys.All), new LookSlot(Side, LyricsSurface.Desktop));
+
+    [Fact]
+    public async Task EachMonitorDrawsItsOwnWallpaperAndAdjustments()
+    {
+        var settings = WithSideWallpaper(Showing(DisplayLyrics.Desktop, DisplayLyrics.None) with { LookMonitor = Main },
+            new AppSettings { BackgroundMode = "colourOnly", Vividness = 0.5 });
+        await PlayingWithLyrics(settings);
+        var side = _renderer.Looks!.Value.Desktop[@"\\.\DISPLAY2"];
+        Assert.Equal("colour", side.BackgroundId);
+        Assert.Equal(0.5, side.Adjustments!.Vividness);
+        // A monitor showing the wallpaper alone draws no lyrics, so its look carries no style.
+        Assert.Null(side.Style);
+        // The edited monitor draws the shared layers.
+        Assert.False(_renderer.Looks!.Value.Desktop.ContainsKey(@"\\.\DISPLAY1"));
+    }
+
+    [Fact]
+    public async Task AMusicVideoPlaysOnThePrimaryDisplayOnly()
+    {
+        var settings = WithSideWallpaper(Showing(DisplayLyrics.Desktop, DisplayLyrics.Desktop) with { LookMonitor = Main },
+            new AppSettings { BackgroundMode = "musicVideo", MusicVideoFallback = "colourOnly" });
+        await PlayingWithLyrics(settings);
+        Assert.Equal("colour", _renderer.Looks!.Value.Desktop[@"\\.\DISPLAY2"].BackgroundId);
+    }
+
+    [Fact]
+    public async Task AnotherMonitorsImportedFileGetsALayerOfItsOwn()
+    {
+        var file = Path.Combine(Path.GetTempPath(), $"lunalyr-test-{Guid.NewGuid():N}.png");
+        await File.WriteAllBytesAsync(file, [0x89, 0x50, 0x4E, 0x47], TestContext.Current.CancellationToken);
+        try
+        {
+            var settings = WithSideWallpaper(Showing(DisplayLyrics.Desktop, DisplayLyrics.Desktop) with { LookMonitor = Main },
+                new AppSettings { BackgroundMode = "custom", WallpaperPath = file });
+            await PlayingWithLyrics(settings);
+            var id = _renderer.Looks!.Value.Desktop[@"\\.\DISPLAY2"].BackgroundId!;
+            Assert.StartsWith("custom.", id);
+            var factory = Assert.IsType<Render.Backgrounds.CustomLayerFactory>(_renderer.Replaced.Single(f => f.Id == id));
+            Assert.Equal(file, factory.Path);
+        }
+        finally
+        {
+            File.Delete(file);
+        }
+    }
+
     [Fact]
     public async Task ASongsRememberedStyleReachesEverySurface()
     {

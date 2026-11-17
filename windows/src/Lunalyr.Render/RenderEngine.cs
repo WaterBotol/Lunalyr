@@ -232,10 +232,7 @@ public sealed partial class RenderEngine : IDisposable
     public void ReplaceLayer(IRenderLayerFactory factory)
     {
         RegisterLayer(factory);
-        Post(() =>
-        {
-            if (_backgroundId == factory.Id) ApplyLayers(factory.Id, _lyricId, renew: true);
-        });
+        Post(() => RefreshBackgrounds(renewed: factory.Id));
     }
 
     /// <summary>The Performance settings (frame rate, low power, battery, covered and paused wallpapers).</summary>

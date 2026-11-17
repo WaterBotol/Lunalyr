@@ -34,9 +34,11 @@ public sealed class FloatingPlacedEventArgs(string displayKey, FloatingRect rela
 
 /// <summary>
 /// One surface's own look, where it differs from the shared scene and layers: its lyric style (the floating style, or
-/// another monitor's) and its lyric composition. Null members follow the shared ones.
+/// another monitor's), its lyric composition, and for a wallpaper its background and adjustments (the Mac's per-monitor
+/// looks). Null members follow the shared ones.
 /// </summary>
-public sealed record SurfaceLook(LyricStyle? Style = null, string? LyricId = null);
+public sealed record SurfaceLook(LyricStyle? Style = null, string? LyricId = null, string? BackgroundId = null,
+    WallpaperAdjustments? Adjustments = null);
 
 /// <summary>One floating window: its options, its window thread, and its fade and stage on the render thread.</summary>
 internal sealed class FloatingPanel(string display)
@@ -177,11 +179,13 @@ public sealed partial class RenderEngine
         lock (_registryGate)
         {
             foreach (var look in floating.Values.Concat(desktop.Values))
-                if (look.LyricId is { } id && !_factories.ContainsKey(id)) throw new ArgumentException($"No layer registered as \"{id}\".", nameof(floating));
+                foreach (var id in new[] { look.LyricId, look.BackgroundId })
+                    if (id is not null && !_factories.ContainsKey(id)) throw new ArgumentException($"No layer registered as \"{id}\".", nameof(floating));
         }
         _looks = new SurfaceLooks(new Dictionary<string, SurfaceLook>(floating, StringComparer.Ordinal),
             new Dictionary<string, SurfaceLook>(desktop, StringComparer.Ordinal));
         Post(RefreshLyricSlots);
+        Post(() => RefreshBackgrounds());
         InputChanged();
     }
 
@@ -253,20 +257,30 @@ public sealed partial class RenderEngine
         return _looks.Desktop.GetValueOrDefault(s.Window.Monitor.DeviceName)?.LyricId ?? _lyricId;
     }
 
-    /// <summary>A surface's own lyric style, or null for the shared scene's.</summary>
-    private LyricStyle? StyleFor(RenderSurface s) => s.Panel is { } panel
-        ? _looks.Floating.GetValueOrDefault(panel.Display)?.Style
-        : _looks.Desktop.GetValueOrDefault(s.Window.Monitor.DeviceName)?.Style;
+    /// <summary>A surface's own look, or null for the shared scene and layers.</summary>
+    private SurfaceLook? LookOf(RenderSurface s) => s.Panel is { } panel
+        ? _looks.Floating.GetValueOrDefault(panel.Display)
+        : _looks.Desktop.GetValueOrDefault(s.Window.Monitor.DeviceName);
 
-    /// <summary>The scene a surface draws: the shared one, with the surface's own style if it has one (made again only when either changes).</summary>
+    /// <summary>The background a wallpaper draws: its own look's, else the shared one.</summary>
+    private string BackgroundIdFor(RenderSurface s) =>
+        (s.Panel is null ? _looks.Desktop.GetValueOrDefault(s.Window.Monitor.DeviceName)?.BackgroundId : null) ?? _backgroundId;
+
+    /// <summary>
+    /// The scene a surface draws: the shared one, with the surface's own style and adjustments if it has them (made again
+    /// only when one of them changes).
+    /// </summary>
     private SceneSnapshot SceneFor(RenderSurface s, SceneSnapshot scene)
     {
-        if (StyleFor(s) is not { } style || ReferenceEquals(style, scene.Style)) return scene;
-        if (!ReferenceEquals(scene, s.LookSource) || !ReferenceEquals(style, s.LookStyle) || s.LookScene is null)
+        var look = LookOf(s);
+        var style = look?.Style is { } own && !ReferenceEquals(own, scene.Style) ? own : null;
+        var adjustments = look?.Adjustments is { } mine && mine != scene.Adjustments ? mine : null;
+        if (style is null && adjustments is null) return scene;
+        if (!ReferenceEquals(scene, s.LookSource) || !ReferenceEquals(look, s.LookUsed) || s.LookScene is null)
         {
             s.LookSource = scene;
-            s.LookStyle = style;
-            s.LookScene = scene with { Style = style };
+            s.LookUsed = look;
+            s.LookScene = scene with { Style = style ?? scene.Style, Adjustments = adjustments ?? scene.Adjustments };
         }
         return s.LookScene;
     }

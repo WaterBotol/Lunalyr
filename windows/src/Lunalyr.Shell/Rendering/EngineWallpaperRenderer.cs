@@ -82,9 +82,13 @@ public sealed class EngineWallpaperRenderer : IWallpaperRenderer
 
     public void SetLooks(IReadOnlyDictionary<string, SurfaceLook> floating, IReadOnlyDictionary<string, SurfaceLook> desktop)
     {
-        // A composition not registered (yet) draws the shared one.
+        // A composition or background not registered (yet) draws the shared one.
         var ids = _engine.LayerIds;
-        SurfaceLook Known(SurfaceLook look) => look.LyricId is { } id && !ids.Contains(id) ? look with { LyricId = null } : look;
+        SurfaceLook Known(SurfaceLook look) => look with
+        {
+            LyricId = look.LyricId is { } id && ids.Contains(id) ? id : null,
+            BackgroundId = look.BackgroundId is { } bg && ids.Contains(BackgroundLayerFor(bg)) ? BackgroundLayerFor(bg) : null,
+        };
         _engine.SetLooks(floating.ToDictionary(p => p.Key, p => Known(p.Value)), desktop.ToDictionary(p => p.Key, p => Known(p.Value)));
     }
 

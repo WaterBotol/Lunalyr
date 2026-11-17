@@ -20,11 +20,15 @@ using PixelFormat = Vortice.DCommon.PixelFormat;
 
 namespace Lunalyr.Render.Backgrounds;
 
-/// <summary>Creates the imported picture or video layer, id <c>"custom"</c>, for one file and placement.</summary>
-public sealed class CustomLayerFactory(string path, WallpaperPlacement placement, BackgroundOptions? options = null, Logger? log = null)
+/// <summary>
+/// Creates the imported picture or video layer for one file and placement: id <c>"custom"</c>, or its own id for a
+/// monitor whose look imports another file.
+/// </summary>
+public sealed class CustomLayerFactory(string path, WallpaperPlacement placement, BackgroundOptions? options = null, Logger? log = null,
+    string id = "custom")
     : IRenderLayerFactory
 {
-    public string Id => "custom";
+    public string Id => id;
 
     public string Path { get; } = path;
 

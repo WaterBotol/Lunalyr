@@ -57,8 +57,8 @@ public sealed partial class AppController
             var settings = Settings;
             _renderer.SetLayers(BackgroundLayerFor(settings), CompositionFor(settings));
         }
-        // A new layout may bring its own floating size.
-        if (FloatsAnywhere(Settings)) UpdateFloating();
+        // A new layout may bring its own floating size, and each monitor's own wallpaper follows the same song and power.
+        if (FloatsAnywhere(Settings) || DisplayKeys.Count > 0) UpdateFloating();
     }
 
     /// <summary>The background layer id <paramref name="settings"/> draw for the song on screen.</summary>
@@ -133,7 +133,12 @@ public sealed partial class AppController
             after = Pick(settings, character, saving).LayerId ?? FallbackBackground;
             title = track.Title;
         }
-        if (settings.BackgroundMode is not ("auto" or "shader" or "pattern" or "musicVideo") || before == after) return;
+        if (settings.BackgroundMode is not ("auto" or "shader" or "pattern" or "musicVideo") || before == after)
+        {
+            // Another monitor's own Custom Mix may still take the song's wallpaper.
+            if (DisplayKeys.Count > 0) UpdateFloating();
+            return;
+        }
         _app.Info($"Custom Mix: \"{title}\" takes the {after} wallpaper.");
         PublishLayers();
     }
