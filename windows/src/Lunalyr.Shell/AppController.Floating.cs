@@ -175,7 +175,23 @@ public sealed partial class AppController
                         // The window drawing the style being edited draws the scene's own; the others their parked copy.
                         var layout = editing == new LookSlot(d.Key, LyricsSurface.Floating) ? CompositionFor(settings)
                             : looks.Value.Floating[d.Key].LyricId ?? CompositionFor(settings);
-                        windows.Add(Window(true, d.Key, layout));
+                        var window = Window(true, d.Key, layout);
+                        windows.Add(window);
+                        // The song title card in a window of its own beside the lyrics' box (the Mac's b11a1ab3), while
+                        // that display's style shows the title, or always in Edit Position so it can be placed.
+                        if (settings.FloatingTitleCard)
+                        {
+                            var title = looks.Value.Floating.TryGetValue(d.Key, out var look) && look.Style is { } style
+                                ? style.OpeningTitle : settings.OpeningTitle;
+                            windows.Add(window with
+                            {
+                                TitleCard = true,
+                                Shown = FloatingTitleVisibility.Shows(shown, card: true, title, editingPosition),
+                                Placeholder = false,
+                                TitleFrames = settings.FloatingTitleFrames,
+                                TitleStart = settings.TitleStart(),
+                            });
+                        }
                     }
                     if (!choice.OnDesktop()) without.Add(d.Device);
                 }

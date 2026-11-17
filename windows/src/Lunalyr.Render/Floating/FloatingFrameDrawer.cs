@@ -300,10 +300,17 @@ public sealed class FloatingFrameDrawer : IDisposable
     /// <param name="behind">What the shade lies over (<see cref="FloatingBackdrop.Behind"/>): an unknown app, or a music
     /// video wallpaper as its own lyrics take it.</param>
     public static SceneSnapshot SceneFor(SceneSnapshot scene, double textSize, double backdrop, bool reduceTransparency,
-                                         double behind = Core.Colour.LyricLegibility.UnknownBackdropLuminance, double inset = 0) =>
+                                         double behind = Core.Colour.LyricLegibility.UnknownBackdropLuminance, double inset = 0,
+                                         bool titleCard = false) =>
         scene with
         {
-            Style = scene.Style with { FloatingTextSize = textSize, FloatingInset = inset },
+            // The song's title has a window of its own (the Mac's b11a1ab3): the lyrics' window draws none and keeps no row
+            // for it; the card's window draws only the card.
+            Style = scene.Style with
+            {
+                FloatingTextSize = textSize, FloatingInset = inset, FloatingTitleOnly = titleCard,
+                OpeningTitle = titleCard && scene.Style.OpeningTitle,
+            },
             Palette = scene.Palette with { TextBackdrop = FloatingBackdrop.Luminance(backdrop, reduceTransparency, behind), TextUnbacked = null },
         };
 }

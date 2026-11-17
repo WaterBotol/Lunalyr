@@ -67,13 +67,17 @@ internal static class LyricStylePage
         // The Mac's d849c49 and e30fbb2: kept for the whole song, and how strong it stays once it rests.
         page.Children.Add(Indented(Card("Keep the song title on screen", LyricStyleCopy.KeepTitle, null,
             Toggle(ctx, s => s.OpeningTitleAlways, (s, v) => s with { OpeningTitleAlways = v }).EnableWhen(ctx, s => s.OpeningTitle))));
+        // The Mac's b11a1ab3: the floating lyrics' title floats in a small window of its own beside them.
+        page.Children.Add(Indented(Card("Show the song title card", LyricStyleCopy.TitleCard, null,
+                Toggle(ctx, s => s.FloatingTitleCard, (s, v) => s with { FloatingTitleCard = v }).EnableWhen(ctx, s => s.OpeningTitle))
+            .ShowWhen(ctx, s => controller()?.FloatsAnywhere(s) ?? s.IsFloating)));
         page.Children.Add(Indented(Card("Title strength", LyricStyleCopy.TitleStrength, null,
                 Slider(ctx, Core.Compositions.OpeningTitle.StrengthMin, Core.Compositions.OpeningTitle.StrengthMax, 0.01, SettingsCopy.Percent,
                     s => s.OpeningTitleStrength, (s, v) => s with { OpeningTitleStrength = Math.Round(v, 2) }))
             .ShowWhen(ctx, s => s.OpeningTitle && s.OpeningTitleAlways)));
         // The Mac's 3276613 and dece022: the title is dragged on the picture above; this puts it back, on the surface shown.
         var resetTitle = Button("Reset Title Position", () => ctx.Update(s => s.IsFloating
-            ? s.WithTitleRow(Core.Compositions.OpeningTitleRow.Standard)
+            ? s.WithTitleFramesReset()
             : s.WithTitlePlacement(Core.Compositions.OpeningTitlePlacement.Standard)));
         var resetTitleCard = Indented(Card("Song title position", null, null, resetTitle));
         ctx.OnRefresh(s =>
@@ -81,7 +85,7 @@ internal static class LyricStylePage
             var help = s.IsFloating ? LyricStyleCopy.ResetTitleFloating : LyricStyleCopy.ResetTitleDesktop;
             resetTitleCard.Description = help;
             AutomationProperties.SetHelpText(resetTitle, help);
-            resetTitle.IsEnabled = s.OpeningTitle && (s.IsFloating ? !s.TitleRow().IsStandard : !s.TitlePlacement().IsStandard);
+            resetTitle.IsEnabled = s.OpeningTitle && (s.IsFloating ? s.TitleIsPlacedByHand : !s.TitlePlacement().IsStandard);
         });
         page.Children.Add(resetTitleCard);
 

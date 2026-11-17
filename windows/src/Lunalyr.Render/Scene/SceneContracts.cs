@@ -166,6 +166,12 @@ public sealed record LyricStyle
     /// </summary>
     public double FloatingInset { get; init; }
 
+    /// <summary>
+    /// The floating song title card's own window (the Mac's b11a1ab3): the stage draws only the song's title card, the
+    /// desktop's stacked card scaled to the window's box, or one row when that box is too small for it.
+    /// </summary>
+    public bool FloatingTitleOnly { get; init; }
+
     /// <summary>Where a shown translation sits (the Mac's <c>custom.translationPlacement</c>): under its line by default.</summary>
     public Core.Compositions.TranslationPlacement TranslationPlacement { get; init; }
 

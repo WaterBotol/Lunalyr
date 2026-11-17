@@ -64,7 +64,12 @@ internal sealed partial class AppHost
         // A drag ended: the frame is kept for that display and the place becomes Custom (the Mac's storeCustomFrame).
         // A resize belongs to the layout showing (tester feedback on 0.9.0): it keeps that size, its text scaled with the
         // height, while the place every layout shares moves to the window's new centre at its own size.
-        engine.FloatingPlaced += (_, e) => PlaceFloating(e.DisplayKey, e.Relative, e.HeightRatio);
+        engine.FloatingPlaced += (_, e) =>
+        {
+            // The song title card's window keeps its own frame per display (the Mac's b11a1ab3).
+            if (e.TitleCard) _settings.Update(s => s.WithTitleFrame(e.Relative, e.DisplayKey));
+            else PlaceFloating(e.DisplayKey, e.Relative, e.HeightRatio);
+        };
         engine.FloatingEditDone += (_, _) => controller.SetFloatingEditing(false);
     }
 
@@ -107,6 +112,15 @@ internal sealed partial class AppHost
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
             File.WriteAllBytes(path, png);
             _log.Info($"Floating lyrics captured to {path}.");
+            // The song title card's window, when there is one, beside it (the second floating window).
+            try
+            {
+                var card = engine.CaptureAsync(Render.RenderEngine.FloatingCaptureIndex - 1).WaitAsync(TimeSpan.FromSeconds(5)).GetAwaiter().GetResult();
+                var cardPath = Path.ChangeExtension(path, null) + "-title.png";
+                File.WriteAllBytes(cardPath, card);
+                _log.Info($"Floating title card captured to {cardPath}.");
+            }
+            catch (ArgumentOutOfRangeException) { }
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {

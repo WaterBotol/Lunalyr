@@ -34,7 +34,8 @@ internal abstract partial class LyricCompositionLayer
         var box = OpeningTitle.Box(SurfaceSize.X, SurfaceSize.Y, BaseSize, Scale, place);
         // The lyric's base size on this screen; a compact card is smaller. The floating window's takes nearly its text
         // size and nearly the window's width, in its middle.
-        var unit = floating ? BaseSize * 0.95 : (compact ? BaseSize * 0.8 : BaseSize) * OpeningTitle.CardScale(place.Scale);
+        var unit = key.TitleUnit > 0 ? key.TitleUnit
+            : floating ? BaseSize * 0.95 : (compact ? BaseSize * 0.8 : BaseSize) * OpeningTitle.CardScale(place.Scale);
         var type = key.Dark ? new Vector3(0.08f, 0.08f, 0.08f) : Vector3.One;
         var shadow = new ShadowSpec(0.45f, (float)(unit * 0.12 * 0.5), (float)(unit * 0.015), key.Dark ? Vector3.One : default);
         // The card glows in the album's own colour: a tight halo and a wide, soft bloom on the type, and one round the

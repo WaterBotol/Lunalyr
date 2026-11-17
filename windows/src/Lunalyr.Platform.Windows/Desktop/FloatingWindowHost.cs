@@ -46,6 +46,18 @@ public sealed record FloatingLyricsOptions
 
     /// <summary>The size <see cref="Layout"/> was last resized to, or null for the shared one.</summary>
     public FloatingLayoutSize? LayoutSize { get; init; }
+
+    /// <summary>
+    /// The song title card's own window (the Mac's b11a1ab3) rather than the lyrics': placed beside the lyrics' box (which the
+    /// fields above still describe), or where it was dragged on that display (<see cref="TitleFrames"/>).
+    /// </summary>
+    public bool TitleCard { get; init; }
+
+    /// <summary>The card's frames set by hand, per display key, relative to it.</summary>
+    public IReadOnlyDictionary<string, IReadOnlyList<double>> TitleFrames { get; init; } = new Dictionary<string, IReadOnlyList<double>>();
+
+    /// <summary>Where the card starts beside the lyrics' box on a display with no frame of its own.</summary>
+    public FloatingTitleStart TitleStart { get; init; } = FloatingTitleStart.Standard;
 }
 
 /// <summary>The renderer's side of the floating window. Every call comes from the window's own thread.</summary>
@@ -290,7 +302,12 @@ public sealed unsafe class FloatingWindowHost : IDisposable
             saved = own.Size;
             if (custom is { } shared) custom = own.Centred(shared);
         }
-        return (display, geometry, FloatingFrame.Resolve(options.Placement, custom, saved, options.TextSize, geometry.ScreenFrame, geometry.Area));
+        var box = FloatingFrame.Resolve(options.Placement, custom, saved, options.TextSize, geometry.ScreenFrame, geometry.Area);
+        if (!options.TitleCard) return (display, geometry, box);
+        // The song title card: where it was dragged on this display, else just beside the lyrics' box.
+        options.TitleFrames.TryGetValue(display.Key, out var titleFrame);
+        return (display, geometry, FloatingTitleFrame.Resolve(FloatingFrame.Decode(titleFrame), options.TitleStart, box, options.TextSize,
+                                                              geometry.ScreenFrame, geometry.Area));
     }
 
     private void Apply(FloatingLyricsOptions options)
@@ -321,7 +338,10 @@ public sealed unsafe class FloatingWindowHost : IDisposable
 
     /// <summary>The see-through margin round the box for these options, in pixels (FloatingFrame.SpillMargin).</summary>
     private int MarginFor(FloatingLyricsOptions options) =>
-        (int)Math.Ceiling(FloatingFrame.SpillMargin(options.TextSize) * (_display?.Monitor.Scale ?? 1));
+        (int)Math.Ceiling((options.TitleCard ? FloatingTitleFrame.Margin : FloatingFrame.SpillMargin(options.TextSize)) * (_display?.Monitor.Scale ?? 1));
+
+    /// <summary>The least a drag or resize leaves: the title card's is smaller than the lyrics'.</summary>
+    private Core.Compositions.SizeD? Least => _applied is { TitleCard: true } ? FloatingTitleFrame.MinimumSize : null;
 
     /// <summary>The window round the box, in screen pixels.</summary>
     private MBox WindowRect => new(_rect.X - _margin, _rect.Y - _margin, _rect.Width + 2 * _margin, _rect.Height + 2 * _margin);
@@ -477,8 +497,8 @@ public sealed unsafe class FloatingWindowHost : IDisposable
         var (dx, dy) = _geometry.Delta(p.X - drag.Cursor.X, p.Y - drag.Cursor.Y);
         var start = _geometry.ToPoints(drag.Start);
         var frame = drag.Edges == FloatingEdges.None
-            ? FloatingFrame.Dragged(start, dx, dy, resizing: false, _geometry.Area)
-            : FloatingFrame.Resized(start, dx, dy, drag.Edges, _geometry.Area);
+            ? FloatingFrame.Dragged(start, dx, dy, resizing: false, _geometry.Area, Least)
+            : FloatingFrame.Resized(start, dx, dy, drag.Edges, _geometry.Area, Least);
         var rect = _geometry.ToPixels(frame);
         if (rect != _rect) Move(rect);
     }

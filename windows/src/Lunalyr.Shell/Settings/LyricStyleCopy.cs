@@ -44,7 +44,11 @@ public static class LyricStyleCopy
 
     /// <summary>Under "Keep the song title on screen" (the Mac's help text, d849c49).</summary>
     public const string KeepTitle =
-        "The title stays for the whole song, quieter once the singing starts, so you always know what’s playing. Low on the left beside the lyrics; in the floating lyrics, a small line above them.";
+        "The title stays for the whole song, quieter once the singing starts, so you always know what’s playing. Low on the left beside the lyrics; in the floating lyrics, on its card beside them.";
+
+    /// <summary>Under "Show the song title card" (the Mac's b11a1ab3).</summary>
+    public const string TitleCard =
+        "With the floating lyrics, the song title floats on a small card of its own just above them. Move or resize it in Edit Position.";
 
     /// <summary>Under "Title strength" (the Mac's help text, e30fbb2).</summary>
     public const string TitleStrength = "How strong the song title stays once the singing has started. 100% keeps it fully solid.";
@@ -54,7 +58,7 @@ public static class LyricStyleCopy
         "Drag the song title on the picture to move it, or its corner to resize it. This puts it back low on the left at its usual size.";
 
     public const string ResetTitleFloating =
-        "Drag the song title on the picture to move it along the floating window’s top or bottom, or its corner to resize it. This puts it back at the top, centred, at its usual size.";
+        "Move or resize the song title card in Edit Position. This puts it back just above the floating lyrics, centred, at its usual size.";
 
     public const string BackingLeadsLayout = "The lead’s layout";
 

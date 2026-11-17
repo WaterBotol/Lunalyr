@@ -356,7 +356,9 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
             IsAnimating = false;
             var opening = PrepareOpening(frame);
             var time = frame.SongSeconds;
-            if (Sheet is { Count: > 0 } && double.IsFinite(time))
+            // The floating song title card's own window draws only the card.
+            if (frame.Scene.Style.FloatingTitleOnly) { }
+            else if (Sheet is { Count: > 0 } && double.IsFinite(time))
             {
                 DrawSynced(dc, time, frame.WallSeconds);
                 IsAnimating = frame.IsPlaying;

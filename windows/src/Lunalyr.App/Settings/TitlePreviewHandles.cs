@@ -106,13 +106,9 @@ internal sealed class TitlePreviewHandles
         _outline.Visibility = _grip.Visibility = _label.Visibility = Visibility.Visible;
         if (options is { Enabled: true })
         {
-            if (Window(options) is not { } where)
-            {
-                _canvas.Visibility = Visibility.Collapsed;
-                return;
-            }
-            var window = WindowOnPicture(where.Geometry, where.Frame, width, height);
-            Show(RowOnPicture(window, where.Geometry, where.Frame, width, options.TextSize, settings.TitleRow()), corner: settings.TitleRow().Bottom ? 0 : 1);
+            // The floating title is a card in a window of its own now (the Mac's b11a1ab3), placed in Edit Position: the
+            // lyrics' window keeps no title row to drag here.
+            _canvas.Visibility = Visibility.Collapsed;
             return;
         }
         var desktop = Desktop();

@@ -20,8 +20,11 @@ using D2DPixelFormat = Vortice.DCommon.PixelFormat;
 namespace Lunalyr.Render;
 
 /// <summary>A drag in edit mode placed the floating lyrics on a display.</summary>
-public sealed class FloatingPlacedEventArgs(string displayKey, FloatingRect relative, double? heightRatio = null) : EventArgs
+public sealed class FloatingPlacedEventArgs(string displayKey, FloatingRect relative, double? heightRatio = null, bool titleCard = false) : EventArgs
 {
+    /// <summary>The song title card's window was placed, not the lyrics'.</summary>
+    public bool TitleCard { get; } = titleCard;
+
     /// <summary>The display's lasting key.</summary>
     public string DisplayKey { get; } = displayKey;
 
@@ -41,10 +44,13 @@ public sealed record SurfaceLook(LyricStyle? Style = null, string? LyricId = nul
     WallpaperAdjustments? Adjustments = null);
 
 /// <summary>One floating window: its options, its window thread, and its fade and stage on the render thread.</summary>
-internal sealed class FloatingPanel(string display)
+internal sealed class FloatingPanel(string display, bool titleCard = false)
 {
     /// <summary>The display's key (empty for the main display), as the options name it.</summary>
     public string Display { get; } = display;
+
+    /// <summary>The song title card's window on that display, rather than the lyrics' (the Mac's b11a1ab3).</summary>
+    public bool TitleCard { get; } = titleCard;
 
     public volatile FloatingLyricsOptions Options = FloatingLyricsOptions.Off;
     public FloatingWindowHost? Host;
@@ -136,19 +142,21 @@ public sealed partial class RenderEngine
     public void SetFloating(IReadOnlyList<FloatingLyricsOptions> windows)
     {
         ArgumentNullException.ThrowIfNull(windows);
+        // One window per display and kind: the lyrics', and the song title card's.
+        static string KeyOf(string display, bool titleCard) => titleCard ? display + "\u0001title" : display;
         var wanted = new Dictionary<string, FloatingLyricsOptions>(StringComparer.Ordinal);
         foreach (var o in windows)
-            if (o.Enabled) wanted.TryAdd(o.Display, o);
+            if (o.Enabled) wanted.TryAdd(KeyOf(o.Display, o.TitleCard), o);
         lock (_lifecycle)
         {
             var panels = _panels.ToList();
             foreach (var p in panels)
-                if (!wanted.ContainsKey(p.Display) && p.Options.Enabled)
+                if (!wanted.ContainsKey(KeyOf(p.Display, p.TitleCard)) && p.Options.Enabled)
                     p.Options = p.Options with { Enabled = false, Shown = false, Editing = false, Placeholder = false };
-            foreach (var (display, o) in wanted)
+            foreach (var (key, o) in wanted)
             {
-                var p = panels.FirstOrDefault(x => x.Display == display);
-                if (p is null) panels.Add(p = new FloatingPanel(display));
+                var p = panels.FirstOrDefault(x => KeyOf(x.Display, x.TitleCard) == key);
+                if (p is null) panels.Add(p = new FloatingPanel(o.Display, o.TitleCard));
                 p.Options = o;
             }
             _panels = [.. panels];
@@ -521,7 +529,7 @@ public sealed partial class RenderEngine
         {
             p.SceneSource = scene;
             p.SceneKey = key;
-            p.Scene = FloatingFrameDrawer.SceneFor(scene, o.TextSize, o.Backdrop, look.ReduceTransparency, behind, inset);
+            p.Scene = FloatingFrameDrawer.SceneFor(scene, o.TextSize, o.Backdrop, look.ReduceTransparency, behind, inset, p.TitleCard);
         }
         return p.Scene;
     }
@@ -586,7 +594,7 @@ public sealed partial class RenderEngine
         }
 
         public void Placed(string displayKey, FloatingRect relative, double? heightRatio) => Raise(() =>
-            engine.FloatingPlaced?.Invoke(engine, new FloatingPlacedEventArgs(displayKey, relative, heightRatio)));
+            engine.FloatingPlaced?.Invoke(engine, new FloatingPlacedEventArgs(displayKey, relative, heightRatio, panel.TitleCard)));
 
         public void EditDone() => Raise(() => engine.FloatingEditDone?.Invoke(engine, EventArgs.Empty));
 

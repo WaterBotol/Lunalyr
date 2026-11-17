@@ -130,10 +130,16 @@ internal sealed class FakeRenderer : IWallpaperRenderer
     private IReadOnlyCollection<string>? _desktopOff;
     private (IReadOnlyDictionary<string, Lunalyr.Render.SurfaceLook> Floating, IReadOnlyDictionary<string, Lunalyr.Render.SurfaceLook> Desktop)? _looks;
 
-    /// <summary>The floating windows last handed over once displays are known (null: never).</summary>
+    /// <summary>The floating lyrics windows last handed over once displays are known (null: never).</summary>
     public IReadOnlyList<Lunalyr.Platform.Desktop.FloatingLyricsOptions>? FloatingWindows
     {
-        get { lock (_gate) return _windows; }
+        get { lock (_gate) return _windows?.Where(w => !w.TitleCard).ToList(); }
+    }
+
+    /// <summary>The song title cards' windows last handed over beside them (null: never).</summary>
+    public IReadOnlyList<Lunalyr.Platform.Desktop.FloatingLyricsOptions>? TitleCardWindows
+    {
+        get { lock (_gate) return _windows?.Where(w => w.TitleCard).ToList(); }
     }
 
     public void SetFloatingWindows(IReadOnlyList<Lunalyr.Platform.Desktop.FloatingLyricsOptions> windows)

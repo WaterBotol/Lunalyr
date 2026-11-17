@@ -8,6 +8,7 @@ using System.Numerics;
 using System.Runtime.InteropServices;
 using Lunalyr.Core.Colour;
 using Lunalyr.Core.Compositions;
+using Lunalyr.Core.Floating;
 using Lunalyr.Core.Lyrics;
 using Lunalyr.Core.Motion;
 using Lunalyr.Render.Scene;
@@ -214,12 +215,25 @@ internal abstract partial class LyricCompositionLayer
             return;
         }
         var floating = FloatingStage;
-        if (floating && phase.Kept)
+        var titleOnly = scene.Style.FloatingTitleOnly;
+        if (titleOnly)
+        {
+            // The card's own window: the desktop's stacked card scaled to its box, or one row once that box is too small for a
+            // readable stacked title (the Mac's FloatingTitleFrame.layout).
+            var titleCompact = phase.Size == OpeningSize.Compact;
+            var layout = TitleLayout(titleCompact);
+            if (!layout.Stacked)
+            {
+                DrawRow(dc, scene, phase, frame.WallSeconds);
+                return;
+            }
+        }
+        else if (floating && phase.Kept)
         {
             DrawRow(dc, scene, phase, frame.WallSeconds);
             return;
         }
-        var compact = floating || phase.Size == OpeningSize.Compact;
+        var compact = titleOnly ? phase.Size == OpeningSize.Compact : floating || phase.Size == OpeningSize.Compact;
         var card = Card(dc, scene, compact, phase.Age);
         if (card is null) return;
         var coverFade = CoverFade(scene, frame.WallSeconds);
@@ -374,7 +388,8 @@ internal abstract partial class LyricCompositionLayer
     {
         var kit = Kit!;
         // The row's own size: the lyric size at the row's scale (dragged on the Settings picture).
-        var size = BaseSize * OpeningTitle.RowScale(key.RowPlace.Scale);
+        // In the title card's own window the row fills its box (TitleUnit); in the lyrics' it follows the lyric size.
+        var size = key.TitleUnit > 0 ? key.TitleUnit : BaseSize * OpeningTitle.RowScale(key.RowPlace.Scale);
         var side = size * OpeningTitle.RowCover;
         var type = key.Dark ? new Vector3(0.08f, 0.08f, 0.08f) : Vector3.One;
         var glow = OpeningTitle.GlowStrength(key.Dark);
@@ -438,7 +453,10 @@ internal abstract partial class LyricCompositionLayer
         var width = (key.Cover ? side + gap : 0) + titleInk.Box.X + (artistInk is null ? 0 : wordsGap + artistInk.Box.X);
         // In the floating window's box, not its see-through margin.
         var frame = OpeningTitle.RowFrame(BoxSize.X, BoxSize.Y, width, height, BaseSize, key.RowPlace.Centre, key.RowPlace.Bottom);
-        frame = frame with { X = frame.X + BoxInset, Y = frame.Y + BoxInset };
+        frame = key.TitleUnit > 0
+            // The title card's own window: the row in the middle of its box.
+            ? frame with { X = BoxInset + (BoxSize.X - width) / 2, Y = BoxInset + (BoxSize.Y - height) / 2 }
+            : frame with { X = frame.X + BoxInset, Y = frame.Y + BoxInset };
 
         Ink? coverShadow = null;
         if (key.Cover)
@@ -609,6 +627,10 @@ internal abstract partial class LyricCompositionLayer
         return fade;
     }
 
+    /// <summary>How the title card's own window draws its card, from its box in points (the Mac's FloatingTitleFrame.layout).</summary>
+    private FloatingTitleFrame.CardLayout TitleLayout(bool compact) =>
+        FloatingTitleFrame.Layout(new SizeD(BoxSize.X / Scale, BoxSize.Y / Scale), compact);
+
     /// <summary>The card for the scene as it is now: set (laid out and baked) once, again only when what it shows changes.</summary>
     /// <param name="age">How long the card has been up: a cover still being read keeps its place for <see cref="OpeningTitle.CoverWait"/>.</param>
     private OpeningCard? Card(ID2D1DeviceContext dc, SceneSnapshot scene, bool compact, double age, bool row = false)
@@ -628,7 +650,7 @@ internal abstract partial class LyricCompositionLayer
                               string.IsNullOrWhiteSpace(scene.TitleReading) ? null : scene.TitleReading.Trim(), compact,
                               slot, FloatingStage, scene.Style.FontFamily, SurfaceSize, Scale, BaseSize, dark,
                               SettledInk.Dot is { } dot ? LyricInks.Vector(dot) : TextColour, row,
-                              scene.Style.OpeningTitlePlacement, scene.Style.OpeningTitleRow);
+                              scene.Style.OpeningTitlePlacement, scene.Style.OpeningTitleRow, TitleUnit(compact, row, scene));
         if (_card is { } current && current.Key == key) return current;
         _card?.Dispose();
         _card = null;
@@ -732,7 +754,18 @@ internal abstract partial class LyricCompositionLayer
 
     private readonly record struct CardKey(string Title, string Artist, string? Album, string? Reading, bool Compact, bool Cover,
                                            bool Floating, string Family, Vector2 Surface, float Scale, double BaseSize, bool Dark, Vector4 Accent,
-                                           bool Row, OpeningTitlePlacement Placement, OpeningTitleRow RowPlace);
+                                           bool Row, OpeningTitlePlacement Placement, OpeningTitleRow RowPlace, double TitleUnit = 0);
+
+    /// <summary>
+    /// In the title card's own window, the card's unit (or the row's lyric size) that fills its box, in pixels; 0 elsewhere,
+    /// where the card follows the lyric size.
+    /// </summary>
+    private double TitleUnit(bool compact, bool row, SceneSnapshot scene)
+    {
+        if (!scene.Style.FloatingTitleOnly) return 0;
+        var layout = TitleLayout(compact);
+        return row ? layout.RowBase * Scale : layout.Nominal * Scale / (compact ? 0.72 : 0.92);
+    }
 
     /// <summary>The card as set: its baked lines and where they go, in device pixels.</summary>
     private sealed class OpeningCard(CardKey key) : IDisposable
