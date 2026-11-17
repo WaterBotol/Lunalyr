@@ -22,7 +22,7 @@ internal static class LyricStylePage
 {
     private const string Automatic = AppSettings.AllLayoutsKey;
 
-    public static StackPanel Build(SettingsContext ctx, Func<IReadOnlyList<string>> installedFonts, Func<bool> reduceMotion,
+    public static StackPanel Build(SettingsContext ctx, Func<bool> reduceMotion,
                                    UIElement? preview, FloatingHooks floating, Func<AppController?> controller)
     {
         // The song playing, for remembered styles: its query (once its length is known) and artist.
@@ -132,7 +132,8 @@ internal static class LyricStylePage
             typeface.Description = s.RandomizeLyricFonts ? $"{detail} {LyricStyleCopy.RandomisedTypeface}".Trim() : detail;
         });
         page.Children.Add(typeface);
-        page.Children.Add(Indented(Card("Font family", "Type to jump to a family.", null, FontList(ctx, installedFonts)))
+        // The Mac's InstalledFontPicker (7fa2f68): a searchable list of the families on this PC, each in its own face.
+        page.Children.Add(Indented(Card("Font family", null, null, InstalledFontPicker.Build(ctx, InstalledFontLibrary.Shared), stacked: true))
             .ShowWhen(ctx, s => s.FontChoice == "installed"));
         // Floating has its own size (Floating lyrics, above).
         page.Children.Add(Card("Lyric size", null, "",
@@ -541,34 +542,6 @@ internal static class LyricStylePage
         }
         list.Children.Add(Caption("With none ticked, each layout uses its own entrance."));
         return list;
-    }
-
-    /// <summary>The installed families, filled when first shown.</summary>
-    private static ComboBox FontList(SettingsContext ctx, Func<IReadOnlyList<string>> installedFonts)
-    {
-        var combo = new ComboBox { MinWidth = 260, MaxWidth = 360, PlaceholderText = "Select a family" };
-        var filled = false;
-        void Fill(AppSettings s)
-        {
-            if (!filled && s.FontChoice == "installed")
-            {
-                filled = true;
-                foreach (var family in installedFonts()) combo.Items.Add(family);
-            }
-            var index = combo.Items.IndexOf(s.FontFamily);
-            if (index < 0 && !string.IsNullOrWhiteSpace(s.FontFamily))
-            {
-                combo.Items.Insert(0, s.FontFamily);
-                index = 0;
-            }
-            combo.SelectedIndex = index;
-        }
-        ctx.OnRefresh(Fill);
-        combo.SelectionChanged += (_, _) =>
-        {
-            if (combo.SelectedItem is string family) ctx.Update(s => s with { FontFamily = family });
-        };
-        return combo;
     }
 
     /// <summary>A swatch button that opens Windows' colour picker for the custom highlight.</summary>

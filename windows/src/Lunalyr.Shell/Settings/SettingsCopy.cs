@@ -96,7 +96,7 @@ public static class SettingsCopy
     public static IReadOnlyList<SettingsChoice> FontChoices { get; } =
     [
         new("system", "Segoe UI Variable", "Windows’ own typeface."),
-        new("installed", "An installed font", "Any font family installed on this PC."),
+        new("installed", "Installed font", "Any font family installed on this PC."),
     ];
 
     // ---- Readings ----

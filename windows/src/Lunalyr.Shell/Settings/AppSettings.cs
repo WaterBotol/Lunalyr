@@ -40,8 +40,16 @@ public sealed partial record AppSettings
     /// </summary>
     public string FontChoice { get; init; } = "system";
 
-    /// <summary>An installed font family, used when <see cref="FontChoice"/> is "installed" (Mac <c>googleFontFamily</c>).</summary>
+    /// <summary>An installed font family, used when <see cref="FontChoice"/> is "installed" (Mac <c>custom.installedFontFamily</c>).</summary>
     public string FontFamily { get; init; } = "";
+
+    /// <summary>
+    /// The saved installed family is no longer on this PC (the Mac's installedFontMissing, 7fa2f68): the lyrics are drawn in
+    /// the default typeface until it returns; the family is kept.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool InstalledFontMissing =>
+        FontChoice == "installed" && !string.IsNullOrWhiteSpace(FontFamily) && !InstalledFonts.IsInstalled(FontFamily);
 
     /// <summary>Show the song's production credits on the wallpaper (Mac <c>custom.creditsLayer</c>).</summary>
     public bool CreditsLayer { get; init; } = true;
@@ -331,7 +339,9 @@ public sealed partial record AppSettings
     /// <summary>The renderer's view of the lyric settings.</summary>
     public LyricStyle Style() => WithLyricExtrasStyle(WithLyricToolsStyle(WithWindowStyle(new()
     {
-        FontFamily = FontChoice == "installed" && !string.IsNullOrWhiteSpace(FontFamily) ? FontFamily.Trim() : LyricStyle.Default.FontFamily,
+        // An installed family uninstalled since falls back to the default typeface (the Mac's drawnFontChoice).
+        FontFamily = FontChoice == "installed" && !string.IsNullOrWhiteSpace(FontFamily) && !InstalledFontMissing
+            ? FontFamily.Trim() : LyricStyle.Default.FontFamily,
         SizeFraction = (float)(LyricStyle.Default.SizeFraction * (double.IsFinite(LyricScale) ? Math.Clamp(LyricScale, 0.5, 2) : 1)),
         Reveal = SceneReveal(WordArrival),
         Credits = CreditsLayer,
