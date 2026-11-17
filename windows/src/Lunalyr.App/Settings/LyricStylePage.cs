@@ -33,6 +33,7 @@ internal static class LyricStylePage
 
         // ---- Show lyrics: on the desktop or floating, and which one's style the rest edits ----
         FloatingLyricsSection.AddSurface(page, ctx);
+        FloatingLyricsSection.AddDisplays(page, ctx, floating);
         FloatingLyricsSection.AddFloating(page, ctx, floating);
 
         // ---- Layout ----

@@ -1,6 +1,7 @@
-// The Lyric style page's "Show lyrics" and "Floating lyrics" sections, ported from the Mac's FloatingLyricsSection.swift
-// (LyricSurfaceSection, FloatingLyricsSection, FloatingLocationPicker; Lunalyr's own lines): which surface shows the
-// lyrics (and so which style the page edits), and the floating window's own size, shade, place and display.
+// The Lyric style page's "Editing", "Displays" and "Floating lyrics" sections, ported from the Mac's
+// FloatingLyricsSection.swift (LyricSurfaceSection, DisplayLyricsSection, FloatingLyricsSection, FloatingLocationPicker;
+// Lunalyr's own lines): which style the page edits, what each display shows, and the floating windows' own size,
+// shade and place.
 
 using Lunalyr.Core.Floating;
 using Lunalyr.Platform.Desktop;
@@ -23,10 +24,10 @@ internal static class FloatingLyricsSection
     /// <summary>The section's tag, so `--settings-page floating` can bring it into view.</summary>
     public const string SectionTag = "floating-lyrics";
 
-    /// <summary>"Show lyrics": on the desktop or floating over the apps; the style controls below edit the chosen one's.</summary>
+    /// <summary>"Editing": the Desktop style or the Floating style; the style controls below edit the chosen one (the Mac's 4f9b1454).</summary>
     public static void AddSurface(StackPanel page, SettingsContext ctx)
     {
-        // The row is its own heading (a "Show lyrics" heading over a "Show lyrics" row said it twice).
+        // The row is its own heading.
         var choice = new RadioButtons { MaxColumns = 2 };
         foreach (var surface in LyricsSurfaces.All) choice.Items.Add(new RadioButton { Content = surface.Title(), Tag = surface.Raw() });
         ctx.OnRefresh(s => choice.SelectedIndex = s.IsFloating ? 1 : 0);
@@ -35,12 +36,73 @@ internal static class FloatingLyricsSection
             if (choice.SelectedItem is RadioButton { Tag: string raw } && LyricsSurfaces.Parse(raw) is { } surface)
                 ctx.Update(s => s.WithLyricsSurface(surface));
         };
-        var card = Card("Show lyrics", null, "", choice);
+        ToolTipService.SetToolTip(choice, FloatingCopy.SurfaceHelp);
+        AutomationProperties.SetHelpText(choice, FloatingCopy.SurfaceHelp);
+        var card = Card("Editing", null, "", choice);
         ctx.OnRefresh(s => card.Description = FloatingCopy.SurfaceCaption(s.Surface));
         page.Children.Add(card);
     }
 
-    /// <summary>The floating window's own settings: size, shade, place and display, and edit position.</summary>
+    /// <summary>"Displays": a menu per connected display, listed by name, saying what it shows (the Mac's DisplayLyricsSection).</summary>
+    public static void AddDisplays(StackPanel page, SettingsContext ctx, FloatingHooks hooks)
+    {
+        var section = Page();
+        section.Margin = new Thickness(0, 18, 0, 0);
+        Section(section, FloatingCopy.DisplaysTitle);
+        var rows = new StackPanel { Spacing = 4 };
+        section.Children.Add(rows);
+        section.Children.Add(Caption(FloatingCopy.DisplaysCaption + " " + FloatingCopy.DisplaysMore));
+        List<(string Key, string Name)> shown = [];
+        List<(string Key, ComboBox Menu)> menus = [];
+        var filling = false;
+        ctx.OnRefresh(s =>
+        {
+            var known = FloatingCopy.Named([.. hooks.Displays().Select(d => (d.Key, d.Name))]);
+            filling = true;
+            try
+            {
+                // Rebuilt only when the displays themselves change: a menu cleared while it was still closing over the
+                // item just picked failed with "Element not found" (14 Nov).
+                if (!known.SequenceEqual(shown))
+                {
+                    shown = known;
+                    rows.Children.Clear();
+                    menus.Clear();
+                    var main = known.Count > 0 ? known[0].Key : null;
+                    foreach (var (key, name) in known)
+                    {
+                        var menu = new ComboBox { MinWidth = 220 };
+                        foreach (var choice in DisplayLyricsChoices.All) menu.Items.Add(new ComboBoxItem { Content = choice.Title(), Tag = choice.Raw() });
+                        var help = FloatingCopy.DisplayHelp(name);
+                        ToolTipService.SetToolTip(menu, help);
+                        AutomationProperties.SetHelpText(menu, help);
+                        var title = known.Count > 1 ? name : FloatingCopy.ThisDisplay;
+                        AutomationProperties.SetName(menu, title);
+                        menu.SelectionChanged += (_, _) =>
+                        {
+                            if (filling || menu.SelectedItem is not ComboBoxItem { Tag: string raw } || DisplayLyricsChoices.Parse(raw) is not { } picked) return;
+                            if (ctx.Current.DisplayChoice(key) != picked) ctx.Update(c => c.WithDisplayChosen(key, picked, main));
+                        };
+                        rows.Children.Add(Card(title, null, null, menu));
+                        menus.Add((key, menu));
+                    }
+                }
+                foreach (var (key, menu) in menus)
+                {
+                    var index = DisplayLyricsChoices.All.ToList().IndexOf(s.DisplayChoice(key));
+                    if (menu.SelectedIndex != index) menu.SelectedIndex = index;
+                }
+            }
+            finally
+            {
+                filling = false;
+            }
+            section.Visibility = shown.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        });
+        page.Children.Add(section);
+    }
+
+    /// <summary>The floating windows' own settings: size, shade and place, and edit position.</summary>
     public static void AddFloating(StackPanel page, SettingsContext ctx, FloatingHooks hooks)
     {
         var section = Page();
@@ -62,43 +124,6 @@ internal static class FloatingLyricsSection
         ctx.OnRefresh(s => place.Description = s.Placement.Title());
         section.Children.Add(place);
 
-        // Display: only with more than one.
-        var displays = new ComboBox { MinWidth = 260, MaxWidth = 360 };
-        var displayCard = Card("Display", null, "", displays);
-        IReadOnlyList<DisplayChoice> shown = [];
-        var filling = false;
-        ctx.OnRefresh(s =>
-        {
-            var known = hooks.Displays();
-            filling = true;
-            try
-            {
-                // Rebuilt only when the displays themselves change. Rebuilding on every refresh cleared the menu while it
-                // was still closing over the item just picked (picking saves a setting, and a custom place saves another),
-                // and WinUI failed with "Element not found" (0x80070490), which crashed Lunalyr (14 Nov).
-                if (!known.Select(d => (d.Key, d.Name)).SequenceEqual(shown.Select(d => (d.Key, d.Name))))
-                {
-                    shown = known;
-                    displays.Items.Clear();
-                    displays.Items.Add(new ComboBoxItem { Content = FloatingCopy.MainDisplay, Tag = "" });
-                    foreach (var d in known) displays.Items.Add(new ComboBoxItem { Content = d.Name, Tag = d.Key });
-                }
-                var index = 0;
-                for (var i = 0; i < shown.Count; i++) if (shown[i].Key == s.FloatingDisplay) index = i + 1;
-                if (displays.SelectedIndex != index) displays.SelectedIndex = index;
-            }
-            finally
-            {
-                filling = false;
-            }
-            displayCard.Visibility = shown.Count > 1 ? Visibility.Visible : Visibility.Collapsed;
-        });
-        displays.SelectionChanged += (_, _) =>
-        {
-            if (filling || displays.SelectedItem is not ComboBoxItem { Tag: string key }) return;
-            if (key != ctx.Current.FloatingDisplay) ctx.Update(s => s with { FloatingDisplay = key });
-        };
-        section.Children.Add(displayCard);
 
         // Edit position and Reset size.
         var edit = Button(FloatingCopy.EditPosition, () => hooks.SetEditing(!hooks.Editing()));

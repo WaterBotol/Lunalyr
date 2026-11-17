@@ -2,6 +2,7 @@ using System.Runtime.InteropServices;
 using Lunalyr.Platform.Desktop;
 using Lunalyr.Shell;
 using Lunalyr.Shell.Rendering;
+using Lunalyr.Shell.Settings;
 
 namespace Lunalyr.App.Hosting;
 
@@ -19,6 +20,29 @@ internal sealed partial class AppHost
         {
             return [];
         }
+    }
+
+    /// <summary>The connected displays' keys as the controller knows them, the main display first (for the tray's Floating toggle).</summary>
+    public IReadOnlyList<string> DisplayKeysNow => _controller?.DisplayKeys ?? [];
+
+    /// <summary>Lyrics float on some display (on the one surface choice while displays are not known).</summary>
+    public bool FloatsAnywhere(AppSettings settings) => _controller?.FloatsAnywhere(settings) ?? settings.IsFloating;
+
+    /// <summary>
+    /// The displays came or went (or the app starts): a display seen for the first time gets its look and choice
+    /// (MonitorLooks.DisplaysChanged), then the controller draws what each one shows.
+    /// </summary>
+    private void ApplyDisplays(AppController? controller = null)
+    {
+        controller ??= _controller;
+        if (controller is null) return;
+        var displays = FloatingDisplays();
+        if (displays.Count > 0)
+        {
+            List<string> keys = [.. displays.Select(d => d.Key)];
+            _settings.Update(s => MonitorLooks.DisplaysChanged(s, keys));
+        }
+        controller.SetDisplays([.. displays.Select(d => new ConnectedDisplay(d.Key, d.Monitor.DeviceName))]);
     }
 
     /// <summary>Edit position on or off (the settings page), only while the lyrics float.</summary>

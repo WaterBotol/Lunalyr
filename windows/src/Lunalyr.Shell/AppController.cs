@@ -272,7 +272,7 @@ public sealed partial class AppController : IAsyncDisposable
         ApplyLyricsHidden(null, settings);
         PublishScene();
         if (RendererRuns(settings)) _renderer.Start();
-        if (settings.WallpaperPaused) _app.Info(settings.IsFloating
+        if (settings.WallpaperPaused) _app.Info(FloatsAnywhere(settings)
             ? "Wallpaper starts paused (paused from the tray last time); the floating lyrics still run."
             : "Wallpaper starts paused (paused from the tray last time).");
 
@@ -383,7 +383,8 @@ public sealed partial class AppController : IAsyncDisposable
         if (old.WallpaperPaused != settings.WallpaperPaused)
             _app.Info(settings.WallpaperPaused ? "Wallpaper paused." : "Wallpaper resumed.");
         if (old.LyricsSurface != settings.LyricsSurface)
-            _app.Info(settings.IsFloating ? "Lyrics float over the apps (their own style)." : "Lyrics are back on the desktop (its own style).");
+            _app.Info(DisplayKeys.Count > 0 ? $"Settings edit the {Core.Floating.LyricsSurfaces.StyleName(settings.Surface)} style."
+                : settings.IsFloating ? "Lyrics float over the apps (their own style)." : "Lyrics are back on the desktop (its own style).");
 
         if (scene is not null) PublishScene();
         if (relook is not null)

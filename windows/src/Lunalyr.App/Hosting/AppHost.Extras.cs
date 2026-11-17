@@ -27,6 +27,7 @@ internal sealed partial class AppHost
         var extras = new LunalyrExtras(() => _settings.Current, change => _settings.Update(change), new ExtrasHooks
         {
             NudgeSync = delta => _controller?.NudgeSongOffset(delta),
+            Displays = () => _controller?.DisplayKeys ?? [],
             HasSong = () => _controller?.Status.Title is not null,
             PlayingSong = () => _controller?.CurrentQuery,
             // The card shortcut and lunalyr://card open the lyric card window (AppHost.LyricCards.cs).
@@ -55,7 +56,12 @@ internal sealed partial class AppHost
         _tray.DisplaysChanged = () =>
         {
             CheckMirroring();
-            _mirroringRecheck ??= new Timer(_ => _tray.Post(CheckMirroring), null, Timeout.Infinite, Timeout.Infinite);
+            ApplyDisplays();
+            _mirroringRecheck ??= new Timer(_ => _tray.Post(() =>
+            {
+                CheckMirroring();
+                ApplyDisplays();
+            }), null, Timeout.Infinite, Timeout.Infinite);
             _mirroringRecheck.Change(TimeSpan.FromSeconds(2), Timeout.InfiniteTimeSpan);
         };
         CheckMirroring();

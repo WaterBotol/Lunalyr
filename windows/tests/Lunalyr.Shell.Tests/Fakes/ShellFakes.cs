@@ -126,6 +126,43 @@ internal sealed class FakeRenderer : IWallpaperRenderer
         lock (_gate) _floating = options;
     }
 
+    private IReadOnlyList<Lunalyr.Platform.Desktop.FloatingLyricsOptions>? _windows;
+    private IReadOnlyCollection<string>? _desktopOff;
+    private (IReadOnlyDictionary<string, Lunalyr.Render.SurfaceLook> Floating, IReadOnlyDictionary<string, Lunalyr.Render.SurfaceLook> Desktop)? _looks;
+
+    /// <summary>The floating windows last handed over once displays are known (null: never).</summary>
+    public IReadOnlyList<Lunalyr.Platform.Desktop.FloatingLyricsOptions>? FloatingWindows
+    {
+        get { lock (_gate) return _windows; }
+    }
+
+    public void SetFloatingWindows(IReadOnlyList<Lunalyr.Platform.Desktop.FloatingLyricsOptions> windows)
+    {
+        lock (_gate) _windows = windows;
+    }
+
+    /// <summary>The monitors whose wallpaper draws no lyrics, as last handed over (null: never).</summary>
+    public IReadOnlyCollection<string>? DesktopLyricsOff
+    {
+        get { lock (_gate) return _desktopOff; }
+    }
+
+    public void SetDesktopLyrics(IReadOnlyCollection<string> monitorsWithout)
+    {
+        lock (_gate) _desktopOff = monitorsWithout;
+    }
+
+    /// <summary>The surfaces' own looks, as last handed over (null: never).</summary>
+    public (IReadOnlyDictionary<string, Lunalyr.Render.SurfaceLook> Floating, IReadOnlyDictionary<string, Lunalyr.Render.SurfaceLook> Desktop)? Looks
+    {
+        get { lock (_gate) return _looks; }
+    }
+
+    public void SetLooks(IReadOnlyDictionary<string, Lunalyr.Render.SurfaceLook> floating, IReadOnlyDictionary<string, Lunalyr.Render.SurfaceLook> desktop)
+    {
+        lock (_gate) _looks = (floating, desktop);
+    }
+
     /// <summary>The layers the fake says it has (empty: the controller assumes constellation and spoken).</summary>
     public IReadOnlyCollection<string> LayerIds { get; set; } = [];
 

@@ -34,7 +34,7 @@ public static class LyricsSurfaces
         _ => null,
     };
 
-    public static string Title(this LyricsSurface surface) => surface == LyricsSurface.Desktop ? "On the desktop" : "Floating over apps";
+    public static string Title(this LyricsSurface surface) => surface == LyricsSurface.Desktop ? "Desktop style" : "Floating style";
 
     /// <summary>Which style the lyric settings are editing, for the settings page.</summary>
     public static string StyleName(this LyricsSurface surface) => surface == LyricsSurface.Desktop ? "Desktop" : "Floating";

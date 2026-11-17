@@ -76,6 +76,18 @@ public sealed class EngineWallpaperRenderer : IWallpaperRenderer
 
     public void SetFloating(Lunalyr.Platform.Desktop.FloatingLyricsOptions options) => _engine.SetFloating(options);
 
+    public void SetFloatingWindows(IReadOnlyList<Lunalyr.Platform.Desktop.FloatingLyricsOptions> windows) => _engine.SetFloating(windows);
+
+    public void SetDesktopLyrics(IReadOnlyCollection<string> monitorsWithout) => _engine.SetDesktopLyrics(monitorsWithout);
+
+    public void SetLooks(IReadOnlyDictionary<string, SurfaceLook> floating, IReadOnlyDictionary<string, SurfaceLook> desktop)
+    {
+        // A composition not registered (yet) draws the shared one.
+        var ids = _engine.LayerIds;
+        SurfaceLook Known(SurfaceLook look) => look.LyricId is { } id && !ids.Contains(id) ? look with { LyricId = null } : look;
+        _engine.SetLooks(floating.ToDictionary(p => p.Key, p => Known(p.Value)), desktop.ToDictionary(p => p.Key, p => Known(p.Value)));
+    }
+
     public void SetLyricsShown(bool shown, bool animate = true) => _engine.SetLyricsShown(shown, animate);
 
     public void SetClock(Func<(double Seconds, bool Playing)> clock) => _engine.SongClock = clock;

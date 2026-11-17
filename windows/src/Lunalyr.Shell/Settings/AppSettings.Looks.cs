@@ -49,6 +49,16 @@ public sealed partial record AppSettings
         return this with { DisplayLyrics = map };
     }
 
+    /// <summary>
+    /// What <paramref name="display"/> shows, picked in Settings (the Mac's <c>setChoice</c>): a display whose lyrics float
+    /// from now on keeps a Floating style of its own.
+    /// </summary>
+    public AppSettings WithDisplayChosen(string display, DisplayLyrics choice, string? main)
+    {
+        var settings = WithDisplayChoice(display, choice);
+        return choice.Floats() ? MonitorLooks.KeepFloatingStyle(settings, [display], main) : settings;
+    }
+
     /// <summary>The displays among <paramref name="connected"/> that get a floating window.</summary>
     public List<string> FloatingDisplays(IEnumerable<string> connected) => [.. connected.Where(d => DisplayChoice(d).Floats())];
 
@@ -350,6 +360,8 @@ public static class MonitorLooks
         {
             if (settings.LookSameEverywhere) settings = CopyEdited(settings, connected, main);
             settings = Edit(settings, main, main);
+            // Kept again from the slot now edited, so the same displays next time change nothing.
+            settings = KeepConnected(settings, connected);
         }
         // The first floating display's Floating style is its own from now on (lazily, as on the Mac).
         settings = KeepFloatingStyle(settings, settings.FloatingDisplays(connected), main);

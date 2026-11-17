@@ -60,6 +60,9 @@ public sealed record ExtrasHooks
 
     /// <summary>A mirrored display now hides the lyrics (true), or no longer does: the controller fades them.</summary>
     public Action<bool>? HiddenByMirroringChanged { get; init; }
+
+    /// <summary>The connected displays' keys, the main one first (none while they are not known).</summary>
+    public Func<IReadOnlyList<string>>? Displays { get; init; }
 }
 
 /// <summary>
@@ -436,13 +439,22 @@ public sealed class LunalyrExtras
     }
 
     /// <summary>
-    /// Moves the lyrics between the desktop and a window over every app, each with its own style. The Mac posts no
-    /// note here (its Shortcuts action answers instead); Windows says where the lyrics went, as links have no other answer.
+    /// Moves the lyrics between the desktop and a window over every app, each with its own style: once displays are
+    /// known, off on every display that floats if any does, else on for the main display (the Mac's 0da0eef7). The Mac
+    /// posts no note here (its Shortcuts action answers instead); Windows says where the lyrics went, as links have no
+    /// other answer.
     /// </summary>
     public void ToggleFloating()
     {
-        _update(s => s.ToggleSurface());
-        Post(_read().IsFloating ? "Lyrics floating over apps" : "Lyrics on the desktop", "macwindow");
+        var displays = _hooks.Displays?.Invoke() ?? [];
+        if (displays.Count == 0)
+        {
+            _update(s => s.ToggleSurface());
+            Post(_read().IsFloating ? "Lyrics floating over apps" : "Lyrics on the desktop", "macwindow");
+            return;
+        }
+        _update(s => s.WithFloatingToggled(displays, displays[0]));
+        Post(_read().FloatsOn(displays) ? "Lyrics floating over apps" : "Lyrics on the desktop", "macwindow");
     }
 
     public void OpenSettings() => _hooks.OpenSettings?.Invoke();

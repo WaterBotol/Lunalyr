@@ -412,12 +412,13 @@ public sealed partial class TrayFlyout : Window
             var settings = _host.Settings.Current;
             DiscordToggle.IsChecked = settings.DiscordPresence;
             HideLyricsToggle.IsChecked = settings.LyricsHidden;
-            FloatingToggle.IsChecked = settings.IsFloating;
-            EditPositionToggle.IsChecked = settings.IsFloating && _host.FloatingEditing;
-            EditPositionToggle.IsEnabled = settings.IsFloating;
+            var floats = _host.FloatsAnywhere(settings);
+            FloatingToggle.IsChecked = floats;
+            EditPositionToggle.IsChecked = floats && _host.FloatingEditing;
+            EditPositionToggle.IsEnabled = floats;
             // "Stay visible": the floating lyrics don't fade while the pointer is over them.
             StayVisibleToggle.IsChecked = !settings.FloatingFadeUnderPointer;
-            StayVisibleToggle.IsEnabled = settings.IsFloating;
+            StayVisibleToggle.IsEnabled = floats;
             RefreshPlayers(settings.Player);
             PausedNote.Visibility = state.WallpaperPaused ? Visibility.Visible : Visibility.Collapsed;
             RefreshMusicVideo();
@@ -746,7 +747,10 @@ public sealed partial class TrayFlyout : Window
     {
         if (_updating) return;
         var floating = FloatingToggle.IsChecked == true;
-        _host.Settings.Update(s => s.WithLyricsSurface(floating ? Lunalyr.Core.Floating.LyricsSurface.Floating : Lunalyr.Core.Floating.LyricsSurface.Desktop));
+        // Once displays are known: off everywhere if any display floats, else on for the primary display.
+        var displays = _host.DisplayKeysNow;
+        _host.Settings.Update(s => displays.Count > 0 ? s.WithFloatingToggled(displays, displays[0])
+            : s.WithLyricsSurface(floating ? Lunalyr.Core.Floating.LyricsSurface.Floating : Lunalyr.Core.Floating.LyricsSurface.Desktop));
         Refresh();
     }
 

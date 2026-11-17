@@ -52,6 +52,22 @@ public interface IWallpaperRenderer : IDisposable
     void SetFloating(FloatingLyricsOptions options) { }
 
     /// <summary>
+    /// Once the displays are known (the Mac's per-display lyrics): a floating window for each entry, on the display its
+    /// <see cref="FloatingLyricsOptions.Display"/> names. Unlike <see cref="SetFloating"/>, it leaves the wallpapers'
+    /// lyrics to <see cref="SetDesktopLyrics"/>. Renderers without a window ignore it.
+    /// </summary>
+    void SetFloatingWindows(IReadOnlyList<FloatingLyricsOptions> windows) { }
+
+    /// <summary>The monitors (by device name) whose wallpaper draws no lyrics; every other wallpaper draws them.</summary>
+    void SetDesktopLyrics(IReadOnlyCollection<string> monitorsWithout) { }
+
+    /// <summary>
+    /// The surfaces drawn in a look of their own (a style and composition other than the scene's): the floating windows
+    /// by display key, the wallpapers by monitor device name. The others draw the scene's. Renderers that can't ignore it.
+    /// </summary>
+    void SetLooks(IReadOnlyDictionary<string, Render.SurfaceLook> floating, IReadOnlyDictionary<string, Render.SurfaceLook> desktop) { }
+
+    /// <summary>
     /// Hide lyrics (milestone 7): the wallpapers' lyrics and their text backing fade out (0.45 s) or back in (0.6 s), from
     /// wherever they are; <paramref name="animate"/> false puts them there at once (start-up). Renderers without lyrics
     /// ignore it.
@@ -126,6 +142,23 @@ public sealed class NullWallpaperRenderer(Logger? logger = null) : IWallpaperRen
         Floating = options;
         FloatingUpdates++;
     }
+
+    /// <summary>The floating windows last handed over (once displays are known).</summary>
+    public IReadOnlyList<FloatingLyricsOptions> FloatingWindows { get; private set; } = [];
+
+    public void SetFloatingWindows(IReadOnlyList<FloatingLyricsOptions> windows) => FloatingWindows = windows;
+
+    /// <summary>The monitors whose wallpaper draws no lyrics, as last handed over.</summary>
+    public IReadOnlyCollection<string> DesktopLyricsOff { get; private set; } = [];
+
+    public void SetDesktopLyrics(IReadOnlyCollection<string> monitorsWithout) => DesktopLyricsOff = monitorsWithout;
+
+    /// <summary>The surfaces' own looks, as last handed over.</summary>
+    public (IReadOnlyDictionary<string, Render.SurfaceLook> Floating, IReadOnlyDictionary<string, Render.SurfaceLook> Desktop) Looks { get; private set; } =
+        (new Dictionary<string, Render.SurfaceLook>(), new Dictionary<string, Render.SurfaceLook>());
+
+    public void SetLooks(IReadOnlyDictionary<string, Render.SurfaceLook> floating, IReadOnlyDictionary<string, Render.SurfaceLook> desktop) =>
+        Looks = (floating, desktop);
 
     public void SetFrameRate(int framesPerSecond)
     {

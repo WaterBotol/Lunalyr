@@ -24,6 +24,11 @@ internal sealed class RenderSurface(int index, SurfaceWindow window)
     /// <summary>The window; the floating surface's changes size and monitor in place (same handle).</summary>
     public SurfaceWindow Window { get; set; } = window;
     public bool IsFloating => Window.Mode == AttachMode.Floating;
+    /// <summary>The floating window this surface draws (null for a wallpaper or the preview window).</summary>
+    public FloatingPanel? Panel;
+    // The scene with this surface's own style (SceneFor), kept while neither changes.
+    public Scene.SceneSnapshot? LookSource, LookScene;
+    public Scene.LyricStyle? LookStyle;
     public int Width => Window.Width;
     public int Height => Window.Height;
     public float Scale => Window.Monitor.Scale;

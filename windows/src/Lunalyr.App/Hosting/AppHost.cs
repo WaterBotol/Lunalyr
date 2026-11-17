@@ -282,6 +282,8 @@ internal sealed partial class AppHost
                 if (e.OldValue.MotionFollowsWindows != e.NewValue.MotionFollowsWindows) controller.SetReduceMotion(ReduceMotion);
                 if (!e.OldValue.OnboardingDone && e.NewValue.OnboardingDone) MotionMayNeedNotice();
             };
+            // Each display shows what its own choice says, migrated from the one surface choice the first time.
+            ApplyDisplays(controller);
             controller.Start();
             controller.ApplySettings(_settings.Current); // anything changed while starting
             StartVisualisers(controller);
