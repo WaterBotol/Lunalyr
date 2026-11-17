@@ -29,6 +29,9 @@ public class VideoLayer : PlacedLayer
     /// <summary>The first frame is on screen, or the video can't be shown (so a crossfade into it never waits for nothing).</summary>
     public override bool HasFirstFrame => _video.First || _failed || _video.Error is not null;
 
+    /// <summary>A video (animated cover art too) waits up to <see cref="Pacing.WallpaperTransition.VideoFirstFrameWait"/> (the Mac's a4e4f6a).</summary>
+    public override Pacing.TransitionGate Gate => Pacing.TransitionGate.Video;
+
     /// <summary>Moving, so drawn every frame, unless held still by Reduce Motion or broken.</summary>
     public override bool IsAnimating => base.IsAnimating || (!_failed && _video.Error is null && (!_reduceMotion || !_video.First));
 

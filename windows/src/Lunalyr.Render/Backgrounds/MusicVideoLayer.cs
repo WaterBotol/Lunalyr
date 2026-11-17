@@ -250,6 +250,13 @@ public sealed class MusicVideoLayer : PlacedLayer
     /// <summary>The stand-in draws at once; a file waits for its first frame (or its failure).</summary>
     public override bool HasFirstFrame => _path is null || _bitmap is not null || _failed || _error is not null;
 
+    /// <summary>
+    /// A file waits for its first frame (the Mac's video gate); with none yet, this is the stand-in while the song's video
+    /// is looked for, never faded to over something on screen (the Mac's videoLookup gate, 5857455).
+    /// </summary>
+    public override Pacing.TransitionGate Gate =>
+        _path is null && _feed.Read().LocalPath is null ? Pacing.TransitionGate.VideoLookup : Pacing.TransitionGate.Video;
+
     /// <summary>Drawn every frame while a file shows (its frames follow the song) or one is loading.</summary>
     public override bool IsAnimating => base.IsAnimating || (_path is not null && !_failed);
 
@@ -690,8 +697,17 @@ public sealed class MusicVideoLayer : PlacedLayer
 /// backing on top; otherwise the video's still (softened by "Video blur") over the album's colours. Filled, the still fills
 /// the surface; shown whole, it sits in the visible picture over the blurred backdrop (<see cref="DrawWhole"/>).
 /// </summary>
-public sealed class YouTubeVideoLayer : IRenderLayer, ISeeThroughLayer, IMeasuredStage
+public sealed class YouTubeVideoLayer : IRenderLayer, ISeeThroughLayer, IMeasuredStage, IFirstFrameLayer
 {
+    /// <summary>
+    /// A picture is up (the Mac's onFirstFrame, 5857455): on the main display the player itself, or under Reduce Motion
+    /// and in the settings preview the video's still; another display shows the album's colours, which draw at once. A
+    /// song change holds the old wallpaper until then (or <see cref="Pacing.WallpaperTransition.VideoFirstFrameWait"/>).
+    /// </summary>
+    public bool HasFirstFrame { get; private set; }
+
+    public Pacing.TransitionGate Gate => Pacing.TransitionGate.Video;
+
     /// <summary>The automatic backing takes a dark-middling video, as for an imported one.</summary>
     public const double AssumedLuminance = 0.2;
 
@@ -757,6 +773,9 @@ public sealed class YouTubeVideoLayer : IRenderLayer, ISeeThroughLayer, IMeasure
             // the video's still, which there would sit frozen for the whole song (Windows' choice; the Mac shows the still).
             // The offscreen settings preview shows the still.
             var uncovered = inputs.PlayerVisible && frame.AheadWork is not null && frame.IsMainDisplay;
+            HasFirstFrame = frame.AheadWork is not null && !frame.IsMainDisplay ? true
+                : frame.AheadWork is not null && !frame.Scene.ReduceMotion ? uncovered
+                : inputs.Still is not null;
             if (frame.AheadWork is not null && !frame.IsMainDisplay) _standIn.Draw(dc, frame.Scene.Palette, _size);
             else if (inputs.YouTubeFraming.ShowsBackdrop()) DrawWhole(dc, frame, inputs, uncovered);
             else if (!uncovered)

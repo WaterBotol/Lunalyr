@@ -70,6 +70,9 @@ public abstract class PlacedLayer : IRenderLayer, IFirstFrameLayer, IMeasuredSta
 
     public abstract bool HasFirstFrame { get; }
 
+    /// <summary>What the fade into this layer waits for: its first frame (a picture decoding).</summary>
+    public virtual Pacing.TransitionGate Gate => Pacing.TransitionGate.FirstFrame;
+
     public virtual bool IsAnimating => _shade.IsEasing(_lastNow);
 
     /// <summary>The backdrop luminance behind the stage, for the automatic text backing.</summary>

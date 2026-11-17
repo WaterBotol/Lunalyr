@@ -416,10 +416,20 @@ public sealed partial class RenderEngine
         if (s.Plan.IsGated) s.NextDue = FramePacing.NextDue(s.NextDue, now, s.Plan.GatePeriod);
     }
 
-    /// <summary>How long a crossfade waits for a background's first frame before showing it anyway (the Mac's firstFrameWait).</summary>
-    private const double FirstFrameWait = 3;
-
     private static bool HasFirstFrame(LayerSlot slot) => slot.Layer is not IFirstFrameLayer layer || layer.HasFirstFrame;
+
+    private static TransitionGate GateOf(LayerSlot slot) => slot.Layer is IFirstFrameLayer layer ? layer.Gate : TransitionGate.None;
+
+    /// <summary>
+    /// Whether the fade into <paramref name="slot"/> may run (the Mac's WallpaperTransition.canDraw): its gate, over
+    /// <paramref name="beneath"/> (null for a surface's first layer), held for <paramref name="heldFor"/> seconds.
+    /// </summary>
+    private static bool CanShow(LayerSlot slot, LayerSlot? beneath, double heldFor)
+    {
+        var gate = GateOf(slot);
+        return WallpaperTransition.CanDraw(gate, HasFirstFrame(slot), heldFor >= WallpaperTransition.FirstFrameWaitFor(gate),
+            firstLayer: beneath is null, overOpaque: beneath is null || IsOpaque(beneath));
+    }
 
     /// <summary>Starts each crossfade held for its background's first frame once it has one, or has waited long enough.</summary>
     private void ReleaseHeldFades(double now)
@@ -427,7 +437,8 @@ public sealed partial class RenderEngine
         foreach (var s in _surfaces)
         {
             if (s.Backgrounds is not { IsHeld: true } fade) continue;
-            if (!HasFirstFrame(fade.Current) && now - fade.ChangedAt < FirstFrameWait && !double.IsNegativeInfinity(fade.ChangedAt)) continue;
+            var heldFor = double.IsNegativeInfinity(fade.ChangedAt) ? double.PositiveInfinity : now - fade.ChangedAt;
+            if (!CanShow(fade.Current, fade.Previous, heldFor)) continue;
             fade.BecameReady(s.State == SurfaceState.Drawing ? now : double.NegativeInfinity);
             s.NeedsFrame = true;
         }
@@ -794,16 +805,25 @@ public sealed partial class RenderEngine
     /// <summary>Crossfades <paramref name="s"/>'s background into a new instance of <paramref name="id"/>.</summary>
     private void ChangeBackground(RenderSurface s, string id, double now)
     {
+        var at = s.State == SurfaceState.Drawing ? now : double.NegativeInfinity;
+        // Back to the layer still drawn under one never shown (a video's stand-in held over the same video): that layer
+        // carries on, with no second instance or player (the Mac's 5857455).
+        if (s.Backgrounds is { IsHeld: true, Previous: { } under } held && under.Id == id)
+        {
+            var dropped = held.Entries.Select(e => e.Layer).ToArray();
+            held.Change(under, ready: true, at, _options.BackgroundFadeSeconds);
+            DisposeDropped(s, dropped);
+            return;
+        }
         if (NewSlot(id) is not { } slot) return;
         if (s.Backgrounds is null)
         {
-            s.Backgrounds = new LayerCrossfade<LayerSlot>(slot, ready: HasFirstFrame(slot), fadingInAt: now);
+            s.Backgrounds = new LayerCrossfade<LayerSlot>(slot, ready: CanShow(slot, null, 0), fadingInAt: now);
             return;
         }
         var before = s.Backgrounds.Entries.Select(e => e.Layer).ToArray();
         // A paused wallpaper can't run a fade: the still frame shows the new layer at once.
-        s.Backgrounds.Change(slot, ready: HasFirstFrame(slot), s.State == SurfaceState.Drawing ? now : double.NegativeInfinity,
-            _options.BackgroundFadeSeconds);
+        s.Backgrounds.Change(slot, ready: CanShow(slot, s.Backgrounds.Current, 0), at, _options.BackgroundFadeSeconds);
         DisposeDropped(s, before);
     }
 

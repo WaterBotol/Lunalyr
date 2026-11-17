@@ -16,4 +16,7 @@ public interface IFirstFrameLayer
 {
     /// <summary>Whether the layer has drawn, or can draw, its first frame. Read on the render thread.</summary>
     bool HasFirstFrame { get; }
+
+    /// <summary>What the fade into this layer waits for (the Mac's transitionGate, 5857455).</summary>
+    Pacing.TransitionGate Gate => Pacing.TransitionGate.FirstFrame;
 }

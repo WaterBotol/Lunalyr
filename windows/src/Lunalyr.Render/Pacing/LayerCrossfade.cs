@@ -53,6 +53,9 @@ public sealed class LayerCrossfade<TLayer> where TLayer : notnull
         bool unseen = top.FadesIn && Fade(top, at, duration) < UnseenFade;
         // A first layer shown at once stays as the base even before it is ready: it is what the surface has.
         if (unseen || (!top.IsReady && _entries.Count > 1)) _entries.RemoveAt(_entries.Count - 1);
+        // Back to the layer held under one that never showed (a video's stand-in held over the same video): nothing to
+        // fade (the Mac's 5857455).
+        if (_entries.Count > 0 && EqualityComparer<TLayer>.Default.Equals(_entries[^1].Layer, next)) return;
         while (_entries.Count >= MaximumLayers)
         {
             var weights = VisibleWeights(at, duration);
