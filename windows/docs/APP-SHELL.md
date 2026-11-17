@@ -309,13 +309,13 @@ reads it.
 ## Settings v1 (`{data}\settings.json`)
 
 Keys follow the Mac's `UserDefaults` keys without `custom.` where the setting means the same; values are the Mac's
-raw values. The file also has `schemaVersion` (2). Unknown or out-of-range values are reset to the default on load.
+raw values. The file also has `schemaVersion` (1). Unknown or out-of-range values are reset to the default on load.
 
 A new install (no file yet) starts with the owner's look of November 2026 (`ShippedDefaults`, the Mac's 2fe4dd7b): the Star
 Trails visualiser with system audio on (captured only once the welcome is finished), 93 pt floating text without a shade,
 the title card always shown, Custom Mix layouts, sung-sweep colour and the owner's Floating style (Hinge). A key an
-existing file lacks reads the record's own (older) default, never the new install's (`MissingKeyDefaults`), and the
-schema 1 -> 2 step writes those old defaults into a file from before (the Mac's `ownerDefaults2026`).
+existing file lacks reads the record's own (older) default, never the new install's (`MissingKeyDefaults`, Windows'
+counterpart of the Mac's `ownerDefaults2026` migration).
 
 | Key | Default | Values | Mac key |
 |---|---|---|---|
