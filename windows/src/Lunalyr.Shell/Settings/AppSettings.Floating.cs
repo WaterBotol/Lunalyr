@@ -216,60 +216,60 @@ public static class LyricStyleProfiles
     public static IReadOnlyDictionary<string, double> FloatingSeed { get; } = new Dictionary<string, double> { ["lyricScale"] = 1.0 };
 
     /// <summary>The style in use, as stored.</summary>
-    public static IReadOnlyDictionary<string, JsonElement> Current(AppSettings settings)
+    public static IReadOnlyDictionary<string, JsonElement> Current(AppSettings settings) => Values(settings, Keys);
+
+    /// <summary><paramref name="keys"/> as the settings hold them, as stored.</summary>
+    public static Dictionary<string, JsonElement> Values(AppSettings settings, IEnumerable<string> keys)
     {
+        ArgumentNullException.ThrowIfNull(settings);
         var node = JsonSerializer.SerializeToNode(settings, AppSettingsJsonContext.Default.AppSettings)!.AsObject();
         var values = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
-        foreach (var key in Keys)
+        foreach (var key in keys)
             if (node[key] is { } value) values[key] = JsonSerializer.SerializeToElement(value, AppSettingsJsonContext.Default.JsonNode);
         return values;
     }
 
+    /// <summary>Today's kept style for <paramref name="surface"/> from before monitors had looks, read for one release.</summary>
     public static IReadOnlyDictionary<string, JsonElement>? Saved(AppSettings settings, LyricsSurface surface) =>
         surface == LyricsSurface.Floating ? settings.LyricStyleFloating : settings.LyricStyleDesktop;
 
     /// <summary>
-    /// Stores the style in use as the current surface's and puts <paramref name="surface"/>'s in its place.
-    /// <c>Seeded</c> is true when it had no style yet and was started from the outgoing one.
+    /// Switches the style Settings edits on the monitor it edits (<see cref="MonitorLooks.SwitchEditing"/>): the style in
+    /// use is kept as its slot's and <paramref name="surface"/>'s is loaded. <c>Seeded</c> is true when it had no style yet
+    /// and was worked out now (a first Floating style starts from the desktop's, less its size).
     /// </summary>
     public static (AppSettings Settings, bool Seeded) Switch(AppSettings settings, LyricsSurface surface)
     {
         ArgumentNullException.ThrowIfNull(settings);
-        var old = settings.Surface;
-        if (old == surface) return (settings, false);
-        var current = Current(settings);
-        var next = With(settings with { LyricsSurface = surface.Raw() }, old, current);
-        if (Saved(settings, surface) is { } incoming)
-            return (With(Apply(next, incoming), surface, incoming), false);
-
-        // The first time: start from the style just stored.
-        if (surface == LyricsSurface.Floating)
-        {
-            var seeded = new Dictionary<string, JsonElement>(current, StringComparer.Ordinal);
-            foreach (var (key, value) in FloatingSeed) seeded[key] = JsonSerializer.SerializeToElement(value, AppSettingsJsonContext.Default.Double);
-            next = Apply(next, seeded);
-        }
-        return (With(next, surface, Current(next)), true);
+        if (settings.Surface == surface) return (settings, false);
+        var editing = settings.EditingSlot(null);
+        return MonitorLooks.SwitchEditing(settings, editing, editing with { Surface = surface }, settings.LookMonitor ?? editing.Display);
     }
 
-    private static AppSettings With(AppSettings settings, LyricsSurface surface, IReadOnlyDictionary<string, JsonElement> style) =>
-        surface == LyricsSurface.Floating ? settings with { LyricStyleFloating = style } : settings with { LyricStyleDesktop = style };
-
-    /// <summary>Puts <paramref name="style"/>'s values in place; a style key it lacks goes back to its default.</summary>
-    private static AppSettings Apply(AppSettings settings, IReadOnlyDictionary<string, JsonElement> style)
+    /// <summary>
+    /// Puts <paramref name="values"/> in place for each of <paramref name="keys"/>; a key it lacks goes back to its
+    /// default. Every other setting comes back as it was.
+    /// </summary>
+    public static AppSettings Applied(AppSettings settings, IReadOnlyDictionary<string, JsonElement> values, IEnumerable<string> keys)
     {
+        ArgumentNullException.ThrowIfNull(settings);
+        ArgumentNullException.ThrowIfNull(values);
         var node = JsonSerializer.SerializeToNode(settings, AppSettingsJsonContext.Default.AppSettings)!.AsObject();
-        // A key the style lacks takes the setting's own default, written out: left missing, the generated reader would
+        // A key the values lack takes the setting's own default, written out: left missing, the generated reader would
         // set it to the type's zero (false for a switch that defaults on).
         var defaults = JsonSerializer.SerializeToNode(new AppSettings(), AppSettingsJsonContext.Default.AppSettings)!.AsObject();
-        foreach (var key in Keys)
+        foreach (var key in keys)
         {
             node.Remove(key);
-            if (style.TryGetValue(key, out var value)) node[key] = JsonSerializer.SerializeToNode(value, AppSettingsJsonContext.Default.JsonElement);
+            if (values.TryGetValue(key, out var value)) node[key] = JsonSerializer.SerializeToNode(value, AppSettingsJsonContext.Default.JsonElement);
             else if (defaults[key] is { } fallback) node[key] = fallback.DeepClone();
         }
         var applied = node.Deserialize(AppSettingsJsonContext.Default.AppSettings) ?? settings;
-        // The kept styles are not part of a style: they come back as they were.
-        return applied.Normalized() with { LyricStyleDesktop = settings.LyricStyleDesktop, LyricStyleFloating = settings.LyricStyleFloating };
+        // The kept styles and looks are not part of a style: they come back as they were.
+        return applied.Normalized() with
+        {
+            LyricStyleDesktop = settings.LyricStyleDesktop, LyricStyleFloating = settings.LyricStyleFloating, Looks = settings.Looks,
+            DisplayLyrics = settings.DisplayLyrics, LookMonitor = settings.LookMonitor,
+        };
     }
 }
