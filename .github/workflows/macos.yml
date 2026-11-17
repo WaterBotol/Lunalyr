@@ -37,7 +37,7 @@ concurrency:
 jobs:
   build:
     runs-on: macos-15
-    timeout-minutes: 40
+    timeout-minutes: 55
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -85,7 +85,8 @@ jobs:
         run: bash Scripts/test.sh
       # Signed ad hoc; draft-release re-signs it when it becomes an update.
       - name: Build app and publisher tools
-        timeout-minutes: 15
+        # About 12 minutes on a typical runner; a slow one took over 15.
+        timeout-minutes: 25
         env:
           LUNALYR_SOURCE_PACKAGES_DIR: ${{ github.workspace }}/Build/TestDerivedData/SourcePackages
         run: bash Scripts/build.sh
