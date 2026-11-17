@@ -108,6 +108,9 @@ public sealed class DisplayLyricsSettingsTests
         Assert.True(Visualisers.SystemAudioService.DrawsVisualiser(side, ["a", "b"]));
         // Unplugged, it no longer counts.
         Assert.False(Visualisers.SystemAudioService.DrawsVisualiser(side, ["a"]));
+        // Music video falling back to Visualisers for songs without a video (the Mac's bc7fb38).
+        Assert.True(Visualisers.SystemAudioService.DrawsVisualiser(new AppSettings { BackgroundMode = "musicVideo", MusicVideoFallback = "visualizer" }, []));
+        Assert.False(Visualisers.SystemAudioService.DrawsVisualiser(new AppSettings { BackgroundMode = "musicVideo", MusicVideoFallback = "pattern" }, []));
     }
 
     [Fact]

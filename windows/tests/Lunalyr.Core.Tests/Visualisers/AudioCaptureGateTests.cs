@@ -25,6 +25,26 @@ public class AudioCaptureGateTests
         Assert.Equal(Decision.Off, Decide(i => i with { Enabled = false, DisplaysAwake = false }));
     }
 
+    // Ported from AudioCaptureGateTests.swift: testMusicVideoFallbackVisualiserNeedsCapture (bc7fb38)
+    [Fact]
+    public void MusicVideoFallbackVisualiserNeedsCapture()
+    {
+        Assert.True(VisualiserChosen("visualizer", "auto"));
+        Assert.True(VisualiserChosen("musicVideo", "visualizer"));
+        Assert.False(VisualiserChosen("musicVideo", "pattern"));
+        Assert.False(VisualiserChosen("pattern", "visualizer"));
+        // A video plays on the main display only on Windows: it covers every wallpaper only with one display.
+        Assert.True(VideoCoversEveryWallpaper(showing: true, displays: 1));
+        Assert.False(VideoCoversEveryWallpaper(showing: true, displays: 2)); // the fallback shows on the other
+        Assert.False(VideoCoversEveryWallpaper(showing: false, displays: 1)); // no video, or still looked for
+        // The decision for each state.
+        Assert.Equal(Decision.Capture(null), Decide());
+        Assert.Equal(Decision.Paused(PauseReason.MusicVideo), Decide(i => i with { MusicVideoShowing = true }));
+        Assert.False(Decision.Paused(PauseReason.MusicVideo).FollowsPlayback); // the session is released
+        Assert.Equal(Decision.Paused(PauseReason.Wallpaper), Decide(i => i with { VisualiserChosen = false }));
+        Assert.Equal(Decision.Off, Decide(i => i with { MusicVideoShowing = true, Enabled = false }));
+    }
+
     // Ported from AudioCaptureGateTests.swift: testNothingPlayingStopsCaptureAfterTheHangTime
     [Fact]
     public void NothingPlayingStopsCaptureAfterTheHangTime()

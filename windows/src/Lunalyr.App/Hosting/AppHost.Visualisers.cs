@@ -20,7 +20,8 @@ internal sealed partial class AppHost
         {
             var status = controller.Status;
             return (status.Playback == PlaybackStatus.Playing, status.Player);
-        }, _options.Demo, Log, () => controller.DisplayKeys, () => FirstRunWelcomeOpen);
+        }, _options.Demo, Log, () => controller.DisplayKeys, () => FirstRunWelcomeOpen,
+            () => controller.MusicVideo?.Status is Core.MusicVideo.MusicVideoStatus.Showing);
         _systemAudio = audio;
         _settings.Changed += (_, e) => audio.SettingsChanged(e.OldValue, e.NewValue);
         if (_wallpaper?.Engine is { } engine)

@@ -58,6 +58,11 @@ internal static partial class WallpaperPage
             visualiser.Children.Add(Caption(SettingsCopy.VisualisersNotYet));
         }
         page.Children.Add(visualiser);
+        // Music response: with Visualisers, and with Music video falling back to Visualisers for songs without one (the
+        // Mac's bc7fb38).
+        var response = new StackPanel { Spacing = 4 }.ShowWhen(ctx, s => Lunalyr.Core.Visualisers.Capture.AudioCaptureGate.VisualiserChosen(s.BackgroundMode, s.MusicVideoFallback));
+        AddMusicResponseSection(response, ctx);
+        page.Children.Add(response);
         var musicVideo = new StackPanel { Spacing = 4 }.ShowWhen(ctx, s => s.BackgroundMode == "musicVideo");
         var musicVideoAdded = false;
         AddMusicVideoSections(musicVideo, ctx, ref musicVideoAdded);
@@ -299,6 +304,9 @@ internal static partial class WallpaperPage
     /// placeholder goes. Implement in <c>WallpaperPage.Visualiser.cs</c>.
     /// </summary>
     static partial void AddVisualiserSections(StackPanel sections, SettingsContext ctx, ref bool added);
+
+    /// <summary>Music response (System audio), shown wherever a visualiser can be the wallpaper.</summary>
+    static partial void AddMusicResponseSection(StackPanel sections, SettingsContext ctx);
 
     /// <summary>
     /// Music video: its whole section (what shows, YouTube search and its key, the fallback, this song's file, link and

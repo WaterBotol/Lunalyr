@@ -22,8 +22,9 @@ internal static partial class WallpaperPage
     {
         added = true;
         AddScene(sections, ctx);
-        AddMusicResponse(sections, ctx);
     }
+
+    static partial void AddMusicResponseSection(StackPanel sections, SettingsContext ctx) => AddMusicResponse(sections, ctx);
 
     private static void AddScene(StackPanel page, SettingsContext ctx)
     {

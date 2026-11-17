@@ -298,6 +298,23 @@ public class SystemAudioTests
         Assert.True(controller.Running);
     }
 
+    // Adapted from AudioCaptureControllerTests.swift: testCaptureStopsWhileAMusicVideoPlaysAndResumesForItsFallback (bc7fb38)
+    [Fact]
+    public void CaptureStopsWhileAMusicVideoPlaysAndResumesForItsFallback()
+    {
+        var (env, controller) = Make();
+        controller.Reconcile();
+        Assert.True(controller.Running, "The fallback visualiser is showing.");
+        env.Prefs = env.Prefs with { MusicVideoShowing = true };
+        controller.Reconcile();
+        Assert.Equal(AudioCaptureState.Paused, controller.State);
+        Assert.False(controller.Running, "No capture while the video plays.");
+        Assert.Equal(AudioCaptureGate.PauseReason.MusicVideo.Message, controller.Status);
+        env.Prefs = env.Prefs with { MusicVideoShowing = false };
+        controller.Reconcile();
+        Assert.True(controller.Running, "The next song has no video.");
+    }
+
     // Adapted from AudioCaptureControllerTests.swift: testDisplaySleepReleasesCaptureAndWakingReconnects
     [Fact]
     public void DisplaySleepReleasesCaptureAndWakingReconnects()

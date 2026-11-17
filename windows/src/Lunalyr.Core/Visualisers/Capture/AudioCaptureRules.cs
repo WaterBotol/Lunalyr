@@ -185,6 +185,8 @@ public static class AudioCaptureGate
         Hidden,
         /// <summary>Pause wallpaper froze every wallpaper, and no settings preview shows the visualiser instead.</summary>
         WallpaperPaused,
+        /// <summary>Music video's video plays on every wallpaper; its fallback visualiser returns when a song has none.</summary>
+        MusicVideo,
     }
 
     public readonly record struct PauseReason(PauseKind Kind, string? PowerMessage = null)
@@ -193,6 +195,7 @@ public static class AudioCaptureGate
         public static PauseReason DisplaysAsleep => new(PauseKind.DisplaysAsleep);
         public static PauseReason Hidden => new(PauseKind.Hidden);
         public static PauseReason WallpaperPaused => new(PauseKind.WallpaperPaused);
+        public static PauseReason MusicVideo => new(PauseKind.MusicVideo);
         public static PauseReason Power(string message) => new(PauseKind.Power, message);
 
         public string Message => Kind switch
@@ -201,6 +204,7 @@ public static class AudioCaptureGate
             PauseKind.Power => PowerMessage ?? "",
             PauseKind.DisplaysAsleep => "Paused while the displays sleep.",
             PauseKind.Hidden => "Paused while no visualiser is on screen.",
+            PauseKind.MusicVideo => "Paused while the music video plays. It resumes with the visualiser.",
             _ => "Paused while the wallpaper is paused. It resumes with the wallpaper.",
         };
     }
@@ -231,6 +235,8 @@ public static class AudioCaptureGate
         public bool Enabled { get; init; }
         public bool VisualiserChosen { get; init; }
         public string? PowerPause { get; init; }
+        /// <summary>Music video's video covers every wallpaper, so its fallback visualiser is shown nowhere.</summary>
+        public bool MusicVideoShowing { get; init; }
         public bool DisplaysAwake { get; init; } = true;
         /// <summary>Seconds since every visualiser surface stopped drawing; null while one draws.</summary>
         public double? SurfacesHiddenFor { get; init; }
@@ -251,6 +257,7 @@ public static class AudioCaptureGate
         if (!inputs.Enabled) return Decision.Off;
         if (!inputs.VisualiserChosen) return Decision.Paused(PauseReason.Wallpaper);
         if (inputs.PowerPause is { } reason) return Decision.Paused(PauseReason.Power(reason));
+        if (inputs.MusicVideoShowing) return Decision.Paused(PauseReason.MusicVideo);
         if (!inputs.DisplaysAwake) return Decision.Paused(PauseReason.DisplaysAsleep);
         // The user's own pause, with nothing left to show what capture hears until the wallpaper resumes.
         if (inputs.SurfacesFrozen) return Decision.Paused(PauseReason.WallpaperPaused);
@@ -282,6 +289,20 @@ public static class AudioCaptureGate
             : $"power settings are showing {shown}";
         return $"Paused: {cause}. System audio resumes with the visualiser.";
     }
+
+    /// <summary>
+    /// Whether the chosen wallpaper type can show a visualiser (the Mac's bc7fb38): Visualisers, or Music video with
+    /// Visualisers as "Without a video" (shown for songs without a video, and on the displays the video stays off).
+    /// </summary>
+    public static bool VisualiserChosen(string chosen, string fallback) =>
+        chosen == "visualizer" || (chosen == "musicVideo" && fallback == "visualizer");
+
+    /// <summary>
+    /// Whether Music video's video plays on every wallpaper, leaving its fallback nowhere: a video was found for the song
+    /// playing, and it covers every connected display. On Windows a video plays on the main display only, so that is
+    /// only so with one display (the Mac follows its "Show the video on").
+    /// </summary>
+    public static bool VideoCoversEveryWallpaper(bool showing, int displays) => showing && displays <= 1;
 
     /// <summary>Whether anything that could show a visualiser is drawing. Unknown (no surfaces yet) counts as drawing.</summary>
     public static bool AnySurfaceDrawing(IReadOnlyCollection<SurfaceDrawing> surfaces) =>

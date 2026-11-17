@@ -15,8 +15,9 @@
 namespace Lunalyr.Core.Visualisers.Capture;
 
 /// <summary>What the controller reads from the app now: the switch and what the wallpaper shows.</summary>
+/// <param name="MusicVideoShowing">Music video's video plays on every wallpaper, so its fallback visualiser shows nowhere.</param>
 public readonly record struct SystemAudioPreferences(bool Enabled, bool VisualiserChosen, string? PowerPause = null,
-    bool WallpaperPaused = false);
+    bool WallpaperPaused = false, bool MusicVideoShowing = false);
 
 /// <summary>A running capture. Disposing it stops it and releases the device.</summary>
 public interface ICaptureSession : IDisposable
@@ -206,6 +207,7 @@ public sealed class SystemAudioController : IDisposable
         Enabled = prefs.Enabled,
         VisualiserChosen = prefs.VisualiserChosen,
         PowerPause = prefs.PowerPause,
+        MusicVideoShowing = prefs.MusicVideoShowing,
         DisplaysAwake = _env.DisplaysAwake(),
         SurfacesHiddenFor = _surfacesHiddenSince is { } hidden ? now - hidden : null,
         SurfacesFrozen = AudioCaptureGate.Frozen(_env.Surfaces(), prefs.WallpaperPaused),
@@ -225,7 +227,7 @@ public sealed class SystemAudioController : IDisposable
         TrackOutput(playback, now);
         var decision = AudioCaptureGate.Decide(Demand(now, prefs, playback));
         // Playback and the stream's health are followed (on a half-second tick) only while they decide something.
-        Follow(decision.FollowsPlayback || prefs.Enabled && prefs.VisualiserChosen);
+        Follow(decision.FollowsPlayback || prefs.Enabled && prefs.VisualiserChosen && !prefs.MusicVideoShowing);
         switch (decision.Kind)
         {
             case AudioCaptureGate.DecisionKind.Off:

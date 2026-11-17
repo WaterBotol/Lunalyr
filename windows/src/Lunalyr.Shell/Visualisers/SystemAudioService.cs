@@ -30,11 +30,12 @@ public sealed class SystemAudioService : IDisposable
     /// <param name="displays">The connected displays' keys, the main one first: a visualiser on any of their own looks
     /// (the Mac's per-monitor looks) needs System audio, not only the one Settings edits.</param>
     /// <param name="welcomeOpen">A first run's welcome is on screen: nothing is captured until it is over.</param>
+    /// <param name="musicVideoShowing">A music video was found for the song playing and shows (the Mac's status .showing).</param>
     public SystemAudioService(Func<AppSettings> settings, Func<(bool Playing, string? Name)> player, bool demo, Logger? logger = null,
-        Func<IReadOnlyList<string>>? displays = null, Func<bool>? welcomeOpen = null)
+        Func<IReadOnlyList<string>>? displays = null, Func<bool>? welcomeOpen = null, Func<bool>? musicVideoShowing = null)
     {
         _log = (logger ?? Logger.Null).App;
-        _environment = new Environment(settings, player, demo, logger ?? Logger.Null, displays, welcomeOpen);
+        _environment = new Environment(settings, player, demo, logger ?? Logger.Null, displays, welcomeOpen, musicVideoShowing);
         _audio = new VisualizerAudio(outputLatency: () => _environment.OutputLatency);
         _controller = new SystemAudioController(_environment, _audio);
         _controller.Changed += (_, _) => Changed?.Invoke(this, EventArgs.Empty);
@@ -81,6 +82,9 @@ public sealed class SystemAudioService : IDisposable
 
     public void Reconnect() => _controller.Reconnect();
 
+    /// <summary>Something the demand reads changed (Music video's video starting or ending).</summary>
+    public void Reconcile() => _controller.Reconcile();
+
     public string Diagnostics() => _controller.Diagnostics();
 
     public void Dispose()
@@ -92,20 +96,25 @@ public sealed class SystemAudioService : IDisposable
     }
 
     /// <summary>
-    /// Whether a visualiser is the wallpaper anywhere: the look Settings edits, or another connected monitor's own.
+    /// Whether a visualiser is the wallpaper anywhere: the look Settings edits, or another connected monitor's own; a
+    /// Music video falling back to Visualisers counts (the Mac's bc7fb38).
     /// </summary>
     public static bool DrawsVisualiser(AppSettings settings, IReadOnlyList<string> displays)
     {
         ArgumentNullException.ThrowIfNull(settings);
         ArgumentNullException.ThrowIfNull(displays);
-        if (settings.BackgroundMode == "visualizer") return true;
+        if (AudioCaptureGate.VisualiserChosen(settings.BackgroundMode, settings.MusicVideoFallback)) return true;
         if (displays.Count == 0 || settings.Looks is null) return false;
-        return displays.Any(display => settings.WallpaperLookFor(display, displays[0]).BackgroundMode == "visualizer");
+        return displays.Any(display =>
+        {
+            var look = settings.WallpaperLookFor(display, displays[0]);
+            return AudioCaptureGate.VisualiserChosen(look.BackgroundMode, look.MusicVideoFallback);
+        });
     }
 
     /// <summary>The app as the controller sees it.</summary>
     private sealed class Environment(Func<AppSettings> settings, Func<(bool Playing, string? Name)> player, bool demo, Logger logger,
-        Func<IReadOnlyList<string>>? displays, Func<bool>? welcomeOpen)
+        Func<IReadOnlyList<string>>? displays, Func<bool>? welcomeOpen, Func<bool>? musicVideoShowing)
         : ISystemAudioEnvironment, IDisposable
     {
         private readonly OutputActivityMeter? _meter = demo ? null : new OutputActivityMeter(logger);
@@ -126,7 +135,12 @@ public sealed class SystemAudioService : IDisposable
         public SystemAudioPreferences Preferences()
         {
             var s = settings();
-            var chosen = DrawsVisualiser(s, displays?.Invoke() ?? []);
+            var connected = displays?.Invoke() ?? [];
+            var chosen = DrawsVisualiser(s, connected);
+            // Music video's video on every wallpaper leaves its fallback visualiser nowhere: capture pauses until a song
+            // has no video (the Mac's bc7fb38).
+            var videoEverywhere = s.BackgroundMode == "musicVideo"
+                && AudioCaptureGate.VideoCoversEveryWallpaper(musicVideoShowing?.Invoke() ?? false, connected.Count);
             var power = _power;
             var shown = Wallpaper.WallpaperPower.EffectiveMode("visualizer", power);
             var powerPause = AudioCaptureGate.PowerPause(chosen, shown == "visualizer", Wallpaper.WallpaperPower.Title(shown),
@@ -134,7 +148,8 @@ public sealed class SystemAudioService : IDisposable
                 power?.Kind == PowerConstraintKind.Battery);
             // The demo's signal stands in for System audio whenever a visualiser shows; nothing is captured. A new install
             // has System audio on (ShippedDefaults), but nothing is captured while its first welcome is open, as on the Mac.
-            return new SystemAudioPreferences((s.AudioReactiveEnabled && !(welcomeOpen?.Invoke() ?? false)) || demo, chosen, powerPause, s.WallpaperPaused);
+            return new SystemAudioPreferences((s.AudioReactiveEnabled && !(welcomeOpen?.Invoke() ?? false)) || demo, chosen, powerPause, s.WallpaperPaused,
+                videoEverywhere);
         }
 
         public IReadOnlyCollection<SurfaceDrawing> Surfaces()

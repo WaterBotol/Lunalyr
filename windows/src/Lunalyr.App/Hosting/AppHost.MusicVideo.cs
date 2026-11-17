@@ -51,6 +51,8 @@ internal sealed partial class AppHost
             ButtonsHeld = () => (GetAsyncKeyState(0x01) & 0x8000) != 0 || (GetAsyncKeyState(0x02) & 0x8000) != 0,
         };
         _musicVideo = video;
+        // Music video's video starting or ending decides whether its fallback visualiser shows, and so System audio.
+        video.Changed += () => _systemAudio?.Reconcile();
         // The player plays a (muted) video stream: never while playback is off for the run.
         var playerOff = offReason ?? (PlaybackGuard.Process.Reason is not null ? "--no-playback" : null);
         if (playerOff is null && _wallpaper is not null && _uiDispatcher is not null)
