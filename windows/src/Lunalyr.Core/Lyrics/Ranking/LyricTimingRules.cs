@@ -168,6 +168,25 @@ public static class LyricTimingRules
         return tier == 2 && LyricSpreadTiming.HasEvenlySpreadWordTiming(result) ? 1 : tier;
     }
 
+    /// <summary>
+    /// The share of sung lines with real word timing at which Mixed timing still ranks with word-by-word, ahead of the
+    /// sources' leads (the owner's call, 17 Nov 2026; the Mac's 46124810): below it, a source timed word by word nearly
+    /// throughout wins, as Kugou's would over Apple Music's mostly line-timed lyrics.
+    /// </summary>
+    public const double FullWordTimingShare = 0.8;
+
+    /// <summary>The share of sung lines with real word timing, 0 to 1.</summary>
+    public static double WordTimedShare(IReadOnlyList<LyricLine> lines)
+    {
+        ArgumentNullException.ThrowIfNull(lines);
+        var vocal = lines.Where(line => !line.IsInstrumental).ToList();
+        return vocal.Count == 0 ? 0 : (double)vocal.Count(ValidWordTiming) / vocal.Count;
+    }
+
+    /// <summary>Synced lyrics with at least <see cref="FullWordTimingShare"/> of their sung lines word-timed.</summary>
+    public static bool IsMostlyWordTimed(LyricResult result) =>
+        result is LyricResult.Synced synced && WordTimedShare(synced.Lines) >= FullWordTimingShare;
+
     /// <summary>"Word-by-word", "Mixed timing" or "Line-synced".</summary>
     public static string Precision(IReadOnlyList<LyricLine> lines)
     {

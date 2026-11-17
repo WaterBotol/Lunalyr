@@ -117,6 +117,17 @@ public static class LyricRanking
         {
             return timing > other;
         }
+        // Mixed timing with few word-timed lines loses to timing that is word by word nearly throughout, whatever the
+        // source's lead (the Mac's 46124810).
+        if (timing == 2)
+        {
+            var full = LyricTimingRules.IsMostlyWordTimed(a.Result);
+            var otherFull = LyricTimingRules.IsMostlyWordTimed(b.Result);
+            if (full != otherFull)
+            {
+                return full;
+            }
+        }
         var lead = Lead(a, timing);
         var otherLead = Lead(b, timing);
         if (lead != otherLead)

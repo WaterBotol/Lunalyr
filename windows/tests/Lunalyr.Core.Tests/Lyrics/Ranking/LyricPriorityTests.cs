@@ -39,9 +39,13 @@ public sealed class LyricPriorityTests : IDisposable
             var line = L.Line(text, start, start + 2);
             return timed ? L.Timed(line, [.. text.Split(' ').Select((w, i) => L.Word(w, start + i, start + i + 1))]) : line;
         }
+        // Mixed: word-timed but for its last line, 4 of 5, enough to rank with word-by-word (FullWordTimingShare).
         LyricResult result = timing == Timing.Plain
             ? L.Plain(["Sing along", "Hold on"], "fixture", source.Title())
-            : L.Synced([Line("Sing along", 1, timing != Timing.Line), Line("Hold on", 4, timing == Timing.Word)], "fixture", source.Title());
+            : timing == Timing.Mixed
+                ? L.Synced([Line("Sing along", 1, true), Line("Hold me", 4, true), Line("Hold you", 7, true), Line("Hold us", 10, true),
+                            Line("Hold on", 13, false)], "fixture", source.Title())
+                : L.Synced([Line("Sing along", 1, timing != Timing.Line), Line("Hold on", 4, timing == Timing.Word)], "fixture", source.Title());
         return new LyricCandidate(source, result, title, "Our Artist", duration, 0);
     }
 
@@ -72,6 +76,35 @@ public sealed class LyricPriorityTests : IDisposable
         Assert.Equal(2, LyricTimingRules.RankedTiming(Candidate(Lrclib, Timing.Mixed).Result));
         Assert.Equal(1, LyricTimingRules.RankedTiming(Candidate(Lrclib, Timing.Line).Result));
         Assert.Equal(0, LyricTimingRules.RankedTiming(Candidate(Lrclib, Timing.Plain).Result));
+    }
+
+    /// <summary><paramref name="lines"/> sung lines, the first <paramref name="timed"/> of them word-timed.</summary>
+    private static LyricCandidate Share(LyricSourceId source, int timed, int lines)
+    {
+        var rows = Enumerable.Range(0, lines).Select(index =>
+        {
+            var start = 1 + index * 3.0;
+            var line = L.Line("Sing along now", start, start + 2.5);
+            return index < timed
+                ? L.Timed(line, [.. new[] { "Sing", "along", "now" }.Select((w, o) => L.Word(w, start + o * 0.8, start + o * 0.8 + 0.7))])
+                : line;
+        }).ToList();
+        return new LyricCandidate(source, L.Synced(rows, "fixture", source.Title()), "Our Song", "Our Artist", 180, 0);
+    }
+
+    // Ported from LyricPriorityTests.swift: testThinMixedTimingLosesToFullWordTiming (the owner's call, 17 Nov 2026: Apple
+    // Music's Mixed timing leads word-by-word only while most of its lines, 80%, are word-timed)
+    [Fact]
+    public void ThinMixedTimingLosesToFullWordTiming()
+    {
+        foreach (var options in Modes(UserOrder))
+        {
+            Assert.Equal(Kugou, Winner([Share(AppleMusicCache, 3, 10), Share(Kugou, 10, 10)], options));
+            Assert.Equal(AppleMusicCache, Winner([Share(AppleMusicCache, 9, 10), Share(Kugou, 10, 10)], options));
+            Assert.Equal(AppleMusicCache, Winner([Share(AppleMusicCache, 8, 10), Share(Kugou, 10, 10)], options));
+            // Two thin ones: the leads decide, as before.
+            Assert.Equal(AppleMusicCache, Winner([Share(AppleMusicCache, 3, 10), Share(Kugou, 4, 10)], options));
+        }
     }
 
     // Ported from LyricPriorityTests.swift: testMusicsWordTimingBeatsLRCLIBsWordTiming

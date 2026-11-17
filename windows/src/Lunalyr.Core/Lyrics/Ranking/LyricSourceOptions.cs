@@ -86,9 +86,11 @@ public sealed record LyricSourceSnapshot(
     /// it answer "not found" (Heathens found NetEase's timing instead of Apple's). v21 (the Mac's v17, 16 Nov 2026): word
     /// stamps spread evenly rank as line timing, a timeline shifted to another recording ranks lower, the leading text
     /// timed by the line takes another match's word timing, QQ Music and Kuwo give word timing, and seven sources were
-    /// added; choices cached under the earlier ranking are looked up again.
+    /// added; choices cached under the earlier ranking are looked up again. v22 (the Mac's v18, 17 Nov 2026): Mixed timing
+    /// with under 80% of its sung lines word-timed ranks below word-by-word timing
+    /// (<see cref="LyricTimingRules.FullWordTimingShare"/>).
     /// </summary>
-    public const string CachePolicy = "v21";
+    public const string CachePolicy = "v22";
 
     /// <summary>The order a fresh install uses.</summary>
     public static IReadOnlyList<LyricSourceId> RecommendedOrder { get; } =

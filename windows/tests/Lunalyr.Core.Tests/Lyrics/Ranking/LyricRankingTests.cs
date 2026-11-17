@@ -66,12 +66,12 @@ public sealed class LyricRankingTests
     public void CacheFingerprintIgnoresInactiveSettingsAndLocalSources()
     {
         static string Print(LyricMatchMode mode, params LyricSourceId[] enabled) => new LyricSourceSnapshot(enabled, mode, "", "x").Fingerprint;
-        Assert.StartsWith("v21|", Print(LyricMatchMode.AccuracyFirst, Lrclib), StringComparison.Ordinal);
+        Assert.StartsWith("v22|", Print(LyricMatchMode.AccuracyFirst, Lrclib), StringComparison.Ordinal);
         Assert.NotEqual(Print(LyricMatchMode.AccuracyFirst, Lrclib), Print(LyricMatchMode.SourceOrder, Lrclib));
         Assert.Equal(Print(LyricMatchMode.AccuracyFirst, Lrclib), Print(LyricMatchMode.AccuracyFirst, Lyrimuse, Lrclib, AppleMusicCache));
         Assert.NotEqual(Print(LyricMatchMode.AccuracyFirst, Lrclib, NetEase), Print(LyricMatchMode.AccuracyFirst, NetEase, Lrclib));
         // The Mac's raw identifiers, so both apps key the same way.
-        Assert.Equal("v21|priority|qqMusic,lyricsOVH,lrclib", Print(LyricMatchMode.SourceOrder, QQMusic, LyricsOvh, Lrclib));
+        Assert.Equal("v22|priority|qqMusic,lyricsOVH,lrclib", Print(LyricMatchMode.SourceOrder, QQMusic, LyricsOvh, Lrclib));
     }
 
     // Ported from LyricRankingTests.swift: testLocalFilesWithTheArtistAreNotRejectedOnTheirLength
