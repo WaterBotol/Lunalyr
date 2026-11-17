@@ -155,7 +155,7 @@ public sealed class MusicVideoFramingTests
         Assert.False(whole.FollowsVideo());
         Assert.False(MusicVideoFraming.Fill.IsWhole());
         Assert.Equal(whole.Rect(Hd, Laptop), ambient.Rect(Hd, Laptop));
-        Assert.Equal(whole.RevealHold(), ambient.RevealHold());
+        Assert.Equal(MusicVideoOverlayMask.Covers(whole, wasShowing: false), MusicVideoOverlayMask.Covers(ambient, wasShowing: false));
         Assert.Equal(1, ambient.YouTubeOverscan());
         Assert.Equal(whole.VideoGravity(Hd, Laptop), ambient.VideoGravity(Hd, Laptop));
     }
@@ -201,14 +201,34 @@ public sealed class MusicVideoFramingTests
         Assert.Contains("overscan = 1.0,", YouTubeEmbed.Html("4NRXx6U8ABQ", 0, overscan: 0.5));
     }
 
-    // Ported from MusicVideoFramingTests.swift: testWholeHoldsTheRevealUntilYouTubesTitleHasFaded
+    // After the Mac's e7e50f7 (MusicVideoReuseTests.swift's overlay mask): shown whole, YouTube's controls are covered for
+    // their first seconds, top, middle and bottom, at the same size in points at any player size.
     [Fact]
-    public void WholeHoldsTheRevealUntilYouTubesTitleHasFaded()
+    public void WholeCoversYouTubesControlsForTheirFirstSeconds()
     {
-        Assert.Equal(0, YouTubeEmbed.RevealDelay(MusicVideoFraming.Fill, showing: false)); // filled: the title is off-screen
-        Assert.Equal(MusicVideoFramings.TitleOverlayHold, YouTubeEmbed.RevealDelay(MusicVideoFraming.Whole, showing: false));
-        Assert.Equal(0, YouTubeEmbed.RevealDelay(MusicVideoFraming.Whole, showing: true)); // already up: not hidden again
-        Assert.InRange(MusicVideoFramings.TitleOverlayHold, 4.5, 6); // measured: overlays gone 4.0–4.4 s in
+        Assert.True(MusicVideoOverlayMask.Covers(MusicVideoFraming.Whole, wasShowing: false));
+        Assert.True(MusicVideoOverlayMask.Covers(MusicVideoFraming.Ambient, wasShowing: false));
+        Assert.False(MusicVideoOverlayMask.Covers(MusicVideoFraming.Whole, wasShowing: true)); // already up
+        Assert.False(MusicVideoOverlayMask.Covers(MusicVideoFraming.Fill, wasShowing: false)); // filled: off-screen
+        Assert.InRange(MusicVideoOverlayMask.Hold, 4.0, 5); // measured: gone 3.8–4.0 s in
+        Assert.Equal(1, MusicVideoOverlayMask.Opacity(0));
+        Assert.Equal(1, MusicVideoOverlayMask.Opacity(4.4));
+        Assert.Equal(0.5, MusicVideoOverlayMask.Opacity(MusicVideoOverlayMask.Hold + MusicVideoOverlayMask.FadeOut / 2), 6);
+        Assert.Equal(0, MusicVideoOverlayMask.Opacity(6));
+        // The glow's sample waits while the controls are drawn.
+        Assert.False(MusicVideoOverlayMask.Capturable(now: 12, coveredAt: 10));
+        Assert.True(MusicVideoOverlayMask.Capturable(now: 15, coveredAt: 10));
+        Assert.True(MusicVideoOverlayMask.Capturable(now: 15, coveredAt: null));
+        // A 16:9 player shown in a 1600 × 900 view: three regions, the middle one centred.
+        var regions = MusicVideoOverlayMask.Regions(new VideoSize(1600, 900), new VideoSize(1600, 900));
+        Assert.Equal(3, regions.Count);
+        Assert.Equal(new VideoRect(0, 0, 1600, MusicVideoOverlayMask.TopBand), regions[0]);
+        Assert.Equal(800, regions[1].MidX, 6);
+        Assert.Equal(450, regions[1].MidY, 6);
+        Assert.Equal(900, regions[2].Y + regions[2].Height, 6);
+        // A taller player than the view (a wide video): its bands fall outside, only the middle is left.
+        Assert.Single(MusicVideoOverlayMask.Regions(new VideoSize(1600, 900), new VideoSize(1600, 600)));
+        Assert.Empty(MusicVideoOverlayMask.Regions(default, new VideoSize(1600, 900)));
     }
 
     // Ported from MusicVideoFramingTests.swift: testWholeHidesABufferingPlayerAtOnce
@@ -434,32 +454,24 @@ public sealed class MusicVideoFramingTests
         return (reveal, shown, timers);
     }
 
-    // Windows' own (the Mac's coordinator setVisible, with hand-fired timers): shown whole, every start, resume and seek is
-    // held 5 s; a repeated "playing" never restarts the wait, and any hide cancels it.
+    // Windows' own (the Mac's coordinator setVisible, with hand-fired timers), after the Mac's e7e50f7: shown whole, a
+    // start, a resume and a seek show the player at once (its controls are covered by the wallpaper instead); a buffering
+    // player is covered at once.
     [Fact]
-    public void WholeHoldsEveryRevealAndAnyHideCancelsIt()
+    public void WholeShowsAtOnceAndBufferingCoversAtOnce()
     {
         var (reveal, shown, timers) = MakeReveal(MusicVideoFraming.Whole);
         reveal.Set(true);
-        Assert.Empty(shown);
-        Assert.True(reveal.RevealPending);
-        reveal.Set(true); // the sample says it plays too: one wait, not two
-        Assert.Equal(1, timers.Count);
-        timers.Fire(MusicVideoFramings.TitleOverlayHold);
         Assert.Equal([true], shown);
-        Assert.True(reveal.Showing);
-        reveal.Set(true); // already up: shown at once, no new wait
+        Assert.False(reveal.RevealPending);
         Assert.Equal(0, timers.Count);
-        // A seek buffers: covered at once (YouTube's overlays come back), then held again.
+        // A seek buffers: covered at once (YouTube's controls come back), then shown again as it plays.
         reveal.Set(false, buffering: true);
-        Assert.Equal([true, true, false], shown);
+        Assert.Equal([true, false], shown);
         reveal.Set(true);
-        Assert.Equal(1, timers.Count);
-        // Paused before the hold ran out: the wait is dropped and never uncovers a paused player.
+        Assert.Equal([true, false, true], shown);
         reveal.Set(false);
-        Assert.Equal(0, timers.Count);
         Assert.False(reveal.Showing);
-        Assert.Equal([true, true, false, false], shown);
     }
 
     // Windows' own: filled, a playing player shows at once, and buffering waits out the grace before it is covered.

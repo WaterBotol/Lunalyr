@@ -6,10 +6,9 @@ namespace Lunalyr.Core.MusicVideo;
 
 /// <summary>
 /// When YouTube's player is uncovered. It shows only while it plays; a playing video that starts buffering stays up for a
-/// short grace when filled (<see cref="YouTubeEmbed.HideDelay"/>), and is covered at once when shown whole. Shown whole, a
-/// player that starts playing stays covered (behind the video's still) for <see cref="MusicVideoFramings.TitleOverlayHold"/>
-/// (<see cref="YouTubeEmbed.RevealDelay"/>), so YouTube's start-of-play title overlay is never seen: after a start, a
-/// resume and a seek alike.
+/// short grace when filled (<see cref="YouTubeEmbed.HideDelay"/>), and is covered at once when shown whole. A player that
+/// starts playing shows at once, filled or whole (the Mac's e7e50f7): shown whole, the wallpaper covers YouTube's controls
+/// over its first seconds instead (<see cref="MusicVideoOverlayMask"/>).
 /// </summary>
 public sealed class YouTubePlayerReveal
 {
@@ -51,24 +50,7 @@ public sealed class YouTubePlayerReveal
         if (visible)
         {
             CancelHide();
-            var hold = YouTubeEmbed.RevealDelay(Framing, Showing);
-            if (hold <= 0)
-            {
-                Reveal();
-                return;
-            }
-            if (_pendingReveal is not null) return;
-            Action? cancel = null;
-            var fired = false;
-            cancel = _schedule(hold, () =>
-            {
-                fired = true;
-                if (_pendingReveal is null || !ReferenceEquals(_pendingReveal, cancel)) return;
-                _pendingReveal = null;
-                Reveal();
-            });
-            // A scheduler that ran the work at once has nothing left to cancel.
-            if (!fired) _pendingReveal = cancel;
+            Reveal();
             return;
         }
         CancelReveal();

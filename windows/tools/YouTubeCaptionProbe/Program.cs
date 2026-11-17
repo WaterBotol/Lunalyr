@@ -1,4 +1,9 @@
 // YouTubeCaptionProbe <videoId> <language> <out.txt> [seconds]
+// YouTubeCaptionProbe --switch <videoA> <videoB> <out.txt> [seconds]
+//
+// --switch: the wallpaper's own embed page (YouTubeEmbed.Html) plays video A, then is told to switch to video B inside
+// the same player (YouTubeEmbed.SwitchScript, the Mac's lunalyrLoad, e7e50f7); it logs the page's messages (B's must carry
+// the new page number), whether the switch was taken, and B's caption reply, so the reuse is seen working.
 //
 // Proves, for one video, what the Mac's caption sync (3c6c9319) relies on, in the Windows player's own engine: YouTube's
 // IFrame player, embedded from a virtual https host in WebView2 exactly as the Music video wallpaper embeds it, loads the
@@ -20,6 +25,8 @@ internal static class Program
     [STAThread]
     private static int Main(string[] args)
     {
+        if (args.Length >= 4 && args[0] == "--switch")
+            return Switch(args[1], args[2], args[3], args.Length > 4 ? int.Parse(args[4], System.Globalization.CultureInfo.InvariantCulture) : 40);
         if (args.Length < 3)
         {
             return 2;
@@ -105,6 +112,121 @@ internal static class Program
                     }
                 };
                 core.Navigate($"https://{Host}/player.html");
+                Log("navigating");
+                timer.Start();
+            }
+            catch (Exception ex)
+            {
+                Log($"failed: {ex.GetType().Name}: {ex.Message}");
+                context.ExitThread();
+            }
+        }
+
+        Start();
+        Application.Run(context);
+        controller?.Close();
+        File.WriteAllText(output, log.ToString(), new UTF8Encoding(false));
+        try
+        {
+            Thread.Sleep(1500);
+            Directory.Delete(userData, recursive: true);
+        }
+        catch (IOException)
+        {
+        }
+        catch (UnauthorizedAccessException)
+        {
+        }
+        return 0;
+    }
+
+    /// <summary>The switch probe: A plays in the wallpaper's page, then B is switched to in the same player.</summary>
+    private static int Switch(string first, string second, string output, int seconds)
+    {
+        var log = new StringBuilder();
+        var started = DateTime.Now;
+        void Log(string message)
+        {
+            lock (log) log.AppendLine($"{(DateTime.Now - started).TotalSeconds,6:F1}s  {message}");
+        }
+        Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
+        using var form = new Form
+        {
+            ShowInTaskbar = false, FormBorderStyle = FormBorderStyle.None, StartPosition = FormStartPosition.Manual,
+            Location = new System.Drawing.Point(-32000, -32000), Size = new System.Drawing.Size(640, 360),
+        };
+        var handle = form.Handle; // created, never shown
+        var userData = Path.Combine(Path.GetTempPath(), "lunalyr-switch-probe-" + Guid.NewGuid().ToString("N"));
+        var context = new ApplicationContext();
+        CoreWebView2Controller? controller = null;
+        var timer = new System.Windows.Forms.Timer { Interval = seconds * 1000 };
+        timer.Tick += (_, _) => { timer.Stop(); Log("done"); context.ExitThread(); };
+        var switched = false;
+        DateTime? firstPlaying = null;
+
+        async void Start()
+        {
+            try
+            {
+                var options = new CoreWebView2EnvironmentOptions { AdditionalBrowserArguments = "--mute-audio" };
+                var environment = await CoreWebView2Environment.CreateAsync(null, userData, options);
+                var controllerOptions = environment.CreateCoreWebView2ControllerOptions();
+                controllerOptions.IsInPrivateModeEnabled = true;
+                controller = await environment.CreateCoreWebView2ControllerAsync(handle, controllerOptions);
+                var core = controller.CoreWebView2;
+                core.IsMuted = true;
+                core.Settings.AreDevToolsEnabled = false;
+                core.Settings.AreDefaultContextMenusEnabled = false;
+                controller.Bounds = new System.Drawing.Rectangle(0, 0, 640, 360);
+                controller.IsVisible = true;
+                var page = Lunalyr.Core.MusicVideo.YouTubeEmbed.PageUrl(1);
+                core.AddWebResourceRequestedFilter($"{page.Scheme}://{page.Host}/*", CoreWebView2WebResourceContext.All);
+                core.WebResourceRequested += (_, e) =>
+                {
+                    var html = Encoding.UTF8.GetBytes(Lunalyr.Core.MusicVideo.YouTubeEmbed.Html(first, 0, 1, captions: "en"));
+                    e.Response = environment.CreateWebResourceResponse(new MemoryStream(html), 200, "OK",
+                        "Content-Type: text/html; charset=utf-8\r\nCache-Control: no-store\r\nReferrer-Policy: strict-origin-when-cross-origin");
+                };
+                core.NewWindowRequested += (_, e) => e.Handled = true;
+                core.PermissionRequested += (_, e) => e.State = CoreWebView2PermissionState.Deny;
+                core.WebMessageReceived += async (_, e) =>
+                {
+                    var json = e.WebMessageAsJson;
+                    Log("page: " + json);
+                    if (json.Contains("\"type\":\"ready\"", StringComparison.Ordinal))
+                    {
+                        await core.ExecuteScriptAsync("window.lunalyrPlay()");
+                        Log("asked to play");
+                    }
+                    if (!switched && json.Contains("\"type\":\"state\",\"value\":1", StringComparison.Ordinal)) firstPlaying ??= DateTime.Now;
+                    if (!switched && firstPlaying is { } at && DateTime.Now - at > TimeSpan.FromSeconds(4))
+                    {
+                        switched = true;
+                        var answer = await core.ExecuteScriptAsync(Lunalyr.Core.MusicVideo.YouTubeEmbed.SwitchScript(second, 0, 2, "en"));
+                        Log($"switch to {second}: {answer}");
+                    }
+                };
+                core.WebResourceResponseReceived += (_, e) =>
+                {
+                    var uri = e.Request.Uri;
+                    if (uri.Contains("/api/timedtext", StringComparison.Ordinal))
+                        Log($"timedtext: HTTP {e.Response.StatusCode}, v={(uri.Contains("v=" + second, StringComparison.Ordinal) ? second : uri.Contains("v=" + first, StringComparison.Ordinal) ? first : "?")}");
+                };
+                // Samples every second, which also triggers the switch once A has played a while.
+                var sampler = new System.Windows.Forms.Timer { Interval = 1000 };
+                sampler.Tick += async (_, _) =>
+                {
+                    var sample = await core.ExecuteScriptAsync("JSON.stringify(window.lunalyrSample && window.lunalyrSample())");
+                    Log("sample: " + sample);
+                    if (!switched && firstPlaying is { } at && DateTime.Now - at > TimeSpan.FromSeconds(4))
+                    {
+                        switched = true;
+                        var answer = await core.ExecuteScriptAsync(Lunalyr.Core.MusicVideo.YouTubeEmbed.SwitchScript(second, 0, 2, "en"));
+                        Log($"switch to {second}: {answer}");
+                    }
+                };
+                sampler.Start();
+                core.Navigate(page.AbsoluteUri);
                 Log("navigating");
                 timer.Start();
             }

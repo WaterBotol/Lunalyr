@@ -28,6 +28,13 @@ internal sealed class MusicVideoBackdropDrawer : IDisposable
     /// <summary>The blurred picture is ready (for the checks).</summary>
     public bool Ready => _blurred is not null;
 
+    /// <summary>The blurred picture as last drawn, and its size in pixels; null before.</summary>
+    public (ID2D1Bitmap1 Bitmap, int Width, int Height)? Picture =>
+        _bitmap is { } bitmap && _blurred is { } blurred ? (bitmap, blurred.Width, blurred.Height) : null;
+
+    /// <summary>The source of <see cref="Picture"/>.</summary>
+    public CoverArt? Source => _source;
+
     /// <summary>
     /// Draws the backdrop of <paramref name="source"/> over the whole of <paramref name="size"/>, or only around
     /// <paramref name="picture"/> (the bands it leaves) when given: there the surface stays as it is (see-through over

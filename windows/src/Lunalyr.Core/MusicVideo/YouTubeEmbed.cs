@@ -15,8 +15,8 @@
 //   (MusicVideoFraming.Whole) there is no overscan, the page is only as large as the visible picture and the player is
 //   sized inside it (Box, window.lunalyrBox) so YouTube's own letterbox bars fall outside. The player shows only while it
 //   plays (ShowsVideo): paused, ended or buffering, the wallpaper's layer covers it with the video's still. Shown whole, a
-//   player that starts playing stays covered for MusicVideoFramings.TitleOverlayHold (RevealDelay), and a buffering one is
-//   covered at once (HideDelay), so YouTube's start-of-play title overlay is never seen. The Mac's frozen frame (a picture
+//   player shows as soon as it plays, with YouTube's controls covered for their first seconds (MusicVideoOverlayMask), and
+//   a buffering one is covered at once (HideDelay). The Mac's frozen frame (a picture
 //   of a paused player) is not part of this; the still shows instead.
 // Silence does not rest on the page: the host mutes the whole WebView2 (CoreWebView2.IsMuted) before it navigates.
 
@@ -81,12 +81,6 @@ public static class YouTubeEmbed
     /// </summary>
     public static double HideDelay(bool buffering, MusicVideoHold hold, bool hasFrame, MusicVideoFraming framing = MusicVideoFraming.Fill) =>
         buffering && hold == MusicVideoHold.Live && !hasFrame && framing == MusicVideoFraming.Fill ? BufferingGrace : 0;
-
-    /// <summary>
-    /// How long a player that starts playing stays hidden before it is shown: none when filled (YouTube's title is
-    /// off-screen) or when it shows already; YouTube's title overlay's while when shown whole.
-    /// </summary>
-    public static double RevealDelay(MusicVideoFraming framing, bool showing) => showing ? 0 : framing.RevealHold();
 
     /// <summary>
     /// Shown whole: the player's size in per cent of the web view, which is only as large as the visible picture. A video of
@@ -184,6 +178,7 @@ public static class YouTubeEmbed
         var captionTrack = CaptionLanguage(captions) is { } track ? $"'{track}'" : "null";
         var captionsWanted = captions is null ? "false" : "true";
         var captionWait = ((int)(CaptionWait * 1000)).ToString(CultureInfo.InvariantCulture);
+        var cueWait = ((int)(CueWait * 1000)).ToString(CultureInfo.InvariantCulture);
         var pageText = page.ToString(CultureInfo.InvariantCulture);
         var zoom = Number(ClampOverscan(overscan));
         var boxText = box?.Script ?? "null";
@@ -201,8 +196,9 @@ public static class YouTubeEmbed
             <script>
             var player = null, ready = false, blurPx = 0, overscan = {{zoom}}, box = {{boxText}};
             var captionsWanted = {{captionsWanted}}, captionTrack = {{captionTrack}}, captionsLoaded = false, captionTimer = null;
+            var currentVideo = '{{videoId}}', currentPage = {{pageText}}, awaitingCue = false;
             function post(type, value) {
-              try { window.chrome.webview.postMessage({type: type, value: value, video: '{{videoId}}', page: {{pageText}}}); } catch (e) {}
+              try { window.chrome.webview.postMessage({type: type, value: value, video: currentVideo, page: currentPage}); } catch (e) {}
             }
             function visibleFor(state) { return state === 1; }
             function show(state) {
@@ -229,6 +225,8 @@ public static class YouTubeEmbed
                     var state = event.data;
                     if (state === 1 || state === 3) { player.mute(); }
                     if (state === -1 || state === 1 || state === 5) { hideCaptions(); }
+                    // Another video switched to in this player (lunalyrLoad) is ready once cued.
+                    if (state === 5 && awaitingCue) { awaitingCue = false; post('ready', 0); }
                     // Caption sync: the captions module is loaded (unseen) once the video plays, in the lyrics' language.
                     if (state === 1 && captionsWanted && !captionsLoaded) {
                       captionsLoaded = true;
@@ -252,6 +250,23 @@ public static class YouTubeEmbed
               if (captionTimer) { clearTimeout(captionTimer); captionTimer = null; }
               hideCaptions();
             };
+            // Another video in this same player (the Mac's YouTubePlayerReuse, e7e50f7): cued at start, not played (the sync
+            // loop plays it), numbered pageNo so its messages are told apart from the last video's; its captions are
+            // loaded again, unseen, when captions names a language ('' for the video's own track).
+            window.lunalyrLoad = function (id, start, pageNo, captions) {
+              if (!ready || !player || !player.cueVideoById) return false;
+              currentVideo = id; currentPage = pageNo;
+              show(-1);
+              player.mute();
+              if (captionTimer) { clearTimeout(captionTimer); captionTimer = null; }
+              captionsWanted = captions !== null; captionTrack = captions ? captions : null; captionsLoaded = false;
+              awaitingCue = true;
+              if (!captionsWanted) hideCaptions();
+              player.cueVideoById({videoId: id, startSeconds: Math.max(0, Math.floor(start))});
+              if (captionsWanted) captionTimer = setTimeout(window.lunalyrCaptionsDone, {{captionWait}});
+              setTimeout(function () { if (awaitingCue) { awaitingCue = false; post('ready', 0); } }, {{cueWait}});
+              return true;
+            };
             window.lunalyrPlay = function () { if (ready) { player.mute(); player.playVideo(); } };
             window.lunalyrPause = function () { if (ready) player.pauseVideo(); };
             window.lunalyrSeek = function (t) { if (ready) { player.mute(); player.seekTo(t, true); } };
@@ -270,6 +285,25 @@ public static class YouTubeEmbed
             <script src="https://www.youtube.com/iframe_api"></script>
             </body></html>
             """;
+    }
+
+    /// <summary>
+    /// A video switched to in the same player (<see cref="SwitchScript"/>) is taken as ready this long after it was asked
+    /// for, if the player never said it was cued (the Mac's cueWait).
+    /// </summary>
+    public const double CueWait = 2;
+
+    /// <summary>
+    /// Switches the ready player to <paramref name="videoId"/> (the page's lunalyrLoad), starting at
+    /// <paramref name="start"/>, numbered <paramref name="page"/>; <paramref name="captions"/> as for <see cref="Html"/>. The
+    /// script's result is "true" when it could.
+    /// </summary>
+    public static string SwitchScript(string videoId, double start, int page, string? captions)
+    {
+        if (!YouTubeVideoId.IsValid(videoId)) throw new ArgumentException("Not a YouTube video ID.", nameof(videoId));
+        var second = Math.Max(0, (int)(double.IsFinite(start) ? start : 0)).ToString(CultureInfo.InvariantCulture);
+        var track = captions is null ? "null" : CaptionLanguage(captions) is { } language ? $"'{language}'" : "''";
+        return $"!!(window.lunalyrLoad && window.lunalyrLoad('{videoId}', {second}, {page.ToString(CultureInfo.InvariantCulture)}, {track}))";
     }
 
     /// <summary>The page itself may load only its own address; YouTube's frames inside it load what they need.</summary>
@@ -358,7 +392,11 @@ public sealed class YouTubeEmbedSession
         }
     }
 
-    public enum EffectKind { None, Ready, Load, Fail, Visible }
+    /// <summary>
+    /// <see cref="EffectKind.Load"/>: a new page; <see cref="EffectKind.Switch"/>: the next video inside the page's ready player
+    /// (the Mac's YouTubePlayerReuse, e7e50f7: 0.8–1.2 s to a first frame against 2.0–2.5 s for a new page).
+    /// </summary>
+    public enum EffectKind { None, Ready, Load, Fail, Visible, Switch }
 
     /// <summary>What the host does next.</summary>
     public readonly record struct Effect(EffectKind Kind, string? VideoId = null, int Page = 0,
@@ -367,6 +405,7 @@ public sealed class YouTubeEmbedSession
         public static Effect None => new(EffectKind.None);
         public static Effect Ready => new(EffectKind.Ready);
         public static Effect Load(string videoId, int page) => new(EffectKind.Load, videoId, page);
+        public static Effect Switch(string videoId, int page) => new(EffectKind.Switch, videoId, page);
         public static Effect Fail(string videoId, MusicVideoPlaybackFailure failure) => new(EffectKind.Fail, videoId, Failure: failure);
         public static Effect Show(bool visible) => new(EffectKind.Visible, Visible: visible);
     }
@@ -400,15 +439,22 @@ public sealed class YouTubeEmbedSession
     /// <summary>Effects that arrive on their own (the ready timeout), on a pool thread.</summary>
     public Action<Effect>? OnEffect { get; set; }
 
-    /// <summary>A new video: a fresh page, with its own reload allowance.</summary>
+    /// <summary>
+    /// A new video, with its own reload allowance: switched to inside the page's player when that is up and well (the Mac's
+    /// YouTubePlayerReuse.load), else a fresh page.
+    /// </summary>
     public Effect Attach(string videoId)
     {
         Reloads = 0;
+        var reuse = YouTubePlayerReuse.LoadFor(hasView: VideoId is not null, pageReady: HasPlayer) == YouTubePlayerReuse.Load.SwitchVideo;
         VideoId = videoId;
-        return StartPage();
+        return StartPage(reuse);
     }
 
-    private Effect StartPage()
+    /// <summary>The page couldn't switch (its player went away): a fresh page instead.</summary>
+    public Effect SwitchRefused() => VideoId is null ? Effect.None : StartPage();
+
+    private Effect StartPage(bool switchVideo = false)
     {
         if (VideoId is not { } videoId) return Effect.None;
         Page++;
@@ -420,7 +466,7 @@ public sealed class YouTubeEmbedSession
         _timeout = cts;
         var page = Page;
         _ = WaitAsync(page, cts.Token);
-        return Effect.Load(videoId, page);
+        return switchVideo ? Effect.Switch(videoId, page) : Effect.Load(videoId, page);
     }
 
     private async Task WaitAsync(int page, CancellationToken ct)
@@ -509,4 +555,28 @@ public sealed class YouTubeEmbedSession
         VideoId = null;
         Ready = false;
     }
+}
+
+/// <summary>
+/// Showing the next YouTube video sooner (the Mac's YouTubePlayerReuse, e7e50f7): a page whose IFrame player is up is told to
+/// switch videos (lunalyrLoad, cueVideoById) instead of a new page loading YouTube's script and player again. On Windows one
+/// player host serves every song, so the Mac's parking of a layer's page has no counterpart: the page simply stays.
+/// </summary>
+public static class YouTubePlayerReuse
+{
+    /// <summary>How the page shows a video.</summary>
+    public enum Load
+    {
+        /// <summary>A new page (HTML, YouTube's script, a new player).</summary>
+        NewPage,
+
+        /// <summary>The video switched inside the page's ready player.</summary>
+        SwitchVideo,
+    }
+
+    /// <summary>
+    /// Switch inside the page only when its player is up and well: never a page still loading, one whose player failed, or
+    /// one whose web content quit (each of those loads a new page).
+    /// </summary>
+    public static Load LoadFor(bool hasView, bool pageReady) => hasView && pageReady ? Load.SwitchVideo : Load.NewPage;
 }

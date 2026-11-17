@@ -495,7 +495,8 @@ public sealed class MusicVideoTests
         Assert.Contains("mute=1", html);
         Assert.Contains("player.mute(); player.playVideo()", html);
         Assert.Contains("player.mute(); player.seekTo", html);
-        Assert.Contains("video: '4NRXx6U8ABQ', page: 3", html);
+        Assert.Contains("var currentVideo = '4NRXx6U8ABQ', currentPage = 3", html); // named per video, as a switch renames them
+        Assert.Contains("video: currentVideo, page: currentPage", html);
     }
 
     // ---- The embed page's life ----

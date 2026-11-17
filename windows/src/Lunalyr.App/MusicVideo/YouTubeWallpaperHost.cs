@@ -73,6 +73,8 @@ internal sealed partial class YouTubeWallpaperHost : IMusicVideoPlaybackSurface,
     // The ambient glow (the Mac's captureAmbient): the player's picture taken about once a second while it shows.
     private DispatcherQueueTimer? _glowTimer;
     private bool _glowBusy;
+    // When the player was last uncovered shown whole: YouTube's controls show for a while (MusicVideoOverlayMask).
+    private double? _controlsAt;
     private readonly YouTubePlayerReveal _reveal;
     /// <summary>What the page and the WebView2 were last given: framing, box, blur, bounds (null: nothing yet).</summary>
     private (MusicVideoFraming Framing, YouTubeEmbed.Box? Box, double Blur, Windows.Foundation.Rect Bounds)? _look;
@@ -260,6 +262,24 @@ internal sealed partial class YouTubeWallpaperHost : IMusicVideoPlaybackSurface,
         core.WebResourceResponseReceived += (sender, e) => _ = CaptureCaptionsAsync(e);
     }
 
+    /// <summary>Asks the page to switch to <paramref name="videoId"/>; a page that can't loads afresh instead.</summary>
+    private async Task SwitchAsync(string videoId, int page)
+    {
+        string? answer = null;
+        try
+        {
+            var script = YouTubeEmbed.SwitchScript(videoId, _pageStart, page, AskCaptions(videoId));
+            if (_controller is { } controller) answer = await controller.CoreWebView2.ExecuteScriptAsync(script);
+        }
+        catch (Exception ex) when (ex is COMException or InvalidOperationException or ArgumentException)
+        {
+            _log.Debug($"Music video: switching YouTube's player failed ({ex.Message}).");
+        }
+        if (_disposed || _session.Page != page || _pageVideo != videoId) return;
+        if (answer == "true") _log.Debug("Music video: the next video plays in the same YouTube player.");
+        else Perform(_session.SwitchRefused());
+    }
+
     /// <summary>The page itself, from memory, for the current video and page; nothing else on the virtual host exists.</summary>
     private void Serve(CoreWebView2WebResourceRequestedEventArgs e)
     {
@@ -407,6 +427,17 @@ internal sealed partial class YouTubeWallpaperHost : IMusicVideoPlaybackSurface,
                 ApplyLook();
                 _controller.CoreWebView2.Navigate(YouTubeEmbed.PageUrl(effect.Page).AbsoluteUri);
                 break;
+            case YouTubeEmbedSession.EffectKind.Switch when _controller is not null && effect.VideoId is { } next:
+                // The next video in the page's ready player (the Mac's lunalyrLoad): covered until it plays, as a new page is.
+                _reveal.Reset();
+                Uncover(false);
+                _pageVideo = next;
+                _pageNumber = effect.Page;
+                _pageStart = MusicVideoTiming.VideoTime(_app.ReadSongPosition().Time, _video.CurrentOffset, null) ?? 0;
+                _look = null;
+                ApplyLook();
+                _ = SwitchAsync(next, effect.Page);
+                break;
             case YouTubeEmbedSession.EffectKind.Visible:
                 _reveal.Set(effect.Visible, buffering);
                 break;
@@ -431,6 +462,7 @@ internal sealed partial class YouTubeWallpaperHost : IMusicVideoPlaybackSurface,
         visible &= _controller is not null && _session.HasPlayer;
         if (_feed.PlayerVisible == visible) return;
         _feed.PlayerVisible = visible;
+        _controlsAt = visible && MusicVideoOverlayMask.Covers(_settings().YouTubeFraming, wasShowing: false) ? Environment.TickCount64 / 1000.0 : null;
         FollowGlow();
         // A wallpaper frozen by "Pause wallpaper" (or resting) still redraws once, so it covers a player that stopped.
         _engine.RequestFrame();
@@ -690,6 +722,8 @@ internal sealed partial class YouTubeWallpaperHost : IMusicVideoPlaybackSurface,
     {
         if (_glowBusy || _core is not { } core || !_feed.PlayerVisible || !_settings().YouTubeFraming.FollowsVideo()
             || !_app.ReadSongPosition().Playing) return;
+        // Not while YouTube's controls are drawn (covered only on screen): they would tint the glow.
+        if (!MusicVideoOverlayMask.Capturable(Environment.TickCount64 / 1000.0, _controlsAt)) return;
         _glowBusy = true;
         var video = _videoId;
         try

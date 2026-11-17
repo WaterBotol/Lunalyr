@@ -270,6 +270,41 @@ public sealed class MusicVideoLayerTests : IDisposable
         Assert.Equal(0, MaxAlpha(_surface.ReadPixels()));
     }
 
+    // After the Mac's e7e50f7: shown whole, the player shows as soon as it plays, with YouTube's controls covered by the
+    // video's blurred still for their first seconds; then it is see-through again.
+    [Fact]
+    public void ShownWholeYouTubesControlsAreCoveredForTheirFirstSeconds()
+    {
+        var red = new byte[32 * 18 * 4];
+        for (var i = 0; i < red.Length; i += 4) { red[i + 2] = 220; red[i + 3] = 255; }
+        var still = new Lunalyr.Core.Colour.CoverArt(32, 18, red);
+        var feed = new Feed
+        {
+            Inputs = new MusicVideoInputs(null, 3, true, 0, 0, 0, PlayerVisible: false, Still: still, YouTubeFraming: MusicVideoFraming.Whole),
+        };
+        using var layer = new YouTubeVideoLayerFactory(feed, Plain).Create();
+        _surface.Prepare(layer);
+        // Covered first, while the still's backdrop is blurred off the render thread.
+        for (var i = 0; i < 100; i++)
+        {
+            DrawTransparent(layer, wall: 1);
+            Thread.Sleep(10);
+        }
+        feed.Inputs = feed.Inputs with { PlayerVisible = true };
+        DrawTransparent(layer, wall: 2);
+        int Alpha(byte[] pixels, int x, int y) => pixels[(y * Width + x) * 4 + 3];
+        var covered = _surface.ReadPixels();
+        Assert.True(Alpha(covered, Width / 2, Height / 2) > 200, "the middle button is covered");
+        DrawTransparent(layer, wall: 2 + MusicVideoOverlayMask.Hold + MusicVideoOverlayMask.FadeOut + 0.1);
+        Assert.Equal(0, Alpha(_surface.ReadPixels(), Width / 2, Height / 2)); // the controls have gone: see-through
+        // Paused and played again: covered again.
+        feed.Inputs = feed.Inputs with { PlayerVisible = false };
+        DrawTransparent(layer, wall: 9);
+        feed.Inputs = feed.Inputs with { PlayerVisible = true };
+        DrawTransparent(layer, wall: 10);
+        Assert.True(Alpha(_surface.ReadPixels(), Width / 2, Height / 2) > 200);
+    }
+
     // After the Mac's 7ef2908 (Whole video, ambient glow): the glow the player's host samples shows in the bands, cross-faded in.
     [Fact]
     public void TheAmbientGlowShowsAroundTheWholePicture()

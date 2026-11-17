@@ -20,8 +20,8 @@ public enum MusicVideoFraming
     /// The picture's width matched to the screen's (grown by <see cref="MusicVideoFramings.WholeBleed"/>): nothing is cut from
     /// its sides. A picture wider than the screen leaves space above and below, which shows a blurred, darkened copy of the
     /// album cover or the video's own still, never black bars; a taller one (4:3 on a 16:10 screen) loses a little of its
-    /// top and bottom. A YouTube player stays hidden for its first <see cref="MusicVideoFramings.TitleOverlayHold"/> of play,
-    /// behind the still, while YouTube's title overlay fades.
+    /// top and bottom. A YouTube player shows as soon as it plays; YouTube's controls over its first seconds are covered
+    /// (<see cref="MusicVideoOverlayMask"/>, the Mac's e7e50f7).
     /// </summary>
     Whole,
 
@@ -83,14 +83,6 @@ public static class MusicVideoFramings
     /// <summary>A fitted picture is grown this much, so no hairline shows at its edge.</summary>
     public const double WholeBleed = 1.01;
 
-    /// <summary>
-    /// YouTube shows the video's title, channel, a pause button, "More videos" and its logo over the first seconds of play,
-    /// and again after a pause or a seek. Filled, they are off-screen; fitted, the player is revealed only once they have
-    /// faded. Measured on the Mac on four official videos (13 Nov 2026): gone 4.0–4.4 s after playing starts, after a
-    /// start, a resume and a seek alike.
-    /// </summary>
-    public const double TitleOverlayHold = 5;
-
     /// <summary>The stored value ("fill", "whole" or "ambient").</summary>
     public static string Value(this MusicVideoFraming framing) => framing switch
     {
@@ -117,9 +109,6 @@ public static class MusicVideoFramings
 
     /// <summary>The YouTube page's zoom of its player.</summary>
     public static double YouTubeOverscan(this MusicVideoFraming framing) => framing == MusicVideoFraming.Fill ? FillOverscan : 1;
-
-    /// <summary>How long a YouTube player that starts playing stays hidden.</summary>
-    public static double RevealHold(this MusicVideoFraming framing) => framing.IsWhole() ? TitleOverlayHold : 0;
 
     /// <summary>
     /// How a video file of <paramref name="contentAspect"/> (null until known) is drawn in <paramref name="container"/>:
@@ -392,5 +381,65 @@ public static class MusicVideoBackdrop
                 to[o + 3] = a;
             }
         }
+    }
+}
+
+/// <summary>
+/// YouTube draws its player controls over the video for the first seconds of play, and again after a pause or a seek: the
+/// title and channel along the top, a pause button in the middle, and "Copy link", "More videos" and "Watch on YouTube"
+/// along the bottom. Filled, they fall off-screen. Shown whole, the player is revealed at once and those regions are covered
+/// with a blurred copy of the video's still, feathered into the picture, until the controls have gone (the Mac's
+/// MusicVideoOverlayMask, e7e50f7 and 92992f0). Measured in the embed on the Mac (16 Nov 2026, players 960×540 and
+/// 1527×859 pt): the controls are the same size in points at any player size, the top strip 0–60 pt, the middle button
+/// 124×56 pt at the centre, the bottom bar 48 pt tall ending 12 pt above the bottom; all hidden 3.8–4.0 s after playing
+/// starts.
+/// </summary>
+public static class MusicVideoOverlayMask
+{
+    /// <summary>How long the regions stay covered after the player starts showing, in seconds.</summary>
+    public const double Hold = 4.5;
+
+    /// <summary>Then the cover fades away over this.</summary>
+    public const double FadeOut = 0.5;
+
+    /// <summary>The covered regions, a little larger than the controls, in points.</summary>
+    public const double TopBand = 76, BottomBand = 76, MiddleWidth = 180, MiddleHeight = 100;
+
+    /// <summary>How far the cover's edges are feathered, in points.</summary>
+    public const double Feather = 14;
+
+    /// <summary>Whether the cover shows when the player starts showing: shown whole, whenever it was not already showing (a start, a resume, a seek).</summary>
+    public static bool Covers(MusicVideoFraming framing, bool wasShowing) => framing.IsWhole() && !wasShowing;
+
+    /// <summary>Whether the picture may be taken (the ambient glow's sample): not while the controls are drawn, covered only on screen.</summary>
+    public static bool Capturable(double now, double? coveredAt) =>
+        coveredAt is not { } at || now - at >= Hold || now < at;
+
+    /// <summary>How strongly the cover shows <paramref name="since"/> seconds after it went up: whole for the hold, then fading.</summary>
+    public static double Opacity(double since) =>
+        !(since >= 0) ? 0 : since < Hold ? 1 : Math.Clamp(1 - (since - Hold) / FadeOut, 0, 1);
+
+    /// <summary>
+    /// The covered regions in the visible part of a whole video, whose 16:9 player (<paramref name="player"/>) is centred on
+    /// it (<paramref name="visible"/>); parts off-screen are left out.
+    /// </summary>
+    public static IReadOnlyList<VideoRect> Regions(VideoSize player, VideoSize visible)
+    {
+        if (!(player.Width > 0) || !(player.Height > 0) || !(visible.Width > 0) || !(visible.Height > 0)) return [];
+        double x = (visible.Width - player.Width) / 2, y = (visible.Height - player.Height) / 2;
+        VideoRect[] rects =
+        [
+            new(x, y, player.Width, TopBand),
+            new(x + (player.Width - MiddleWidth) / 2, y + (player.Height - MiddleHeight) / 2, MiddleWidth, MiddleHeight),
+            new(x, y + player.Height - BottomBand, player.Width, BottomBand),
+        ];
+        var shown = new List<VideoRect>(3);
+        foreach (var r in rects)
+        {
+            double left = Math.Max(0, r.X), top = Math.Max(0, r.Y);
+            double right = Math.Min(visible.Width, r.X + r.Width), bottom = Math.Min(visible.Height, r.Y + r.Height);
+            if (right - left > 1 && bottom - top > 1) shown.Add(new VideoRect(left, top, right - left, bottom - top));
+        }
+        return shown;
     }
 }

@@ -723,6 +723,9 @@ public sealed class YouTubeVideoLayer : IRenderLayer, ISeeThroughLayer, IMeasure
     private readonly MusicVideoBackdropDrawer _backdrop = new();
     private readonly MusicVideoGlowDrawer _glow = new();
     private CoverArt? _glowShown;
+    // YouTube's controls over the first seconds of play, covered when shown whole (the Mac's MusicVideoOverlayMask).
+    private bool _wasUncovered;
+    private double _coveredAt = double.NegativeInfinity;
     private readonly Logger _log;
     private Vector2 _size;
     private float _scale = 1;
@@ -773,6 +776,9 @@ public sealed class YouTubeVideoLayer : IRenderLayer, ISeeThroughLayer, IMeasure
             // the video's still, which there would sit frozen for the whole song (Windows' choice; the Mac shows the still).
             // The offscreen settings preview shows the still.
             var uncovered = inputs.PlayerVisible && frame.AheadWork is not null && frame.IsMainDisplay;
+            // A start, a resume or a seek shown whole: YouTube's controls are drawn for a while, so they are covered.
+            if (uncovered && MusicVideoOverlayMask.Covers(inputs.YouTubeFraming, _wasUncovered)) _coveredAt = frame.WallSeconds;
+            _wasUncovered = uncovered;
             HasFirstFrame = frame.AheadWork is not null && !frame.IsMainDisplay ? true
                 : frame.AheadWork is not null && !frame.Scene.ReduceMotion ? uncovered
                 : inputs.Still is not null;
@@ -851,7 +857,11 @@ public sealed class YouTubeVideoLayer : IRenderLayer, ISeeThroughLayer, IMeasure
             }
             _glow.Draw(dc, _size, frame.WallSeconds, frame.Scene.ReduceMotion, cut);
         }
-        if (uncovered) return;
+        if (uncovered)
+        {
+            CoverControls(dc, inputs, layout, container, visible, frame.WallSeconds);
+            return;
+        }
         dc.PushAxisAlignedClip(new Vortice.RawRectF((float)visible.X, (float)visible.Y, (float)(visible.X + visible.Width),
             (float)(visible.Y + visible.Height)), AntialiasMode.Aliased);
         // Aspect-filled into the 16:9 player's frame (a 4:3 hqdefault still, with its own baked-in bars, is cropped, not
@@ -865,6 +875,40 @@ public sealed class YouTubeVideoLayer : IRenderLayer, ISeeThroughLayer, IMeasure
         }
         DrawStill(dc, inputs, frame.WallSeconds, stillRect);
         dc.PopAxisAlignedClip();
+    }
+
+    /// <summary>
+    /// Over a whole player just shown: YouTube's controls (top, middle, bottom) covered with the video's blurred still,
+    /// feathered into the picture, for <see cref="MusicVideoOverlayMask.Hold"/>, then fading (the Mac's e7e50f7). The
+    /// feather is drawn as a few nested copies, each a little further in, so the cover thins out towards its edge.
+    /// </summary>
+    private void CoverControls(ID2D1DeviceContext dc, MusicVideoInputs inputs, MusicVideoFramings.WholeLayout layout, VideoSize container,
+                               VideoRect visible, double now)
+    {
+        var opacity = MusicVideoOverlayMask.Opacity(now - _coveredAt);
+        if (opacity <= 0.002 || inputs.Still is null || !ReferenceEquals(_backdrop.Source, inputs.Still)
+            || _backdrop.Picture is not { } picture) return;
+        // The blurred still is the video's own picture (YouTube's bars cut out): drawn where the picture's frame lies.
+        var frameRect = new Vortice.RawRectF((float)((container.Width - layout.Frame.Width) / 2), (float)((container.Height - layout.Frame.Height) / 2),
+            (float)((container.Width + layout.Frame.Width) / 2), (float)((container.Height + layout.Frame.Height) / 2));
+        var source = new Vortice.RawRectF(0, 0, picture.Width, picture.Height);
+        const int steps = 6;
+        // Each nested copy adds this much; together they reach 97 % where the feather ends.
+        var step = (float)(1 - Math.Pow(0.03, 1.0 / steps));
+        var feather = MusicVideoOverlayMask.Feather;
+        foreach (var region in MusicVideoOverlayMask.Regions(layout.Player, layout.Visible))
+        {
+            double x = visible.X + region.X, y = visible.Y + region.Y;
+            for (var i = 0; i <= steps; i++)
+            {
+                var inset = Math.Min(feather * i / steps, Math.Min(region.Width, region.Height) / 2 - 1);
+                if (inset < 0) break;
+                var clip = new Vortice.RawRectF((float)(x + inset), (float)(y + inset), (float)(x + region.Width - inset), (float)(y + region.Height - inset));
+                dc.PushAxisAlignedClip(clip, AntialiasMode.PerPrimitive);
+                dc.DrawBitmap(picture.Bitmap, frameRect, (float)opacity * (i == steps ? 1 : step), InterpolationMode.Linear, source, null);
+                dc.PopAxisAlignedClip();
+            }
+        }
     }
 
     /// <summary>
