@@ -90,25 +90,50 @@ enum QQMusicTripleDES {
     }
 
     private static func f(_ state: UInt32, _ key: RoundKey) -> UInt32 {
-        let t1 = bitnumIntl(state, 31, 0) | ((state & 0xf000_0000) >> 1) | bitnumIntl(state, 4, 5) |
-            bitnumIntl(state, 3, 6) | ((state & 0x0f00_0000) >> 3) | bitnumIntl(state, 8, 11) |
-            bitnumIntl(state, 7, 12) | ((state & 0x00f0_0000) >> 5) | bitnumIntl(state, 12, 17) |
-            bitnumIntl(state, 11, 18) | ((state & 0x000f_0000) >> 7) | bitnumIntl(state, 16, 23)
-        let t2 = bitnumIntl(state, 15, 0) | ((state & 0x0000_f000) << 15) | bitnumIntl(state, 20, 5) |
-            bitnumIntl(state, 19, 6) | ((state & 0x0000_0f00) << 13) | bitnumIntl(state, 24, 11) |
-            bitnumIntl(state, 23, 12) | ((state & 0x0000_00f0) << 11) | bitnumIntl(state, 28, 17) |
-            bitnumIntl(state, 27, 18) | ((state & 0x0000_000f) << 9) | bitnumIntl(state, 0, 23)
-        var l = [Int((t1 >> 24) & 0xff), Int((t1 >> 16) & 0xff), Int((t1 >> 8) & 0xff),
-                 Int((t2 >> 24) & 0xff), Int((t2 >> 16) & 0xff), Int((t2 >> 8) & 0xff)]
+        // Built up a term at a time, each typed: Xcode 16.4 (CI) cannot
+        // type-check these as single expressions in reasonable time.
+        var t1: UInt32 = bitnumIntl(state, 31, 0)
+        t1 |= (state & 0xf000_0000) >> 1
+        t1 |= bitnumIntl(state, 4, 5)
+        t1 |= bitnumIntl(state, 3, 6)
+        t1 |= (state & 0x0f00_0000) >> 3
+        t1 |= bitnumIntl(state, 8, 11)
+        t1 |= bitnumIntl(state, 7, 12)
+        t1 |= (state & 0x00f0_0000) >> 5
+        t1 |= bitnumIntl(state, 12, 17)
+        t1 |= bitnumIntl(state, 11, 18)
+        t1 |= (state & 0x000f_0000) >> 7
+        t1 |= bitnumIntl(state, 16, 23)
+        var t2: UInt32 = bitnumIntl(state, 15, 0)
+        t2 |= (state & 0x0000_f000) << 15
+        t2 |= bitnumIntl(state, 20, 5)
+        t2 |= bitnumIntl(state, 19, 6)
+        t2 |= (state & 0x0000_0f00) << 13
+        t2 |= bitnumIntl(state, 24, 11)
+        t2 |= bitnumIntl(state, 23, 12)
+        t2 |= (state & 0x0000_00f0) << 11
+        t2 |= bitnumIntl(state, 28, 17)
+        t2 |= bitnumIntl(state, 27, 18)
+        t2 |= (state & 0x0000_000f) << 9
+        t2 |= bitnumIntl(state, 0, 23)
+        var l: [Int] = [Int((t1 >> 24) & 0xff), Int((t1 >> 16) & 0xff), Int((t1 >> 8) & 0xff),
+                        Int((t2 >> 24) & 0xff), Int((t2 >> 16) & 0xff), Int((t2 >> 8) & 0xff)]
         for index in 0..<6 { l[index] ^= key[index] }
-        let s = (UInt32(sbox[0][sboxBit(l[0] >> 2)]) << 28) |
-            (UInt32(sbox[1][sboxBit(((l[0] & 0x03) << 4) | (l[1] >> 4))]) << 24) |
-            (UInt32(sbox[2][sboxBit(((l[1] & 0x0f) << 2) | (l[2] >> 6))]) << 20) |
-            (UInt32(sbox[3][sboxBit(l[2] & 0x3f)]) << 16) |
-            (UInt32(sbox[4][sboxBit(l[3] >> 2)]) << 12) |
-            (UInt32(sbox[5][sboxBit(((l[3] & 0x03) << 4) | (l[4] >> 4))]) << 8) |
-            (UInt32(sbox[6][sboxBit(((l[4] & 0x0f) << 2) | (l[5] >> 6))]) << 4) |
-            UInt32(sbox[7][sboxBit(l[5] & 0x3f)])
+        let six: [Int] = [
+            l[0] >> 2,
+            ((l[0] & 0x03) << 4) | (l[1] >> 4),
+            ((l[1] & 0x0f) << 2) | (l[2] >> 6),
+            l[2] & 0x3f,
+            l[3] >> 2,
+            ((l[3] & 0x03) << 4) | (l[4] >> 4),
+            ((l[4] & 0x0f) << 2) | (l[5] >> 6),
+            l[5] & 0x3f,
+        ]
+        var s: UInt32 = 0
+        for box in 0..<8 {
+            let value: UInt32 = UInt32(sbox[box][sboxBit(six[box])])
+            s |= value << UInt32(28 - 4 * box)
+        }
         let permutation = [15, 6, 19, 20, 28, 11, 27, 16, 0, 14, 22, 25, 4, 17, 30, 9,
                            1, 7, 23, 13, 31, 26, 2, 8, 18, 12, 29, 5, 21, 10, 3, 24]
         var out: UInt32 = 0
