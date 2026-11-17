@@ -95,6 +95,9 @@ public static class FloatingTitleFrame
     /// <summary>The smallest title the stacked card is drawn with; below it the card is a single row: cover, title, artist.</summary>
     public const double MinimumStackedTitle = 14;
 
+    /// <summary>Seconds the card and its row cross-fade for as the window crosses <see cref="MinimumStackedTitle"/>.</summary>
+    public const double CrossFade = 0.25;
+
     /// <summary>The share of the card's height and width its contents use.</summary>
     public const double Fill = 0.9;
 

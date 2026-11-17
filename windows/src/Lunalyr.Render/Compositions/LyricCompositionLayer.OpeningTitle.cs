@@ -23,6 +23,12 @@ namespace Lunalyr.Render.Compositions;
 internal abstract partial class LyricCompositionLayer
 {
     private OpeningCard? _card;
+
+    // The title card's own window keeps its stacked card and its row both, so a cross-fade between them builds neither again.
+    private OpeningCard? _rowCard;
+    private bool? _titleStacked;
+    private double _titleSwitchAt = double.NegativeInfinity;
+    private double _titleFade = 1;
     private CoverArt? _coverSource;
     private ID2D1Bitmap1? _coverBitmap;
     private ID2D1BitmapBrush1? _coverBrush;
@@ -215,27 +221,52 @@ internal abstract partial class LyricCompositionLayer
             return;
         }
         var floating = FloatingStage;
-        var titleOnly = scene.Style.FloatingTitleOnly;
-        if (titleOnly)
+        if (scene.Style.FloatingTitleOnly)
         {
             // The card's own window: the desktop's stacked card scaled to its box, or one row once that box is too small for a
-            // readable stacked title (the Mac's FloatingTitleFrame.layout).
+            // readable stacked title (the Mac's FloatingTitleFrame.layout), the two cross-fading as it crosses the line.
             var titleCompact = phase.Size == OpeningSize.Compact;
             var arrived = OpeningReveal.At(phase.Age, phase.Size, ReduceMotion).Title;
             TitlePresence = Math.Clamp(Math.Min(1, arrived * 1.6) * (1 - Easing.Smoothstep(phase.Exit)), 0, 1);
-            var layout = TitleLayout(titleCompact);
-            if (!layout.Stacked)
+            var stacked = TitleLayout(titleCompact).Stacked;
+            var wall = frame.WallSeconds;
+            if (_titleStacked != stacked)
             {
-                DrawRow(dc, scene, phase, frame.WallSeconds);
-                return;
+                if (_titleStacked is not null && !ReduceMotion) _titleSwitchAt = wall;
+                _titleStacked = stacked;
             }
+            var through = Math.Clamp((wall - _titleSwitchAt) / FloatingTitleFrame.CrossFade, 0, 1);
+            try
+            {
+                if (through < 1)
+                {
+                    IsAnimating = true;
+                    _titleFade = 1 - through;
+                    if (stacked) DrawRow(dc, scene, phase, wall);
+                    else DrawStackedCard(dc, scene, phase, frame, floating, titleCompact);
+                }
+                _titleFade = through;
+                if (stacked) DrawStackedCard(dc, scene, phase, frame, floating, titleCompact);
+                else DrawRow(dc, scene, phase, wall);
+            }
+            finally
+            {
+                _titleFade = 1;
+            }
+            return;
         }
-        else if (floating && phase.Kept)
+        if (floating && phase.Kept)
         {
             DrawRow(dc, scene, phase, frame.WallSeconds);
             return;
         }
-        var compact = titleOnly ? phase.Size == OpeningSize.Compact : floating || phase.Size == OpeningSize.Compact;
+        DrawStackedCard(dc, scene, phase, frame, floating, floating || phase.Size == OpeningSize.Compact);
+    }
+
+    /// <summary>The stacked card: its cover, title, reading, artist and album, as it arrives, rests and leaves.</summary>
+    private void DrawStackedCard(ID2D1DeviceContext dc, SceneSnapshot scene, in OpeningPhase phase, in FrameContext frame,
+                                 bool floating, bool compact)
+    {
         var card = Card(dc, scene, compact, phase.Age);
         if (card is null) return;
         var coverFade = CoverFade(scene, frame.WallSeconds);
@@ -244,8 +275,9 @@ internal abstract partial class LyricCompositionLayer
         var reveal = OpeningReveal.At(phase.Age, compact ? OpeningSize.Compact : phase.Size, reduce);
         var leaving = Easing.Smoothstep(phase.Exit);
         var unit = card.Unit;
-        // A staying card settles to a quieter rest after a while: a kept one at Title strength.
-        var opacity = (1 - leaving) * phase.Opacity;
+        // A staying card settles to a quieter rest after a while: a kept one at Title strength. In the card's own window it
+        // may be cross-fading with its row.
+        var opacity = (1 - leaving) * phase.Opacity * _titleFade;
         var blur = reduce ? 0f : (float)(leaving * unit * 0.06);
         var lift = reduce ? 0f : (float)(-leaving * unit * 0.14);
         var rise = reduce ? 0 : unit * 0.32;
@@ -349,7 +381,7 @@ internal abstract partial class LyricCompositionLayer
         var reveal = OpeningReveal.At(phase.Age, OpeningSize.Compact, reduce);
         var leaving = Easing.Smoothstep(phase.Exit);
         var arrival = reduce ? reveal.Title : Easing.Smoothstep(reveal.Title);
-        var alpha = Math.Min(1, arrival * 1.4) * (1 - leaving) * phase.Opacity;
+        var alpha = Math.Min(1, arrival * 1.4) * (1 - leaving) * phase.Opacity * _titleFade;
         if (!(alpha > 0.002)) return;
         // Settles in from beyond its edge (the top, or the foot where it was put), and lifts back out that way.
         var dy = reduce ? 0f : (float)((card.Key.RowPlace.Bottom ? 1 : -1) * (1 - arrival + leaving) * card.Unit * 0.18);
@@ -653,20 +685,22 @@ internal abstract partial class LyricCompositionLayer
                               slot, FloatingStage, scene.Style.FontFamily, SurfaceSize, Scale, BaseSize, dark,
                               SettledInk.Dot is { } dot ? LyricInks.Vector(dot) : TextColour, row,
                               scene.Style.OpeningTitlePlacement, scene.Style.OpeningTitleRow, TitleUnit(compact, row, scene));
-        if (_card is { } current && current.Key == key) return current;
-        _card?.Dispose();
-        _card = null;
+        // Only the title card's window keeps a row beside its card; elsewhere one card at a time.
+        ref var held = ref (row && scene.Style.FloatingTitleOnly ? ref _rowCard : ref _card);
+        if (held is { } current && current.Key == key) return current;
+        held?.Dispose();
+        held = null;
         SyncShade(dc, dark);
         Meter.Enter();
         try
         {
-            _card = key.Row ? BuildRow(key) : BuildCard(key);
+            held = key.Row ? BuildRow(key) : BuildCard(key);
         }
         finally
         {
             Meter.Exit();
         }
-        return _card;
+        return held;
     }
 
     /// <summary>Dark type, for a lyric ink chosen against a light backdrop (the Mac's <c>OpeningTitleCard.isDark</c>).</summary>
@@ -750,6 +784,8 @@ internal abstract partial class LyricCompositionLayer
         ReleaseCardVideo();
         _card?.Dispose();
         _card = null;
+        _rowCard?.Dispose();
+        _rowCard = null;
         DropCover();
         DropShade();
     }

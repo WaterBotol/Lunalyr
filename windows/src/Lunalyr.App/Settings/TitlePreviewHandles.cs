@@ -16,10 +16,10 @@ namespace Lunalyr.App.Settings;
 /// <summary>
 /// The song title's box on the Settings picture, with handles (the Mac's <c>TitleCardHandles</c> and
 /// <c>FloatingTitleHandles</c>, 3276613 and dece022). On the desktop: drag the box to move the title card, drag its
-/// top-right corner to scale it (60–160%) from its lower-left corner; kept on screen. With the lyrics floating and the
-/// title kept on screen: drag the row along the floating window and to its top or foot (whichever half it is dropped
-/// in), drag its corner to scale it. Saved as it moves; the picture stands for a desktop laid out as the preview draws
-/// it (or, floating, the display the window is on).
+/// top-right corner to scale it (60–160%) from its lower-left corner; kept on screen. With the lyrics floating, the song
+/// title card's own window (the Mac's b11a1ab3): drag it to move it, drag its lower-right corner to resize it, no smaller
+/// than its least and kept on the display; its frame is kept for the first floating display. Saved as it moves; the
+/// picture stands for a desktop laid out as the preview draws it (or, floating, the display the window is on).
 /// </summary>
 internal sealed class TitlePreviewHandles
 {
@@ -32,18 +32,22 @@ internal sealed class TitlePreviewHandles
     private readonly Rectangle _grip;
     private readonly TextBlock _label;
     private Drag? _drag;
+    private InputSystemCursorShape _gripCursor = InputSystemCursorShape.SizeNortheastSouthwest;
     private FloatingLyricsOptions? _windowFor;
     private DateTime _windowAt;
-    private (FloatingDisplay Geometry, FloatingRect Frame)? _window;
+    private (string Display, FloatingDisplay Geometry, FloatingRect Frame)? _window;
+    private object? _framesFor, _startFor;
 
     /// <summary>What a drag started from: the desktop card's box (desktop points) or the row's box on the picture.</summary>
-    private sealed record Drag(bool Row, bool Resizing, Windows.Foundation.Point Pointer, (double X, double Y, double Width, double Height) Box,
-                               OpeningTitlePlacement Placement, OpeningTitleRow RowPlace, (double X, double Y, double Width, double Height) Window,
-                               (double Width, double Height) Desktop, double BaseSize)
+    private sealed record Drag(bool Resizing, Windows.Foundation.Point Pointer, (double X, double Y, double Width, double Height) Box,
+                               OpeningTitlePlacement Placement, (double Width, double Height) Desktop, double BaseSize)
     {
         public DateTime LastSent { get; set; }
         public OpeningTitlePlacement NowPlacement { get; set; }
-        public OpeningTitleRow NowRow { get; set; }
+
+        /// <summary>The floating title card's window being placed: its display and frame (relative to it) at the start.</summary>
+        public (string DisplayKey, FloatingDisplay Geometry, FloatingRect Start)? Card { get; init; }
+        public FloatingRect NowCard { get; set; }
     }
 
     public TitlePreviewHandles(AppHost host)
@@ -65,7 +69,7 @@ internal sealed class TitlePreviewHandles
             Fill = new SolidColorBrush(Colors.White), Stroke = accent, StrokeThickness = 1.5,
         };
         _grip.PointerPressed += (_, e) => Begin(e, resizing: true);
-        _grip.PointerEntered += (_, _) => _canvas.Pointer(InputSystemCursor.Create(InputSystemCursorShape.SizeNortheastSouthwest));
+        _grip.PointerEntered += (_, _) => _canvas.Pointer(InputSystemCursor.Create(_gripCursor));
         _label = new TextBlock
         {
             Text = "Song title", FontSize = 11, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, IsHitTestVisible = false,
@@ -89,8 +93,8 @@ internal sealed class TitlePreviewHandles
         if (_drag is not null) return;
         var settings = _host.Settings.Current;
         var options = _host.Controller?.Floating;
-        // Floating, only a title kept on screen has a row to place.
-        if (!settings.OpeningTitle || (options is { Enabled: true } && !settings.OpeningTitleAlways))
+        // Floating, the title card's window is placed, while it shows.
+        if (!settings.OpeningTitle || (options is { Enabled: true } && !settings.FloatingTitleCard))
         {
             _canvas.Visibility = Visibility.Collapsed;
             return;
@@ -106,9 +110,12 @@ internal sealed class TitlePreviewHandles
         _outline.Visibility = _grip.Visibility = _label.Visibility = Visibility.Visible;
         if (options is { Enabled: true })
         {
-            // The floating title is a card in a window of its own now (the Mac's b11a1ab3), placed in Edit Position: the
-            // lyrics' window keeps no title row to drag here.
-            _canvas.Visibility = Visibility.Collapsed;
+            if (CardWindow(options, settings) is not { } where)
+            {
+                _canvas.Visibility = Visibility.Collapsed;
+                return;
+            }
+            Show(WindowOnPicture(where.Geometry, where.Frame, width, height), corner: 2);
             return;
         }
         var desktop = Desktop();
@@ -117,15 +124,17 @@ internal sealed class TitlePreviewHandles
              corner: -1);
     }
 
-    /// <summary>Shows the box (picture pixels) with its grip at the top-right corner (-1), or at the right of its foot (0) or top (1).</summary>
+    /// <summary>Shows the box (picture pixels) with its grip at the top-right corner (-1) or the lower-right one (2).</summary>
     private void Show((double X, double Y, double Width, double Height) box, int corner)
     {
         _canvas.Visibility = Visibility.Visible;
+        _label.Text = corner == 2 ? "Song title card" : "Song title";
+        _gripCursor = corner == 2 ? InputSystemCursorShape.SizeNorthwestSoutheast : InputSystemCursorShape.SizeNortheastSouthwest;
         Canvas.SetLeft(_outline, box.X);
         Canvas.SetTop(_outline, box.Y);
         _outline.Width = Math.Max(4, box.Width);
         _outline.Height = Math.Max(4, box.Height);
-        var gripY = corner switch { -1 => box.Y, 0 => box.Y, _ => box.Y + box.Height };
+        var gripY = corner == 2 ? box.Y + box.Height : box.Y;
         Canvas.SetLeft(_grip, box.X + box.Width - GripSize / 2);
         Canvas.SetTop(_grip, gripY - GripSize / 2);
         Canvas.SetLeft(_label, box.X + 2);
@@ -141,19 +150,19 @@ internal sealed class TitlePreviewHandles
         var options = _host.Controller?.Floating;
         if (options is { Enabled: true })
         {
-            if (Window(options) is not { } where) return;
-            var window = WindowOnPicture(where.Geometry, where.Frame, width, height);
-            var row = settings.TitleRow();
-            _drag = new Drag(true, resizing, pointer, RowOnPicture(window, where.Geometry, where.Frame, width, options.TextSize, row),
-                             OpeningTitlePlacement.Standard, row, window, default, 0) { NowRow = row };
+            if (CardWindow(options, settings) is not { } where) return;
+            _drag = new Drag(resizing, pointer, default, OpeningTitlePlacement.Standard, default, 0)
+            {
+                Card = (where.Display, where.Geometry, where.Frame), NowCard = where.Frame,
+            };
         }
         else
         {
             var desktop = Desktop();
             var baseSize = BaseSize(desktop);
             var placement = settings.TitlePlacement();
-            _drag = new Drag(false, resizing, pointer, OpeningTitle.Box(desktop.Width, desktop.Height, baseSize, 1, placement), placement,
-                             OpeningTitleRow.Standard, default, desktop, baseSize) { NowPlacement = placement };
+            _drag = new Drag(resizing, pointer, OpeningTitle.Box(desktop.Width, desktop.Height, baseSize, 1, placement), placement,
+                             desktop, baseSize) { NowPlacement = placement };
         }
         _canvas.CapturePointer(e.Pointer);
         e.Handled = true;
@@ -166,11 +175,10 @@ internal sealed class TitlePreviewHandles
         if (width <= 0 || height <= 0) return;
         var point = e.GetCurrentPoint(_canvas).Position;
         double dx = point.X - drag.Pointer.X, dy = point.Y - drag.Pointer.Y;
-        if (drag.Row)
+        if (drag.Card is { } card)
         {
-            drag.NowRow = drag.Resizing
-                ? OpeningTitle.RowResized(drag.RowPlace, drag.Box.Width, dx)
-                : OpeningTitle.RowMoved(drag.RowPlace, dx, point.Y, drag.Window);
+            drag.NowCard = CardDragged(card.Start, card.Geometry, dx, dy, width, height, drag.Resizing);
+            Show(WindowOnPicture(card.Geometry, drag.NowCard, width, height), corner: 2);
         }
         else
         {
@@ -199,7 +207,19 @@ internal sealed class TitlePreviewHandles
     }
 
     private void Save(Drag drag) =>
-        _host.Settings.Update(s => drag.Row ? s.WithTitleRow(drag.NowRow) : s.WithTitlePlacement(drag.NowPlacement));
+        _host.Settings.Update(s => drag.Card is { } card ? s.WithTitleFrame(drag.NowCard, card.DisplayKey) : s.WithTitlePlacement(drag.NowPlacement));
+
+    /// <summary>
+    /// The title card's window moved or resized by a drag on the picture (the Mac's FloatingTitleHandles): picture pixels to
+    /// points on the display, y up; no smaller than its least, kept on the display.
+    /// </summary>
+    internal static FloatingRect CardDragged(FloatingRect start, FloatingDisplay geometry, double dx, double dy, double pictureWidth,
+                                             double pictureHeight, bool resizing)
+    {
+        var screen = geometry.ScreenFrame;
+        return FloatingFrame.Dragged(start, dx / pictureWidth * screen.Width, -dy / pictureHeight * screen.Height, resizing, geometry.Area,
+                                     FloatingTitleFrame.MinimumSize);
+    }
 
     /// <summary>
     /// The desktop the picture stands for, in points: the preview lays the wallpaper out as a 1080-line display
@@ -211,13 +231,18 @@ internal sealed class TitlePreviewHandles
 
     private static double BaseSize((double Width, double Height) desktop) => ViewportMetrics.For(desktop.Width, desktop.Height, 1).BaseSize;
 
-    private (FloatingDisplay Geometry, FloatingRect Frame)? Window(FloatingLyricsOptions options)
+    /// <summary>The title card's window beside the first floating lyrics (Settings edits that display's): its display and frame.</summary>
+    private (string Display, FloatingDisplay Geometry, FloatingRect Frame)? CardWindow(FloatingLyricsOptions options, Shell.Settings.AppSettings settings)
     {
-        if (!ReferenceEquals(options, _windowFor) || DateTime.UtcNow - _windowAt > TimeSpan.FromSeconds(2))
+        if (!ReferenceEquals(options, _windowFor) || !ReferenceEquals(settings.FloatingTitleFrames, _framesFor)
+            || !Equals(settings.FloatingTitleStart, _startFor) || DateTime.UtcNow - _windowAt > TimeSpan.FromSeconds(2))
         {
             _windowFor = options;
+            _framesFor = settings.FloatingTitleFrames;
+            _startFor = settings.FloatingTitleStart;
             _windowAt = DateTime.UtcNow;
-            _window = FloatingWindowHost.Where(options) is { } found ? (found.Geometry, found.Frame) : null;
+            var card = options with { TitleCard = true, TitleFrames = settings.FloatingTitleFrames, TitleStart = settings.TitleStart() };
+            _window = FloatingWindowHost.Where(card) is { } found ? (found.Display.Key, found.Geometry, found.Frame) : null;
         }
         return _window;
     }
@@ -229,24 +254,5 @@ internal sealed class TitlePreviewHandles
         var screen = geometry.ScreenFrame;
         return (frame.MinX / screen.Width * width, (screen.Height - frame.MaxY) / screen.Height * height,
                 frame.Width / screen.Width * width, frame.Height / screen.Height * height);
-    }
-
-    /// <summary>
-    /// The row's box on the picture (the Mac's <c>FloatingTitleHandles.rowBox</c>): its size estimated from the words
-    /// (the real row hugs them), placed in the window as the window places it.
-    /// </summary>
-    private (double X, double Y, double Width, double Height) RowOnPicture((double X, double Y, double Width, double Height) window,
-                                                                           FloatingDisplay geometry, FloatingRect frame, double pictureWidth,
-                                                                           double textSize, OpeningTitleRow row)
-    {
-        var scene = _host.Controller?.Scene;
-        var title = scene?.Title ?? "Song Title";
-        var artist = scene?.Artist ?? "Artist";
-        var unit = pictureWidth / geometry.ScreenFrame.Width;
-        var size = textSize * OpeningTitle.RowScale(row.Scale);
-        var rowWidth = size * (OpeningTitle.RowCover + 0.2 + OpeningTitle.RowTitle * 0.55 * title.Length
-                               + (artist.Length == 0 ? 0 : 0.16 + OpeningTitle.RowArtist * 0.5 * artist.Length));
-        var placed = OpeningTitle.RowFrame(frame.Width, frame.Height, rowWidth, size * OpeningTitle.RowCover, textSize, row.Centre, row.Bottom);
-        return (window.X + placed.X * unit, window.Y + placed.Y * unit, placed.Width * unit, placed.Height * unit);
     }
 }

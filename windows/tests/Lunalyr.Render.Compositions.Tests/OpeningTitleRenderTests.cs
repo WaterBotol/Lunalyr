@@ -202,6 +202,46 @@ public sealed class OpeningTitleRenderTests : IDisposable
         Assert.Empty(_sink.Entries);
     }
 
+    /// <summary>The title card's own window (the Mac's b11a1ab3): the scene as that window draws it, its box set by an inset.</summary>
+    private static SceneSnapshot CardWindow(SceneSnapshot scene, double inset = 0) =>
+        Kept(scene with { Style = scene.Style with { FloatingTextSize = 40, FloatingTitleOnly = true, FloatingInset = inset } }, 1);
+
+    // Ported from OpeningTitleTests.swift (b11a1ab3): the card's window draws the card alone, never the lyrics.
+    [Fact]
+    public void TheTitleCardsWindowDrawsOnlyTheCard()
+    {
+        using var layer = Layer("editorial");
+        var card = CardWindow(OpeningFixtures.HumanNature());
+        var drawn = Frame(layer, card, 12.5);
+        Assert.True(Lit(drawn, 0, Height) > 400, $"{Lit(drawn, 0, Height)}");
+        // No title: nothing at all, though a line is being sung.
+        Assert.Equal(0, Lit(Frame(layer, card with { Title = "" }, 12.5), 0, Height));
+        Assert.Empty(_sink.Entries);
+    }
+
+    // Ported from OpeningTitleTests.swift (b11a1ab3): under 14 pt the card becomes one row, cross-fading for 0.25 s.
+    [Fact]
+    public void TheCardCrossFadesToARowWhenItsBoxGetsSmall()
+    {
+        using var layer = Layer("editorial");
+        var scene = OpeningFixtures.HumanNature();
+        IRenderLayer[] layers = [layer];
+        // A 30 px tall box in the middle: too small for a stacked title.
+        var small = CardWindow(scene, inset: (Height - 30) / 2.0);
+        const double song = 60;
+        _stage.Render(layers, CardWindow(scene), song, 200, Scale);
+        _stage.Render(layers, small, song, 200.05, Scale);
+        var fading = _stage.Pixels();
+        _stage.Render(layers, small, song, 201, Scale);
+        var row = _stage.Pixels();
+        // Settled: only the row, in its box.
+        Assert.True(Lit(row, Height / 2 - 15, Height / 2 + 15) > 100, $"{Lit(row, Height / 2 - 15, Height / 2 + 15)}");
+        Assert.Equal(0, Lit(row, 0, Height / 2 - 40));
+        // A twentieth of a second in, the card (at the small box's size) is still fading out over it.
+        Assert.True(Differing(fading, row) > 50, $"{Differing(fading, row)}");
+        Assert.Empty(_sink.Entries);
+    }
+
     /// <summary>The mean row of the lit pixels.</summary>
     private static double Centroid(byte[] pixels)
     {
