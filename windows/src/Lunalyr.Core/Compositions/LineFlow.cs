@@ -52,15 +52,16 @@ public static class LineFlow
     /// finishing its exit. An earlier renderer never reappears after a change of timing, and a rolling line followed by
     /// another rolling line has no exit of its own: its words carry on in that line's stage.
     /// </summary>
+    /// <param name="heldUntil">A carrying stage line held until its hand-over (StageCarryMotion.HeldUntil), by row.</param>
     public static bool IsLeaving(int line, int current, IReadOnlyList<LyricLine> lines, double time, StageRules rules,
-                                 double span = LyricPhraseTiming.ExitSpan)
+                                 double span = LyricPhraseTiming.ExitSpan, Func<int, double?>? heldUntil = null)
     {
         if (line < 0 || line >= current || current >= lines.Count) return false;
         if (ChangesTiming(lines[line], lines[current])) return false;
         for (var k = line; k < current; k++)
             if (ChangesTiming(lines[k], lines[k + 1])) return false;
         var handOver = HandOver(line, lines, rules);
-        if (!LyricPhraseTiming.StillLeaving(lines[line], handOver, time, span)) return false;
+        if (!LyricPhraseTiming.StillLeaving(lines[line], handOver, time, span, heldUntil?.Invoke(line))) return false;
         if (rules.Rolls(lines, line) && rules.Rolls(lines, line + 1)) return false;
         return !(rules.Rolls(lines, current) && rules.Rolls(lines, line));
     }
@@ -76,19 +77,21 @@ public static class LineFlow
     public static double RollingPresence(bool nextRolls, bool outgoing, double exit) => nextRolls && !outgoing ? 1 : 1 - exit;
 
     /// <summary>When a stage-filling layout's line has been sung and held long enough (<see cref="LyricPhraseTiming.StageHeldUntil"/>).</summary>
-    public static double StageExitStart(LyricLine line, LyricPhraseTiming pose) =>
-        Math.Min(pose.ExitStart, LyricPhraseTiming.StageHeldUntil(line));
+    /// <remarks>A carrying line held until its hand-over (<paramref name="heldUntil"/>, already in <paramref name="pose"/>) leaves then: the hand-over is its exit.</remarks>
+    public static double StageExitStart(LyricLine line, LyricPhraseTiming pose, double? heldUntil = null) =>
+        heldUntil is null ? Math.Min(pose.ExitStart, LyricPhraseTiming.StageHeldUntil(line)) : pose.ExitStart;
 
     /// <summary>
     /// The exit the renderer draws: word-timed lines that do not roll (and line-timed lines in stage layouts) leave a
     /// moment after their last word; everything else at the phrase's own exit.
     /// </summary>
-    public static double RenderedExitStart(int row, IReadOnlyList<LyricLine> lines, double handOver, bool rolls, bool fillsStage)
+    public static double RenderedExitStart(int row, IReadOnlyList<LyricLine> lines, double handOver, bool rolls, bool fillsStage,
+                                           double? heldUntil = null)
     {
         var line = lines[row];
-        var phrase = LyricPhraseTiming.ExitStartOf(line, handOver);
+        var phrase = LyricPhraseTiming.ExitStartOf(line, handOver, heldUntil);
         if (rolls || !(line.WordTimed || fillsStage)) return phrase;
-        return Math.Min(phrase, LyricPhraseTiming.StageHeldUntil(line));
+        return heldUntil is null ? Math.Min(phrase, LyricPhraseTiming.StageHeldUntil(line)) : phrase;
     }
 
     /// <summary>0…1: how far the line after <paramref name="row"/> has arrived (its spring); 0 before it starts or when <paramref name="row"/> is held.</summary>

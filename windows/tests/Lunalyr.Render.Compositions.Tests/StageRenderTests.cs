@@ -143,8 +143,10 @@ public sealed class StageRenderTests : IDisposable
             var scene = Scene(line) with { ReduceMotion = reduceMotion };
             foreach (var t in new[] { 2.75, 2.8, 2.85, 2.9, 3.0, 3.15, 5.5, 6.2 })
                 Assert.True(Lit(Frame(layer, scene, t)) > 100, $"{id} drew nothing at {t}{(reduceMotion ? " under Reduce Motion" : "")}");
-            // Gone once the line has been held and has left.
-            Assert.Equal(0, Lit(Frame(layer, scene, LyricPhraseTimingEnd(line) + 0.9)));
+            // Gone once the line has been held and has left. A layout that hands it on to the next line inside a phrase run
+            // (Torque, Hinge, Portal; not under Reduce Motion) leaves the stage to that line instead, so the frame is not
+            // empty then: LyricPhraseRunsTests checks that the held line stops being drawn once its hand-over has played.
+            if (!Carries(id, reduceMotion)) Assert.Equal(0, Lit(Frame(layer, scene, LyricPhraseTimingEnd(line) + 0.9)));
         }
         Assert.Empty(_sink.Entries);
     }
@@ -193,6 +195,67 @@ public sealed class StageRenderTests : IDisposable
     }
 
     private static double LyricPhraseTimingEnd(LyricLine line) => Core.Motion.LyricPhraseTiming.StageHeldUntil(line);
+
+    /// <summary>The light ink in a frame and its centre (the Mac's inkStats).</summary>
+    private static (double Ink, double X, double Y) InkStats(byte[] pixels)
+    {
+        double mass = 0, sx = 0, sy = 0;
+        for (var i = 0; i < pixels.Length / 4; i++)
+        {
+            var light = (pixels[i * 4] + pixels[i * 4 + 1] + pixels[i * 4 + 2]) / (3 * 255.0);
+            if (light <= 0.15) continue;
+            mass += light;
+            sx += light * (i % Width);
+            sy += light * (i / Width);
+        }
+        return mass > 0 ? (mass, sx / mass, sy / mass) : (0, 0, 0);
+    }
+
+    // Ported from LyricPhraseRunsTests.swift: testTheHandOverIsDrawnWithoutAJump. A carrying layout's hand-over as drawn,
+    // 1/60 s apart: the stage never empties, and the ink's centre never jumps.
+    [Theory]
+    [InlineData("torque")]
+    [InlineData("hinge")]
+    [InlineData("portal")]
+    public void TheHandOverIsDrawnWithoutAJump(string id)
+    {
+        static LyricLine Sung(string[] texts, double start)
+        {
+            var words = texts.Select((text, i) => new LyricWord(text + (i < texts.Length - 1 ? " " : ""), start + i * 0.4, start + i * 0.4 + 0.36)).ToList();
+            return new LyricLine { Start = start, End = words[^1].End, Text = string.Concat(words.Select(w => w.Text)), WordTimed = true, Words = words };
+        }
+        var first = Sung(["we", "keep", "running"], 1);
+        var second = Sung(["through", "the", "night"], first.End + 1.5);
+        LyricLine[] lines = [first, second];
+        var scene = Scene(first) with { Lyrics = new LyricResult.Synced(lines, new LyricProvenance("Word-by-word", "Test")) };
+        var kind = id switch { "torque" => Core.Compositions.CompositionKind.Torque, "hinge" => Core.Compositions.CompositionKind.Hinge, _ => Core.Compositions.CompositionKind.Portal };
+        var carry = Core.Motion.StageCarry.Make(0, new Core.Motion.LyricPhraseRuns(lines), lines, _ => true)!;
+        var hold = Core.Compositions.StageCarryMotion.HeldUntil(carry, kind)!.Value;
+        var start = Core.Compositions.StageCarryMotion.HandoverStart(carry, kind)!.Value;
+        Assert.True(start <= hold);
+        Assert.True(carry.Outgoing!.Value.Boundary.NextOnset >= start); // the hand-over starts by the next line's first word
+        using var layer = Layer(id);
+        for (var t = start - 1.0; t < start - 0.1; t += 1.0 / 30) Frame(layer, scene, t);
+        var previous = InkStats(Frame(layer, scene, start - 0.1));
+        Assert.True(previous.Ink > 50, $"{id}: nothing on the stage before the hand-over");
+        var full = previous.Ink;
+        var frames = (int)((Math.Max(hold - start, 0.5) + 0.1) * 60);
+        for (var step = 1; step <= frames; step++)
+        {
+            var t = start - 0.1 + step / 60.0;
+            var now = InkStats(Frame(layer, scene, t));
+            Assert.True(now.Ink > 20, $"{id}: the stage emptied at {t:0.000}");
+            // A later word of the new line bursting in is its own entrance; a page passing edge-on is a sliver.
+            var entering = second.Words.Skip(1).Any(w => t - w.Start > -0.06 && t - w.Start < 0.3);
+            if (Math.Min(now.Ink, previous.Ink) > 0.25 * full && !entering)
+                Assert.True(Math.Sqrt(Math.Pow(now.X - previous.X, 2) + Math.Pow(now.Y - previous.Y, 2)) < 72, $"{id}: the ink jumped at {t:0.000}");
+            previous = now;
+        }
+        Assert.Empty(_sink.Entries);
+    }
+
+    /// <summary>Whether the layout hands the scene's first line on to the next inside a phrase run (Torque, Hinge, Portal).</summary>
+    private static bool Carries(string id, bool reduceMotion) => !reduceMotion && id is "torque" or "hinge" or "portal";
 
     /// <summary>A line 2.3 s after <paramref name="line"/>, so no instrumental break (2.4 s or more) opens before it.</summary>
     private static LyricLine Following(LyricLine line) => new()

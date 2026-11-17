@@ -56,6 +56,23 @@ public sealed class PortalMotion
 
 public static class PortalGeometry
 {
+    /// <summary>
+    /// Where a line's column stands: which way its trail leans (FlipX), how far it zig-zags (Reach, before the line's
+    /// pace), its sideways shift (a share of the stage's width) and the live pill's drop below the middle (a share of its
+    /// height). A line on its own draws them from its own seed (its chances by salt 1, 3, 4 and 5); inside a phrase run,
+    /// from the run's, so every line of the run stands in the same column and the next line's first pill lands where the
+    /// live pill was (the Mac's ddb1a3c5). Takes the line's chances as values, so a frame allocates nothing.
+    /// </summary>
+    public static (double FlipX, double Reach, double ShiftX, double Lift) Placement(StageCarry? carry, double own1, double own3,
+                                                                                     double own4, double own5)
+    {
+        var (c1, c3, c4, c5) = carry is { } run
+            ? (StageCarryMotion.RunChance(run.Seed, 1), StageCarryMotion.RunChance(run.Seed, 3), StageCarryMotion.RunChance(run.Seed, 4),
+               StageCarryMotion.RunChance(run.Seed, 5))
+            : (own1, own3, own4, own5);
+        return (c1 < 0.5 ? 1 : -1, 0.8 + 0.5 * c3, (c4 - 0.5) * 0.24, 0.1 + 0.08 * c5);
+    }
+
     /// <summary>The ornaments a word without a picture of its own may carry (the Mac's SF Symbols; see <see cref="SegoeIcons"/>).</summary>
     public static readonly string[] Ornaments = ["arrow.up.right", "arrow.right", "sparkle", "play.fill", "plus", "bolt.fill", "star.fill"];
 

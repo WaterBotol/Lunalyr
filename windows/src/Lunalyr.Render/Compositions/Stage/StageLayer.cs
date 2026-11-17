@@ -433,14 +433,24 @@ internal abstract class StageLayer(CompositionKind kind, IWordBreaker breaker, L
     protected abstract void DrawLine(ID2D1DeviceContext dc, StageLine line, double time, double exitStart, in Matrix4x4 stage,
                                      double alpha, float blur, int shown);
 
+    /// <summary>What the line being drawn carries over from the line before and into the line after (a carrying layout's DrawLine reads it).</summary>
+    protected StageCarry? LineCarry { get; private set; }
+
     protected override void DrawStage(ID2D1DeviceContext dc, int row, double time, in LyricPhraseTiming pose, double presence,
-                                      double opacity, double yield)
+                                      double opacity, double yield, StageCarry? carry = null, double? heldUntil = null)
     {
         var line = Line(row);
         if (line is null) return;
         EnsureShapes(dc);
+        LineCarry = carry;
         var source = line.Line;
-        var exitStart = LineFlow.StageExitStart(source, pose);
+        var exitStart = LineFlow.StageExitStart(source, pose, heldUntil);
+        // A carrying layout's own hand-over is the line's entrance and exit: it does not also fade, rise or swell.
+        var carriedIn = carry?.Incoming is not null;
+        var carriedOut = carry?.Outgoing is not null;
+        var arrived = carriedIn ? 1 : pose.Arrival;
+        var gone = carriedOut ? 0 : pose.Exit;
+        var progress = carriedIn ? 1 : pose.Progress;
         _lineLeave = StageMotion.Leave(time, exitStart);
         foreach (var backing in line.Backing) DrawBackingGroup(dc, backing, time, opacity, row);
         // The line's own entrance: a word-timed line swells and slides in; a line-timed one makes the chosen entrance.
@@ -453,19 +463,19 @@ internal abstract class StageLayer(CompositionKind kind, IWordBreaker breaker, L
         {
             alpha = presence * opacity;
             // Reduce Motion: the line fades; it does not slide or swell.
-            var swell = reduce ? 1 : (float)(0.965 + 0.035 * pose.Arrival - 0.012 * pose.Exit);
-            var slide = reduce ? 0 : (float)(((1 - pose.Arrival) * 0.20 - pose.Exit * 0.10) * BaseSize);
+            var swell = reduce ? 1 : (float)(0.965 + 0.035 * arrived - 0.012 * gone);
+            var slide = reduce ? 0 : (float)(((1 - arrived) * 0.20 - gone * 0.10) * BaseSize);
             local = Matrix3x2.CreateScale(swell, centre) * Matrix3x2.CreateTranslation(0, slide);
         }
         else
         {
-            alpha = pose.Presence * (1 - 0.5 * yield) * opacity;
+            alpha = progress * (1 - pose.Exit) * (1 - 0.5 * yield) * opacity;
             var pointSize = BaseSize * 1.06 * 0.68;
             // A line sung as one enters as its layout has it enter: the choice for the phrase (a mix picks by its seed).
             var motion = Choice.For(Kind, TimedWordKey.SeedOf(source.Text, source.Start)).Motion(Kind);
-            var entrance = EntranceTransform.Make(pose.Progress, pose.Arrival, motion, pointSize, row % 2 == 0 ? 1 : -1, reduce);
+            var entrance = EntranceTransform.Make(progress, arrived, motion, pointSize, row % 2 == 0 ? 1 : -1, reduce);
             local = Matrix3x2.CreateTranslation(-centre) * Entrance(entrance) * Matrix3x2.CreateTranslation(centre);
-            blur = Points(motion.Blur(pose.Progress, reduce));
+            blur = Points(motion.Blur(progress, reduce));
         }
         if (!(alpha > 0.002)) return;
         // A reading that cannot be split by run sits once under the stage, and the line's translation under that; they are
@@ -503,7 +513,7 @@ internal abstract class StageLayer(CompositionKind kind, IWordBreaker breaker, L
         }
         // Below the stage, in the stack they are fitted as (the Mac's VStack of the stage, its reading and translation).
         var top = Stage.Height;
-        var underOpacity = (float)(pose.Progress * (1 - pose.Exit) * opacity);
+        var underOpacity = (float)(pose.Progress * (1 - pose.Exit) * HandoverFade(carry, time) * opacity);
         if (line.LineReading is { } under)
         {
             var world = Matrix3x2.CreateTranslation(centre.X, (float)(top + gap + under.Box.Y / 2)) * toDevice;

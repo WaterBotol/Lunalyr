@@ -1,3 +1,4 @@
+using Lunalyr.Core.Compositions;
 using Lunalyr.Core.Lyrics;
 using Lunalyr.Core.Lyrics.Timing;
 using Lunalyr.Core.Motion;
@@ -141,5 +142,141 @@ public sealed class LyricPhraseRunsTests
         Assert.Null(alone.Outgoing);
         // After a long gap there is nothing to carry.
         Assert.Null(Carry(0, Lines(6))!.Outgoing);
+    }
+
+    // ---- Holding the stage until the hand-over ----
+
+    // Ported from LyricPhraseRunsTests.swift: testACarryingLineStaysOnStageUntilItsHandOver
+    [Fact]
+    public void ACarryingLineStaysOnStageUntilItsHandOver()
+    {
+        var song = Lines(2);
+        var rules = new StageRules(RollsWordTimed: false);
+        double? Held(int row) => StageCarryMotion.HeldUntil(Carry(row, song), CompositionKind.Torque);
+        var handOver = StageCarryMotion.TorqueHandover(Carry(0, song)!.Outgoing!.Value);
+        Assert.True(handOver >= song[1].Start);
+        var during = handOver + 0.2;
+        Assert.False(LineFlow.IsLeaving(0, 1, song, during, rules)); // on its own the line left soon after its last word
+        Assert.True(LineFlow.IsLeaving(0, 1, song, during, rules, heldUntil: Held));
+        // The exit the renderer draws, and the one the frame rate follows, agree.
+        var hold = Held(0)!.Value;
+        var pose = new LyricPhraseTiming(song[0], song[1].Start, during, hold);
+        Assert.Equal(hold, LineFlow.StageExitStart(song[0], pose, hold));
+        Assert.Equal(hold, LineFlow.RenderedExitStart(0, song, song[1].Start, rolls: false, fillsStage: true, heldUntil: hold));
+        // Once the hand-over has played and the line has left, it is no longer drawn.
+        Assert.False(LineFlow.IsLeaving(0, 1, song, hold + LyricPhraseTiming.ExitSpan + 0.01, rules, heldUntil: Held));
+        // Layouts that do not carry keep their own exits.
+        Assert.Null(StageCarryMotion.HeldUntil(Carry(0, song), CompositionKind.Mosaic));
+        Assert.Null(StageCarryMotion.HeldUntil(Carry(0, song), CompositionKind.Fable));
+        // After a long gap nothing is held.
+        var apart = Lines(6);
+        Assert.Null(StageCarryMotion.HeldUntil(Carry(0, apart), CompositionKind.Torque));
+        Assert.Null(StageCarryMotion.HandoverStart(Carry(0, apart), CompositionKind.Torque));
+        // Text beside the stage (a translation) leaves as the hand-over starts.
+        foreach (var kind in new[] { CompositionKind.Torque, CompositionKind.Hinge, CompositionKind.Portal })
+            Assert.True(StageCarryMotion.HandoverStart(Carry(0, song), kind) <= StageCarryMotion.HeldUntil(Carry(0, song), kind));
+    }
+
+    // ---- Torque ----
+
+    private static TorquePlan Torque(LyricLine line) =>
+        TorqueGeometry.Plan(StageRun.Make(line.Words, new bool[line.Words.Count]));
+
+    private static double TorqueAngle(int face, TorquePlan plan, StageCarry? carry, double exitStart, double time) =>
+        (face - TorqueGeometry.Rotation(plan, time, 0, false, carry)) * 90 + TorqueGeometry.Swing(plan, time, exitStart, false, carry);
+
+    // Ported from LyricPhraseRunsTests.swift: testTorqueTurnsOnIntoTheNextLine
+    [Fact]
+    public void TorqueTurnsOnIntoTheNextLine()
+    {
+        var song = Lines(1.5);
+        var outPlan = Torque(song[0]);
+        var inPlan = Torque(song[1]);
+        var outCarry = Carry(0, song)!;
+        var inCarry = Carry(1, song)!;
+        var hold = StageCarryMotion.HeldUntil(outCarry, CompositionKind.Torque)!.Value;
+        var start = StageCarryMotion.TorqueHandover(outCarry.Outgoing!.Value);
+        var last = outPlan.Faces.Length - 1;
+        double? previous = null, previousStep = null;
+        for (var step = -30; step <= 60; step++)
+        {
+            var t = start + step / 120.0;
+            var outgoing = TorqueAngle(last, outPlan, outCarry, hold, t);
+            var incoming = TorqueAngle(0, inPlan, inCarry, double.PositiveInfinity, t);
+            Assert.Equal(90, incoming - outgoing, 9); // one column
+            if (previous is { } before)
+            {
+                var size = outgoing - before;
+                Assert.True(Math.Abs(size) < 12, $"the column jumped at {t}");
+                if (previousStep is { } was) Assert.True(Math.Abs(size - was) < 2.5, $"the turn lurched at {t}");
+                previousStep = size;
+            }
+            previous = outgoing;
+        }
+        Assert.Equal(0, TorqueAngle(last, outPlan, outCarry, hold, start - 0.01), 9); // faces the viewer until the hand-over
+        Assert.Equal(0, TorqueAngle(0, inPlan, inCarry, double.PositiveInfinity, start + 1), 6); // and the next line faces it after
+        Assert.Equal(0, TorqueGeometry.Fading(hold - 0.01, hold));
+    }
+
+    // Ported from LyricPhraseRunsTests.swift: testTorqueStartsAgainAfterALongGap
+    [Fact]
+    public void TorqueStartsAgainAfterALongGap()
+    {
+        var song = Lines(5);
+        Assert.Null(Carry(0, song)!.Outgoing);
+        Assert.Null(Carry(1, song)!.Incoming);
+        var plan = Torque(song[1]);
+        var first = song[1].Words[0].Start - StageMotion.Lead;
+        Assert.Equal(45, TorqueAngle(0, plan, Carry(1, song), double.PositiveInfinity, first), 9);
+    }
+
+    // ---- Hinge ----
+
+    // Ported from LyricPhraseRunsTests.swift: testHingeTurnsItsLastPageOntoTheNextLine
+    [Fact]
+    public void HingeTurnsItsLastPageOntoTheNextLine()
+    {
+        var song = Lines(1.2);
+        var outCarry = Carry(0, song)!;
+        var inCarry = Carry(1, song)!;
+        var hand = outCarry.Outgoing!.Value;
+        var start = StageCarryMotion.HingeHandover(hand);
+        double[] pageStarts = [song[0].Words[0].Start];
+        double Turn(double t) => HingeGeometry.Turns(pageStarts, false, t, 1, StageCarryMotion.HingeHandoverTurn(hand, t))[^1];
+        Assert.Equal(0, Turn(start - 0.01));
+        Assert.Equal(1, Turn(start + HingeGeometry.Turn), 9);
+        var previous = Turn(start - 0.05);
+        for (var step = 1; step <= 120; step++)
+        {
+            var now = Turn(start - 0.05 + step / 120.0);
+            Assert.True(Math.Abs(now - previous) < 0.06, "the page jumped");
+            previous = now;
+        }
+        // On its own the last page never turns: the book closes instead.
+        Assert.Equal(0, HingeGeometry.Turns(pageStarts, false, start + 1, 1)[^1]);
+        var hold = StageCarryMotion.HeldUntil(outCarry, CompositionKind.Hinge)!.Value;
+        var exit = HingeGeometry.Exit(hold, hold + 0.2, carried: true);
+        Assert.Equal(0, exit.Fold); // a carried line does not close the book
+        Assert.Equal(0, exit.Travel);
+        Assert.True(HingeGeometry.Carries(outCarry) && HingeGeometry.Carries(inCarry)); // both lines open on the middle spine
+        Assert.False(HingeGeometry.Carries(Carry(1, Lines(6))));
+    }
+
+    // ---- Portal ----
+
+    // Ported from LyricPhraseRunsTests.swift: testPortalKeepsItsColumnThroughARun
+    [Fact]
+    public void PortalKeepsItsColumnThroughARun()
+    {
+        var song = Lines(0.6, 0.6, 8);
+        // A different value for every line's own seed, as its chances give.
+        static double Own(int row, int salt) => (row * 37 + salt * 11) % 100 / 100.0;
+        (double FlipX, double Reach, double ShiftX, double Lift) Placement(int row) =>
+            PortalGeometry.Placement(Carry(row, song), Own(row, 1), Own(row, 3), Own(row, 4), Own(row, 5));
+        for (var row = 1; row <= 2; row++) Assert.Equal(Placement(0), Placement(row));
+        Assert.Equal(6, Carry(2, song)!.WordsBefore); // the float's phase runs on word after word
+        var runs = Enumerable.Range(0, 40).Select(i => PortalGeometry.Placement(new StageCarry(i * 7919, 0, null, null), 0, 0, 0, 0).ShiftX);
+        Assert.True(runs.Distinct().Count() > 10); // runs stand in different columns
+        Assert.Null(Carry(3, song)!.Incoming);
     }
 }

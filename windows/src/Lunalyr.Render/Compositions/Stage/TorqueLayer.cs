@@ -118,12 +118,14 @@ internal sealed class TorqueLayer(IWordBreaker breaker, Logger? logger) : StageL
         var plan = line.Plan;
         if (plan.Faces.Length == 0) return;
         var reduce = ReduceMotion;
-        var rho = TorqueGeometry.Rotation(plan, time, shown, reduce);
-        var swing = TorqueGeometry.Swing(plan, time, exitStart, reduce);
+        // Inside a phrase run the column turns on into the next line, and in from the last (the Mac's ddb1a3c5).
+        var carry = LineCarry;
+        var rho = TorqueGeometry.Rotation(plan, time, shown, reduce, carry);
+        var swing = TorqueGeometry.Swing(plan, time, exitStart, reduce, carry);
         var leaving = TorqueGeometry.Leaving(time, exitStart);
         // Its turn stays ease-in cubic; its opacity eases out over 0.27 s instead, so the last frame isn't a sharp drop
         // (the Mac's 436adda).
-        var whole = (1 - TorqueGeometry.Fading(time, exitStart)) * alpha;
+        var whole = (carry?.Outgoing is null ? 1 - TorqueGeometry.Fading(time, exitStart) : 1) * alpha;
         if (!(whole > 0.002)) return;
         // Inside the 5 % title-safe margins.
         var available = new SizeD(Stage.Width * 0.9, Stage.Height * 0.9);

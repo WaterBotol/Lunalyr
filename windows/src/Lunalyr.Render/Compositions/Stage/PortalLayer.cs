@@ -166,10 +166,15 @@ internal sealed class PortalLayer(IWordBreaker breaker, Logger? logger) : StageL
             line.Tilts[i] = reduce ? 0 : (entrance + rock) / speed * (0.5 + 0.5 * lives[i]);
         }
         // Which way this line's trail leans, and where the pills sit. The trail always climbs above the live pill.
-        var flipX = StageShared.Chance(seed, null, 1) < 0.5 ? 1.0 : -1.0;
-        var reach = (0.8 + 0.5 * StageShared.Chance(seed, null, 3)) / Math.Sqrt(speed);
-        var shiftX = (StageShared.Chance(seed, null, 4) - 0.5) * 0.24 * Stage.Width;
-        var lift = Stage.Height * (0.1 + 0.08 * StageShared.Chance(seed, null, 5));
+        // Inside a phrase run every line keeps the run's column, so the next line's first pill lands where the live pill
+        // was as the trail climbs away, rather than the column jumping across the stage (the Mac's ddb1a3c5).
+        var carry = LineCarry;
+        var placement = PortalGeometry.Placement(carry, StageShared.Chance(seed, null, 1), StageShared.Chance(seed, null, 3),
+                                                 StageShared.Chance(seed, null, 4), StageShared.Chance(seed, null, 5));
+        var flipX = placement.FlipX;
+        var reach = placement.Reach / Math.Sqrt(speed);
+        var shiftX = placement.ShiftX * Stage.Width;
+        var lift = Stage.Height * placement.Lift;
         // Pills further back than this fade out: the live one and two before it.
         var fadeFrom = speed > 1.6 ? 1.0 : 1.6;
         var gap = u * 0.16;
@@ -207,7 +212,12 @@ internal sealed class PortalLayer(IWordBreaker breaker, Logger? logger) : StageL
                               gap, baseY - bounds.MinY, bounds.MaxY - baseY, line.Climb, line.Column);
         // Quick songs get less float, so the eye can follow.
         var floatAmount = reduce ? 0 : 1 / speed;
-        var group = Matrix3x2.CreateTranslation(0, reduce ? 0 : (float)(-Stage.Height * 0.1 * leaving)) * Homography.Flat(stage);
+        // Inside a run the trail climbs away a whole pill's height, making room for the next line's first pill in the live
+        // pill's place.
+        var climb = carry?.Outgoing is null ? Stage.Height * 0.1 : Math.Max(Stage.Height * 0.1, u * 2.4);
+        var group = Matrix3x2.CreateTranslation(0, reduce ? 0 : (float)(-climb * leaving)) * Homography.Flat(stage);
+        // The float's phase runs on through a run, word after word.
+        var phaseBase = carry?.WordsBefore ?? 0;
         var tile = Tile(line.InkTime);
         var calm = Desaturated(tile, 0.78);
         var boil = reduce ? 0 : Math.Floor(time * 8) * 0.9;
@@ -221,8 +231,8 @@ internal sealed class PortalLayer(IWordBreaker breaker, Logger? logger) : StageL
             var x0 = AlongX(rank, flipX, reach);
             // Only the live pill floats; the trail holds still to be read.
             var floating = live * floatAmount;
-            var bob = Math.Sin(time * (1.2 + 0.6 * StageShared.Chance(seed, id, 7)) + id * 1.3) * u * 0.07 * floating;
-            var sway = Math.Cos(time * (0.9 + 0.5 * StageShared.Chance(seed, id, 8)) + id * 0.9) * u * 0.05 * floating;
+            var bob = Math.Sin(time * (1.2 + 0.6 * StageShared.Chance(seed, id, 7)) + (phaseBase + id) * 1.3) * u * 0.07 * floating;
+            var sway = Math.Cos(time * (0.9 + 0.5 * StageShared.Chance(seed, id, 8)) + (phaseBase + id) * 0.9) * u * 0.05 * floating;
             // Each pill comes in from its own direction, between the right and below, never down through the trail.
             var heading = StageShared.Chance(seed, id, 9) * 0.5 * Math.PI;
             var travel = (1 - motion.Settle[id]) * floatAmount;

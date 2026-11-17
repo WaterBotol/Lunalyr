@@ -527,12 +527,14 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
 
     private LyricPhraseRuns? _phraseRuns;
     private LyricSheet? _phraseRunsSheet;
+    private StageCarry?[] _carries = [];
+    private bool[] _carryKnown = [];
+    private LyricSheet? _carriesSheet;
+    private bool _carriesReduced;
+    private Func<int, double?>? _heldUntilOf;
 
-    /// <summary>
-    /// The seed of the phrase run line <paramref name="row"/> is in (LyricPhraseRuns, worked out once per song from the
-    /// lyrics alone), or null when it is in none.
-    /// </summary>
-    protected long? RunSeed(int row)
+    /// <summary>The phrase runs of the sheet on screen (worked out once per song from the lyrics alone).</summary>
+    private LyricPhraseRuns? PhraseRuns()
     {
         if (Sheet is not { } sheet) return null;
         if (!ReferenceEquals(sheet, _phraseRunsSheet))
@@ -540,7 +542,44 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
             _phraseRunsSheet = sheet;
             _phraseRuns = new LyricPhraseRuns(sheet.Lines);
         }
-        return _phraseRuns?[row]?.Seed;
+        return _phraseRuns;
+    }
+
+    /// <summary>
+    /// What line <paramref name="row"/>'s stage carries over from the line before and on into the line after, inside its
+    /// phrase run (the Mac's ddb1a3c5); null under Reduce Motion, which fades every line in and out on its own. Every line
+    /// of a sheet shares this layer's layout. Kept per sheet, so a frame allocates nothing.
+    /// </summary>
+    protected StageCarry? CarryOf(int row)
+    {
+        if (ReduceMotion || Sheet is not { } sheet || row < 0 || row >= sheet.Lines.Count) return null;
+        if (!ReferenceEquals(sheet, _carriesSheet) || _carriesReduced != ReduceMotion || _carries.Length != sheet.Lines.Count)
+        {
+            _carriesSheet = sheet;
+            _carriesReduced = ReduceMotion;
+            _carries = new StageCarry?[sheet.Lines.Count];
+            _carryKnown = new bool[sheet.Lines.Count];
+        }
+        if (!_carryKnown[row])
+        {
+            var count = sheet.Lines.Count;
+            _carries[row] = PhraseRuns() is { } runs ? StageCarry.Make(row, runs, sheet.Lines, other => other >= 0 && other < count) : null;
+            _carryKnown[row] = true;
+        }
+        return _carries[row];
+    }
+
+    /// <summary>When a carrying stage layout holds line <paramref name="row"/> until (its hand-over has played), or null.</summary>
+    protected double? HeldUntilOf(int row) =>
+        Rules.FillsStage && Kind.CarriesStage() ? StageCarryMotion.HeldUntil(CarryOf(row), Kind) : null;
+
+    /// <summary>
+    /// The seed of the phrase run line <paramref name="row"/> is in (LyricPhraseRuns, worked out once per song from the
+    /// lyrics alone), or null when it is in none.
+    /// </summary>
+    protected long? RunSeed(int row)
+    {
+        return PhraseRuns()?[row]?.Seed;
     }
 
     /// <summary>A floating window's see-through margin round its box, in pixels (0 elsewhere).</summary>
@@ -585,7 +624,8 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
         // Three back: after two very short lines the one before them can still be leaving.
         for (var row = index - 3; row < index; row++)
         {
-            if (!LineFlow.IsLeaving(row, index, lines, time, Rules, LeavingSpan)) continue;
+            // A carrying stage layout holds a line on the stage until its hand-over to the next has played.
+            if (!LineFlow.IsLeaving(row, index, lines, time, Rules, LeavingSpan, _heldUntilOf ??= HeldUntilOf)) continue;
             var held = Rolls(row) ? null : LineFlow.HeldShift(row, lines, time);
             if (Rules.FillsStage) held = null;
             var leaving = new DrawnLine
@@ -608,6 +648,9 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
             _drawn[count++] = leaving;
         }
         int? next = active is not null ? LineFlow.NextLinePreview(index, sheet, time, Rules) : null;
+        // A carrying stage brings the next line in itself, by its hand-over: a preview of it would sit where the hand-over
+        // then draws it again.
+        if (next is { } carried && Rules.FillsStage && Kind.CarriesStage() && CarryOf(carried)?.Incoming is not null) next = null;
         var since = sheet.PreviewSince[index];
         _drawn[count++] = new DrawnLine
         {
@@ -738,12 +781,17 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
         if (row < 0 || row >= lines.Count) return;
         var line = lines[row];
         if (line.Words.Count == 0 || !(drawn.Previewing || time >= line.Start)) return;
-        var pose = new LyricPhraseTiming(line, LineFlow.HandOver(row, lines, Rules), time);
+        // Inside a run a carrying stage carries on from the line before and into the line after; a preview is drawn on its own.
+        var carry = drawn.Previewing || !Rules.FillsStage || !Kind.CarriesStage() ? null : CarryOf(row);
+        var held = carry is null ? null : StageCarryMotion.HeldUntil(carry, Kind);
+        var pose = new LyricPhraseTiming(line, LineFlow.HandOver(row, lines, Rules), time, held);
         var rolls = Rolls(row);
         var handsOffPreview = line.WordTimed && !drawn.Outgoing && Options.RevealsWords && Options.PreviewsNextWord;
+        // A carrying layout's own hand-over is the line's entrance: the line does not also fade in.
+        var carriedIn = carry?.Incoming is not null;
         var stagePresence = drawn.Previewing ? 1
             : rolls ? LineFlow.RollingPresence(Rolls(row + 1), drawn.Outgoing, pose.Exit)
-            : line.WordTimed ? (handsOffPreview ? 1 : pose.Progress)
+            : line.WordTimed ? (handsOffPreview || carriedIn ? 1 : pose.Progress)
             : pose.Presence;
         if (!(stagePresence > 0.001)) return;
         var handoff = LineFlow.TimingHandoffPresence(row, lines, time);
@@ -760,8 +808,8 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
             // A stage layout draws nothing for a preview (the Mac's firstRunOnly is a clear stage).
             if (!drawn.Previewing)
             {
-                DrawStage(dc, row, time, pose, stagePresence, opacity, drawn.Yield);
-                DrawEdgeTranslation(dc, row, pose.Progress * (1 - pose.Exit) * opacity);
+                DrawStage(dc, row, time, pose, stagePresence, opacity, drawn.Yield, carry, held);
+                DrawEdgeTranslation(dc, row, pose.Progress * (1 - pose.Exit) * HandoverFade(carry, time) * opacity);
             }
             return;
         }
@@ -801,8 +849,17 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
     /// A stage layout's line <paramref name="row"/> (Hinge, Broadside, Portal, Mosaic, Torque, Fable): the line's
     /// presence, the hand-over opacity and how far it yields to the next line's preview.
     /// </summary>
+    /// <param name="carry">What the line's stage carries over from the line before and into the line after (null on its own).</param>
+    /// <param name="heldUntil">When a carrying line is held until (already in <paramref name="pose"/>).</param>
     protected virtual void DrawStage(ID2D1DeviceContext dc, int row, double time, in LyricPhraseTiming pose, double presence,
-                                     double opacity, double yield) { }
+                                     double opacity, double yield, StageCarry? carry = null, double? heldUntil = null) { }
+
+    /// <summary>
+    /// Text beside a carrying stage (a translation, a whole-line reading) leaves as the hand-over to the next line starts,
+    /// so it never sits over the next line's (the Mac's e6959bca); 1 otherwise.
+    /// </summary>
+    protected double HandoverFade(StageCarry? carry, double time) =>
+        StageCarryMotion.HandoverStart(carry, Kind) is { } start ? 1 - LyricMotion.Settle(time - start, LyricPhraseTiming.ExitDuration) : 1;
 
     /// <summary>Sets a stage layout's line ahead of time (laid out and baked), not on the frame it first appears.</summary>
     protected virtual void PrepareStage(int row) { }

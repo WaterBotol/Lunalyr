@@ -131,7 +131,11 @@ public static class HingeGeometry
     /// the next page's first word is about to be sung; a line-timed spread opens from the spine at once. The last page
     /// never turns: the line leaves by closing the book (<see cref="Exit"/>). Eased in and out: a page is a heavy thing.
     /// </summary>
-    public static void Turns(ReadOnlySpan<double> pageStarts, bool lineTimed, double time, double speed, Span<double> turns)
+    /// <param name="handover">Inside a phrase run, how far the last page has turned over onto the next line's first page
+    /// (StageCarryMotion.HingeHandoverTurn, the Mac's ddb1a3c5): it turns as a page turns within a line, instead of the
+    /// book closing. Null on its own.</param>
+    public static void Turns(ReadOnlySpan<double> pageStarts, bool lineTimed, double time, double speed, Span<double> turns,
+                             double? handover = null)
     {
         var count = pageStarts.Length;
         if (count == 0) return;
@@ -144,28 +148,34 @@ public static class HingeGeometry
             for (var k = 0; k < count; k++)
             {
                 var open = EaseOut((time - (first - StageMotion.Lead) - SpreadStagger * k) / Swing);
-                turns[k] = k == count - 1 ? 0.5 - 0.5 * open : 0.5 + 0.5 * open;
+                turns[k] = k == count - 1 ? 0.5 - 0.5 * open + (handover ?? 0) : 0.5 + 0.5 * open;
             }
             return;
         }
         for (var k = 0; k < count; k++)
-            turns[k] = k + 1 < count ? EaseInOut((time - (pageStarts[k + 1] - StageMotion.Lead - TurnLead)) / span) : 0;
+            turns[k] = k + 1 < count ? EaseInOut((time - (pageStarts[k + 1] - StageMotion.Lead - TurnLead)) / span) : handover ?? 0;
     }
 
-    public static double[] Turns(IReadOnlyList<double> pageStarts, bool lineTimed, double time, double speed)
+    public static double[] Turns(IReadOnlyList<double> pageStarts, bool lineTimed, double time, double speed, double? handover = null)
     {
         var turns = new double[pageStarts.Count];
-        Turns(pageStarts.ToArray(), lineTimed, time, speed, turns);
+        Turns(pageStarts.ToArray(), lineTimed, time, speed, turns, handover);
         return turns;
     }
+
+    /// <summary>Whether a line shares its spine with a neighbour in its run: every line of a run opens on the middle spine.</summary>
+    public static bool Carries(StageCarry? carry) => carry?.Incoming is not null || carry?.Outgoing is not null;
 
     /// <summary>
     /// How the line leaves: the book closes. Both pages fold shut onto the spine, accelerating (Fold, 0…1 of the way
     /// shut), the read page gone in the first moments (ReadFade); the closed book is already moving off in the reading
     /// direction and, once shut, recedes quickly (Travel, 0…1 of <see cref="ExitTravel"/>; Opacity).
     /// </summary>
-    public static (double Fold, double ReadFade, double Travel, double Opacity) Exit(double exitStart, double time)
+    /// <param name="carried">A line that hands its last page on to the next line in a run does not close: once that page has
+    /// landed (<paramref name="exitStart"/>) it fades where it lies, under the next line's book.</param>
+    public static (double Fold, double ReadFade, double Travel, double Opacity) Exit(double exitStart, double time, bool carried = false)
     {
+        if (carried) return (0, 1, 0, 1 - Easing.Smoothstep((time - exitStart) / StageCarryMotion.HingeCarryFade));
         if (!(time > exitStart)) return (0, 1, 0, 1);
         var age = time - exitStart;
         var fold = EaseIn(age / Close);

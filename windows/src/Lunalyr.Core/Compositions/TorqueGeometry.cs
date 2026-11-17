@@ -190,27 +190,37 @@ public static class TorqueGeometry
     /// How far the column has turned, in faces: 0 facing the first phrase, 1 the second, and so on (a little past during
     /// the overshoot). Under Reduce Motion it steps to the face of the newest shown word.
     /// </summary>
-    public static double Rotation(TorquePlan plan, double time, int shownCount, bool reduceMotion)
+    /// <param name="carry">Inside a phrase run the column does not stop between lines (the Mac's ddb1a3c5): the line before
+    /// turns on past its last face as this line's first face turns in, one more face of the same column on the same turn
+    /// (StageCarryMotion.TorqueHandoverTurn). This line starts a face back and turns to its first; its last face turns on
+    /// into the next line's.</param>
+    public static double Rotation(TorquePlan plan, double time, int shownCount, bool reduceMotion, StageCarry? carry = null)
     {
         if (reduceMotion)
             return shownCount > 0 && shownCount - 1 < plan.FaceOfRun.Length ? plan.FaceOfRun[shownCount - 1] : 0;
         double rho = 0;
+        if (carry?.Incoming is { } incoming) rho += StageCarryMotion.TorqueHandoverTurn(incoming, time) - 1;
         for (var k = 1; k < plan.Faces.Length; k++)
         {
             var p = (time - plan.Faces[k].TurnStart) / (3 * Unit);
             if (!(p > 0)) break;
             rho += Out(p);
         }
+        if (carry?.Outgoing is { } outgoing) rho += StageCarryMotion.TorqueHandoverTurn(outgoing, time);
         return rho;
     }
 
-    /// <summary>The whole column's extra turn, in degrees: a new line enters already turning (+45° to 0), and leaves turning on to the left (0 to −60).</summary>
-    public static double Swing(TorquePlan plan, double time, double exitStart, bool reduceMotion)
+    /// <summary>
+    /// The whole column's extra turn, in degrees: a new line enters already turning (+45° to 0), and leaves turning on to
+    /// the left (0 to −60). Inside a run the hand-over turn (<see cref="Rotation"/>) does both instead.
+    /// </summary>
+    public static double Swing(TorquePlan plan, double time, double exitStart, bool reduceMotion, StageCarry? carry = null)
     {
         if (reduceMotion || plan.Faces.Length == 0) return 0;
         var enter = (time - (plan.Faces[0].Start - StageMotion.Lead)) / (2 * Unit);
-        var entering = plan.LineTimed || enter < 1 ? 45 * (1 - Out(enter)) : 0;
-        return entering - 60 * Leaving(time, exitStart);
+        var entering = carry?.Incoming is null && (plan.LineTimed || enter < 1) ? 45 * (1 - Out(enter)) : 0;
+        var leaving = carry?.Outgoing is null ? 60 * Leaving(time, exitStart) : 0;
+        return entering - leaving;
     }
 
     /// <summary>The line leaving, 0…1, on the in-ease.</summary>

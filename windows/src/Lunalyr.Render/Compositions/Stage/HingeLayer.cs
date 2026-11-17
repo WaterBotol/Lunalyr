@@ -47,7 +47,9 @@ internal sealed class HingeLayer(IWordBreaker breaker, Logger? logger) : StageLa
         var pages = HingeGeometry.Pages(phrasing);
         var rtl = phrasing.RightToLeft;
         var width = Stage.Width;
-        var spine = HingeGeometry.Spine(width, pages.Count == 1, rtl);
+        // Inside a phrase run every line opens on the same spine, in the middle, so a page turning over from one line lands
+        // on the spine the next line's page lies against (the Mac's ddb1a3c5).
+        var spine = HingeGeometry.Spine(width, pages.Count == 1 && !HingeGeometry.Carries(CarryOf(source.Row)), rtl);
         var line = new HingeLine(source)
         {
             Phrasing = phrasing, Pages = pages, Spine = spine,
@@ -182,15 +184,20 @@ internal sealed class HingeLayer(IWordBreaker breaker, Logger? logger) : StageLa
         var rtl = phrasing.RightToLeft;
         var u = Unit;
         var turns = line.A.AsSpan(0, pages.Count);
-        HingeGeometry.Turns(line.PageStarts, phrasing.LineTimed, time, line.Speed, turns);
-        var exit = HingeGeometry.Exit(exitStart, time);
+        // Inside a run the last page turns over onto the next line's first page instead of the book closing.
+        var carry = LineCarry;
+        double? handover = carry?.Outgoing is { } outgoing ? StageCarryMotion.HingeHandoverTurn(outgoing, time) : null;
+        HingeGeometry.Turns(line.PageStarts, phrasing.LineTimed, time, line.Speed, turns, handover);
+        var exit = HingeGeometry.Exit(exitStart, time, carried: carry?.Outgoing is not null);
         for (var k = 0; k < pages.Count; k++) line.Begun[k] = phrasing.LineTimed || time >= line.PageStarts[k] - StageMotion.Lead;
         HingeGeometry.Instances(turns, line.Begun, exit.Fold, exit.ReadFade, reduce, _instances);
         // The book moves only in the reading direction: in, still moving, as the line arrives; off, accelerating, as it leaves.
-        var entry = HingeGeometry.Entry(line.FirstStart, time);
+        var entry = carry?.Incoming is null ? HingeGeometry.Entry(line.FirstStart, time) : 0;
         var drift = reduce ? 0 : (entry - exit.Travel) * Stage.Width * HingeGeometry.ExitTravel * (rtl ? -1 : 1);
         // Reduce Motion: no fold or travel; the line fades as every other does.
-        var whole = (reduce ? 1 - StageMotion.Leave(time, exitStart) : exit.Opacity) * alpha;
+        // Inside a run this line's page lies under the last line's turning page and shows as that page lifts off it.
+        var uncovered = carry?.Incoming is { } incoming ? StageCarryMotion.HingeUncovered(incoming, time) : 1;
+        var whole = (reduce ? 1 - StageMotion.Leave(time, exitStart) : exit.Opacity) * uncovered * alpha;
         if (!(whole > 0.002)) return;
         var book = Matrix4x4.CreateTranslation((float)drift, 0, 0) * stage;
         var own = rtl ? HingeSide.Left : HingeSide.Right;

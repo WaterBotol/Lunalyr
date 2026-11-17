@@ -26,7 +26,9 @@ public readonly record struct LyricPhraseTiming
     /// <param name="line">The line.</param>
     /// <param name="nextStart">When it hands over (<see cref="HandOver"/>).</param>
     /// <param name="time">Lyric time.</param>
-    public LyricPhraseTiming(LyricLine line, double nextStart, double time)
+    /// <param name="heldUntil">A carrying stage line held until its hand-over to the next line (StageCarryMotion.HeldUntil):
+    /// it leaves no earlier than that.</param>
+    public LyricPhraseTiming(LyricLine line, double nextStart, double time, double? heldUntil = null)
     {
         ArgumentNullException.ThrowIfNull(line);
         var duration = Math.Max(0, Math.Min(line.End, nextStart) - line.Start);
@@ -35,7 +37,7 @@ public readonly record struct LyricPhraseTiming
         var seed = TimeSeed(line.Start) ^ 0x51ED_C0DEUL;
         Arrival = LyricMotion.SpringStep(time - line.Start,
             new Spring(3.36 / Math.Max(0.14, attack * 1.6), 0.82 + 0.06 * LyricMotion.Jitter(seed, 1)));
-        ExitStart = ExitStartOf(line, nextStart);
+        ExitStart = ExitStartOf(line, nextStart, heldUntil);
         Exit = LyricMotion.Settle(time - ExitStart, ExitDuration);
     }
 
@@ -81,12 +83,13 @@ public readonly record struct LyricPhraseTiming
     /// A line starts to leave a quarter second before the next one, so the two are not both mostly visible in the
     /// middle of the stage, but never before its own last word has been sung.
     /// </summary>
-    public static double ExitStartOf(LyricLine line, double nextStart)
+    public static double ExitStartOf(LyricLine line, double nextStart, double? heldUntil = null)
     {
         ArgumentNullException.ThrowIfNull(line);
         var lastWordEnd = double.NegativeInfinity;
         for (var i = 0; i < line.Words.Count; i++) lastWordEnd = Math.Max(lastWordEnd, line.Words[i].End);
-        return Math.Max(lastWordEnd + 0.10, Math.Min(line.End + 0.12, nextStart - 0.25));
+        var own = Math.Max(lastWordEnd + 0.10, Math.Min(line.End + 0.12, nextStart - 0.25));
+        return Math.Max(own, heldUntil ?? double.NegativeInfinity);
     }
 
     /// <summary>
@@ -109,8 +112,8 @@ public readonly record struct LyricPhraseTiming
         row >= 0 && row + 1 < lines.Count && HandOver(row, lines) > lines[row + 1].Start;
 
     /// <summary>Whether an earlier line still has words on their way out.</summary>
-    public static bool StillLeaving(LyricLine line, double nextStart, double time, double span = ExitSpan) =>
-        time < ExitStartOf(line, nextStart) + span;
+    public static bool StillLeaving(LyricLine line, double nextStart, double time, double span = ExitSpan, double? heldUntil = null) =>
+        time < ExitStartOf(line, nextStart, heldUntil) + span;
 
     /// <summary>
     /// The onset of a line's first sung word (one with a letter or digit): its own start when word-timed, the line's
