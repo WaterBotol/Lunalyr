@@ -31,7 +31,7 @@ public sealed partial class AppController
         lock (_gate)
         {
             if (_disposed) return;
-            var whole = _settings.YouTubeFraming == MusicVideoFraming.Whole;
+            var whole = _settings.YouTubeFraming.IsWhole();
             var wanted = whole ? video : null;
             http = _stillHttp;
             if (wanted == _shapeVideo && (_shapeCts is not null || http is null)) return;

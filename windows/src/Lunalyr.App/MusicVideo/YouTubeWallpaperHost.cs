@@ -70,6 +70,9 @@ internal sealed partial class YouTubeWallpaperHost : IMusicVideoPlaybackSurface,
     private MusicVideoHold _hold = MusicVideoHold.Other;
     private DispatcherQueueTimer? _placement;
     private bool _disposed;
+    // The ambient glow (the Mac's captureAmbient): the player's picture taken about once a second while it shows.
+    private DispatcherQueueTimer? _glowTimer;
+    private bool _glowBusy;
     private readonly YouTubePlayerReveal _reveal;
     /// <summary>What the page and the WebView2 were last given: framing, box, blur, bounds (null: nothing yet).</summary>
     private (MusicVideoFraming Framing, YouTubeEmbed.Box? Box, double Blur, Windows.Foundation.Rect Bounds)? _look;
@@ -167,6 +170,8 @@ internal sealed partial class YouTubeWallpaperHost : IMusicVideoPlaybackSurface,
         }
         if (wanted != _videoId) _idle.Reset();
         _videoId = wanted;
+        // A new video: the old one's glow goes.
+        _feed.Glow = null;
         _loop.IsCurrent = () => _video.IsShowing(new MusicVideoSource.YouTube(wanted));
         _loop.OnDuration = length => _video.NoteVideoDuration(length, new MusicVideoSource.YouTube(wanted));
         _loop.OnSample = (sample, _, at) => _video.NoteVideoSample(sample.VideoTime, sample.VideoPlaying && !sample.Buffering,
@@ -426,6 +431,7 @@ internal sealed partial class YouTubeWallpaperHost : IMusicVideoPlaybackSurface,
         visible &= _controller is not null && _session.HasPlayer;
         if (_feed.PlayerVisible == visible) return;
         _feed.PlayerVisible = visible;
+        FollowGlow();
         // A wallpaper frozen by "Pause wallpaper" (or resting) still redraws once, so it covers a player that stopped.
         _engine.RequestFrame();
     }
@@ -441,7 +447,7 @@ internal sealed partial class YouTubeWallpaperHost : IMusicVideoPlaybackSurface,
             width = client.Right - client.Left;
             height = client.Bottom - client.Top;
         }
-        if (framing != MusicVideoFraming.Whole || width <= 0 || height <= 0)
+        if (!framing.IsWhole() || width <= 0 || height <= 0)
             return (framing, null, new Windows.Foundation.Rect(0, 0, Math.Max(0, width), Math.Max(0, height)));
         // Shown whole: never larger than the screen; the page draws the 16:9 player at the box inside it, so YouTube's own
         // bars for a video of another shape fall outside.
@@ -653,6 +659,66 @@ internal sealed partial class YouTubeWallpaperHost : IMusicVideoPlaybackSurface,
         return timer;
     }
 
+    // ---- The ambient glow ----
+
+    /// <summary>Samples while the player is uncovered (so YouTube's overlays and a blank page never tint the glow).</summary>
+    private void FollowGlow()
+    {
+        if (_feed.PlayerVisible)
+        {
+            if (_glowTimer is null)
+            {
+                _glowTimer = _ui.CreateTimer();
+                _glowTimer.Interval = TimeSpan.FromSeconds(MusicVideoAmbience.Interval);
+                _glowTimer.IsRepeating = true;
+                _glowTimer.Tick += (_, _) => SampleGlow();
+            }
+            if (!_glowTimer.IsRunning) _glowTimer.Start();
+            SampleGlow();
+        }
+        else
+        {
+            _glowTimer?.Stop();
+        }
+    }
+
+    /// <summary>
+    /// A small copy of the picture for the ambient glow (WebView2's own capture of what it shows), blurred off the UI
+    /// thread and handed to the wallpaper; only for "Whole video, ambient glow", while it plays.
+    /// </summary>
+    private async void SampleGlow()
+    {
+        if (_glowBusy || _core is not { } core || !_feed.PlayerVisible || !_settings().YouTubeFraming.FollowsVideo()
+            || !_app.ReadSongPosition().Playing) return;
+        _glowBusy = true;
+        var video = _videoId;
+        try
+        {
+            using var stream = new InMemoryRandomAccessStream();
+            await core.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png, stream);
+            var bytes = new byte[stream.Size];
+            using (var reader = new DataReader(stream.GetInputStreamAt(0)))
+            {
+                await reader.LoadAsync((uint)stream.Size);
+                reader.ReadBytes(bytes);
+            }
+            var glow = await Task.Run(() =>
+                Lunalyr.Platform.Imaging.ArtworkDecoder.DecodeCover(bytes, MusicVideoAmbience.SampleWidth * 4) is { } picture
+                && !MusicVideoAmbience.LooksBlank(picture)
+                    ? MusicVideoAmbience.Glow(picture)
+                    : null);
+            if (glow is not null && video == _videoId && _feed.PlayerVisible) _feed.Glow = glow;
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            _log.Debug($"Music video: the ambient glow's capture failed ({ex.Message}).");
+        }
+        finally
+        {
+            _glowBusy = false;
+        }
+    }
+
     // ---- Closing ----
 
     private void Close()
@@ -661,6 +727,8 @@ internal sealed partial class YouTubeWallpaperHost : IMusicVideoPlaybackSurface,
         _session.Stop();
         _idle.Reset();
         _videoId = null;
+        _feed.Glow = null;
+        _glowTimer?.Stop();
         CloseWebView();
         _placement?.Stop();
         _placement = null;
@@ -687,6 +755,7 @@ internal sealed partial class YouTubeWallpaperHost : IMusicVideoPlaybackSurface,
         _disposed = true;
         _video.CaptionLogged -= LogCaption;
         _captionsWait?.Stop();
+        _glowTimer?.Stop();
         void Teardown()
         {
             Close();

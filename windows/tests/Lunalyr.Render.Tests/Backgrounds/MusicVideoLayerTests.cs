@@ -270,14 +270,50 @@ public sealed class MusicVideoLayerTests : IDisposable
         Assert.Equal(0, MaxAlpha(_surface.ReadPixels()));
     }
 
-    private void DrawTransparent(IRenderLayer layer, bool desktop = true, bool main = true)
+    // After the Mac's 7ef2908 (Whole video, ambient glow): the glow the player's host samples shows in the bands, cross-faded in.
+    [Fact]
+    public void TheAmbientGlowShowsAroundTheWholePicture()
+    {
+        // A green glow sample, as the host hands it over (already blurred).
+        var green = new byte[16 * 9 * 4];
+        for (var i = 0; i < green.Length; i += 4) { green[i + 1] = 220; green[i + 3] = 255; }
+        var glow = new Lunalyr.Core.Colour.CoverArt(16, 9, green);
+        var feed = new Feed
+        {
+            Inputs = new MusicVideoInputs(null, 3, true, 0, 0, 0, PlayerVisible: true, YouTubeFraming: MusicVideoFraming.Ambient,
+                YouTubeAspect: 2.39, Glow: glow),
+        };
+        using var layer = new YouTubeVideoLayerFactory(feed, Plain).Create();
+        _surface.Prepare(layer);
+        var (_, top, _, _) = MusicVideoFramings.VisiblePixels(2.39, Width, Height);
+        (int B, int G, int R, int A) At(byte[] pixels, int x, int y) { var i = (y * Width + x) * 4; return (pixels[i], pixels[i + 1], pixels[i + 2], pixels[i + 3]); }
+        DrawTransparent(layer, wall: 1);
+        var arriving = At(_surface.ReadPixels(), Width / 2, top / 2);
+        DrawTransparent(layer, wall: 1 + Lunalyr.Core.MusicVideo.MusicVideoAmbience.Fade);
+        var pixels = _surface.ReadPixels();
+        var band = At(pixels, Width / 2, top / 2);
+        // In the band: the glow, under its own darkening (220 × 0.7 ≈ 154), faded in from nothing.
+        Assert.InRange(band.G, 140, 170);
+        Assert.True(band.G > band.R + 100 && band.G > band.B + 100, $"{band}");
+        Assert.True(arriving.G < band.G - 50, $"{arriving} → {band}");
+        Assert.Equal(0, At(pixels, Width / 2, Height / 2).A); // the picture stays see-through over the player
+        // Shown whole without the glow, or the glow gone with its video: no green.
+        feed.Inputs = feed.Inputs with { YouTubeFraming = MusicVideoFraming.Whole };
+        DrawTransparent(layer, wall: 9);
+        Assert.True(At(_surface.ReadPixels(), Width / 2, top / 2).G < 60);
+        feed.Inputs = feed.Inputs with { YouTubeFraming = MusicVideoFraming.Ambient, Glow = null };
+        DrawTransparent(layer, wall: 10);
+        Assert.True(At(_surface.ReadPixels(), Width / 2, top / 2).G < 60);
+    }
+
+    private void DrawTransparent(IRenderLayer layer, bool desktop = true, bool main = true, double wall = 1)
     {
         var dc = _surface.Context;
         dc.BeginDraw();
         dc.Clear(new Vortice.Mathematics.Color4(0, 0, 0, 0));
         var frame = new FrameContext
         {
-            Dc = dc, DWrite = _surface.DWrite, D2DFactory = _surface.Factory, Size = _surface.Size, Scale = 1, WallSeconds = 1,
+            Dc = dc, DWrite = _surface.DWrite, D2DFactory = _surface.Factory, Size = _surface.Size, Scale = 1, WallSeconds = wall,
             SongSeconds = double.NaN, IsPlaying = false, Scene = Scene(), DeltaSeconds = 1 / 60.0,
             AheadWork = desktop ? new Lunalyr.Render.Pacing.AheadWork() : null,
             IsMainDisplay = desktop && main,

@@ -24,6 +24,12 @@ public enum MusicVideoFraming
     /// behind the still, while YouTube's title overlay fades.
     /// </summary>
     Whole,
+
+    /// <summary>
+    /// Shown whole, with a glow around it that follows the picture: a blurred copy of the playing video, sampled about once a
+    /// second (<see cref="MusicVideoAmbience"/>), like YouTube's ambient mode (the Mac's 7ef2908).
+    /// </summary>
+    Ambient,
 }
 
 /// <summary>How a library video (a video file, on Windows) is drawn: AVFoundation's resizeAspect or resizeAspectFill.</summary>
@@ -60,7 +66,13 @@ public static class MusicVideoFramings
     public const string LibraryKey = "libraryVideoFraming";
 
     /// <summary>Every choice, in the menu's order.</summary>
-    public static IReadOnlyList<MusicVideoFraming> All { get; } = [MusicVideoFraming.Fill, MusicVideoFraming.Whole];
+    public static IReadOnlyList<MusicVideoFraming> All { get; } = [MusicVideoFraming.Fill, MusicVideoFraming.Whole, MusicVideoFraming.Ambient];
+
+    /// <summary>The whole picture is shown, not cropped to fill (whole, with or without the glow).</summary>
+    public static bool IsWhole(this MusicVideoFraming framing) => framing != MusicVideoFraming.Fill;
+
+    /// <summary>The glow around the picture follows the video.</summary>
+    public static bool FollowsVideo(this MusicVideoFraming framing) => framing == MusicVideoFraming.Ambient;
 
     /// <summary>YouTube's player is 16:9; other shapes are letterboxed inside it.</summary>
     public const double YouTubeAspect = 16.0 / 9.0;
@@ -79,22 +91,35 @@ public static class MusicVideoFramings
     /// </summary>
     public const double TitleOverlayHold = 5;
 
-    /// <summary>The stored value ("fill" or "whole").</summary>
-    public static string Value(this MusicVideoFraming framing) => framing == MusicVideoFraming.Whole ? "whole" : "fill";
+    /// <summary>The stored value ("fill", "whole" or "ambient").</summary>
+    public static string Value(this MusicVideoFraming framing) => framing switch
+    {
+        MusicVideoFraming.Whole => "whole",
+        MusicVideoFraming.Ambient => "ambient",
+        _ => "fill",
+    };
 
     /// <summary>A stored value, or <see cref="MusicVideoFraming.Fill"/> (the look before the choice existed).</summary>
-    public static MusicVideoFraming FromStored(object? stored) =>
-        stored is string text && text == "whole" ? MusicVideoFraming.Whole : MusicVideoFraming.Fill;
+    public static MusicVideoFraming FromStored(object? stored) => stored switch
+    {
+        "whole" => MusicVideoFraming.Whole,
+        "ambient" => MusicVideoFraming.Ambient,
+        _ => MusicVideoFraming.Fill,
+    };
 
     /// <summary>The menu's title.</summary>
-    public static string Title(this MusicVideoFraming framing) =>
-        framing == MusicVideoFraming.Whole ? "Show the whole video" : "Fill the screen";
+    public static string Title(this MusicVideoFraming framing) => framing switch
+    {
+        MusicVideoFraming.Whole => "Show the whole video",
+        MusicVideoFraming.Ambient => "Whole video, ambient glow",
+        _ => "Fill the screen",
+    };
 
     /// <summary>The YouTube page's zoom of its player.</summary>
     public static double YouTubeOverscan(this MusicVideoFraming framing) => framing == MusicVideoFraming.Fill ? FillOverscan : 1;
 
     /// <summary>How long a YouTube player that starts playing stays hidden.</summary>
-    public static double RevealHold(this MusicVideoFraming framing) => framing == MusicVideoFraming.Whole ? TitleOverlayHold : 0;
+    public static double RevealHold(this MusicVideoFraming framing) => framing.IsWhole() ? TitleOverlayHold : 0;
 
     /// <summary>
     /// How a video file of <paramref name="contentAspect"/> (null until known) is drawn in <paramref name="container"/>:
@@ -102,17 +127,17 @@ public static class MusicVideoFramings
     /// </summary>
     public static MusicVideoGravity VideoGravity(this MusicVideoFraming framing, double? contentAspect, VideoSize container)
     {
-        if (framing != MusicVideoFraming.Whole) return MusicVideoGravity.Fill;
+        if (!framing.IsWhole()) return MusicVideoGravity.Fill;
         if (contentAspect is not { } aspect || aspect <= 0 || !double.IsFinite(aspect) || container.Width <= 0 || container.Height <= 0)
             return MusicVideoGravity.Fit;
         return aspect >= container.Width / container.Height ? MusicVideoGravity.Fit : MusicVideoGravity.Fill;
     }
 
     /// <summary>The extra scale of a fitted picture (none when filled).</summary>
-    public static double BleedScale(this MusicVideoFraming framing) => framing == MusicVideoFraming.Whole ? WholeBleed : 1;
+    public static double BleedScale(this MusicVideoFraming framing) => framing.IsWhole() ? WholeBleed : 1;
 
     /// <summary>Whether a blurred backdrop shows around the picture.</summary>
-    public static bool ShowsBackdrop(this MusicVideoFraming framing) => framing == MusicVideoFraming.Whole;
+    public static bool ShowsBackdrop(this MusicVideoFraming framing) => framing.IsWhole();
 
     /// <summary>
     /// Where a video of <paramref name="aspect"/> (width / height) is drawn in <paramref name="container"/> (centred; may run
@@ -125,7 +150,7 @@ public static class MusicVideoFramings
         var byWidth = new VideoSize(container.Width, container.Width / aspect);
         var byHeight = new VideoSize(container.Height * aspect, container.Height);
         var fits = byWidth.Height <= container.Height;
-        var size = framing == MusicVideoFraming.Whole ? byWidth : fits ? byHeight : byWidth;
+        var size = framing.IsWhole() ? byWidth : fits ? byHeight : byWidth;
         var grow = framing.BleedScale();
         size = new VideoSize(size.Width * grow, size.Height * grow);
         return new VideoRect((container.Width - size.Width) / 2, (container.Height - size.Height) / 2, size.Width, size.Height);
@@ -286,7 +311,7 @@ public static class MusicVideoBackdrop
     }
 
     /// <summary>An area-averaged reduction (each target pixel is the mean of the source pixels it covers).</summary>
-    private static float[] Reduce(CoverArt image, int width, int height)
+    internal static float[] Reduce(CoverArt image, int width, int height)
     {
         var source = image.Pixels;
         var result = new float[width * height * 4];
@@ -325,7 +350,7 @@ public static class MusicVideoBackdrop
         return result;
     }
 
-    private static float[] Kernel(double sigma)
+    internal static float[] Kernel(double sigma)
     {
         var radius = (int)Math.Ceiling(sigma * 3);
         var kernel = new float[radius * 2 + 1];
@@ -341,7 +366,7 @@ public static class MusicVideoBackdrop
     }
 
     /// <summary>One pass of a separable Gaussian, the edge pixels continued past the edge.</summary>
-    private static void Blur(float[] from, float[] to, int width, int height, float[] kernel, bool horizontal)
+    internal static void Blur(float[] from, float[] to, int width, int height, float[] kernel, bool horizontal)
     {
         var radius = kernel.Length / 2;
         for (var y = 0; y < height; y++)

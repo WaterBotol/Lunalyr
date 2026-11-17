@@ -46,9 +46,13 @@ namespace Lunalyr.Render.Backgrounds;
 /// <param name="YouTubeFraming">How a YouTube video sits on the screen (<c>musicVideoFraming</c>).</param>
 /// <param name="FileFraming">How a video file sits on the screen (<c>libraryVideoFraming</c>).</param>
 /// <param name="YouTubeAspect">The YouTube video's own shape (oEmbed, asked only when shown whole), or null for 16:9.</param>
+/// <param name="Glow">
+/// The YouTube video's ambient glow (<see cref="MusicVideoFraming.Ambient"/>): its newest sample, already blurred, taken
+/// by the player's host about once a second; a new reference is a new sample. Null for none (yet).
+/// </param>
 public readonly record struct MusicVideoInputs(string? LocalPath, double SongTime, bool Playing, double Offset, double Dim, double Blur,
     bool PlayerVisible = false, CoverArt? Still = null, MusicVideoFraming YouTubeFraming = MusicVideoFraming.Fill,
-    MusicVideoFraming FileFraming = MusicVideoFraming.Fill, double? YouTubeAspect = null);
+    MusicVideoFraming FileFraming = MusicVideoFraming.Fill, double? YouTubeAspect = null, CoverArt? Glow = null);
 
 /// <summary>Where the music video layers get their inputs and tell what they saw. Every member is called on the render thread.</summary>
 public interface IMusicVideoFeed
@@ -207,7 +211,14 @@ public sealed class MusicVideoLayer : PlacedLayer
     private readonly MusicVideoStandIn _standIn = new();
     private readonly MusicVideoPicture _picture = new();
     private readonly MusicVideoBackdropDrawer _backdrop = new();
+    private readonly MusicVideoGlowDrawer _glow = new();
     private readonly object _gate = new();
+    // The ambient glow's sampling (the Mac's AVPlayerItemVideoOutput read about once a second): the frame on screen drawn
+    // small on a context of its own, read back, and blurred off the render thread.
+    private double _glowAt = double.NegativeInfinity;
+    private Task<CoverArt?>? _glowing;
+    private ID2D1DeviceContext? _sampleDc;
+    private ID2D1Bitmap1? _sampleTarget, _sampleRead;
     private readonly Queue<(VideoFrame Frame, int Generation)> _queue = new();
 
     private Thread? _worker;
@@ -280,9 +291,15 @@ public sealed class MusicVideoLayer : PlacedLayer
             if (inputs.FileFraming.ShowsBackdrop())
             {
                 // Shown whole: the width matched (the Mac's videoGravity: a fit for a wider picture, a fill for a taller one,
-                // grown by the bleed), over the stand-in and the cover's blurred backdrop, which show in the bands.
+                // grown by the bleed), over the stand-in and the cover's blurred backdrop, which show in the bands; with an
+                // ambient glow, the glow over the backdrop.
                 _standIn.Draw(dc, frame.Scene.Palette, Size);
                 _backdrop.Draw(dc, frame.Scene.Cover, Size, frame.WallSeconds);
+                if (inputs.FileFraming.FollowsVideo())
+                {
+                    SampleGlow(dc, frame, inputs);
+                    _glow.Draw(dc, Size, frame.WallSeconds, frame.Scene.ReduceMotion);
+                }
                 var rect = inputs.FileFraming.Rect((double)_width / _height, new VideoSize(Size.X, Size.Y));
                 _picture.DrawIn(dc, _bitmap, _width, _height, rect, inputs.Blur, Scale);
             }
@@ -296,6 +313,85 @@ public sealed class MusicVideoLayer : PlacedLayer
             _standIn.Draw(dc, frame.Scene.Palette, Size);
         }
         _standIn.Dim(dc, inputs.Dim, Size);
+    }
+
+    /// <summary>
+    /// The ambient glow samples the picture about once a second, only while it shows and the video moves (the Mac's
+    /// ambienceActive: not paused, not the Reduce Motion still, not the settings preview).
+    /// </summary>
+    private void SampleGlow(ID2D1DeviceContext dc, in FrameContext frame, MusicVideoInputs inputs)
+    {
+        if (_glowing is { IsCompleted: true } done)
+        {
+            _glowing = null;
+            if (done.IsCompletedSuccessfully && done.Result is { } glow) _glow.Present(glow);
+        }
+        var active = inputs.Playing && !frame.Scene.ReduceMotion && frame.AheadWork is not null && _bitmap is not null;
+        if (!active || _glowing is not null || frame.WallSeconds - _glowAt < MusicVideoAmbience.Interval) return;
+        _glowAt = frame.WallSeconds;
+        if (Sample(dc) is { } sample)
+            _glowing = Task.Run(() => MusicVideoAmbience.LooksBlank(sample) ? null : MusicVideoAmbience.Glow(sample));
+    }
+
+    /// <summary>The frame on screen, drawn twice the glow's width and read back (premultiplied BGRA); null when it can't be.</summary>
+    private unsafe CoverArt? Sample(ID2D1DeviceContext dc)
+    {
+        if (_bitmap is null || _width <= 0 || _height <= 0) return null;
+        var width = MusicVideoAmbience.SampleWidth * 2;
+        var height = Math.Max(1, (int)Math.Round((double)width * _height / _width));
+        try
+        {
+            if (_sampleDc is null)
+            {
+                using var device = dc.Device;
+                _sampleDc = device.CreateDeviceContext(DeviceContextOptions.None);
+            }
+            if (_sampleTarget is null || _sampleTarget.PixelSize.Width != width || _sampleTarget.PixelSize.Height != height)
+            {
+                _sampleTarget?.Dispose();
+                _sampleRead?.Dispose();
+                var format = new PixelFormat(Format.B8G8R8A8_UNorm, AlphaMode.Premultiplied);
+                _sampleTarget = _sampleDc.CreateBitmap(new SizeI(width, height), IntPtr.Zero, 0, new BitmapProperties1(format, 96, 96, BitmapOptions.Target));
+                _sampleRead = _sampleDc.CreateBitmap(new SizeI(width, height), IntPtr.Zero, 0,
+                    new BitmapProperties1(format, 96, 96, BitmapOptions.CannotDraw | BitmapOptions.CpuRead));
+            }
+            _sampleDc.Target = _sampleTarget;
+            _sampleDc.BeginDraw();
+            _sampleDc.Clear(new Color4(0, 0, 0, 1));
+            _sampleDc.DrawBitmap(_bitmap, new Vortice.RawRectF(0, 0, width, height), 1, InterpolationMode.Linear,
+                new Vortice.RawRectF(0, 0, _width, _height), null);
+            _sampleDc.EndDraw().CheckError();
+            _sampleDc.Target = null;
+            _sampleRead!.CopyFromBitmap(_sampleTarget);
+            var map = _sampleRead.Map(MapOptions.Read);
+            try
+            {
+                var pixels = new byte[width * height * 4];
+                for (var y = 0; y < height; y++)
+                    System.Runtime.InteropServices.Marshal.Copy(map.Bits + (int)(y * map.Pitch), pixels, y * width * 4, width * 4);
+                return new CoverArt(width, height, pixels);
+            }
+            finally
+            {
+                _sampleRead.Unmap();
+            }
+        }
+        catch (SharpGenException ex)
+        {
+            Log.Render.Debug($"Music video: the ambient glow's sample failed ({ex.Message}).");
+            ReleaseSampler();
+            return null;
+        }
+    }
+
+    private void ReleaseSampler()
+    {
+        _sampleTarget?.Dispose();
+        _sampleTarget = null;
+        _sampleRead?.Dispose();
+        _sampleRead = null;
+        _sampleDc?.Dispose();
+        _sampleDc = null;
     }
 
     /// <summary>Picks the frame the song's clock asks for, asking the worker to seek when decoding forward won't reach it soon.</summary>
@@ -405,6 +501,10 @@ public sealed class MusicVideoLayer : PlacedLayer
     {
         StopWorker();
         _path = path;
+        // A new video: the old one's glow goes.
+        _glow.Reset();
+        _glowing = null;
+        _glowAt = double.NegativeInfinity;
         _failed = false;
         _error = null;
         _shownTime = null;
@@ -563,6 +663,8 @@ public sealed class MusicVideoLayer : PlacedLayer
         _picture.Release();
         _standIn.Release();
         _backdrop.Release();
+        _glow.Release();
+        ReleaseSampler();
         _bitmap?.Dispose();
         _bitmap = null;
         _texture?.Dispose();
@@ -578,6 +680,8 @@ public sealed class MusicVideoLayer : PlacedLayer
         _picture.Dispose();
         _standIn.Dispose();
         _backdrop.Dispose();
+        _glow.Dispose();
+        ReleaseSampler();
     }
 }
 
@@ -601,6 +705,8 @@ public sealed class YouTubeVideoLayer : IRenderLayer, ISeeThroughLayer, IMeasure
     private readonly MusicVideoStandIn _standIn = new();
     private readonly MusicVideoPicture _picture = new();
     private readonly MusicVideoBackdropDrawer _backdrop = new();
+    private readonly MusicVideoGlowDrawer _glow = new();
+    private CoverArt? _glowShown;
     private readonly Logger _log;
     private Vector2 _size;
     private float _scale = 1;
@@ -715,6 +821,17 @@ public sealed class YouTubeVideoLayer : IRenderLayer, ISeeThroughLayer, IMeasure
         }
         _backdrop.Draw(dc, backdrop, _size, frame.WallSeconds, cut,
             inputs.Still is not null ? inputs.YouTubeAspect ?? MusicVideoFramings.YouTubeAspect : null);
+        // With an ambient glow: the samples the player's host takes, over the backdrop (the Mac's MusicVideoAmbientGlow).
+        if (inputs.YouTubeFraming.FollowsVideo())
+        {
+            if (!ReferenceEquals(inputs.Glow, _glowShown))
+            {
+                _glowShown = inputs.Glow;
+                if (inputs.Glow is { } glow) _glow.Present(glow);
+                else _glow.Reset();
+            }
+            _glow.Draw(dc, _size, frame.WallSeconds, frame.Scene.ReduceMotion, cut);
+        }
         if (uncovered) return;
         dc.PushAxisAlignedClip(new Vortice.RawRectF((float)visible.X, (float)visible.Y, (float)(visible.X + visible.Width),
             (float)(visible.Y + visible.Height)), AntialiasMode.Aliased);
@@ -783,6 +900,8 @@ public sealed class YouTubeVideoLayer : IRenderLayer, ISeeThroughLayer, IMeasure
         _standIn.Release();
         _picture.Release();
         _backdrop.Release();
+        _glow.Release();
+        _glowShown = null;
         _stillBitmap?.Dispose();
         _stillBitmap = null;
         _still = null;
@@ -796,5 +915,6 @@ public sealed class YouTubeVideoLayer : IRenderLayer, ISeeThroughLayer, IMeasure
         _shade.Dispose();
         _picture.Dispose();
         _backdrop.Dispose();
+        _glow.Dispose();
     }
 }

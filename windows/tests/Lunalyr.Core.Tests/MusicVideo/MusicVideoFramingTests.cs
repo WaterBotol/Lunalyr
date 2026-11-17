@@ -31,7 +31,9 @@ public sealed class MusicVideoFramingTests
     {
         Assert.Equal("Fill the screen", MusicVideoFraming.Fill.Title());
         Assert.Equal("Show the whole video", MusicVideoFraming.Whole.Title());
-        Assert.Equal([MusicVideoFraming.Fill, MusicVideoFraming.Whole], MusicVideoFramings.All);
+        Assert.Equal([MusicVideoFraming.Fill, MusicVideoFraming.Whole, MusicVideoFraming.Ambient], MusicVideoFramings.All);
+        Assert.Equal("Whole video, ambient glow", MusicVideoFraming.Ambient.Title());
+        Assert.Equal("ambient", MusicVideoFraming.Ambient.Value());
         Assert.Equal("fill", MusicVideoFraming.Fill.Value());
         Assert.Equal("whole", MusicVideoFraming.Whole.Value());
     }
@@ -141,6 +143,45 @@ public sealed class MusicVideoFramingTests
         Assert.Equal(1, MusicVideoFraming.Fill.BleedScale());
         Assert.True(MusicVideoFraming.Whole.ShowsBackdrop());
         Assert.False(MusicVideoFraming.Fill.ShowsBackdrop());
+    }
+
+    // Ported from MusicVideoFramingTests.swift: testAmbientIsWholeWithAGlow (7ef2908)
+    [Fact]
+    public void AmbientIsWholeWithAGlow()
+    {
+        MusicVideoFraming ambient = MusicVideoFraming.Ambient, whole = MusicVideoFraming.Whole;
+        Assert.Equal(MusicVideoFraming.Ambient, MusicVideoFramings.FromStored("ambient"));
+        Assert.True(ambient.IsWhole() && ambient.ShowsBackdrop() && ambient.FollowsVideo());
+        Assert.False(whole.FollowsVideo());
+        Assert.False(MusicVideoFraming.Fill.IsWhole());
+        Assert.Equal(whole.Rect(Hd, Laptop), ambient.Rect(Hd, Laptop));
+        Assert.Equal(whole.RevealHold(), ambient.RevealHold());
+        Assert.Equal(1, ambient.YouTubeOverscan());
+        Assert.Equal(whole.VideoGravity(Hd, Laptop), ambient.VideoGravity(Hd, Laptop));
+    }
+
+    // Ported from MusicVideoFramingTests.swift: testAmbientGlowIsSmallAndBlurred (7ef2908)
+    [Fact]
+    public void AmbientGlowIsSmallAndBlurred()
+    {
+        // Red on the left half, blue on the right, 640 × 320.
+        const int side = 640;
+        var pixels = new byte[side * (side / 2) * 4];
+        for (var y = 0; y < side / 2; y++)
+        for (var x = 0; x < side; x++)
+        {
+            var i = (y * side + x) * 4;
+            if (x < side / 2) pixels[i + 2] = 255; else pixels[i] = 255;
+            pixels[i + 3] = 255;
+        }
+        var glow = MusicVideoAmbience.Glow(new Lunalyr.Core.Colour.CoverArt(side, side / 2, pixels))!;
+        Assert.InRange(glow.Width, 1, MusicVideoAmbience.SampleWidth + 1);
+        // Blurred: the middle mixes red and blue; the edges keep their own colour (no dark fringe).
+        var mid = ((glow.Height / 2) * glow.Width + glow.Width / 2) * 4;
+        Assert.True(glow.Pixels[mid] > 60 && glow.Pixels[mid + 2] > 60, "the middle is a blend");
+        Assert.True(glow.Pixels[(glow.Height / 2 * glow.Width) * 4 + 2] > 200, "the left edge stays red");
+        Assert.False(MusicVideoAmbience.LooksBlank(glow));
+        Assert.True(MusicVideoAmbience.LooksBlank(new Lunalyr.Core.Colour.CoverArt(4, 4, new byte[64])));
     }
 
     // Ported from MusicVideoFramingTests.swift: testEmbedPageZoomFollowsTheFraming

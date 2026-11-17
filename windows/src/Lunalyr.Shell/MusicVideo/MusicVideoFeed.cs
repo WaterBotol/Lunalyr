@@ -15,6 +15,7 @@ public sealed class MusicVideoFeed : IMusicVideoFeed
 
     private volatile Reader? _reader;
     private volatile bool _playerVisible;
+    private volatile Lunalyr.Core.Colour.CoverArt? _glow;
 
     private sealed record Reader(Func<MusicVideoInputs> Read, Action<string, double?, double, bool> Report, Action<string, string> Failed);
 
@@ -30,10 +31,17 @@ public sealed class MusicVideoFeed : IMusicVideoFeed
         set => _playerVisible = value;
     }
 
+    /// <summary>The YouTube player's ambient glow, its newest sample already blurred (set by its host); null for none.</summary>
+    public Lunalyr.Core.Colour.CoverArt? Glow
+    {
+        get => _glow;
+        set => _glow = value;
+    }
+
     public MusicVideoInputs Read()
     {
         var inputs = _reader?.Read() ?? new MusicVideoInputs(null, double.NaN, false, 0, 0.35, 0);
-        return inputs with { PlayerVisible = _playerVisible };
+        return inputs with { PlayerVisible = _playerVisible, Glow = _glow };
     }
 
     public void Report(string path, double? duration, double videoTime, bool playing) => _reader?.Report(path, duration, videoTime, playing);
