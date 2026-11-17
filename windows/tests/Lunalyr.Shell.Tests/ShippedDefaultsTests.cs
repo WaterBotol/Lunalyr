@@ -87,6 +87,10 @@ public sealed class ShippedDefaultsTests
         Assert.True(floating.EditorialTypography);
         Assert.Equal(0.6, floating.ConstellationLinkOpacity);
         Assert.Equal("mix", floating.WordArrivalByStyle["spoken"]);
+        // Once displays are known and floating lyrics are first used, the main display's Floating style is the owner's Hinge.
+        var keys = new[] { "a", "b" };
+        var used = MonitorLooks.DisplaysChanged(ShippedDefaults.ForNewInstall(), keys).WithFloatingToggled(keys, "a");
+        Assert.Equal("hinge", used.LookFor("a", LyricsSurface.Floating, "a").LyricComposition);
         // Switching back finds the Desktop style as it was.
         Assert.Equal("automatic", floating.WithLyricsSurface(LyricsSurface.Desktop).LyricComposition);
     }
@@ -157,15 +161,5 @@ public sealed class ShippedDefaultsTests
         Assert.True((bool)normalised["wordRevealByStyle"]!["constellation"]!);
         Assert.True((bool)normalised["nextWordPreviewByStyle"]!["cutout"]!);
         Assert.Equal("glide", (string?)normalised["wordArrivalByStyle"]!["cascade"]);
-    }
-
-    [Fact]
-    public void TheOldDefaultsStepFillsOnlyMissingKeys()
-    {
-        var file = new System.Text.Json.Nodes.JsonObject { ["lyricComposition"] = "spoken", ["floatingTextSize"] = 60.0 };
-        ShippedDefaults.KeepOldDefaults.Apply(file);
-        Assert.Equal("spoken", (string?)file["lyricComposition"]);
-        Assert.Equal(60.0, (double?)file["floatingTextSize"]);
-        Assert.Equal("auto", (string?)file["backgroundMode"]);
     }
 }

@@ -452,6 +452,8 @@ public sealed unsafe class FloatingWindowHost : IDisposable
     private void OnButtonDown(int x, int y)
     {
         if (_applied is not { Editing: true }) return;
+        // A press in the margin round the box (before the window lets it through) does nothing.
+        if (x < _margin || y < _margin || x >= _margin + _rect.Width || y >= _margin + _rect.Height) return;
         var hit = HitAt(x, y);
         if (hit == FloatingHit.Done)
         {

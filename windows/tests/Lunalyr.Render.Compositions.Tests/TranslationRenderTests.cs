@@ -129,6 +129,22 @@ public sealed class TranslationRenderTests : IDisposable
 
     [Theory]
     [InlineData("editorial")]
+    [InlineData("spoken")]
+    [InlineData("hinge")]
+    public void ChangingThePlaceOnALiveLayerDrawsAsAFreshOne(string id)
+    {
+        // The place is part of the style, so a change sets the line again: the translation is not left under the line too.
+        using var live = Layer(id);
+        using var fresh = Layer(id);
+        var below = Placed(TranslationPlacement.Below);
+        var bottom = Placed(TranslationPlacement.Bottom);
+        for (var t = 19.4; t < 20.4; t += 1.0 / 15) Frame(live, below, t);
+        for (var t = 20.4; t < 21.4; t += 1.0 / 15) { Frame(live, bottom, t); Frame(fresh, bottom, t); }
+        Assert.Equal(0, Differing(Frame(live, bottom, 21.4), Frame(fresh, bottom, 21.4)));
+    }
+
+    [Theory]
+    [InlineData("editorial")]
     [InlineData("hinge")]
     public void AtTheScreensEdgeTheTranslationSitsThere(string id)
     {

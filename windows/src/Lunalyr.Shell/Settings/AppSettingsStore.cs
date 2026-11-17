@@ -23,7 +23,6 @@ public static class AppSettingsStore
             // is laid over these, maps included, so a stored empty map must not pick up the new install's entries.
             MissingKeyDefaults = () => new AppSettings(),
             SchemaVersion = AppSettings.SchemaVersion,
-            Migrations = [ShippedDefaults.KeepOldDefaults],
             Logger = logger,
             TimeProvider = time ?? TimeProvider.System,
         });

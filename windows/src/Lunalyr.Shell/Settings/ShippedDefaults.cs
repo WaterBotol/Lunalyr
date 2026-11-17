@@ -3,17 +3,16 @@
 // a large floating text with no shade, and so on), and the owner's Floating style.
 //
 // A new install, with no settings file yet, starts from these (AppSettingsStore's CreateDefaults). An existing install
-// keeps its look: the settings file stores every setting on each save, and the one-time schema 1 -> 2 step
-// (KeepOldDefaults, the Mac's DefaultsMigration and its ownerDefaults2026 flag) writes the old default into any key a
-// file from before lacks, since a missing key would otherwise read the new ones. A kept style missing a key already
-// reads the old default (LyricStyleProfiles.Applied lays it over the record's own).
+// keeps its look: the settings file stores every setting on each save, and a key a file lacks reads the record's own
+// (older) default, never these (the store's MissingKeyDefaults, Windows' counterpart of the Mac's DefaultsMigration and
+// its ownerDefaults2026 flag). A kept style missing a key also reads the old default (LyricStyleProfiles.Applied lays it
+// over the record's own).
 //
 // Left out, as on the Mac: fonts (Windows' system face, Segoe UI Variable, stays the default and plays SF Pro's part),
 // the music video, Discord, the lyric sources and anything per song. Windows has no Wavefield projection, Light 3D
 // colours, Heavy scenes on the main display or machine translation, and already draws at 60 fps.
 
 using System.Text.Json;
-using Lunalyr.Platform.Settings;
 
 namespace Lunalyr.Shell.Settings;
 
@@ -192,19 +191,4 @@ public static class ShippedDefaults
 
     /// <summary>The settings a fresh store starts with (no file yet): <see cref="NewInstall"/>, normalised.</summary>
     public static AppSettings ForNewInstall() => NewInstall().Normalized();
-
-    /// <summary>
-    /// The settings file's step from schema 1 to 2: a file from before these defaults gets the old default (the record's
-    /// own) written for every key it lacks, so nothing it shows changes.
-    /// </summary>
-    public static SettingsMigration KeepOldDefaults { get; } = new(1, file =>
-    {
-        var old = JsonSerializer.SerializeToNode(new AppSettings(), AppSettingsJsonContext.Default.AppSettings)!.AsObject();
-        foreach (var (key, value) in old)
-            if (key != "schemaVersion" && !file.ContainsKey(key)) file[key] = value?.DeepClone();
-        // A key left out while empty (the kept Floating style, say) is empty in a file from before, not the new install's.
-        var shipped = JsonSerializer.SerializeToNode(NewInstall(), AppSettingsJsonContext.Default.AppSettings)!.AsObject();
-        foreach (var (key, _) in shipped)
-            if (key != "schemaVersion" && !file.ContainsKey(key)) file[key] = null;
-    });
 }

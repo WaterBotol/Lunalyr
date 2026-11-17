@@ -89,6 +89,9 @@ internal sealed partial class AppHost
         foreach (var problem in options.Problems) _log.Warn($"Command line: {problem}");
 
         _settings = AppSettingsStore.Open(dataRoot, Log);
+        // A first run's welcome holds System audio from the start (it opens after the visualisers start).
+        _firstRunWelcomeOpen = Lunalyr.Shell.Onboarding.OnboardingGate.Decide(
+            Lunalyr.Shell.Onboarding.OnboardingGate.IsFirstRun(_settings.LoadReport), _settings.Current, options).Show;
         if (_settings.LoadReport.UserMessage is { } message) _log.Warn($"Settings: {message}");
         _tray = new TrayHost(instance.WindowClass, Log);
     }

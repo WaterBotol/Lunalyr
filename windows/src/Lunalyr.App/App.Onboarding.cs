@@ -50,6 +50,8 @@ public partial class App
         }
         catch (Exception ex)
         {
+            // A welcome that never opened holds nothing.
+            _host.FirstRunWelcomeOpen = false;
             // The welcome not opening must not take Lunalyr down; Settings has everything it offers.
             _host.ReportCrash(ex, "welcome window", fatal: false);
         }
