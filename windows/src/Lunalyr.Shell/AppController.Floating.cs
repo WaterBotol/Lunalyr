@@ -132,7 +132,7 @@ public sealed partial class AppController
                     LayoutSize = settings.LayoutSize(layout),
                     Backdrop = settings.FloatingBackdrop,
                     FadesUnderPointer = settings.FloatingFadeUnderPointer,
-                    Placement = settings.Placement,
+                    Placement = settings.PlacementFor(display),
                     Display = display,
                     Frames = settings.FloatingFrames,
                     Sizes = settings.FloatingSizes,

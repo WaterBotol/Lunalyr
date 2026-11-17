@@ -60,7 +60,9 @@ public class FloatingSettingsTests
     public void CustomFramesAreKeptPerDisplayAndResetClears()
     {
         var options = new AppSettings().WithCustomFrame(new FloatingRect(40, 60, 500, 160), "A");
-        Assert.Equal(FloatingPlacement.Custom, options.Placement); // dragging the window makes it Custom
+        Assert.Equal(FloatingPlacement.Custom, options.PlacementFor("A")); // dragging the window makes its display Custom
+        Assert.Equal(FloatingPlacement.Bottom, options.PlacementFor("B")); // another display keeps its place
+        Assert.Equal(FloatingPlacement.Bottom, options.Placement);
         Assert.Equal(new FloatingRect(40, 60, 500, 160), options.CustomFrame("A"));
         Assert.Equal(new Core.Compositions.SizeD(500, 160), options.SavedSize("A"));
         Assert.Null(options.CustomFrame("B")); // another display keeps its own
@@ -68,6 +70,17 @@ public class FloatingSettingsTests
         Assert.Null(options.CustomFrame("A"));
         Assert.Null(options.SavedSize("A"));
         Assert.Equal(FloatingPlacement.Bottom, options.Placement);
+        Assert.Equal(FloatingPlacement.Bottom, options.PlacementFor("A"));
+    }
+
+    // Ported from FloatingLyricsTests.swift: testPickingAPlaceAppliesToEveryDisplay
+    [Fact]
+    public void PickingAPlaceAppliesToEveryDisplay()
+    {
+        var options = new AppSettings().WithCustomFrame(new FloatingRect(40, 60, 500, 160), "A").WithFloatingPlacement(FloatingPlacement.TopRight);
+        Assert.Equal(FloatingPlacement.TopRight, options.PlacementFor("A"));
+        Assert.Equal(FloatingPlacement.TopRight, options.PlacementFor("B"));
+        Assert.Equal(new FloatingRect(40, 60, 500, 160), options.CustomFrame("A")); // the frame placed by hand is kept for Custom
     }
 
     // ---- Desktop or floating, never both ----

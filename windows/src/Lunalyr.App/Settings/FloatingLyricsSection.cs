@@ -174,7 +174,7 @@ internal static class FloatingLyricsSection
             AutomationProperties.SetName(button, preset.Title());
             ToolTipService.SetToolTip(button, preset.Title());
             var chosen = preset;
-            button.Click += (_, _) => ctx.Update(s => s with { FloatingPlacement = chosen.Raw() });
+            button.Click += (_, _) => ctx.Update(s => s.WithFloatingPlacement(chosen));
             Grid.SetRow(button, row);
             Grid.SetColumn(button, column);
             grid.Children.Add(button);
@@ -185,7 +185,7 @@ internal static class FloatingLyricsSection
         var custom = new ToggleButton { Content = "Custom", Padding = new Thickness(10, 3, 10, 3) };
         AutomationProperties.SetName(custom, FloatingPlacement.Custom.Title());
         ToolTipService.SetToolTip(custom, "The place and size you set with Edit position");
-        custom.Click += (_, _) => ctx.Update(s => s with { FloatingPlacement = FloatingPlacement.Custom.Raw() });
+        custom.Click += (_, _) => ctx.Update(s => s.WithFloatingPlacement(FloatingPlacement.Custom));
 
         ctx.OnRefresh(s =>
         {

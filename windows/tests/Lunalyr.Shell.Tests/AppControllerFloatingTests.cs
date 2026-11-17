@@ -145,10 +145,14 @@ public sealed class AppControllerFloatingTests : IAsyncDisposable
     [Fact]
     public async Task FramesPlacedByHandReachTheRenderer()
     {
-        var controller = await PlayingWithLyrics(Floating);
+        // Dragging one display's window makes only that display Custom (the Mac's 0da0eef7).
+        var controller = await PlayingWithLyrics(new AppSettings().WithDisplayChoice("A", DisplayLyrics.Floating).WithDisplayChoice("B", DisplayLyrics.Floating));
+        controller.SetDisplays([new ConnectedDisplay("A", @"\\.\DISPLAY1"), new ConnectedDisplay("B", @"\\.\DISPLAY2")]);
         var placed = controller.Settings.WithCustomFrame(new FloatingRect(40, 60, 500, 160), "A");
         controller.ApplySettings(placed);
-        Assert.Equal(FloatingPlacement.Custom, _renderer.Floating.Placement);
-        Assert.Equal([40.0, 60, 500, 160], _renderer.Floating.Frames["A"]);
+        var windows = _renderer.FloatingWindows!;
+        Assert.Equal(FloatingPlacement.Custom, windows.Single(w => w.Display == "A").Placement);
+        Assert.Equal(FloatingPlacement.Bottom, windows.Single(w => w.Display == "B").Placement);
+        Assert.Equal([40.0, 60, 500, 160], windows[0].Frames["A"]);
     }
 }

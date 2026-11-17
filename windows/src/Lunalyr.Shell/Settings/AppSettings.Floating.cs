@@ -35,7 +35,17 @@ public sealed partial record AppSettings
     /// <summary>Where the floating window sits: a preset's raw value or "custom" (Mac <c>custom.floating.placement</c>).</summary>
     public string FloatingPlacement { get; init; } = "bottom";
 
-    /// <summary>The display's lasting key, or empty for the main display (Mac <c>custom.floating.display</c>).</summary>
+    /// <summary>
+    /// Places set on one display (Custom, by dragging its window there), by display key (Mac <c>custom.floating.placements</c>);
+    /// the others take <see cref="FloatingPlacement"/>. Picking a place clears them.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyDictionary<string, string>? FloatingPlacementsByDisplay { get; init; }
+
+    /// <summary>
+    /// Where the one floating window went before each display had a choice: the display's lasting key, or empty for the
+    /// main display (Mac <c>custom.floating.display</c>). Read to migrate, and while no display is known.
+    /// </summary>
     public string FloatingDisplay { get; init; } = "";
 
     /// <summary>Frames placed by hand per display key, relative to that display, in points, y up (Mac <c>custom.floating.frames</c>).</summary>
@@ -120,7 +130,18 @@ public sealed partial record AppSettings
     public Core.Compositions.SizeD? SavedSize(string display) =>
         (FloatingSizes ?? new Dictionary<string, IReadOnlyList<double>>()).TryGetValue(display, out var values) ? FloatingFrame.Decode(values)?.Size : null;
 
-    /// <summary>Keeps a frame dragged into place on <paramref name="display"/> and switches to Custom.</summary>
+    /// <summary>Where the window goes on <paramref name="display"/>: its own place if it has one, else the shared one.</summary>
+    public FloatingPlacement PlacementFor(string display) =>
+        FloatingPlacementsByDisplay?.TryGetValue(display, out var raw) == true && FloatingPlacements.Parse(raw) is { } own ? own : Placement;
+
+    /// <summary>A place picked for every display (the Mac's <c>placement</c> setter): the places set per display are forgotten.</summary>
+    public AppSettings WithFloatingPlacement(FloatingPlacement placement) => this with
+    {
+        FloatingPlacement = placement.Raw(),
+        FloatingPlacementsByDisplay = null,
+    };
+
+    /// <summary>Keeps a frame dragged into place on <paramref name="display"/> and makes that display's place Custom; the others keep theirs.</summary>
     public AppSettings WithCustomFrame(FloatingRect relative, string display)
     {
         var frames = new Dictionary<string, IReadOnlyList<double>>(FloatingFrames ?? new Dictionary<string, IReadOnlyList<double>>())
@@ -131,7 +152,9 @@ public sealed partial record AppSettings
         {
             [display] = FloatingFrame.Encode(new FloatingRect(0, 0, relative.Width, relative.Height)),
         };
-        return this with { FloatingFrames = frames, FloatingSizes = sizes, FloatingPlacement = Core.Floating.FloatingPlacement.Custom.Raw() };
+        var placements = new Dictionary<string, string>(FloatingPlacementsByDisplay ?? new Dictionary<string, string>(), StringComparer.Ordinal);
+        if (PlacementFor(display) != Core.Floating.FloatingPlacement.Custom) placements[display] = Core.Floating.FloatingPlacement.Custom.Raw();
+        return this with { FloatingFrames = frames, FloatingSizes = sizes, FloatingPlacementsByDisplay = placements };
     }
 
     /// <summary>Forgets the sizes and frames set by hand; the presets go back to the size that follows the text size.</summary>
@@ -140,6 +163,7 @@ public sealed partial record AppSettings
         FloatingFrames = new Dictionary<string, IReadOnlyList<double>>(),
         FloatingSizes = new Dictionary<string, IReadOnlyList<double>>(),
         FloatingLayoutSizes = new Dictionary<string, IReadOnlyList<double>>(),
+        FloatingPlacementsByDisplay = null,
         FloatingPlacement = Placement == Core.Floating.FloatingPlacement.Custom ? Core.Floating.FloatingPlacement.Bottom.Raw() : FloatingPlacement,
     };
 
@@ -154,6 +178,8 @@ public sealed partial record AppSettings
             FloatingBackdrop = double.IsFinite(backdrop) ? Math.Clamp(backdrop, 0, 1) : DefaultFloatingBackdrop,
             FloatingPlacement = FloatingPlacements.Parse(FloatingPlacement) is { } placement ? placement.Raw() : defaults.FloatingPlacement,
             FloatingDisplay = FloatingDisplay ?? "",
+            FloatingPlacementsByDisplay = FloatingPlacementsByDisplay?.Where(p => FloatingPlacements.Parse(p.Value) is not null)
+                .ToDictionary(p => p.Key, p => p.Value, StringComparer.Ordinal) is { Count: > 0 } placements ? placements : null,
             FloatingFrames = ValidFrames(FloatingFrames),
             FloatingSizes = ValidFrames(FloatingSizes),
             FloatingLayoutSizes = ValidLayoutSizes(FloatingLayoutSizes),
