@@ -17,7 +17,7 @@ namespace Lunalyr.Shell.Settings;
 public sealed partial record AppSettings
 {
     /// <summary>The schema version this build writes.</summary>
-    public const int SchemaVersion = 1;
+    public const int SchemaVersion = 2;
 
     // ---- Lyric style ----
 

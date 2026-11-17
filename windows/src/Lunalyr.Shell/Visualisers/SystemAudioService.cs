@@ -115,8 +115,9 @@ public sealed class SystemAudioService : IDisposable
             var powerPause = AudioCaptureGate.PowerPause(chosen, shown == "visualizer", Wallpaper.WallpaperPower.Title(shown),
                 power?.Kind == PowerConstraintKind.LowPowerVisuals, power?.Kind == PowerConstraintKind.EnergySaver,
                 power?.Kind == PowerConstraintKind.Battery);
-            // The demo's signal stands in for System audio whenever a visualiser shows; nothing is captured.
-            return new SystemAudioPreferences(s.AudioReactiveEnabled || demo, chosen, powerPause, s.WallpaperPaused);
+            // The demo's signal stands in for System audio whenever a visualiser shows; nothing is captured. A new install
+            // has System audio on (ShippedDefaults), but nothing is captured until the welcome is finished, as on the Mac.
+            return new SystemAudioPreferences((s.AudioReactiveEnabled && s.OnboardingDone) || demo, chosen, powerPause, s.WallpaperPaused);
         }
 
         public IReadOnlyCollection<SurfaceDrawing> Surfaces()

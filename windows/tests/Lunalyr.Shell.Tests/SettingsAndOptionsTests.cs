@@ -93,7 +93,7 @@ public sealed class AppSettingsTests
             "nextWordPreviewByStyle", "nextWordPreviewLead", "styleMemoryEnabled", "styleMemorySongs", "styleMemoryArtists",
         ];
         Assert.Equal(keys.Order(), json.EnumerateObject().Select(p => p.Name).Order());
-        Assert.Equal(1, json.GetProperty("schemaVersion").GetInt32());
+        Assert.Equal(AppSettings.SchemaVersion, json.GetProperty("schemaVersion").GetInt32());
 
         await using var reopened = AppSettingsStore.Open(temp.Path, Logger.Null);
         Assert.Equal("spoken", reopened.Current.LyricComposition);

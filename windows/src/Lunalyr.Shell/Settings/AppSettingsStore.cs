@@ -17,8 +17,10 @@ public static class AppSettingsStore
             Folder = dataRoot,
             Name = FileName,
             TypeInfo = AppSettingsJsonContext.Default.AppSettings,
-            CreateDefaults = () => new AppSettings(),
+            // A new install (no file yet) starts with the owner's look (ShippedDefaults); an existing file keeps its own values.
+            CreateDefaults = ShippedDefaults.ForNewInstall,
             SchemaVersion = AppSettings.SchemaVersion,
+            Migrations = [ShippedDefaults.KeepOldDefaults],
             Logger = logger,
             TimeProvider = time ?? TimeProvider.System,
         });
