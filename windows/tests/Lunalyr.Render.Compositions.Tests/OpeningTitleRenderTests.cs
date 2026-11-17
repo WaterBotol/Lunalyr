@@ -206,7 +206,7 @@ public sealed class OpeningTitleRenderTests : IDisposable
     private static SceneSnapshot CardWindow(SceneSnapshot scene, double inset = 0) =>
         Kept(scene with { Style = scene.Style with { FloatingTextSize = 40, FloatingTitleOnly = true, FloatingInset = inset } }, 1);
 
-    // Ported from OpeningTitleTests.swift (b11a1ab3): the card's window draws the card alone, never the lyrics.
+    // After the Mac's b11a1ab3 (OpeningTitleTests.swift): the card's window draws the card alone, never the lyrics.
     [Fact]
     public void TheTitleCardsWindowDrawsOnlyTheCard()
     {
@@ -219,7 +219,7 @@ public sealed class OpeningTitleRenderTests : IDisposable
         Assert.Empty(_sink.Entries);
     }
 
-    // Ported from OpeningTitleTests.swift (b11a1ab3): under 14 pt the card becomes one row, cross-fading for 0.25 s.
+    // After the Mac's b11a1ab3 (OpeningTitleTests.swift): under 14 pt the card becomes one row, cross-fading for 0.25 s.
     [Fact]
     public void TheCardCrossFadesToARowWhenItsBoxGetsSmall()
     {

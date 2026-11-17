@@ -4,10 +4,10 @@ using Lunalyr.Shell.Settings;
 
 namespace Lunalyr.Shell.Tests;
 
-/// <summary>Ported from FloatingLyricsTests.swift (the Mac's b11a1ab3): the song title card's settings.</summary>
+/// <summary>After the Mac's b11a1ab3 (FloatingLyricsTests.swift): the song title card's settings.</summary>
 public sealed class FloatingTitleCardSettingsTests
 {
-    // Ported from FloatingLyricsTests.swift: testTitleCardFramesAreKeptPerDisplayAndReset
+    // After the Mac\'s b11a1ab3 (FloatingLyricsTests.swift covers this; its test names were not relayed)
     [Fact]
     public void TitleCardFramesAreKeptPerDisplayAndReset()
     {
@@ -26,7 +26,7 @@ public sealed class FloatingTitleCardSettingsTests
         Assert.False(s.TitleIsPlacedByHand);
     }
 
-    // Ported from FloatingLyricsTests.swift: testTheOldTitleRowIsCarriedOverOnce
+    // After the Mac\'s b11a1ab3 (FloatingLyricsTests.swift covers this; its test names were not relayed)
     [Fact]
     public void TheOldTitleRowIsCarriedOverOnce()
     {

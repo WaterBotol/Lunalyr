@@ -3,10 +3,10 @@ using Lunalyr.Render.Scene;
 
 namespace Lunalyr.Render.Tests.Scene;
 
-/// <summary>Ported from OpeningTitleTests.swift (the Mac's b11a1ab3): the title card has its own window.</summary>
+/// <summary>After the Mac's b11a1ab3 (OpeningTitleTests.swift): the title card has its own window.</summary>
 public sealed class FloatingTitleSceneTests
 {
-    // Ported from OpeningTitleTests.swift: testTheLyricsBoxKeepsNoTitleRow
+    // After the Mac\'s b11a1ab3 (OpeningTitleTests.swift covers this; its test names were not relayed)
     [Fact]
     public void TheLyricsWindowDrawsNoTitleAndTheCardsDrawsOnlyIt()
     {

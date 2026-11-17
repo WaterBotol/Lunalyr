@@ -194,7 +194,7 @@ public sealed class AppControllerDisplayLyricsTests : IAsyncDisposable
         Assert.Equal(Core.Colour.LyricColourMode.MusicReactive, looks.Desktop[@"\\.\DISPLAY2"].Style!.ColourMode);
     }
 
-    // Ported from FloatingLyricsTests.swift (the Mac's b11a1ab3): the song title card floats beside each display's lyrics.
+    // After the Mac's b11a1ab3 (FloatingLyricsTests.swift): the song title card floats beside each display's lyrics.
     [Fact]
     public async Task TheTitleCardFloatsBesideEachFloatingDisplaysLyrics()
     {

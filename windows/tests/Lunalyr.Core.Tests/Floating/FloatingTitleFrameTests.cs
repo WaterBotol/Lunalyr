@@ -3,12 +3,12 @@ using Lunalyr.Core.Floating;
 
 namespace Lunalyr.Core.Tests.Floating;
 
-/// <summary>Ported from OpeningTitleTests.swift and FloatingLyricsTests.swift (the Mac's b11a1ab3): the floating song title card's window.</summary>
+/// <summary>After the Mac's b11a1ab3 (OpeningTitleTests.swift and FloatingLyricsTests.swift): the floating song title card's window.</summary>
 public sealed class FloatingTitleFrameTests
 {
     private static readonly FloatingRect Area = new(0, 70, 1512, 874);
 
-    // Ported from OpeningTitleTests.swift: testTheCardStartsJustAboveTheLyricsCentred
+    // After the Mac\'s b11a1ab3 (OpeningTitleTests.swift covers this; its test names were not relayed)
     [Fact]
     public void TheCardStartsJustAboveTheLyricsCentred()
     {
@@ -25,7 +25,7 @@ public sealed class FloatingTitleFrameTests
         Assert.True(Area.Contains(under));
     }
 
-    // Ported from OpeningTitleTests.swift: testTheOldRowsPlaceBecomesTheCardsStart
+    // After the Mac\'s b11a1ab3 (OpeningTitleTests.swift covers this; its test names were not relayed)
     [Fact]
     public void TheOldRowsPlaceBecomesTheCardsStart()
     {
@@ -40,7 +40,7 @@ public sealed class FloatingTitleFrameTests
         Assert.Null(FloatingTitleStart.Decode([1]));
     }
 
-    // Ported from OpeningTitleTests.swift: testTheCardIsStackedUntilItIsTooSmall
+    // After the Mac\'s b11a1ab3 (OpeningTitleTests.swift covers this; its test names were not relayed)
     [Fact]
     public void TheCardIsStackedUntilItIsTooSmall()
     {
@@ -62,7 +62,7 @@ public sealed class FloatingTitleFrameTests
         Assert.True(FloatingTitleFrame.MinimumSize.Height <= line); // small enough to reach the row
     }
 
-    // Ported from FloatingLyricsTests.swift: testTheTitleCardShowsWithTheFloatingLyrics
+    // After the Mac\'s b11a1ab3 (FloatingLyricsTests.swift covers this; its test names were not relayed)
     [Fact]
     public void TheTitleCardShowsWithTheFloatingLyrics()
     {

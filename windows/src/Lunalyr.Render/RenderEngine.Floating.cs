@@ -479,7 +479,7 @@ public sealed partial class RenderEngine
         // The title card's shade comes and goes with its card (none drawn: none at all).
         var backdrop = !p.TitleCard ? o.Backdrop
             : hasStage && s.Lyric?.Layer is Compositions.LyricCompositionLayer { TitlePresence: var presence } ? o.Backdrop * presence : 0;
-        if (FloatTrace && p.TitleCard && Math.Abs(backdrop - p.TraceShade) > 0.1)
+        if (FloatTrace && p.TitleCard && (Math.Abs(backdrop - p.TraceShade) > 0.1 || (backdrop == 0) != (p.TraceShade == 0)))
         {
             p.TraceShade = backdrop;
             _log.Info($"FLOATTRACE title card shade {backdrop:0.00} at song {frame.SongSeconds:0.00}");

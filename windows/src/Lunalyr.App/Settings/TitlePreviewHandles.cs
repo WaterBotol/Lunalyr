@@ -190,7 +190,7 @@ internal sealed class TitlePreviewHandles
                   box.Width / drag.Desktop.Width * width, box.Height / drag.Desktop.Height * height), corner: -1);
         }
         // The wallpaper and the preview follow, a step at a time.
-        if (DateTime.UtcNow - drag.LastSent >= LiveStep)
+        if ((drag.Card is null || drag.NowCard != drag.Card.Value.Start) && DateTime.UtcNow - drag.LastSent >= LiveStep)
         {
             drag.LastSent = DateTime.UtcNow;
             Save(drag);
@@ -202,7 +202,8 @@ internal sealed class TitlePreviewHandles
         if (_drag is not { } drag) return;
         _drag = null;
         if (e is not null) _canvas.ReleasePointerCapture(e.Pointer);
-        Save(drag);
+        // A click that moved nothing leaves the card following the lyrics' box.
+        if (drag.Card is not { } card || drag.NowCard != card.Start) Save(drag);
         Refresh();
     }
 
