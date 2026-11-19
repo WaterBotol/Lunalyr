@@ -39,6 +39,33 @@ enum OpeningTitle {
     static var showsCover: Bool { showsCover(in: .standard) }
     static func showsCover(in defaults: UserDefaults) -> Bool { defaults.object(forKey: coverKey) as? Bool ?? true }
 
+    // MARK: Its colours
+
+    /// The card's colours (the owner, 20 Nov 2026): white, or a colour of
+    /// your own for each line (the title with its reading, the artist, the
+    /// album). Never the lyrics' colour, so the card looks the same whatever
+    /// the lyrics do. Each line glows in its own colour. Kept app-wide, like
+    /// the card's place.
+    static let customColoursKey = "custom.openingTitleCustomColours"
+    static let titleColourKey = "custom.openingTitleTitleColour"
+    static let artistColourKey = "custom.openingTitleArtistColour"
+    static let albumColourKey = "custom.openingTitleAlbumColour"
+    static let whiteHex = "#FFFFFF"
+
+    struct Colours: Equatable {
+        var title: Color = .white
+        var artist: Color = .white
+        var album: Color = .white
+        static let white = Colours()
+
+        /// White unless `custom` is on; a colour that cannot be read is white.
+        @MainActor static func resolved(custom: Bool, title: String, artist: String, album: String) -> Colours {
+            guard custom else { return .white }
+            func colour(_ hex: String) -> Color { LyricColourOptions.oklab(hex: hex).map { Perceptual.color($0) } ?? .white }
+            return Colours(title: colour(title), artist: colour(artist), album: colour(album))
+        }
+    }
+
     /// The cover to draw: the wallpaper's own artwork for the song, when the
     /// setting is on and there is one. Nil keeps the text where it is.
     static func cover(_ artwork: NSImage?, enabled: Bool) -> NSImage? {
@@ -160,10 +187,6 @@ enum OpeningTitle {
     // Type sizes, as shares of the title's own size (before a long title is
     // set smaller), so the hierarchy holds at every size.
     static let artistShare: CGFloat = 0.32
-    /// How strongly the card glows in the album's colour: fully over a dark
-    /// picture, gently when the type is dark on a light one (a glow there
-    /// would only muddy the words).
-    static func glowStrength(dark: Bool) -> Double { dark ? 0.35 : 1 }
     static let readingShare: CGFloat = 0.32
     static let albumShare: CGFloat = 0.26
     /// The cover's side, as a share of the title's nominal size: the same
@@ -825,7 +848,6 @@ struct OpeningTitleCard: View {
     var coverFade = 1.0
     /// The lyric's base size on this screen.
     let baseSize: CGFloat
-    let accent: Color
     let mood: TrackMood
     /// The floating lyrics: centred in the window, compact, no scrim of its own.
     var floating = false
@@ -836,7 +858,13 @@ struct OpeningTitleCard: View {
     @SurfaceStyle private var style
     private var settings: Settings { style.settings }
     @Environment(\.lyricReduceMotion) private var reduceMotion
-    @Environment(\.lyricInk) private var ink
+    @AppStorage(OpeningTitle.customColoursKey) private var customColours = false
+    @AppStorage(OpeningTitle.titleColourKey) private var titleHex = OpeningTitle.whiteHex
+    @AppStorage(OpeningTitle.artistColourKey) private var artistHex = OpeningTitle.whiteHex
+    @AppStorage(OpeningTitle.albumColourKey) private var albumHex = OpeningTitle.whiteHex
+    private var colours: OpeningTitle.Colours {
+        .resolved(custom: customColours, title: titleHex, artist: artistHex, album: albumHex)
+    }
 
     var body: some View {
         GeometryReader { geometry in
@@ -849,7 +877,7 @@ struct OpeningTitleCard: View {
             let place = OpeningTitle.Placement.stored()
             let box = OpeningTitle.box(in: size, baseSize: baseSize, placement: place)
             let unit = floating ? baseSize * 0.95 : (compact ? baseSize * 0.8 : baseSize) * CGFloat(place.scale)
-            let dark = Self.isDark(ink.base.rest)
+            let colours = self.colours
             if window {
                 let fit = FloatingTitleFrame.layout(for: size, compact: phase.size == .compact)
                 ZStack {
@@ -857,12 +885,12 @@ struct OpeningTitleCard: View {
                         // The desktop's card, at the window's scale.
                         let nominalShare: CGFloat = phase.size == .compact ? 0.72 : 0.92
                         card(unit: fit.nominal / nominalShare, compact: phase.size == .compact, reveal: reveal,
-                             dark: dark, width: size.width * FloatingTitleFrame.fill)
+                             colours: colours, width: size.width * FloatingTitleFrame.fill)
                             .opacity((1 - leaving) * phase.opacity)
                             .blur(radius: reduceMotion ? 0 : leaving * fit.nominal * 0.06)
                             .transition(.opacity)
                     } else {
-                        titleRow(reveal: reveal, leaving: leaving, dark: dark, width: size.width * FloatingTitleFrame.fill,
+                        titleRow(reveal: reveal, leaving: leaving, colours: colours, width: size.width * FloatingTitleFrame.fill,
                                  scale: fit.rowBase / max(1, baseSize), bottom: false)
                             .transition(.opacity)
                     }
@@ -871,7 +899,7 @@ struct OpeningTitleCard: View {
                 // Resizing across the line swaps the two with a short fade.
                 .animation(reduceMotion ? nil : .easeInOut(duration: 0.25), value: fit.stacked)
             } else {
-            let block = card(unit: unit, compact: compact, reveal: reveal, dark: dark,
+            let block = card(unit: unit, compact: compact, reveal: reveal, colours: colours,
                              width: floating ? size.width * 0.9 : box.width)
                 .opacity((1 - leaving) * phase.opacity)
                 .blur(radius: reduceMotion ? 0 : leaving * unit * 0.06)
@@ -883,7 +911,7 @@ struct OpeningTitleCard: View {
                     // Legible over a bright or busy video: the picture
                     // darkens softly towards the corner the card is in, like
                     // a film's grade, rather than a patch behind the words.
-                    let shade = dark ? Color.white : .black
+                    let shade = Color.black
                     EllipticalGradient(stops: [.init(color: shade.opacity(0.4), location: 0),
                                                .init(color: shade.opacity(0.28), location: 0.3),
                                                .init(color: shade.opacity(0.1), location: 0.65),
@@ -904,16 +932,9 @@ struct OpeningTitleCard: View {
         .accessibilityHidden(true)
     }
 
-    /// Dark type, for a lyric ink chosen against a light backdrop.
-    static func isDark(_ colour: Color) -> Bool {
-        guard let rgb = NSColor(colour).usingColorSpace(.sRGB) else { return false }
-        let luminance = 0.2126 * rgb.redComponent + 0.7152 * rgb.greenComponent + 0.0722 * rgb.blueComponent
-        return luminance < 0.4
-    }
-
     @ViewBuilder
-    private func card(unit: CGFloat, compact: Bool, reveal: OpeningTitle.Reveal, dark: Bool, width: CGFloat) -> some View {
-        let type: Color = dark ? Color(white: 0.08) : .white
+    private func card(unit: CGFloat, compact: Bool, reveal: OpeningTitle.Reveal, colours: OpeningTitle.Colours,
+                      width: CGFloat) -> some View {
         // The title's size; the lines under it take shares of it. A long
         // title is set smaller, but they are not.
         let nominal = unit * (compact ? 0.72 : 0.92)
@@ -930,9 +951,8 @@ struct OpeningTitleCard: View {
         let readingSize = nominal * OpeningTitle.readingShare * readingMetrics.scale
         let albumSize = nominal * OpeningTitle.albumShare * albumMetrics.scale
         let showsReading = reading != nil && !compact
-        // The card glows in the album's own colour: a tight halo and a wide,
-        // soft bloom, arriving with the words and leaving with them.
-        let glow = OpeningTitle.glowStrength(dark: dark)
+        // Each line glows in its own colour: a tight halo and a wide, soft
+        // bloom, arriving with the words and leaving with them.
         // One spacing scale (`OpeningTitle.Spacing`): the reading close
         // under its title, the artist a clear step down, the album tight
         // under the artist; the cover the same step away from the words.
@@ -947,7 +967,7 @@ struct OpeningTitleCard: View {
         let readingText = reading.flatMap { reading in showsReading ? reading : nil }.map { reading in
             Text(reading)
                 .font(settings.uiFont(size: readingSize, mood: mood))
-                .foregroundStyle(type.opacity(0.78))
+                .foregroundStyle(colours.title.opacity(0.78))
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
                 .cardLine(readingMetrics, size: readingSize)
@@ -958,23 +978,25 @@ struct OpeningTitleCard: View {
         // In the artist's own case, as the menu bar and player show it.
         let artistText = artist.isEmpty ? nil : Text(artist)
             .font(settings.uiFont(size: artistSize, mood: mood))
-            .foregroundStyle(type.opacity(0.92))
+            .foregroundStyle(colours.artist.opacity(0.92))
             .lineLimit(1)
             .minimumScaleFactor(0.6)
             .cardLine(artistMetrics, size: artistSize)
             .opacity(reveal.artist)
+            .modifier(OpeningTitleTypeShadow(glow: colours.artist, unit: unit))
         let albumText = compact ? nil : album.map { album in
             Text(album)
                 .font(settings.uiFont(size: albumSize, mood: mood))
                 .kerning(albumSize * 0.02)
-                .foregroundStyle(type.opacity(0.7))
+                .foregroundStyle(colours.album.opacity(0.7))
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
                 .cardLine(albumMetrics, size: albumSize)
+                .modifier(OpeningTitleTypeShadow(glow: colours.album, unit: unit))
                 .padding(.top, step.line)
                 .opacity(reveal.album)
         }
-        let typeShadow = OpeningTitleTypeShadow(dark: dark, accent: accent, glow: glow, unit: unit)
+        let titleGlow = OpeningTitleTypeShadow(glow: colours.title, unit: unit)
         if slot {
             // A cover of one size for every title (`coverShare`): the
             // title and its reading from the cover's top, stepping down a
@@ -990,7 +1012,7 @@ struct OpeningTitleCard: View {
                         TitleCover(still: cover, motion: animatedCover)
                             .clipShape(RoundedRectangle(cornerRadius: nominal * 0.1, style: .continuous))
                             .shadow(color: .black.opacity(0.45), radius: nominal * 0.12, y: nominal * 0.04)
-                            .shadow(color: accent.opacity(0.55 * glow), radius: nominal * 0.32)
+                            .shadow(color: colours.title.opacity(0.55), radius: nominal * 0.32)
                             .scaleEffect(reduceMotion ? 1 : 0.9 + 0.1 * reveal.cover, anchor: .bottomLeading)
                             .opacity(reveal.cover * coverFade)
                     }
@@ -998,7 +1020,7 @@ struct OpeningTitleCard: View {
                 FirstThatFits(accepts: titleAccepts(titleSize)) {
                     ForEach(OpeningTitle.titleSteps, id: \.self) { share in
                         VStack(alignment: .leading, spacing: 0) {
-                            titleText(titleSize * share, type: type, centred: centred, reveal: reveal, rise: rise,
+                            titleText(titleSize * share, type: colours.title, centred: centred, reveal: reveal, rise: rise,
                                       metrics: titleMetrics)
                             readingText
                         }
@@ -1007,41 +1029,42 @@ struct OpeningTitleCard: View {
                     }
                     // Last: the smallest on one line, narrowed to fit.
                     VStack(alignment: .leading, spacing: 0) {
-                        titleText(titleSize * (OpeningTitle.titleSteps.last ?? 0.58), type: type, centred: centred,
+                        titleText(titleSize * (OpeningTitle.titleSteps.last ?? 0.58), type: colours.title, centred: centred,
                                   reveal: reveal, rise: rise, metrics: titleMetrics, lines: 1)
                         readingText
                     }
                     .frame(minWidth: 0, minHeight: 0, alignment: .topLeading)
                     .clipped()
                 }
-                .modifier(typeShadow)
+                .modifier(titleGlow)
                 VStack(alignment: .leading, spacing: 0) {
                     artistText
                     albumText
                 }
                 .fixedSize(horizontal: false, vertical: true)
-                .modifier(typeShadow)
             }
         } else {
             CappedWidth(maximum: width) {
                 VStack(alignment: centred ? .center : .leading, spacing: 0) {
-                    FirstThatFits(accepts: titleAccepts(titleSize)) {
-                        ForEach(OpeningTitle.titleSteps, id: \.self) { share in
-                            titleText(titleSize * share, type: type, centred: centred, reveal: reveal, rise: rise,
-                                      metrics: titleMetrics)
+                    VStack(alignment: centred ? .center : .leading, spacing: 0) {
+                        FirstThatFits(accepts: titleAccepts(titleSize)) {
+                            ForEach(OpeningTitle.titleSteps, id: \.self) { share in
+                                titleText(titleSize * share, type: colours.title, centred: centred, reveal: reveal, rise: rise,
+                                          metrics: titleMetrics)
+                                    .frame(minWidth: 0, minHeight: 0, alignment: .topLeading)
+                                    .clipped()
+                            }
+                            titleText(titleSize * (OpeningTitle.titleSteps.last ?? 0.58), type: colours.title, centred: centred,
+                                      reveal: reveal, rise: rise, metrics: titleMetrics, lines: 1)
                                 .frame(minWidth: 0, minHeight: 0, alignment: .topLeading)
                                 .clipped()
                         }
-                        titleText(titleSize * (OpeningTitle.titleSteps.last ?? 0.58), type: type, centred: centred,
-                                  reveal: reveal, rise: rise, metrics: titleMetrics, lines: 1)
-                            .frame(minWidth: 0, minHeight: 0, alignment: .topLeading)
-                            .clipped()
+                        readingText
                     }
-                    readingText
+                    .modifier(titleGlow)
                     if let artistText { artistText.padding(.top, step.group) }
                     albumText
                 }
-                .modifier(typeShadow)
             }
         }
     }
@@ -1081,13 +1104,11 @@ struct OpeningTitleCard: View {
     /// The floating window's kept title: the cover, the title and the
     /// artist on one centred line, settling down from above as it enters
     /// and lifting away as it leaves.
-    private func titleRow(reveal: OpeningTitle.Reveal, leaving: Double, dark: Bool, width: CGFloat,
+    private func titleRow(reveal: OpeningTitle.Reveal, leaving: Double, colours: OpeningTitle.Colours, width: CGFloat,
                           scale: CGFloat, bottom: Bool) -> some View {
-        let type: Color = dark ? Color(white: 0.08) : .white
         // The row's own size: the lyric size at the row's scale.
         let baseSize = self.baseSize * scale
         let side = baseSize * OpeningTitle.rowCover
-        let glow = OpeningTitle.glowStrength(dark: dark)
         let arrival = reduceMotion ? reveal.title : Easing.smoothstep(reveal.title)
         return HStack(spacing: baseSize * 0.2) {
             if let cover {
@@ -1104,21 +1125,20 @@ struct OpeningTitleCard: View {
                 Text(title)
                     .font(settings.lyricFont(size: baseSize * OpeningTitle.rowTitle * OpeningTitle.TypeMetrics(title,
                         font: settings.lyricFace(size: 100, hero: true, mood: mood)).scale, hero: true, mood: mood))
-                    .foregroundStyle(type)
+                    .foregroundStyle(colours.title)
                     .layoutPriority(1)
+                    .modifier(OpeningTitleTypeShadow(glow: colours.title, unit: baseSize, row: true))
                 if !artist.isEmpty {
                     Text(artist)
                         .font(settings.uiFont(size: baseSize * OpeningTitle.rowArtist * OpeningTitle.TypeMetrics(artist,
                             font: settings.uiFace(size: 100, mood: mood)).scale, mood: mood))
-                        .foregroundStyle(type.opacity(0.78))
+                        .foregroundStyle(colours.artist.opacity(0.78))
+                        .modifier(OpeningTitleTypeShadow(glow: colours.artist, unit: baseSize, row: true))
                         .opacity(reveal.artist)
                 }
             }
             .lineLimit(1)
             .truncationMode(.tail)
-            .compositingGroup()
-            .shadow(color: (dark ? Color.white : .black).opacity(0.5), radius: baseSize * 0.1, y: baseSize * 0.015)
-            .shadow(color: accent.opacity(0.45 * glow), radius: baseSize * 0.3)
         }
         // Hugs its words (at most `width`), so it can be placed across the window.
         .modifier(CappedWidthModifier(maximum: width))
@@ -1222,20 +1242,27 @@ struct CappedWidthModifier: ViewModifier {
     func body(content: Content) -> some View { CappedWidth(maximum: maximum) { content } }
 }
 
-/// The card's type, as one: a soft shadow under it, as the lyrics have,
-/// then a glow in the album's colour.
+/// A line's shadow and glow: a dark shadow for legibility, then a tight
+/// halo and a wide bloom in the line's own colour (`OpeningTitle.Colours`).
+/// `row`: the floating window's one-line title, with a single softer glow.
 struct OpeningTitleTypeShadow: ViewModifier {
-    let dark: Bool
-    let accent: Color
-    let glow: Double
+    let glow: Color
     let unit: CGFloat
+    var row = false
 
     func body(content: Content) -> some View {
-        content
-            .compositingGroup()
-            .shadow(color: (dark ? Color.white : .black).opacity(0.45), radius: unit * 0.12, y: unit * 0.015)
-            .shadow(color: accent.opacity(0.7 * glow), radius: unit * 0.18)
-            .shadow(color: accent.opacity(0.45 * glow), radius: unit * 0.6)
+        if row {
+            content
+                .compositingGroup()
+                .shadow(color: .black.opacity(0.5), radius: unit * 0.1, y: unit * 0.015)
+                .shadow(color: glow.opacity(0.45), radius: unit * 0.3)
+        } else {
+            content
+                .compositingGroup()
+                .shadow(color: .black.opacity(0.45), radius: unit * 0.12, y: unit * 0.015)
+                .shadow(color: glow.opacity(0.7), radius: unit * 0.18)
+                .shadow(color: glow.opacity(0.45), radius: unit * 0.6)
+        }
     }
 }
 

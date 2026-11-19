@@ -527,7 +527,7 @@ struct LyricLayer: View {
                              motionCover: content.motionCover, paused: !animating,
                              coverPending: content.coverPending && style.openingTitleCover,
                              coverFade: coverFade.map { key.track == $0.track ? $0.value : 1 } ?? 1,
-                             baseSize: baseSize, accent: accent, mood: mood,
+                             baseSize: baseSize, mood: mood,
                              floating: backdropOverride != nil && titleMode == .inline, window: titleMode == .only)
         }
     }

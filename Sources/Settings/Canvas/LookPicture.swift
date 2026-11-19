@@ -301,7 +301,7 @@ struct FloatingScene: View {
                                 album: track.flatMap { OpeningTitle.albumLine(album: $0.album ?? "", title: $0.title) },
                                 reading: nil,
                                 cover: OpeningTitle.cover(playing.currentTrackArtwork, enabled: showsCover),
-                                baseSize: CGFloat(options.textSize), accent: Color(.sRGB, red: 0.95, green: 0.55, blue: 0.42),
+                                baseSize: CGFloat(options.textSize),
                                 mood: .neutral, window: true)
             .environment(\.colorScheme, .dark)
     }
@@ -424,7 +424,7 @@ struct TitleCardHandles: View {
                                 album: track.flatMap { OpeningTitle.albumLine(album: $0.album ?? "", title: $0.title) },
                                 reading: nil,
                                 cover: OpeningTitle.cover(playing.currentTrackArtwork, enabled: OpeningTitle.showsCover),
-                                baseSize: baseSize, accent: Color(.sRGB, red: 0.95, green: 0.55, blue: 0.42),
+                                baseSize: baseSize,
                                 mood: .neutral)
             .frame(width: desktop.width, height: desktop.height)
             .scaleEffect(unit, anchor: .topLeading)
