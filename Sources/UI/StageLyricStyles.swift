@@ -112,13 +112,15 @@ struct StageRun: Equatable, Identifiable {
     /// are there but faint (`waitingPart`), and each lights as it is sung.
     /// Revealed one character at a time, 사랑해 was a lone 사 for a beat
     /// and ストロベリー spelled itself out, which no reader of those
-    /// scripts takes as a word.
-    static func partOpacity(_ index: Int, of parts: [Part], at time: Double) -> Double {
+    /// scripts takes as a word. `waits: false` (a reading under the word)
+    /// keeps every part clear until it is sung, so the reading still fills
+    /// in with the voice, as it does in every other layout.
+    static func partOpacity(_ index: Int, of parts: [Part], at time: Double, waits: Bool = true) -> Double {
         guard parts.indices.contains(index) else { return 0 }
         let age = time - (parts[index].start - 0.03)
         if index == 0 { return age >= 0 ? 1 : 0 }
         let sung = vc_settle(age, StageMotion.syllableFade)
-        guard showsWhole(parts), time >= parts[0].start - 0.03 else { return sung }
+        guard waits, showsWhole(parts), time >= parts[0].start - 0.03 else { return sung }
         return waitingPart + (1 - waitingPart) * sung
     }
 
@@ -416,7 +418,7 @@ struct StageLyricView: View {
             guard var share = part.source.flatMap({ readings[$0] }), !share.isEmpty else { continue }
             if !started { share = String(share.drop(while: \.isWhitespace)); started = true }
             var piece = AttributedString(share)
-            let shown = StageRun.partOpacity(index, of: run.parts, at: time)
+            let shown = StageRun.partOpacity(index, of: run.parts, at: time, waits: false)
             piece.foregroundColor = shown <= 0 ? .clear : colour.opacity(min(1, shown))
             result.append(piece)
         }
