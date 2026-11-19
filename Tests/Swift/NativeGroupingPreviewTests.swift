@@ -106,6 +106,69 @@ final class NativeGroupingPreviewTests: XCTestCase {
         }
     }
 
+    /// Scattered and Echo, a row with the line's glue as written (as before
+    /// they parted a long run) above a row as the wallpaper now sets it.
+    func testWriteFlowSheets() throws {
+        let environment = ProcessInfo.processInfo.environment
+        guard let dir = environment["LUNALYR_NATIVE_PREVIEW_DIR"] else {
+            throw XCTSkip("Set TEST_RUNNER_LUNALYR_NATIVE_PREVIEW_DIR to write the sheets")
+        }
+        try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        let stage = CGSize(width: 960, height: 400), base: CGFloat = 52
+        let picked = Self.samples.filter { ["ja", "ja-katakana", "zh", "ko", "th"].contains($0.name) }
+        for (composition, hue) in [(LyricComposition.scattered, 0.72), (.echo, 0.62)] {
+            let sheet = VStack(spacing: 2) {
+                ForEach(Array(picked.enumerated()), id: \.offset) { _, sample in
+                    ForEach([false, true], id: \.self) { parted in
+                        HStack(spacing: 2) {
+                            ForEach(Self.moments(sample), id: \.self) { time in
+                                self.flowCell(composition, sample: sample, parted: parted, time: time, stage: stage,
+                                              base: base, hue: hue)
+                            }
+                        }
+                    }
+                }
+            }
+            .background(Color.black)
+            let renderer = ImageRenderer(content: sheet)
+            renderer.scale = 0.5
+            let image = try XCTUnwrap(renderer.nsImage)
+            let rep = try XCTUnwrap(NSBitmapImageRep(data: try XCTUnwrap(image.tiffRepresentation)))
+            try XCTUnwrap(rep.representation(using: .png, properties: [:]))
+                .write(to: URL(fileURLWithPath: dir + "/flow-\(composition.rawValue).png"))
+        }
+    }
+
+    static func moments(_ sample: Sample) -> [Double] {
+        let first = sample.words.map(\.start).min() ?? 1, last = sample.words.map(\.end).max() ?? 1
+        return (0..<6).map { first + 0.13 + (last + 0.6 - first) * Double($0) / 5 }
+    }
+
+    private func flowCell(_ composition: LyricComposition, sample: Sample, parted: Bool, time: Double, stage: CGSize,
+                          base: CGFloat, hue: Double) -> some View {
+        let glue = parted
+            ? LyricRuns.splittingWords(sample.words, glue: sample.glue, into: .words, longerThan: LyricRuns.longRun)
+            : sample.glue
+        let last = sample.words.map(\.end).max() ?? 1
+        return ZStack {
+            LinearGradient(colors: [Color(hue: hue, saturation: 0.55, brightness: 0.32),
+                                    Color(hue: hue, saturation: 0.6, brightness: 0.08)],
+                           startPoint: .topLeading, endPoint: .bottomTrailing)
+            LyricLineView(words: sample.words, time: time, stageSize: stage, baseSize: base, mood: .neutral,
+                          composition: composition, seed: 3, readings: [:], lineEnd: last + 0.4,
+                          exitStart: last + 2, glue: glue, phraseGlue: parted ? sample.glue : nil)
+                .modifier(FittedLyricStage(available: stage, userScale: 1, neutral: 0.75))
+                .frame(width: stage.width, height: stage.height)
+            Text(String(format: "%@ %@ %@ %.2fs", composition.rawValue, sample.name, parted ? "now" : "was", time))
+                .font(.system(size: 22)).foregroundStyle(.white.opacity(0.5))
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading).padding(8)
+        }
+        .frame(width: stage.width, height: stage.height)
+        .clipped()
+        .environment(\.colorScheme, .dark)
+        .environment(\.lyricInk, LyricInk())
+    }
+
     /// The runs each sample is cut into, written beside the sheets, so the
     /// grouping can be read as text as well as seen.
     func testWriteNativeGroupingRuns() throws {
