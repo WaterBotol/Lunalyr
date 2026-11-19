@@ -145,7 +145,7 @@ extension StageLyricView {
                                         .font(font(size, hero: true, id: run.id))
                                         .livelyLetters()
                                         .lineLimit(1).minimumScaleFactor(0.5).frame(maxWidth: stage.width * 1.1)
-                                        .background { tileBackground(tile, size: size) }
+                                        .background { tileBackground(tile, size: size, run: run) }
                                         .highlightLayer(tile)
                                         .lyricShadow(0.28, radius: 8, y: 3)
                                 }

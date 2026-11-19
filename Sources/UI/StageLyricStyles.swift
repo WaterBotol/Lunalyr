@@ -462,9 +462,20 @@ struct StageLyricView: View {
         settings.arrival(in: composition, for: LyricsFetcher.Word(text: run.text, start: run.start, end: run.end)).highlightsSungWords
     }
 
-    func tileBackground(_ on: Bool, size: CGFloat) -> some View {
-        RoundedRectangle(cornerRadius: 3).fill(ink.tileColour).opacity(on ? 1 : 0)
-            .padding(.horizontal, -size * 0.1).padding(.vertical, -size * 0.02)
+    /// The tile behind a word on "Cutout · Highlight", reaching past the
+    /// word's frame by however far its letters stand beyond the line box
+    /// (`LyricInkReach`): kana, kanji and accented capitals under a face
+    /// with a short box (Minecrafter) stuck out above it.
+    func tileBackground(_ on: Bool, size: CGFloat, run: StageRun) -> some View {
+        // Measured as set, and in capitals too: Hinge sets its words in
+        // capitals, whose accents stand taller ("Ō" over "ō").
+        let face = settings.lyricMeasureFace(size: size, hero: true, mood: mood, seed: UInt64(abs(seed &+ run.id)),
+                                             text: run.text)
+        let reach = on ? LyricInkReach.of(run.text, face: face).union(LyricInkReach.of(run.text.uppercased(), face: face))
+            : .none
+        return RoundedRectangle(cornerRadius: 3).fill(ink.tileColour).opacity(on ? 1 : 0)
+            .padding(.horizontal, -size * 0.1)
+            .padding(.top, -(size * 0.02 + reach.top)).padding(.bottom, -(size * 0.02 + reach.bottom))
     }
 
     /// 1 for an ordinary pace, up to 3 when the line is sung fast: every motion

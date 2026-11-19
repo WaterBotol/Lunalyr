@@ -105,6 +105,8 @@ enum ScatteredTypography {
         /// its own by "Cutout · Highlight": one for a single word or a word
         /// sung in syllables, several for a run of Japanese or Chinese.
         var segments: [Segment] = []
+        /// How far its letters reach past its line box (`LyricInkReach`).
+        var inkReach = LyricInkReach.none
         var isGlued: Bool { tokens.count > 1 }
         /// Fixed clearance around the ink: the slot never grows with the word.
         var inset: CGSize { CGSize(width: metrics.size * 0.12, height: metrics.size * 0.05) }
@@ -198,12 +200,16 @@ enum ScatteredTypography {
                 : LyricRuns.boundaries(labels: labels, font: nil)
             // Each token's share of the run's reading, so the reading can
             // fill in as the run is sung (`LyricReadingInk.shares`).
-            runs.append(Run(index: runIndex, tokens: range, label: label, font: font, metrics: metrics,
+            var run = Run(index: runIndex, tokens: range, label: label, font: font, metrics: metrics,
                 reading: LyricReadingInk(tokens: Array(words[range]), readings: key.readings, font: readingFont),
                 source: source, seed: seed, order: order,
                 sustain: range.count == 1 ? tokens[range.lowerBound].sustain : 0,
                 rightToLeft: LyricScript.isRightToLeft(label), glyphMotion: LyricScript.allowsGlyphMotion(label),
-                boundaries: boundaries))
+                boundaries: boundaries)
+            run.inkReach = LyricInkReach.of(label, face: settings.lyricMeasureFace(size: metrics.size,
+                hero: metrics.isHero || metrics.isFocal, mood: key.mood, seed: seed,
+                alternate: metrics.alternateFace, text: source.text))
+            runs.append(run)
         }
         segment(&runs, words: words, ranges: ranges, glue: visible.glue,
                 lineEnd: LyricHighlightTiming.lineEnd(key.lineEnd, words: words))
@@ -425,6 +431,8 @@ enum SpokenTypography {
         /// in degrees (see `RollingStack.turnLimit`). Worked out once here,
         /// not on every frame.
         var turnLimit: Double = 12
+        /// How far its letters reach past its line box (`LyricInkReach`).
+        var inkReach = LyricInkReach.none
         var id: TimedWordKey { source.presentationID }
 
         static func slot(ordinal: Int) -> Double {
@@ -478,7 +486,9 @@ enum SpokenTypography {
                         ? settings.lyricMeasureFace(size: pointSize, hero: heavy, mood: key.mood, seed: seed,
                                                     alternate: alternate, text: word.text) : nil)
                 } ?? [],
-                turnLimit: RollingStack.turnLimit(text: word.text, reading: reading, pointSize: pointSize, tile: tile))
+                turnLimit: RollingStack.turnLimit(text: word.text, reading: reading, pointSize: pointSize, tile: tile),
+                inkReach: LyricInkReach.of(word.text, face: settings.lyricMeasureFace(size: pointSize, hero: heavy,
+                    mood: key.mood, seed: seed, alternate: alternate, text: word.text)))
         }
     }
 }

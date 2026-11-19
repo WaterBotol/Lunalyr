@@ -156,19 +156,21 @@ struct LyricHighlightMark: Equatable {
     static let reach = CGSize(width: 0.1, height: 0.05)
     static let seam: CGFloat = 0.04
 
-    /// The tile's rectangle within a label of `size`, set at `pointSize`.
-    func rect(in size: CGSize, pointSize: CGFloat, rightToLeft: Bool) -> CGRect {
+    /// The tile's rectangle within a label of `size`, set at `pointSize`,
+    /// taller by however far the letters reach past the line box (`ink`).
+    func rect(in size: CGSize, pointSize: CGFloat, rightToLeft: Bool, ink: LyricInkReach = .none) -> CGRect {
         let reach = Self.reach.width * pointSize, seam = Self.seam * pointSize
         var start = CGFloat(from) * size.width - (from <= 0.001 ? reach : seam)
         var end = CGFloat(to) * size.width + (to >= 0.999 ? reach : seam)
         if rightToLeft { (start, end) = (size.width - end, size.width - start) }
         let height = Self.reach.height * pointSize
-        return CGRect(x: start, y: -height, width: max(0, end - start), height: size.height + height * 2)
+        let top = height + ink.top, bottom = height + ink.bottom
+        return CGRect(x: start, y: -top, width: max(0, end - start), height: size.height + top + bottom)
     }
 
     /// The part of `rect` the press has reached.
-    func pressed(in size: CGSize, pointSize: CGFloat, rightToLeft: Bool) -> CGRect {
-        var rect = rect(in: size, pointSize: pointSize, rightToLeft: rightToLeft)
+    func pressed(in size: CGSize, pointSize: CGFloat, rightToLeft: Bool, ink: LyricInkReach = .none) -> CGRect {
+        var rect = rect(in: size, pointSize: pointSize, rightToLeft: rightToLeft, ink: ink)
         let width = rect.width * CGFloat(pose.width)
         if rightToLeft { rect.origin.x += rect.width - width }
         rect.size.width = width
@@ -182,11 +184,13 @@ struct LyricHighlightTiles: View {
     let colour: Color
     let pointSize: CGFloat
     var rightToLeft = false
+    /// How far the letters reach past the line box.
+    var ink = LyricInkReach.none
 
     var body: some View {
         GeometryReader { proxy in
             ForEach(Array(marks.enumerated()), id: \.offset) { _, mark in
-                let rect = mark.rect(in: proxy.size, pointSize: pointSize, rightToLeft: rightToLeft)
+                let rect = mark.rect(in: proxy.size, pointSize: pointSize, rightToLeft: rightToLeft, ink: ink)
                 CutoutTile(colour: colour, width: CGFloat(mark.pose.width), rightToLeft: rightToLeft)
                     .frame(width: rect.width, height: rect.height)
                     .scaleEffect(CGFloat(mark.pose.scale))
@@ -207,11 +211,13 @@ struct LyricHighlightMask: View {
     let pointSize: CGFloat
     var rightToLeft = false
     var switchAt = 0.4
+    /// How far the letters reach past the line box.
+    var ink = LyricInkReach.none
 
     var body: some View {
         GeometryReader { proxy in
             ForEach(Array(marks.enumerated()), id: \.offset) { _, mark in
-                let rect = mark.pressed(in: proxy.size, pointSize: pointSize, rightToLeft: rightToLeft)
+                let rect = mark.pressed(in: proxy.size, pointSize: pointSize, rightToLeft: rightToLeft, ink: ink)
                 Rectangle()
                     .frame(width: rect.width, height: rect.height)
                     .position(x: rect.midX, y: rect.midY)
