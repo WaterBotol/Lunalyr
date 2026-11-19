@@ -107,6 +107,23 @@ final class MusicVideoCaptionSyncTests: XCTestCase {
         XCTAssertTrue(Sync.sameWord("regret", "regrett"))
         XCTAssertFalse(Sync.sameWord("get", "got"), "short words must match exactly")
         XCTAssertEqual(Sync.tokens("夜に駆ける"), ["夜", "に", "駆", "け", "る"])
+        // Thai is written without spaces between words too: matched by character.
+        XCTAssertEqual(Sync.tokens("รักเธอ"), ["รั", "ก", "เ", "ธ", "อ"])
+    }
+
+    /// A track in another language than the lyrics' (the uploader's English
+    /// translation of a Japanese song, 19 Nov 2026) is not used at once: the
+    /// player is asked for the lyrics' language, once.
+    func testAnotherLanguagesTrackAsksOnceForTheLyricsLanguage() {
+        let english = Sync.Capture(automatic: false, language: "en")
+        XCTAssertEqual(Sync.choose(english, wanted: "ja", alreadyAsked: false), .askFor("ja"))
+        XCTAssertEqual(Sync.choose(english, wanted: "ja", alreadyAsked: true), .use, "asked once only")
+        XCTAssertEqual(Sync.choose(Sync.Capture(automatic: false, language: "ja"), wanted: "ja", alreadyAsked: false), .use)
+        XCTAssertEqual(Sync.choose(Sync.Capture(automatic: true, language: "en-US"), wanted: "en", alreadyAsked: false), .use)
+        XCTAssertEqual(Sync.choose(english, wanted: nil, alreadyAsked: false), .use, "lyrics' language unknown")
+        XCTAssertEqual(Sync.choose(Sync.Capture(automatic: false, language: nil), wanted: "ja", alreadyAsked: false), .use)
+        XCTAssertEqual(Sync.baseLanguage("zh-Hans"), "zh")
+        XCTAssertNil(Sync.baseLanguage("x'); alert(1"))
     }
 
     func testMusicAndOtherNoiseCuesAreNotWords() {
