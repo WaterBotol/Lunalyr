@@ -141,8 +141,10 @@ final class ReadingSyllableRevealTests: XCTestCase {
         XCTAssertGreaterThan(opacity(onset + 0.03), 0)
         XCTAssertLessThan(opacity(onset + 0.03), 1)
         XCTAssertEqual(opacity(onset + 0.5), 1, accuracy: 0.001)
-        let stage = StageRun.Part(text: "い", start: onset, source: nil)
-        let first = StageRun.Part(text: "思", start: line.words[1].start, source: nil)
+        // A spelled syllable: a kana or Han part now waits faint from its
+        // word's first syllable, which a reading never does.
+        let stage = StageRun.Part(text: "i", start: onset, source: nil)
+        let first = StageRun.Part(text: "omo", start: line.words[1].start, source: nil)
         XCTAssertEqual(opacity(onset + 0.05), StageRun.partOpacity(1, of: [first, stage], at: onset + 0.05),
                        accuracy: 0.0001)
     }
