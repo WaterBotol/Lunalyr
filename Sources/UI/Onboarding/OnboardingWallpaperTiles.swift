@@ -4,8 +4,8 @@ import SwiftUI
 /// The eight wallpaper types as pictures (`WallpaperTypePicture`), four to
 /// a row, each with its name under it, the chosen one ringed: the choice
 /// tiles of the redesign (SPEC.md section 3), sized for onboarding's look
-/// step. Choosing does what `WallpaperModeGrid` does, Image or video with
-/// nothing imported asking for a file. While power saving draws another
+/// step. Choosing goes through `WallpaperModeGrid.choose`, Image or video
+/// with nothing imported asking for a file. While power saving draws another
 /// type, a leaf marks the tile it draws.
 struct OnboardingWallpaperTiles: View {
     var chooseImport: () -> Void

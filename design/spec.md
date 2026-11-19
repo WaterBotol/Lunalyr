@@ -57,7 +57,7 @@ Reduce Transparency: nothing to remove. Reduce Motion: press and state changes b
 
 ## Components (built in `Sources/UI/Design/ThemeComponents.swift`)
 
-Theme tokens (`ThemeTokens`), `ThemedButtonStyle` (normal and prominent), `ThemedToggleStyle`, `ThemedSegments`, `ThemedSlider`, `ThemedCard`, `ThemedSectionHeader`, `ThemedInfoButton` (popover for long explanations), `ThemeMiniPreview` (live miniature of each theme for the picker). The Style Gallery shows each in both themes and every state.
+Theme tokens (`ThemeTokens`), `ThemedButtonStyle` (normal and prominent), `ThemedToggleStyle`, `ThemedSegments`, `ThemedCard`, `ThemedSectionHeader`, `ThemedInfoButton` (popover for long explanations), `ThemeMiniPreview` (live miniature of each theme for the picker).
 
 ## Layout spec
 

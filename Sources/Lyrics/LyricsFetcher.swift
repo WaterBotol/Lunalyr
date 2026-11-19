@@ -97,9 +97,6 @@ final class LyricsFetcher {
         self.tracer = tracer
         fetchSource = fetch ?? { id, query, folder in try await LyricsFetcher.fetch(id, query: query, localFolder: folder) }
     }
-    func lyrics(title: String, artist: String, album: String? = nil, duration: Double) async -> Result? {
-        await lookup(LyricQuery(title:title,artist:artist,album:album,duration:duration)).result
-    }
     /// Queries every enabled source at once and reports progress as they
     /// answer. A match is shown as soon as nothing pending could beat it, or
     /// when the grace period ends; after that only a match that ranks higher

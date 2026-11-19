@@ -168,7 +168,7 @@ enum LunalyrTextStyle {
     /// A page's title beside its controls, a step's heading. 17-point semibold.
     case title
     /// A group inside a panel ("Wallpaper" in the menu). 11-point semibold,
-    /// secondary; a header to VoiceOver when used with `PanelSectionHeader`.
+    /// secondary.
     case groupTitle
     /// The line being sung, quoted in the menu-bar panel. 15-point semibold.
     case lyric
@@ -195,13 +195,6 @@ enum LunalyrTextStyle {
         case .caption: return .subheadline
         case .footnote: return .footnote
         case .value: return .body.monospacedDigit()
-        }
-    }
-
-    var isSecondary: Bool {
-        switch self {
-        case .groupTitle, .caption, .footnote: return true
-        default: return false
         }
     }
 }

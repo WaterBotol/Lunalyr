@@ -111,10 +111,9 @@ struct MenuBarProgress: View {
     }
 }
 
-/// The line being sung, from `LunalyrModels.lyricNow` like
-/// `CurrentLyricLine`, in a block that keeps one height while a song is
-/// current, whatever it shows: a line that wraps drops the next line
-/// instead of growing, and a note between lines, "Looking for lyrics…" or
+/// The line being sung, from `LunalyrModels.lyricNow`, in a block that
+/// keeps one height while a song is current, whatever it shows: a line
+/// that wraps drops the next line instead of growing, and a note between lines, "Looking for lyrics…" or
 /// hidden lyrics sit in the same space. The panel's window sizes itself to
 /// its content, so a block that grew and shrank with each line would move
 /// every row below it, under the pointer, several times a minute. Idle, the

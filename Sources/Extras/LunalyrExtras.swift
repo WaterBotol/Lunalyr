@@ -273,7 +273,6 @@ final class LunalyrExtras: ObservableObject {
     private var ticker: MenuBarLyricTicker?
     private var discord: DiscordPresence?
     private var screenObserver: NSObjectProtocol?
-    private var copyCardTask: Task<Void, Never>?
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults

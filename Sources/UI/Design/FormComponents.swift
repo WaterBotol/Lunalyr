@@ -13,8 +13,6 @@ import SwiftUI
 //                     format: { $0.formatted(.percent.precision(.fractionLength(0))) })
 //         InspectorCaption("Lunalyr analyses system audio.", more: "The longer text about what is sent where.")
 //     }
-//
-//     PanelSectionHeader("Wallpaper")                      // menu-bar panel groups
 
 /// The short caption under a control: 11.5 pt ink2, 3 points under it. With
 /// `more`, the caption ends in an accent "More" that opens the longer text
@@ -518,51 +516,6 @@ struct StatusGlyph: View {
         }
     }
 }
-
-/// A group's title inside a panel that isn't a `Form` (the menu-bar panel,
-/// onboarding): secondary, semibold, a header to VoiceOver.
-struct PanelSectionHeader<Accessory: View>: View {
-    let title: String
-    let accessory: Accessory
-
-    init(_ title: String, @ViewBuilder accessory: () -> Accessory) {
-        self.title = title
-        self.accessory = accessory()
-    }
-
-    var body: some View {
-        HStack(alignment: .firstTextBaseline) {
-            Text(title)
-                .lunalyrText(.groupTitle)
-                .accessibilityAddTraits(.isHeader)
-            Spacer(minLength: LunalyrDesign.Spacing.small)
-            accessory
-        }
-    }
-}
-
-extension PanelSectionHeader where Accessory == EmptyView {
-    init(_ title: String) {
-        self.init(title) { EmptyView() }
-    }
-}
-
-/// A Settings page's icon: a violet SF Symbol, one calm colour for every page
-/// (`tint` is kept for callers). No badge behind it (docs/DESIGN.md: no squircle
-/// tiles as ornament). Decorative: the row's title names it.
-struct SettingsIcon: View {
-    let symbol: String
-    let tint: Color
-    var size: CGFloat = LunalyrDesign.Size.sidebarIcon
-
-    var body: some View {
-        Image(systemName: symbol)
-            .font(.system(size: size * 0.6, weight: .medium))
-            .frame(width: size, height: size)
-            .accessibilityHidden(true)
-    }
-}
-
 
 /// A caption with a symbol: 11.5 pt ink2, the symbol before it.
 struct CaptionLabelStyle: LabelStyle {

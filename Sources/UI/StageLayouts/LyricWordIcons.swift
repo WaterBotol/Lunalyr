@@ -14,13 +14,6 @@ enum LyricWordIcons {
         entry(for: word)?.symbol
     }
 
-    /// Whether `word`'s icon is a strong one: a thing you can picture (a
-    /// heart, a house) rather than a person or a verb (she, run). A layout
-    /// may let strong icons follow one another and space out the weak ones.
-    static func isStrong(_ word: String) -> Bool {
-        entry(for: word)?.strong ?? false
-    }
-
     static func entry(for word: String) -> (symbol: String, strong: Bool)? {
         for key in candidates(word) {
             if let symbol = strong[key] { return (symbol, true) }

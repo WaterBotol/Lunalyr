@@ -137,11 +137,6 @@ final class DesktopPlayerModel: ObservableObject {
         self.playNote = playNote
     }
 
-    /// The player that is playing now, when it is one the search can drive.
-    func followNowPlaying() {
-        if let active = NowPlayingMonitor.shared.activePlayer, active != player { player = active }
-    }
-
     func runSearch() {
         guard !isPreview else { return }
         searchTask?.cancel()

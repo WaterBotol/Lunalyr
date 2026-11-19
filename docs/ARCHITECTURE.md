@@ -101,10 +101,10 @@ flowchart LR
 | `ScatteredLyricText.swift`, `SpokenTypographyView.swift` | The two lyric renderers: flowing compositions (Scattered, Constellation, Echo) and word-arrival compositions (Spoken, Cascade, Cutout). |
 | `LyricTypography.swift`, `LyricStageFit.swift`, `WordPresentation.swift` | Cached typography, fitting lines to the stage, and per-word reveal state. |
 | `InstrumentalInterludeView.swift` | The interlude ribbons and next-vocal cue. |
-| `ShaderBackgroundView.swift` + `Shaders.metal` | The 27 ambient GPU effects, run per pixel through SwiftUI's `colorEffect`. |
+| `ShaderBackgroundView.swift` + `Shaders.metal` | The 27 ambient GPU effects, drawn per pixel by Lunalyr's own Metal view. |
 | `FractalBackgroundView.swift` | The 18 line patterns, drawn on the CPU. |
 | `AnimatedGradientView.swift`, `MotionArtworkView.swift`, `CustomWallpaperView.swift` | Album-colour gradients, animated album covers, and imported images or videos. |
-| `ColorExtractor.swift`, `TrackMood.swift`, `VersoPalette.swift` | Palettes from artwork, a per-track mood used by automatic choices, and the app's colours. |
+| `ColorExtractor.swift`, `TrackMood.swift` | Palettes from artwork and a per-track mood used by automatic choices. |
 | `ConnectionGeometryCache.swift`, `VisualClock.swift`, `AppFont.swift`, `MenuBarView.swift` | Constellation link cache, animation clocks, interface font loading, and the menu-bar panel. |
 
 ### `Visualizers/`: audio-reactive scenes
@@ -181,7 +181,7 @@ Visualisers are complete wallpapers: audio shapes their own geometry and light. 
 
 The five visualisers are Silk Ribbons, Spectral Aurora and Spectrum Tunnel (adapted from [Synesthia](https://github.com/jonjaques/synesthia)), Aurora Curtains (built on Verso's ambient Aurora material) and Fosfora Aurora (ported from [Fosfora](https://github.com/kevinraymond/fosfora)). The `ThirdParty/` manifests record what was adapted and how.
 
-The 27 ambient GPU effects are separate: they are `[[stitchable]]` functions in `Shaders.metal`, applied through SwiftUI's `colorEffect`, and they do not react to audio.
+The 27 ambient GPU effects are separate: they are functions in `Shaders.metal`, each called from its own fragment shader in Lunalyr's Metal view, and they do not react to audio.
 
 ## Settings and storage
 

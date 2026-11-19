@@ -116,20 +116,8 @@ struct VizUniforms {
         \.p8, \.p9, \.p10, \.p11, \.p12, \.p13, \.p14, \.p15,
     ]
 
-    /// How many options a visualizer may declare — one number, derived from
-    /// the struct itself, that the host, the docs, and the tests all use.
-    static var parameterCount: Int { parameterKeyPaths.count }
-
     subscript(parameter index: Int) -> Float {
         get { self[keyPath: Self.parameterKeyPaths[index]] }
         set { self[keyPath: Self.parameterKeyPaths[index]] = newValue }
-    }
-
-    /// Bounds-checked `subscript(parameter:)`: a descriptor that declares more
-    /// options than there are slots quietly loses the extras rather than
-    /// trapping in a release build.
-    mutating func setParameter(_ index: Int, to value: Float) {
-        guard Self.parameterKeyPaths.indices.contains(index) else { return }
-        self[parameter: index] = value
     }
 }

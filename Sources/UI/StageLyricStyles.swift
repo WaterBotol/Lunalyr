@@ -554,17 +554,12 @@ struct StageLyricView: View {
 // MARK: - Shared by several layouts
 
 extension StageLyricView {
-    /// The little words ("the", "of", "and"...) Fable sets a touch smaller.
+    /// The little words ("the", "of", "and"...), which Portal never gives an ornament.
     static let little: Set<String> = [
         "a", "an", "the", "of", "to", "in", "on", "at", "by", "for", "and", "or", "but", "so", "as", "if", "is", "it",
         "my", "me", "we", "i", "i'm", "i'll", "you", "be", "up", "us", "no", "oh", "can", "can't", "do", "did", "don't",
         "under", "over", "with", "from", "into", "out", "off", "all", "are", "was", "im", "ill",
     ]
-
-    /// Whether `text` is one of the little words, and short.
-    func isLittle(_ text: String) -> Bool {
-        Self.little.contains(text.lowercased().trimmingCharacters(in: .punctuationCharacters)) && text.count <= 5
-    }
 
     /// A steady 0...1 for a line (`word` nil) or one of its words and a salt.
     func chance(_ word: Int?, _ salt: Int) -> Double {

@@ -1,24 +1,6 @@
 import AppKit
 import SwiftUI
 
-/// A short reminder, on pages whose settings belong to a lyric style
-/// (readings, translations), of which style they change.
-@MainActor
-struct LyricStyleEditingNote: View {
-    @ObservedObject var options: FloatingLyricsOptions = .shared
-    @ObservedObject private var styles = LyricStyles.shared
-
-    var body: some View {
-        let screens = FloatingDisplayChoice.connected()
-        if screens.count > 1, !styles.sameEverywhere {
-            InspectorCaption("These settings change \(MonitorBar.name(of: styles.editingDisplay, among: screens))’s "
-                             + "\(options.surface.styleName) style; other monitors keep their own.")
-        } else if options.isFloating {
-            InspectorCaption("These settings change the Floating style; the desktop lyrics keep their own.")
-        }
-    }
-}
-
 /// The floating window's size and place, in Text › Size and place while
 /// the Floating view shows: the size preset, the place on screen and the
 /// display; the exact text size, Edit position and Reset size under More
@@ -162,84 +144,6 @@ struct FloatingDisplayChoice {
             let number = (seen[display.name] ?? 0) + 1
             seen[display.name] = number
             return FloatingDisplayChoice(key: display.key, name: "\(display.name) \(number)")
-        }
-    }
-}
-
-/// A small screen with its menu bar and Dock, and a spot for each preset:
-/// click one to put the lyrics there. Custom is the place set by dragging.
-struct FloatingLocationPicker: View {
-    @Binding var placement: FloatingPlacement
-    static let size = CGSize(width: 196, height: 124)
-
-    var body: some View {
-        VStack(alignment: .trailing, spacing: LunalyrDesign.Spacing.xSmall) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(Color.primary.opacity(0.06))
-                    .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .strokeBorder(Color.lunalyrContrastBorder, lineWidth: 1))
-                VStack(spacing: 0) {
-                    // The menu bar and the Dock, which the presets keep clear of.
-                    UnevenRoundedRectangle(topLeadingRadius: 8, topTrailingRadius: 8, style: .continuous)
-                        .fill(Color.primary.opacity(0.16))
-                        .frame(height: 9)
-                    Spacer(minLength: 0)
-                    Capsule().fill(Color.primary.opacity(0.18))
-                        .frame(width: 74, height: 8)
-                        .padding(.bottom, 4)
-                }
-                Grid(horizontalSpacing: 6, verticalSpacing: 6) {
-                    ForEach(0..<3, id: \.self) { row in
-                        GridRow {
-                            ForEach(0..<3, id: \.self) { column in
-                                spot(FloatingPlacement.presets.first { $0.cell?.column == column && $0.cell?.row == row })
-                            }
-                        }
-                    }
-                }
-                .padding(.top, 15)
-                .padding(.bottom, 16)
-                .padding(.horizontal, 8)
-            }
-            .frame(width: Self.size.width, height: Self.size.height)
-            Button {
-                placement = .custom
-            } label: {
-                Label("Custom", systemImage: placement == .custom ? "hand.draw.fill" : "hand.draw")
-                    .font(.caption.weight(.medium))
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 3)
-                    .background(Capsule().fill(placement == .custom ? Color.lunalyrAccent : Color.primary.opacity(0.1)))
-                    .foregroundStyle(placement == .custom ? Color.white : Color.primary)
-                    .contentShape(Capsule())
-            }
-            .buttonStyle(.plain)
-            .help("The place and size you set with Edit position")
-            .accessibilityLabel(FloatingPlacement.custom.title)
-            .accessibilityAddTraits(placement == .custom ? .isSelected : [])
-        }
-    }
-
-    @ViewBuilder
-    private func spot(_ preset: FloatingPlacement?) -> some View {
-        if let preset {
-            let selected = placement == preset
-            Button { placement = preset } label: {
-                RoundedRectangle(cornerRadius: 3, style: .continuous)
-                    .fill(selected ? Color.lunalyrAccent : Color.primary.opacity(0.22))
-                    .frame(width: 50, height: 14)
-                    .overlay(RoundedRectangle(cornerRadius: 3, style: .continuous)
-                        .strokeBorder(selected ? Color.clear : Color.lunalyrContrastBorder, lineWidth: 1))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .help(preset.title)
-            .accessibilityLabel(preset.title)
-            .accessibilityAddTraits(selected ? .isSelected : [])
-        } else {
-            Color.clear.frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 }

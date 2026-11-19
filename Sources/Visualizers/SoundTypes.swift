@@ -12,7 +12,6 @@ import Foundation
 struct SoundOnsetRing: Sendable, Equatable, RandomAccessCollection, MutableCollection {
     static let capacity = 8
     typealias Index = Int
-    typealias Indices = Range<Int>
 
     private var slots = (SoundOnset(), SoundOnset(), SoundOnset(), SoundOnset(),
                          SoundOnset(), SoundOnset(), SoundOnset(), SoundOnset())
@@ -329,9 +328,6 @@ struct SoundTypeIdleGate {
     private var hiddenFrom = Double.infinity
     private var hiddenUntil = Double.infinity
     private var kick = Hidden(), snare = Hidden(), hat = Hidden()
-
-    /// How much of the sustained classes shows, 0...1.
-    var sustainedPresence: Float { presence }
 
     /// The sound types `sound` as this surface shows them at wall-clock time
     /// `clock` (seconds, any monotonic clock), `live` being whether the scene

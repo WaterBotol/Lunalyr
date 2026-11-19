@@ -6,13 +6,7 @@ import SwiftUI
 // Controls for doing one thing fast, shared by the menu-bar panel, the
 // Settings stage and onboarding:
 //
-//     WallpaperModeGrid()                     // pick the wallpaper type
-//     HStack {
-//         ToggleTile("Pause", symbol: "pause.fill", isOn: extras.wallpaperPaused,
-//                    detail: "⌃⌥⌘P") { extras.toggleWallpaperPause() }
-//     }
 //     SongTimingNudge()                       // lyrics earlier / later for this song
-//     Button("Settings…") { … }.buttonStyle(MenuRowButtonStyle(shortcut: "⌘,"))
 //     LunalyrPlayerPicker()                   // Automatic / Apple Music / Spotify
 
 // MARK: Wallpaper type
@@ -32,7 +26,7 @@ extension Settings.BackgroundMode {
         }
     }
 
-    /// The tile's label in `WallpaperModeGrid`; `title` everywhere else.
+    /// The tile's label in onboarding's wallpaper tiles; `title` everywhere else.
     var shortTitle: String {
         switch self {
         case .auto: return "Match"
@@ -46,7 +40,7 @@ extension Settings.BackgroundMode {
         }
     }
 
-    /// The looks Lunalyr draws, in the order the grid shows them.
+    /// The looks Lunalyr draws, in the order the tiles show them.
     static let generated: [Settings.BackgroundMode] = [.auto, .visualizer, .shader, .pattern, .colourOnly]
     /// The looks that start from the user's own picture.
     static let own: [Settings.BackgroundMode] = [.desktop, .custom, .musicVideo]
@@ -66,46 +60,8 @@ extension Settings.BackgroundMode {
     }
 }
 
-/// Every wallpaper type as a tile, the chosen one lit: one click to change
-/// the look. The five Lunalyr draws sit in a row of small tiles, the three
-/// that start from something else (your picture, a file, the song's video) in a row of wide ones beneath. While
-/// power saving draws something other than the choice, a leaf marks the
-/// tile it draws. Imported image or video with nothing imported yet calls
-/// `chooseImport` instead (Settings opens its file panel; the menu opens
-/// Settings at `.wallpaper`).
-struct WallpaperModeGrid: View {
-    /// What to do for Imported image or video while no file is imported.
-    var chooseImport: () -> Void
-    @Model(\.settings) private var settings
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    init(chooseImport: @escaping () -> Void = {}) {
-        self.chooseImport = chooseImport
-    }
-
-    var body: some View {
-        VStack(spacing: 6) {
-            HStack(spacing: 6) {
-                ForEach(Settings.BackgroundMode.generated) { tile($0, wide: false) }
-            }
-            HStack(spacing: 6) {
-                ForEach(Settings.BackgroundMode.own) { tile($0, wide: true) }
-            }
-        }
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel("Wallpaper type")
-    }
-
-    private func tile(_ mode: Settings.BackgroundMode, wide: Bool) -> some View {
-        let effective = settings.effectiveBackgroundMode
-        return ModeTile(mode: mode, wide: wide, selected: settings.backgroundMode == mode,
-                        standsIn: effective == mode && settings.backgroundMode != mode) { choose(mode) }
-    }
-
-    private func choose(_ mode: Settings.BackgroundMode) {
-        Self.choose(mode, settings: settings, chooseImport: chooseImport)
-    }
-
+/// Choosing a wallpaper type, for onboarding's tiles.
+enum WallpaperModeGrid {
     /// Picks `mode`, or -- for Imported image or video with nothing imported
     /// yet, or the copy gone -- calls `chooseImport` instead. The menu-bar
     /// panel's Wallpaper submenu does exactly the same.
@@ -119,151 +75,6 @@ struct WallpaperModeGrid: View {
         // touches (whole Settings sections). The tile lights with its own
         // scoped animation; pages animate their own sections.
         settings.backgroundMode = mode
-    }
-}
-
-private struct ModeTile: View {
-    let mode: Settings.BackgroundMode
-    /// A tile in the second row: symbol beside the name where it fits.
-    let wide: Bool
-    let selected: Bool
-    /// Power saving draws this instead of the chosen type.
-    let standsIn: Bool
-    let action: () -> Void
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    var body: some View {
-        Button(action: action) {
-            content
-                .foregroundStyle(selected ? Color.white : Color.primary)
-                .frame(maxWidth: .infinity, minHeight: wide ? 34 : 50)
-                .padding(.horizontal, LunalyrDesign.Spacing.xSmall)
-                .styledSurface(radius: LunalyrDesign.Radius.card, selected: selected, recessed: true)
-                .overlay(alignment: .topTrailing) {
-                    if standsIn {
-                        Image(systemName: "leaf.fill")
-                            .font(.system(size: 9, weight: .bold))
-                            .foregroundStyle(LunalyrStatus.success.text)
-                            .padding(5)
-                            .accessibilityHidden(true)
-                    }
-                }
-                .contentShape(RoundedRectangle(cornerRadius: LunalyrDesign.Radius.card, style: .continuous))
-                .animation(LunalyrDesign.Motion.animation(LunalyrDesign.Motion.quick, reduceMotion: reduceMotion),
-                           value: selected)
-        }
-        .buttonStyle(ModeTilePressStyle())
-        .help("\(mode.title): \(mode.summary)")
-        .accessibilityLabel(mode.title)
-        .accessibilityValue(standsIn ? "Shown by power saving for now" : "")
-        .accessibilityHint(mode.summary)
-        .accessibilityAddTraits(selected ? [.isSelected] : [])
-    }
-
-    /// A wide tile lays its symbol beside the name where the whole name
-    /// fits, and stacks them like the small tiles where it doesn't (the
-    /// narrow menu-bar panel), so a name never truncates ("Your wal…").
-    @ViewBuilder private var content: some View {
-        if wide {
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: 6) {
-                    Image(systemName: mode.symbol).font(.system(size: 13, weight: .medium))
-                    Text(mode.shortTitle).font(.callout).lineLimit(1).fixedSize()
-                }
-                stacked
-                    .padding(.vertical, LunalyrDesign.Spacing.small)
-            }
-        } else {
-            stacked
-        }
-    }
-
-    private var stacked: some View {
-        VStack(spacing: LunalyrDesign.Spacing.xSmall) {
-            Image(systemName: mode.symbol)
-                .font(.system(size: 15, weight: .medium))
-                .frame(height: 18)
-            Text(mode.shortTitle)
-                .font(.caption)
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
-        }
-    }
-}
-
-/// A wallpaper tile dims slightly while pressed, so the click registers
-/// before the new look arrives.
-private struct ModeTilePressStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .brightness(configuration.isPressed ? -0.08 : 0)
-    }
-}
-
-// MARK: Toggle tiles
-
-/// A square-ish button that shows a state, like a Control Center module:
-/// the symbol lights in the accent while on. For actions that flip
-/// something (Pause wallpaper, Hide lyrics) and one-shot actions (Copy lyric
-/// card: `isOn` false).
-struct ToggleTile: View {
-    let title: String
-    let symbol: String
-    var isOn: Bool
-    /// A second line: the shortcut, or what the state means.
-    var detail: String?
-    /// Spoken for the action, when the title alone is ambiguous
-    /// ("Pause Wallpaper", not "Pause").
-    var accessibilityTitle: String?
-    let action: () -> Void
-    @Environment(\.isEnabled) private var enabled
-
-    init(_ title: String, symbol: String, isOn: Bool = false, detail: String? = nil, accessibilityTitle: String? = nil,
-         action: @escaping () -> Void) {
-        self.title = title
-        self.symbol = symbol
-        self.isOn = isOn
-        self.detail = detail
-        self.accessibilityTitle = accessibilityTitle
-        self.action = action
-    }
-
-    var body: some View {
-        Button(action: action) {
-            VStack(spacing: 5) {
-                Image(systemName: symbol)
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(isOn ? Color.white : Color.primary)
-                    .frame(width: 28, height: 28)
-                    .background(Circle().fill(isOn ? AnyShapeStyle(Color.lunalyrAccent) : AnyShapeStyle(.quaternary)))
-                Text(title)
-                    .font(.caption.weight(.medium))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-                if let detail {
-                    Text(detail)
-                        .lunalyrText(.footnote)
-                        .lineLimit(1)
-                }
-            }
-            .frame(maxWidth: .infinity, minHeight: 58)
-            .padding(.vertical, 6)
-            .padding(.horizontal, 4)
-            .background(
-                RoundedRectangle(cornerRadius: LunalyrDesign.Radius.card, style: .continuous)
-                    .fill(.quinary)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: LunalyrDesign.Radius.card, style: .continuous)
-                    .strokeBorder(Color.lunalyrContrastBorder, lineWidth: 1)
-            )
-            .opacity(enabled ? 1 : 0.45)
-            .contentShape(RoundedRectangle(cornerRadius: LunalyrDesign.Radius.card, style: .continuous))
-        }
-        .buttonStyle(.plain)
-        .help(detail.map { "\(accessibilityTitle ?? title) (\($0))" } ?? (accessibilityTitle ?? title))
-        .accessibilityLabel(accessibilityTitle ?? title)
-        .accessibilityValue(isOn ? "On" : "")
     }
 }
 
@@ -392,64 +203,10 @@ struct SongOffsetField: View {
     }
 }
 
-// MARK: Menu rows
-
-/// A full-width row like a menu item: highlighted under the pointer, the
-/// shortcut at the trailing edge. For Settings…, Check for Updates… and Quit
-/// at the foot of the menu-bar panel, and other list-like actions.
-struct MenuRowButtonStyle: ButtonStyle {
-    var symbol: String?
-    /// "⌘,", shown at the trailing edge. The button still needs its own
-    /// `.keyboardShortcut` for the keys to work.
-    var shortcut: String?
-
-    func makeBody(configuration: Configuration) -> some View {
-        MenuRow(configuration: configuration, symbol: symbol, shortcut: shortcut)
-    }
-
-    private struct MenuRow: View {
-        let configuration: ButtonStyleConfiguration
-        let symbol: String?
-        let shortcut: String?
-        @State private var hovering = false
-        @Environment(\.isEnabled) private var enabled
-
-        var body: some View {
-            HStack(spacing: LunalyrDesign.Spacing.small) {
-                if let symbol {
-                    Image(systemName: symbol)
-                        .frame(width: 18)
-                        .foregroundStyle(.secondary)
-                }
-                configuration.label
-                Spacer(minLength: LunalyrDesign.Spacing.small)
-                if let shortcut {
-                    Text(shortcut).foregroundStyle(.secondary)
-                }
-            }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 5)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .contentShape(Rectangle())
-            .background(RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .fill(hovering && enabled ? Color.primary.opacity(configuration.isPressed ? 0.14 : 0.08) : .clear))
-            .opacity(enabled ? 1 : 0.45)
-            .onHover { hovering = $0 }
-            // A panel that closes under the pointer never hears it leave:
-            // forget the hover, so the row isn't lit when the panel reopens.
-            .onDisappear { hovering = false }
-            .onReceive(NotificationCenter.default.publisher(for: NSWindow.didResignKeyNotification)) { _ in
-                hovering = false
-            }
-        }
-    }
-}
-
 // MARK: Player
 
 /// "Player: Automatic / Apple Music / Spotify", reading the models'
-/// `PlayerOptions` (the NowPlaying folder's `PlayerChoicePicker` reads the
-/// shared one, which snapshots can't isolate).
+/// `PlayerOptions` rather than the shared one, so snapshots can isolate it.
 struct LunalyrPlayerPicker: View {
     var title: String
     @Model(\.players) private var options

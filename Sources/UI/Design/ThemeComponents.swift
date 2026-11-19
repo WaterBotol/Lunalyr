@@ -58,13 +58,13 @@ private struct FormDensityKey: EnvironmentKey { static let defaultValue = FormDe
 private struct ThemeOnCanvasKey: EnvironmentKey { static let defaultValue = false }
 
 extension EnvironmentValues {
-    /// Draws components in this style instead of the chosen one (the Style Gallery).
+    /// Draws components in this style instead of the chosen one (UI snapshots).
     var themeStyleOverride: SettingsVisualStyle? {
         get { self[ThemeStyleOverrideKey.self] }
         set { self[ThemeStyleOverrideKey.self] = newValue }
     }
 
-    /// Holds every component at one state (the Style Gallery).
+    /// Holds every component at one state.
     var themeForcedState: ThemeState? {
         get { self[ThemeForcedStateKey.self] }
         set { self[ThemeForcedStateKey.self] = newValue }
@@ -729,26 +729,6 @@ enum ThemedSliderMath {
     }
 }
 
-/// A titled slider with its value at the right (12 pt, monospaced digits).
-struct ThemedSlider: View {
-    let title: String
-    @Binding var value: Double
-    let range: ClosedRange<Double>
-    let format: (Double) -> String
-
-    init(_ title: String, value: Binding<Double>, in range: ClosedRange<Double>,
-         format: @escaping (Double) -> String) {
-        self.title = title
-        _value = value
-        self.range = range
-        self.format = format
-    }
-
-    var body: some View {
-        ValueSlider(title, value: $value, in: range, format: format)
-    }
-}
-
 // MARK: Section header, "More", section
 
 /// A section's title: 13 pt semibold ink, a header to VoiceOver. `info`, a
@@ -843,107 +823,6 @@ struct ThemedCard<Content: View>: View {
         // The form's controls even outside a `ThemedForm` (the Look inspector).
         .themedFormControls()
     }
-}
-
-// MARK: Style Gallery
-
-/// Every control in both window styles and its states, side by side: the
-/// preview for judging the system (`#Preview "Style Gallery"`) and the
-/// source of the gallery screenshots (UI snapshot tests).
-struct StyleGallery: View {
-    @State private var on = true
-    @State private var off = false
-    @State private var pick = 1
-    @State private var level = 0.6
-    @State private var menu = 0
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 0) {
-            ForEach(SettingsVisualStyle.allCases) { style in
-                column(style)
-            }
-        }
-        .frame(width: 1080)
-    }
-
-    private func column(_ style: SettingsVisualStyle) -> some View {
-        ThemeReader { _, t in
-            VStack(alignment: .leading, spacing: 28) {
-                Text(style.title)
-                    .font(LunalyrDesign.Studio.TypeScale.title)
-                    .foregroundStyle(Color.studio(.ink))
-                ThemedCard("Buttons") {
-                    stateGrid { state in
-                        Button(state.rawValue.capitalized) {}
-                            .buttonStyle(ThemedButtonStyle())
-                            .environment(\.themeForcedState, state)
-                    }
-                    stateGrid { state in
-                        Button(state.rawValue.capitalized) {}
-                            .buttonStyle(ThemedButtonStyle(prominent: true))
-                            .environment(\.themeForcedState, state)
-                    }
-                }
-                ThemedCard("Switches") {
-                    Toggle("On", isOn: $on)
-                    Toggle("Off", isOn: $off)
-                    Toggle("Disabled", isOn: $on).disabled(true)
-                    InspectorCaption("A caption sits 3 points under its control.", more: "The longer explanation.")
-                }
-                ThemedCard("Checkboxes") {
-                    CheckboxList {
-                        Toggle("On", isOn: $on)
-                        Toggle("Off", isOn: $off)
-                        Toggle(isOn: $on) {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("With a caption")
-                                InspectorCaption("Captions under a checkbox line up with its label.")
-                            }
-                        }
-                    }
-                }
-                ThemedCard("Choices") {
-                    ChoiceSegments("Segments", selection: $pick, cases: [0, 1, 2], label: { ["Automatic", "Music", "Spotify"][$0] })
-                    ChoiceMenu("Pop-up", selection: $menu, selectedTitle: { ["Say so briefly", "Stay quiet"][$0] }) {
-                        Text("Say so briefly").tag(0)
-                        Text("Stay quiet").tag(1)
-                    }
-                    ValueSlider("Lyric size", value: $level, in: 0...1, minimumLabel: "Small", maximumLabel: "Large",
-                                format: { "\(Int($0 * 100))%" })
-                    HStack(spacing: 14) {
-                        ForEach([ThemeState.pressed, .focused, .disabled], id: \.self) { state in
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(state.rawValue.capitalized).lunalyrText(.caption)
-                                ThemedSliderTrack(value: $level, range: 0...1)
-                                    .environment(\.themeForcedState, state)
-                            }
-                        }
-                    }
-                }
-                StatusBanner(.warning, title: "Default folder unavailable",
-                             message: "Export lyrics in Lyrimuse first, or choose the folder where you already save them.")
-            }
-            .toggleStyle(ThemedToggleStyle())
-            .buttonStyle(ThemedButtonStyle())
-            .padding(.horizontal, 30)
-            .padding(.vertical, 24)
-            .frame(width: 540, alignment: .topLeading)
-            .background(Color(nsColor: t.canvas))
-        }
-        .environment(\.themeStyleOverride, style)
-    }
-
-    private func stateGrid<Item: View>(@ViewBuilder _ item: @escaping (ThemeState) -> Item) -> some View {
-        HStack(spacing: 10) {
-            ForEach(ThemeState.allCases, id: \.self) { state in
-                item(state)
-            }
-        }
-    }
-}
-
-#Preview("Style Gallery") {
-    StyleGallery()
 }
 
 // MARK: Pages
