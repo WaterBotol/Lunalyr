@@ -369,9 +369,9 @@ final class FableStyleTests: XCTestCase {
         for (index, run) in runs.enumerated() {
             XCTAssertEqual(plan.strokes[index].start, run.start - StageMotion.lead, accuracy: 1e-9, "Lands on its beat")
         }
-        // Nothing is written before its beat; everything is written once its stroke ends.
-        XCTAssertEqual(StageLyricView.fableWritten(plan.strokes[4], at: runs[4].start - 0.1), 0)
-        XCTAssertEqual(StageLyricView.fableWritten(plan.strokes[4], at: plan.strokes[4].start + plan.strokes[4].length), 1)
+        // Nothing appears before its beat; everything has appeared a moment after it.
+        XCTAssertEqual(StageLyricView.fableAppeared(plan.strokes[4], at: runs[4].start - 0.1), 0)
+        XCTAssertEqual(StageLyricView.fableAppeared(plan.strokes[4], at: plan.strokes[4].start + StageLyricView.fableAppear), 1)
     }
 
     /// The big landing belongs to the focal words (the hero's is biggest);
@@ -428,12 +428,14 @@ final class FableStyleTests: XCTestCase {
         XCTAssertGreaterThan(plan.pages[0].rows.count, 1, "Still a row per phrase")
     }
 
-    func testStrokeMaskStops() {
-        XCTAssertEqual(FableStroke.stops(0).clear, 0)
-        XCTAssertEqual(FableStroke.stops(1).solid, 1)
-        let half = FableStroke.stops(0.5)
-        XCTAssertLessThanOrEqual(half.solid, half.clear)
-        XCTAssertGreaterThan(half.clear, 0)
-        XCTAssertLessThan(half.solid, 1)
+    /// A written word fades in whole, quickly, on its stroke's beat: no wipe.
+    func testWrittenWordsFadeInWhole() {
+        let stroke = StageLyricView.FablePlan.Stroke(start: 10, length: 1.2)
+        XCTAssertEqual(StageLyricView.fableAppeared(stroke, at: 9.99), 0)
+        XCTAssertEqual(StageLyricView.fableAppeared(stroke, at: 10 + StageLyricView.fableAppear), 1)
+        // Whatever the stroke's length.
+        XCTAssertEqual(StageLyricView.fableAppeared(StageLyricView.FablePlan.Stroke(start: 10, length: 4), at: 10.2), 1)
+        let half = StageLyricView.fableAppeared(stroke, at: 10 + StageLyricView.fableAppear / 2)
+        XCTAssertEqual(half, 0.5, accuracy: 1e-9)
     }
 }
