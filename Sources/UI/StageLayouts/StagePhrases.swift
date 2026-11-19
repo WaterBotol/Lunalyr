@@ -138,7 +138,7 @@ enum StagePhrases {
         let plain = text.lowercased().replacingOccurrences(of: "\u{2019}", with: "'")
             .trimmingCharacters(in: CharacterSet.punctuationCharacters.subtracting(CharacterSet(charactersIn: "'")))
             .trimmingCharacters(in: .whitespaces)
-        return functionWords.contains(plain)
+        return functionWords.contains(plain) || LyricScript.lightWords.contains(plain)
     }
 
     /// Punctuation that ends a phrase when a run ends with it.
@@ -356,7 +356,7 @@ enum StagePhrases {
             let longer = untimed ? 0 : durations[id] - durations[best]
             if longer > 0.05 { best = id; continue }
             if longer < -0.05 { continue }
-            let letters = runs[id].text.count - runs[best].text.count
+            let letters = LyricScript.readingLength(runs[id].text) - LyricScript.readingLength(runs[best].text)
             if letters >= 0 { best = id }
         }
         return best

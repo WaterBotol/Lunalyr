@@ -74,6 +74,41 @@ enum LyricScript {
         }
     }
 
+    /// How long a word reads, counted in Latin letters: a Han character,
+    /// a kana or a Hangul block carries about as much as two (未来 reads
+    /// like "future", 사랑 like "love"). The emphasis rules were written in
+    /// letters, and by a plain count a Chinese, Japanese or Korean word of
+    /// two characters was as slight as "an".
+    static func readingLength(_ text: String) -> Int {
+        text.reduce(0) { total, character in
+            guard character.isLetter || character.isNumber else { return total }
+            return total + (character.unicodeScalars.first.map(isWide) == true ? 2 : 1)
+        }
+    }
+
+    /// Han, kana or Hangul: the characters `readingLength` counts double.
+    private static func isWide(_ scalar: Unicode.Scalar) -> Bool {
+        switch scalar.value {
+        case 0x1100...0x11FF, 0x3130...0x318F, 0xA960...0xA97F, 0xAC00...0xD7FF,
+             0x3040...0x30FF, 0x31F0...0x31FF, 0xFF66...0xFF9F,
+             0x3005, 0x3400...0x4DBF, 0x4E00...0x9FFF, 0xF900...0xFAFF, 0x20000...0x323AF: return true
+        default: return false
+        }
+    }
+
+    /// Words that are as light in Chinese, Japanese and Korean as "the",
+    /// "of" and "I" are in English: pronouns, particles and the commonest
+    /// endings, which are never the word a line leans on. Mostly they ride
+    /// with the word before them; these are the ones that stand alone.
+    static let lightWords: Set<String> = [
+        // Chinese
+        "我", "你", "他", "她", "它", "的", "了", "着", "过", "吗", "呢", "吧", "啊", "呀", "是", "在", "和", "也", "就", "都",
+        // Japanese
+        "は", "が", "を", "に", "の", "へ", "と", "も", "で", "や", "か", "ね", "よ", "な", "て", "た",
+        // Korean
+        "나", "너", "내", "네", "날", "널", "난", "넌", "그", "이", "저", "은", "는", "을", "를", "의", "에",
+    ]
+
     /// Letters or digits, i.e. anything sung rather than punctuation.
     static func hasLetters(_ text: String) -> Bool {
         text.contains { $0.isLetter || $0.isNumber }

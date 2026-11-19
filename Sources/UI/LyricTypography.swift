@@ -241,7 +241,10 @@ enum ScatteredTypography {
     private static func drag(_ word: LyricsFetcher.Word, average: Double) -> Double {
         let cleaned = word.text.lowercased()
             .trimmingCharacters(in: CharacterSet.punctuationCharacters.union(.whitespaces))
-        guard cleaned.count > 2, !functionWords.contains(cleaned), average > 0.01 else { return 0 }
+        // A single kanji, hanzi or Hangul block (愛, 夢) is a word of its own.
+        let length = LyricScript.readingLength(cleaned)
+        guard length > 2 || (length == 2 && cleaned.count == 1), !functionWords.contains(cleaned),
+              !LyricScript.lightWords.contains(cleaned), average > 0.01 else { return 0 }
         return Easing.smoothstep(((word.end - word.start) / average - 1.15) / 0.85)
     }
     struct WordMetrics: Equatable {
@@ -271,9 +274,9 @@ enum ScatteredTypography {
             let cleaned = word.text.lowercased()
                 .trimmingCharacters(in: CharacterSet.punctuationCharacters.union(.whitespaces))
             guard !cleaned.isEmpty else { continue }
-            let length = Double(min(cleaned.count, 10))
+            let length = Double(min(LyricScript.readingLength(cleaned), 10))
             var score = drag(word, average: average) * 6 + length
-            if functionWords.contains(cleaned) { score -= 20 }
+            if functionWords.contains(cleaned) || LyricScript.lightWords.contains(cleaned) { score -= 20 }
             // Ties go to the later word: a line resolves forwards.
             if score >= bestScore { bestScore = score; best = index }
         }
@@ -309,7 +312,7 @@ enum ScatteredTypography {
         let cleaned = word.text.lowercased()
             .trimmingCharacters(in: CharacterSet.punctuationCharacters.union(.whitespaces))
         let isFocal = key.wordTimed && index == focal
-        let isMinor = !isFocal && functionWords.contains(cleaned)
+        let isMinor = !isFocal && (functionWords.contains(cleaned) || LyricScript.lightWords.contains(cleaned))
 
         let editorialAmount = key.fontIdentity.editorial ? key.fontIdentity.editorialAmount : 0
         // Whether the hash lets this word take the second face at the
@@ -444,8 +447,11 @@ enum SpokenTypography {
         key.words.enumerated().map { index, word in
             let voice = word.text.lowercased().filter(\.isLetter)
             let filler = ["a", "an", "the", "i", "in", "of", "to", "and", "or", "it", "is", "my", "me", "you"].contains(voice)
+                || LyricScript.lightWords.contains(voice)
             let hash = word.text.utf8.reduce(UInt64(1469598103934665603)) { ($0 ^ UInt64($1)) &* 1099511628211 }
-            let hero = !filler && (word.text.count >= 5 || word.end - word.start > 0.65)
+            // By reading length: a word of three kanji or Hangul blocks is
+            // as long a word as a five-letter English one (see `readingLength`).
+            let hero = !filler && (LyricScript.readingLength(word.text) >= 5 || word.end - word.start > 0.65)
             // Three clear steps, so a column has a rhythm of large and
             // small words rather than near-equal ones.
             let columnSize = key.baseSize * (hero ? 0.96 : filler ? 0.56 : 0.70)
