@@ -803,9 +803,28 @@ struct LyricLayer: View {
     static func renderedExitStart(_ row: Int, in lines: [LyricsFetcher.Line], handOver: Double, rolls: Bool,
                                   fillsStage: Bool, heldUntil: Double? = nil) -> Double {
         let line = lines[row]
-        let phrase = LyricPhraseTiming.exitStart(of: line, nextStart: handOver, heldUntil: heldUntil)
+        let phrase = min(LyricPhraseTiming.exitStart(of: line, nextStart: handOver, heldUntil: heldUntil),
+                         stageClearance(row, in: lines, fillsStage: fillsStage, heldUntil: heldUntil) ?? .infinity)
         guard !rolls, line.wordTimed || fillsStage else { return phrase }
         return heldUntil == nil ? min(phrase, stageHeldUntil(line)) : phrase
+    }
+
+    /// The latest a stage-filling line (Hinge, Portal, Mosaic, Torque,
+    /// Fable) starts to leave when the next line starts: as an ordinary
+    /// line does, a quarter second before it. Such a line fills the stage,
+    /// so it has nowhere to move aside to (`heldShift`): kept on while a
+    /// held note or an ad-lib rang on into the next line (up to
+    /// `LyricPhraseTiming.longestHold`), it sat whole under the next line
+    /// as that line built up on the same stage, the two lines' words on
+    /// top of each other. A line that hands its stage straight on to the
+    /// next (`StageCarry`, `heldUntil`) leaves by that hand-over instead.
+    /// Nil when nothing caps the exit.
+    static func stageClearance(_ row: Int, in lines: [LyricsFetcher.Line], fillsStage: Bool,
+                               heldUntil: Double?) -> Double? {
+        guard fillsStage, heldUntil == nil, lines.indices.contains(row), lines.indices.contains(row + 1),
+              !lines[row + 1].isInstrumental else { return nil }
+        // Never before the line has had a moment of its own.
+        return max(lines[row + 1].start - 0.25, lines[row].start + 0.5)
     }
 
     /// A layout remembered for this song or artist wins; "automatic" there
@@ -876,7 +895,9 @@ struct LyricLayer: View {
             let carry = previewing ? nil : stageCarry(index, lines: lines, fingerprint: scene.fingerprint)
             let held = StageCarry.heldUntil(carry, composition: composition)
             let pose = LyricPhraseTiming(line: line, nextStart: handOver(after: index, in: lines), time: time,
-                                         heldUntil: held)
+                                         heldUntil: held,
+                                         leavesBy: previewing ? nil : Self.stageClearance(index, in: lines,
+                                             fillsStage: composition.fillsStage, heldUntil: held))
             // A carrying layout's own hand-over is the line's entrance and
             // exit: the line does not also fade, rise or swell in and out.
             let carriedIn = composition.carriesStage && carry?.incoming != nil
