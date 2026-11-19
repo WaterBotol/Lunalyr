@@ -35,9 +35,10 @@ struct StageRun: Equatable, Identifiable {
     var end: Double
     var parts: [Part]
 
-    /// Glued syllables join into one run, but never into a run too long to read
-    /// as a word: an unspaced Chinese, Japanese or Korean line, or a romanised
-    /// one, is cut into short runs that arrive one by one.
+    /// Glued syllables join into one run: a word, as a reader takes it in.
+    /// An unspaced Chinese, Japanese or Thai line is parted at its words
+    /// first (`wordGlue`), and a Korean line is spaced at its own, so a
+    /// run is cut further only when the system could not part it at all.
     static func make(_ words: [LyricsFetcher.Word], glue: [Bool]) -> [StageRun] {
         let glue = wordGlue(words, glue: glue)
         var runs: [StageRun] = []
@@ -67,14 +68,18 @@ struct StageRun: Equatable, Identifiable {
         LyricRuns.splittingWords(words, glue: glue, into: .words)
     }
 
-    /// The longest unspaced word kept as one run; a longer one is cut.
-    static let unspacedWordLimit = 6
+    /// The longest run kept whole. `wordGlue` has already parted an
+    /// unspaced line at its words, so this only catches a stretch the
+    /// system could not part. A limit of six characters cut real words in
+    /// half: ストロベリー|ショートケーキ became ストロベリ|ーショートケ|ーキ,
+    /// and a Korean word such as 사랑했었는데 lost its ending.
+    static let unspacedWordLimit = 12
 
     /// Whether the word `text` at `index` joins the run before it: glued to
     /// it, and the two together still short enough to read as one word.
     private static func joins(_ text: String, at index: Int, glue: [Bool], after previous: String?) -> Bool {
         guard index > 0, glue.indices.contains(index), glue[index], let previous else { return false }
-        return previous.count + text.count <= (LyricScript.keepsSyllables(text) ? unspacedWordLimit : 12)
+        return previous.count + text.count <= unspacedWordLimit
     }
 
     /// The glue of the runs `make` builds: true where a word joins the run
@@ -102,11 +107,28 @@ struct StageRun: Equatable, Identifiable {
 
     /// How visible one part is: the first arrives with its word; each later
     /// syllable fades in over a short settle as it is sung, never cut in.
+    /// A word of Chinese, Japanese, Korean or Thai arrives whole instead,
+    /// as karaoke in those languages shows it: its parts still to be sung
+    /// are there but faint (`waitingPart`), and each lights as it is sung.
+    /// Revealed one character at a time, 사랑해 was a lone 사 for a beat
+    /// and ストロベリー spelled itself out, which no reader of those
+    /// scripts takes as a word.
     static func partOpacity(_ index: Int, of parts: [Part], at time: Double) -> Double {
         guard parts.indices.contains(index) else { return 0 }
         let age = time - (parts[index].start - 0.03)
         if index == 0 { return age >= 0 ? 1 : 0 }
-        return vc_settle(age, StageMotion.syllableFade)
+        let sung = vc_settle(age, StageMotion.syllableFade)
+        guard showsWhole(parts), time >= parts[0].start - 0.03 else { return sung }
+        return waitingPart + (1 - waitingPart) * sung
+    }
+
+    /// How strongly a part of a word shown whole is drawn before it is sung.
+    static let waitingPart = 0.32
+
+    /// Whether a run of `parts` arrives whole (see `partOpacity`): it is
+    /// written in a script that times each syllable or character.
+    static func showsWhole(_ parts: [Part]) -> Bool {
+        parts.count > 1 && parts.contains { LyricScript.keepsSyllables($0.text) }
     }
 
     /// The word with its not-yet-sung syllables invisible (they still take up
