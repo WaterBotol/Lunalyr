@@ -110,8 +110,12 @@ enum LyricRuns {
         /// Words as a reader takes them in, for a rolling stage: in Japanese
         /// only a word that cannot begin one (`JapaneseReading.continuesPhrase`)
         /// stays with the word before it (窓辺に 座って 海を 見ていた, where
-        /// phrases leave 窓辺に 座って海を見ていた), and elsewhere a single
-        /// character does (我们 一起 走过 春天的 小路).
+        /// phrases leave 窓辺に 座って海を見ていた). In Chinese a particle
+        /// stays with the word before it (春天的, 走过), and single
+        /// characters stay with each other (我爱你, 紅蓮華) but never join
+        /// a longer word before them: 小路 我想, not 小路我 想. Elsewhere
+        /// (Thai, Lao, Myanmar, Khmer) a single character stays with the
+        /// word before it.
         case words
     }
 
@@ -158,6 +162,7 @@ enum LyricRuns {
             let tokenizer = NLTokenizer(unit: .word)
             tokenizer.string = text
             let japanese = text.unicodeScalars.contains { (0x3041...0x30FF).contains($0.value) }
+            let han = !japanese && text.unicodeScalars.contains { LyricRuns.isHan($0) }
             var starts = Set<Int>()
             var previous: Substring?
             tokenizer.enumerateTokens(in: text.startIndex..<text.endIndex) { range, _ in
@@ -167,6 +172,9 @@ enum LyricRuns {
                 case .phrases: stays = Self.isLight(word)
                 case .words where japanese:
                     stays = previous.map { JapaneseReading.continuesPhrase(String(word), after: String($0)) } ?? false
+                case .words where han && word.count == 1 && word.unicodeScalars.allSatisfy(LyricRuns.isHan):
+                    stays = LyricRuns.chineseParticles.contains(Character(String(word)))
+                        || previous.map { $0.count == 1 && !LyricRuns.chineseParticles.contains(Character(String($0))) } ?? false
                 case .words: stays = word.count <= 1
                 }
                 if !stays { starts.insert(text.distance(from: text.startIndex, to: range.lowerBound)) }
@@ -179,6 +187,20 @@ enum LyricRuns {
         }
     }
     private static let phraseStarts = PhraseStarts()
+
+    /// Chinese particles and suffixes that end the word before them rather
+    /// than begin one: structural 的 地 得, aspect 了 着 过, plural 们, and
+    /// the sentence-final particles.
+    static let chineseParticles: Set<Character> = ["的", "地", "得", "了", "着", "著", "过", "過", "们", "們",
+                                                   "吗", "嗎", "呢", "吧", "啊", "呀", "啦", "嘛", "么", "麼", "哦", "喔", "哪"]
+
+    /// A Han character (CJK unified ideographs and their extensions).
+    static func isHan(_ scalar: Unicode.Scalar) -> Bool {
+        switch scalar.value {
+        case 0x3400...0x4DBF, 0x4E00...0x9FFF, 0xF900...0xFAFF, 0x20000...0x323AF: return true
+        default: return false
+        }
+    }
 
     /// The line as one string, runs apart and the tokens of each run
     /// together: what Echo repeats and a lyric card sets. Joining every
