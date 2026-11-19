@@ -99,8 +99,7 @@ final class OpeningTitleFontSheetTests: XCTestCase {
                 Color(red: 0.13, green: 0.12, blue: 0.16)
                 OpeningTitleCard(phase: OpeningTitle.Phase(age: 10, exit: 0, size: .full, moving: false),
                                  title: card.title, artist: card.artist, album: card.album, reading: card.reading,
-                                 cover: OpeningTitleCardLayoutPreviewTests.cover, baseSize: baseSize,
-                                 accent: Color(.sRGB, red: 0.95, green: 0.55, blue: 0.42), mood: .neutral)
+                                 cover: OpeningTitleCardLayoutPreviewTests.cover, baseSize: baseSize, mood: .neutral)
                     .environment(\.lyricReduceMotion, true)
             }
             .frame(width: screen.width, height: screen.height)

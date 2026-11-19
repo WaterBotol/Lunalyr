@@ -188,12 +188,15 @@ enum Perceptual {
 
 /// How lyric text is coloured. Standard is neutral renderer ink and the old saved “static” value.
 enum LyricColourMode: String, CaseIterable, Identifiable {
-    case standard = "static", albumDrift, sungSweep, musicReactive, customGradient
+    case standard = "static", albumDrift, sungSweep, customGradient
     var id: String { rawValue }
     static let defaultMode: Self = .albumDrift
     static var choices: [Self] { allCases.filter { $0 != .standard } }
 
+    /// The mode saved as `raw`. Static white and the retired Music
+    /// reactive (removed 20 Nov 2026) read as the default.
     static func savedChoice(_ raw: String) -> Self? {
+        if raw == "musicReactive" { return defaultMode }
         guard let mode = Self(rawValue: raw) else { return nil }
         return mode == .standard ? defaultMode : mode
     }
@@ -203,7 +206,6 @@ enum LyricColourMode: String, CaseIterable, Identifiable {
         case .standard: return "Static white"
         case .albumDrift: return "Album drift"
         case .sungSweep: return "Sung sweep"
-        case .musicReactive: return "Music reactive"
         case .customGradient: return "Custom gradient"
         }
     }
@@ -212,8 +214,7 @@ enum LyricColourMode: String, CaseIterable, Identifiable {
         switch self {
         case .standard: return "White type, as before."
         case .albumDrift: return "Colours from the cover drift slowly through the words."
-        case .sungSweep: return "White lyrics fill with colour as each word or line is sung, stepping through the cover’s colours word by word. Unsynced lyrics use Album Drift."
-        case .musicReactive: return "Bass and treble shift the emphasis between cover colours; brightness and depth follow loudness. Uses live audio when a visualiser is capturing it, and the vocal timing otherwise."
+        case .sungSweep: return "White lyrics fill with Album Drift’s colours as each word or line is sung. Unsynced lyrics use Album Drift."
         case .customGradient: return "Your own two to four colours, drifting through the line."
         }
     }
@@ -352,7 +353,7 @@ struct LyricInk {
             var sample = Self.sample(sweepRest, sung: sung, halo: dark)
             sample.dim = dim
             return sample
-        case .albumDrift, .customGradient, .musicReactive:
+        case .albumDrift, .customGradient:
             // Lifted like the line's base colour and Sung sweep: 3:1, or
             // where that would wash the colour out, a tint kept at 2.5:1.
             let source = gradient(slot: slot, seed: seed)
@@ -367,9 +368,6 @@ struct LyricInk {
     /// A point on the line's gradient. Blend around the hue wheel so
     /// different pastels keep their colour between stops.
     func gradient(slot: Double, seed: UInt64 = 0) -> OKLab {
-        if mode == .musicReactive {
-            return Perceptual.mix(stops.0, stops.1, slot)
-        }
         guard stopCount > 1 else { return stops.0 }
         var t = (phase + slot * 0.42 + vc_jitter(seed, 21) * 0.02).truncatingRemainder(dividingBy: 1)
         if t < 0 { t += 1 }
@@ -591,10 +589,6 @@ final class LyricInkDirector {
         /// Album colours, sRGB.
         var album: [SIMD3<Float>] = []
         var backdrop: Double = 0.08
-        /// Live audio, when a visualiser is capturing it.
-        var audio: VCAudioLevels?
-        /// Timing-derived vocal intensity, used when there is no audio.
-        var vocal: Double = 0
         var reduceMotion = false
         /// The system's Increase Contrast: 4.5:1 and brighter unsung words.
         var increaseContrast = false
@@ -627,7 +621,6 @@ final class LyricInkDirector {
     /// Every channel starts at white, so the first colour fades in.
     private var channels: [VCFollower] = (0..<12).map { VCFollower(value: $0 % 3 == 0 ? 1 : 0, velocity: 0, valid: 1) }
     private var backdrop = VCFollower()
-    private var level = VCFollower(), balance = VCFollower()
     private var phase = 0.0
     /// Dark text on a light wallpaper: the decision (with hysteresis) and
     /// how far the colours have eased towards it.
@@ -651,7 +644,6 @@ final class LyricInkDirector {
     /// The cover's own colours, unpastelled, for `Inputs.pastel` off.
     private var albumRawStops: Stops = LyricInkDirector.fallbackPastels
     private var vivid = LyricInkDirector.fallbackPastels.2
-    private var reactiveAccent = LyricInkDirector.fallbackPastels.3
     /// The cover's colours in OKLab, for "Album accent".
     private var albumColours: [OKLab] = []
     private var backgroundHue: Double?
@@ -959,7 +951,6 @@ final class LyricInkDirector {
         let chromatic = colours.filter { $0.chroma >= 0.012 }.sorted { $0.chroma > $1.chroma }
         guard let strongest = chromatic.first else {
             vivid = Self.fallbackPastels.2
-            reactiveAccent = Self.fallbackPastels.3
             albumStops = Self.fallbackPastels
             albumRawStops = Self.fallbackPastels
             return
@@ -980,9 +971,6 @@ final class LyricInkDirector {
             if !matches { picks.append(colour) }
             if picks.count == 4 { break }
         }
-        reactiveAccent = picks.dropFirst().first {
-            LyricHighlight.hueDistance($0.hue, vivid.hue) < .pi * 0.60
-        } ?? vivid
         var lyric = picks.map { LyricInk.pastel($0, fallbackHue: $0.hue) }
         if let tint = lyric.first, lyric.count == 1 {
             lyric = [
@@ -1012,27 +1000,10 @@ final class LyricInkDirector {
             // has a different number of colours.
             return (inputs.pastel ? albumStops : albumRawStops, 4)
         case .sungSweep:
-            // The cover's colours, each made as strong as the single sung
-            // colour used to be. Not the custom gradient's colours: those
-            // always exist (there are defaults), so they took over every
-            // song's sweep and it never followed the cover.
-            func strong(_ colour: OKLab) -> OKLab {
-                guard inputs.pastel else { return colour }
-                return LyricInk.applyingStrength(1.35, to: LyricInk.pastel(colour, fallbackHue: vivid.hue))
-            }
-            let album = inputs.pastel ? albumStops : albumRawStops
-            return ((strong(album.0), strong(album.1), strong(album.2), strong(album.3)), 4)
-        case .musicReactive:
-            let calm = inputs.reduceMotion
-            let loud = inputs.audio.map { min(1, $0.rms * 2.4 + $0.bass * 0.6) } ?? inputs.vocal
-            let tilt = inputs.audio.map { min(1, max(-1, ($0.treble - $0.bass) * 2.5)) } ?? 0
-            let intensity = vc_follow(&level, calm ? 0.3 : min(1, max(0, loud)), dt, 0.3, 1.5)
-            let shift = vc_follow(&balance, calm ? 0 : tilt, dt, 0.4, 1.5)
-            let chroma = 0.12 + 0.09 * intensity, lightness = 0.77 + 0.09 * intensity
-            let emphasis = shift * 0.04
-            let first = OKLab(l: lightness, chroma: chroma - emphasis, hue: vivid.hue)
-            let second = OKLab(l: lightness, chroma: chroma * 0.9 + emphasis, hue: reactiveAccent.hue)
-            return ((first, second, first, second), 2)
+            // Album drift's colours (the owner, 20 Nov 2026). Not the custom
+            // gradient's: those always exist (there are defaults), so they
+            // took over every song's sweep and it never followed the cover.
+            return (inputs.pastel ? albumStops : albumRawStops, 4)
         case .customGradient:
             guard !inputs.custom.isEmpty else { return (inputs.pastel ? albumStops : albumRawStops, 4) }
             let count = min(4, inputs.custom.count)

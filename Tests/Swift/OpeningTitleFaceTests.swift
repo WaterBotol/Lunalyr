@@ -28,7 +28,7 @@ final class OpeningTitleFaceTests: XCTestCase {
         let view = OpeningTitleCard(phase: OpeningTitle.Phase(age: 10, exit: 0, size: .full, moving: false),
                                     title: title, artist: "WALLOWS", album: "TELL ME THAT ITS OVER", reading: nil,
                                     cover: OpeningTitleCardLayoutPreviewTests.flatCover,
-                                    baseSize: LyricViewportMetrics(size: screen).baseSize, accent: .black, mood: .neutral)
+                                    baseSize: LyricViewportMetrics(size: screen).baseSize, mood: .neutral)
             .frame(width: screen.width, height: screen.height)
             .background(Color.black)
             .environment(\.lyricReduceMotion, true)

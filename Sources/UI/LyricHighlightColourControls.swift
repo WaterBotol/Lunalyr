@@ -56,7 +56,7 @@ struct LyricColourSwatch: View {
     private static let backdropLuminance = 0.02
 
     var body: some View {
-        let moving = colours.mode.drifts || colours.mode == .musicReactive
+        let moving = colours.mode.drifts
         // Ten frames a second is plenty for a slow drift; none under Reduce
         // Motion (the colours hold almost still there) or while Settings is
         // in the background.
@@ -92,7 +92,7 @@ struct LyricColourSwatch: View {
         return LyricInkDirector.Inputs(mode: colours.mode, speed: colours.speed, strength: colours.strength,
             custom: colours.customColours,
             album: AlbumWallpaperPalette(grid: grid).artworkStops,
-            backdrop: Self.backdropLuminance, vocal: 0.5, reduceMotion: reduceMotion,
+            backdrop: Self.backdropLuminance, reduceMotion: reduceMotion,
             increaseContrast: contrast == .increased, highlight: options.mode, highlightCustom: options.customColour,
             pastel: colours.pastelApplies(to: colours.mode))
     }

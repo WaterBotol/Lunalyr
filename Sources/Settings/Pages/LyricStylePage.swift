@@ -62,6 +62,10 @@ struct LyricStylePage: View {
     @AppStorage(OpeningTitle.settingKey) private var showOpeningTitle = true
     @AppStorage(OpeningTitle.coverKey) private var showOpeningCover = true
     @AppStorage(OpeningTitle.alwaysKey) private var keepsOpeningTitle = ShippedDefaults.openingTitleAlways
+    @AppStorage(OpeningTitle.customColoursKey) private var titleCustomColours = false
+    @AppStorage(OpeningTitle.titleColourKey) private var titleColourHex = OpeningTitle.whiteHex
+    @AppStorage(OpeningTitle.artistColourKey) private var artistColourHex = OpeningTitle.whiteHex
+    @AppStorage(OpeningTitle.albumColourKey) private var albumColourHex = OpeningTitle.whiteHex
     @AppStorage(OpeningTitle.Placement.leftKey) private var titleLeft: Double?
     @AppStorage(OpeningTitle.Placement.liftKey) private var titleLift: Double?
     @AppStorage(OpeningTitle.Placement.scaleKey) private var titleScale: Double?
@@ -122,6 +126,15 @@ struct LyricStylePage: View {
 
     /// The layers shown with the lyrics: checkboxes, as related options;
     /// how backing vocals move and Editorial typography under More options.
+    /// A colour well for one line of the song title, kept as a hex string.
+    private func titleColourWell(_ label: String, hex: Binding<String>) -> some View {
+        ColorPicker(label, selection: Binding(
+            get: { LyricColourOptions.oklab(hex: hex.wrappedValue).map { Perceptual.color($0) } ?? .white },
+            set: { hex.wrappedValue = LyricColourOptions.hex($0) ?? OpeningTitle.whiteHex }),
+                    supportsOpacity: false)
+            .fixedSize()
+    }
+
     private var shownWithLyrics: some View {
         InspectorSection("Shown with the lyrics") {
             VStack(alignment: .leading, spacing: 7) {
@@ -130,6 +143,19 @@ struct LyricStylePage: View {
                 Toggle("Show the album cover", isOn: $showOpeningCover)
                     .padding(.leading, 23)
                     .disabled(!showOpeningTitle)
+                Toggle("Use my own title colours", isOn: $titleCustomColours)
+                    .padding(.leading, 23)
+                    .disabled(!showOpeningTitle)
+                    .help("The song title is white and glows white. Turn this on to pick a colour for the title, the artist and the album; each line glows in its own colour. The lyrics’ colour never changes it.")
+                if titleCustomColours && showOpeningTitle {
+                    HStack(spacing: 14) {
+                        titleColourWell("Title", hex: $titleColourHex)
+                        titleColourWell("Artist", hex: $artistColourHex)
+                        titleColourWell("Album", hex: $albumColourHex)
+                    }
+                    .padding(.leading, 46)
+                    .revealRow()
+                }
                 Toggle("Keep the song title on screen", isOn: $keepsOpeningTitle)
                     .padding(.leading, 23)
                     .disabled(!showOpeningTitle)

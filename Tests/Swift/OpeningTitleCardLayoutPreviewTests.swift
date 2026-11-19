@@ -59,7 +59,7 @@ final class OpeningTitleCardLayoutPreviewTests: XCTestCase {
         let phase = OpeningTitle.Phase(age: 10, exit: 0, size: size, moving: false)
         let view = OpeningTitleCard(phase: phase, title: title, artist: "Clara Vey & The Lanterns", album: "Paper Moons",
                                     reading: reading, cover: flatCover,
-                                    baseSize: LyricViewportMetrics(size: screen).baseSize, accent: .black, mood: .neutral)
+                                    baseSize: LyricViewportMetrics(size: screen).baseSize, mood: .neutral)
             .frame(width: screen.width, height: screen.height)
             .background(Color.black)
             .environment(\.lyricReduceMotion, true)
@@ -121,8 +121,7 @@ final class OpeningTitleCardLayoutPreviewTests: XCTestCase {
                 Color.black.opacity(0.35)
                 OpeningTitleCard(phase: phase, title: item.title, artist: item.artist, album: item.album,
                                  reading: item.reading, cover: item.cover ? Self.cover : nil, coverPending: item.pending,
-                                 baseSize: baseSize,
-                                 accent: Color(.sRGB, red: 0.95, green: 0.55, blue: 0.42), mood: .neutral)
+                                 baseSize: baseSize, mood: .neutral)
                 // Guides: the card's left edge and the bottom inset.
                 Path { path in
                     let left = max(40, screen.width * 0.058)
