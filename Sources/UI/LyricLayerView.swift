@@ -967,9 +967,14 @@ struct LyricLayer: View {
                         let words = rolling?.words ?? (readingDisplay == .replace ? readings ?? line.words : line.words)
                         // A constellation is a web of fragments: an unspaced
                         // line is parted into its words there, or it is one
-                        // fragment with nothing to link.
-                        let glue = rolls ? [] : glue(index, words: words, scene: scene, live: live,
-                                                     splitsWords: composition.hasConnections)
+                        // fragment with nothing to link. Scattered and Echo
+                        // part only a long run (`GlueParting`).
+                        let parting = GlueParting(composition)
+                        let glue = rolls ? [] : glue(index, words: words, scene: scene, live: live, parting: parting)
+                        // Echo's repeats are the line as written, its
+                        // phrases spaced only where the line spaces them.
+                        let phraseGlue = composition == .echo && parting != .none
+                            ? self.glue(index, words: words, scene: scene, live: live) : nil
                         let annotations = readingDisplay == .below
                             ? rolling?.readings ?? readingPairs(index, readings: readings, words: line.words,
                                                                  glue: composition.fillsStage ? StageRun.glue(words, glue: glue) : glue,
@@ -992,7 +997,7 @@ struct LyricLayer: View {
                             bottomInset: band, following: rolling?.following, ordinals: rolling?.ordinals ?? [:],
                             rollingLineEnds: rolling?.lineEnds ?? [:], parts: rolling?.parts ?? [:],
                             accents: wordAccents(index, words: words, glue: glue, rolling: rolling, scene: scene),
-                            carry: carry)
+                            carry: carry, phraseGlue: phraseGlue)
                             .environment(\.lyricActionStrength, settings.actionWordStrength.amount)
                         let arrived: Double = carriedIn ? 1 : pose.arrival
                         let gone: Double = carriedOut ? 0 : pose.exit
@@ -1156,18 +1161,38 @@ struct LyricLayer: View {
     }
 
     /// Which words of a line run together, worked out once per line and
-    /// the words shown for it. `splitsWords` parts unspaced runs into their
-    /// words (`LyricRuns.splittingWords`).
+    /// the words shown for it. `parting` parts unspaced runs further
+    /// (`LyricRuns.splittingWords`).
     private func glue(_ index: Int, words: [LyricsFetcher.Word], scene: SceneLines, live: Bool,
-                      splitsWords: Bool = false) -> [Bool] {
+                      parting: GlueParting = .none) -> [Bool] {
         guard scene.lines.indices.contains(index) else { return [] }
         let line = scene.lines[index]
         let build = {
             let glue = LyricRuns.glue(line: line, words: words)
-            return splitsWords ? LyricRuns.splittingWords(words, glue: glue) : glue
+            switch parting {
+            case .none: return glue
+            case .phrases: return LyricRuns.splittingWords(words, glue: glue)
+            case .longRuns: return LyricRuns.splittingWords(words, glue: glue, into: .words, longerThan: LyricRuns.longRun)
+            }
         }
         guard live else { return build() }
-        return cache.glue(line: index, fingerprint: scene.fingerprint, words: words, splitsWords: splitsWords, build: build)
+        return cache.glue(line: index, fingerprint: scene.fingerprint, words: words, parting: parting, build: build)
+    }
+
+    /// How a layout parts a line's unspaced runs: a constellation into
+    /// phrases, its fragments; Scattered and Echo only a long run, into
+    /// words (`LyricRuns.longRun`); the others not at all (a stage layout
+    /// parts its own, `StageRun`).
+    enum GlueParting: Hashable {
+        case none, phrases, longRuns
+
+        init(_ composition: LyricComposition) {
+            switch composition {
+            case _ where composition.hasConnections: self = .phrases
+            case .scattered, .echo: self = .longRuns
+            default: self = .none
+            }
+        }
     }
 
     /// Word symbols and action words for a word-timed line, planned on the
@@ -1468,22 +1493,24 @@ final class LyricLayerCache: ObservableObject {
     }
 
     private var glueFingerprint = 0
-    private var glues: [Int: (words: Int, value: [Bool])] = [:]
+    /// By line and parting: Echo asks for a line both parted and whole.
+    private var glues: [GlueKey: (words: Int, value: [Bool])] = [:]
+    private struct GlueKey: Hashable { var line: Int; var parting: LyricLayer.GlueParting }
 
     /// Keyed by the words themselves: comparing only the first word reused
     /// one display mode's grouping in the other whenever a line began with
     /// a word that has no reading ("Baby 夢ならば").
-    func glue(line: Int, fingerprint: Int, words: [LyricsFetcher.Word], splitsWords: Bool = false,
-              build: () -> [Bool]) -> [Bool] {
+    func glue(line: Int, fingerprint: Int, words: [LyricsFetcher.Word],
+              parting: LyricLayer.GlueParting = .none, build: () -> [Bool]) -> [Bool] {
         if fingerprint != glueFingerprint { glues.removeAll(); glueFingerprint = fingerprint }
         var hasher = Hasher()
         hasher.combine(Self.signature(words))
-        hasher.combine(splitsWords)
         let signature = hasher.finalize()
-        if let hit = glues[line], hit.words == signature { return hit.value }
+        let key = GlueKey(line: line, parting: parting)
+        if let hit = glues[key], hit.words == signature { return hit.value }
         let value = build()
         if glues.count > 48 { glues.removeAll() }
-        glues[line] = (signature, value)
+        glues[key] = (signature, value)
         return value
     }
 

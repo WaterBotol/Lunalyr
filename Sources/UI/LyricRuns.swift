@@ -101,6 +101,13 @@ enum LyricRuns {
         splittingWords(words, glue: glue(line: line, words: words), into: .words)
     }
 
+    /// The most characters of a script written without spaces that
+    /// Scattered and Echo set as one run. A longer one -- most of a
+    /// Japanese or Chinese line -- is parted into its words, which flow
+    /// onto rows as an English line's words do; whole, it was one block
+    /// that shrank to fit the stage.
+    static let longRun = 8
+
     /// How finely `splittingWords` parts an unspaced run.
     enum Parting {
         /// Phrases, for a constellation's fragments: a light word -- one of
@@ -124,11 +131,16 @@ enum LyricRuns {
     /// where a timed token begins. For layouts made of separate fragments --
     /// a constellation needs several to link, a rolling stage sets one word
     /// at a time -- that would otherwise get a whole unspaced line as one.
-    static func splittingWords(_ words: [LyricsFetcher.Word], glue: [Bool], into parting: Parting = .phrases) -> [Bool] {
+    ///
+    /// Given `longerThan`, only a run of more characters than that is
+    /// parted: a short one stays as it is.
+    static func splittingWords(_ words: [LyricsFetcher.Word], glue: [Bool], into parting: Parting = .phrases,
+                               longerThan: Int = 0) -> [Bool] {
         var result = glue
         for range in ranges(glue, count: words.count) where range.count > 1 {
             let tokens = words[range]
             guard tokens.contains(where: { writtenWithoutSpaces($0.text) }) else { continue }
+            if longerThan > 0, tokens.reduce(0, { $0 + $1.text.count }) <= longerThan { continue }
             var offsets: [Int] = [], text = ""
             for token in tokens {
                 offsets.append(text.count)

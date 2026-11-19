@@ -218,6 +218,10 @@ struct LyricLineView: View {
     /// hand over to the next line through it, and Echo's repeats drift on
     /// one path through a run. Nil draws the line on its own.
     var carry: StageCarry? = nil
+    /// The glue Echo sets its repeats by, when the live line's runs were
+    /// parted further than the line itself parts them (`LyricLayer.GlueParting`):
+    /// the repeats are the line as written. Nil repeats it by `glue`.
+    var phraseGlue: [Bool]? = nil
     @StateObject private var echoText = RenderMemo<EchoPhrase, (text: String, rightToLeft: Bool)>()
     @SurfaceStyle private var style
 
@@ -238,10 +242,10 @@ struct LyricLineView: View {
                 ZStack {
                     BackingVocalLayer(groups: split.backing, time: time, stageSize: stageSize, baseSize: baseSize,
                                       seed: seed, composition: composition, mood: mood)
-                    lineBody(words: split.main, glue: split.mainGlue)
+                    lineBody(words: split.main, glue: split.mainGlue, phraseGlue: split.mainGlue)
                 }
             } else {
-                lineBody(words: words, glue: glue)
+                lineBody(words: words, glue: glue, phraseGlue: phraseGlue.flatMap { $0.count == glue.count ? $0 : nil } ?? glue)
             }
         }
         .environment(\.lyricWordAccents, accents)
@@ -255,7 +259,7 @@ struct LyricLineView: View {
     }
 
     @ViewBuilder
-    private func lineBody(words: [LyricsFetcher.Word], glue: [Bool]) -> some View {
+    private func lineBody(words: [LyricsFetcher.Word], glue: [Bool], phraseGlue: [Bool]) -> some View {
         ZStack {
             if composition.fillsStage {
                 StageLyricView(words: words, glue: glue, time: time, stageSize: stageSize, baseSize: baseSize, mood: mood,
@@ -295,7 +299,7 @@ struct LyricLineView: View {
               .background {
                   if composition == .echo {
                       GeometryReader { proxy in
-                          echoBackdrop(words: words, glue: glue, lineHeight: proxy.size.height)
+                          echoBackdrop(words: words, glue: phraseGlue, lineHeight: proxy.size.height)
                               .frame(width: proxy.size.width, height: proxy.size.height)
                       }
                   }
