@@ -72,7 +72,7 @@ extension StageLyricView {
     private func fableWord(_ run: StageRun, plan: FablePlan, runs: [StageRun], seed: Int) -> some View {
         let role = plan.roles[run.id]
         let size = Self.fableSize(role, wordCount: runs.count, unit: unit)
-        let written = Self.fableWritten(plan.strokes[run.id], at: time)
+        let written = Self.fableAppeared(plan.strokes[run.id], at: time)
         let entrance = chosenEntrance(run, progress: StageMotion.arrival(run.start, at: time), size: size)
         let native = entrance.native && !reduceMotion
         let shown = time >= run.start - StageMotion.lead
@@ -87,7 +87,10 @@ extension StageLyricView {
         let side: Double = plan.rightToLeft ? -1 : 1
         let live = Self.torqueLive(run, runs: runs, at: time)
         fableFace(run, size: size, live: live, sample: sample(run, of: runs.count), lineTimed: plan.lineTimed)
-            .modifier(FableStroke(progress: native && plan.writes[run.id] ? written : 1, rightToLeft: plan.rightToLeft))
+            // A word the pen used to write in with a sweep now just fades
+            // in on the stroke's beat (the owner, 19 Nov 2026: "get rid of
+            // that").
+            .opacity(native && plan.writes[run.id] ? written : 1)
             .scaleEffect(CGFloat(pose.scale), anchor: .bottom)
             .rotationEffect(.degrees(pose.spin * side), anchor: .bottom)
             .offset(y: size * CGFloat(pose.lift))
@@ -147,12 +150,16 @@ extension StageLyricView {
         }
     }
 
-    /// How much of a word its pen stroke has written, 0...1: the pen's own
-    /// speed (smoothstep), from the stroke's start over its length.
-    static func fableWritten(_ stroke: FablePlan.Stroke, at time: Double) -> Double {
+    /// How far a word its pen stroke brings in has appeared, 0...1: a short
+    /// fade of the whole word from the stroke's start. It used to be wiped
+    /// in across the word over the stroke's length (`FableStroke`, removed).
+    static func fableAppeared(_ stroke: FablePlan.Stroke, at time: Double) -> Double {
         guard time >= stroke.start else { return 0 }
-        return Easing.smoothstep((time - stroke.start) / max(0.01, stroke.length))
+        return Easing.smoothstep((time - stroke.start) / fableAppear)
     }
+
+    /// Seconds a written word takes to fade in.
+    static let fableAppear = 0.16
 
     /// A word's landing at `time`: how far above (negative) or below its
     /// place it is (a share of its size), its scale and its swing (degrees,
@@ -431,35 +438,6 @@ extension StageMotion {
     static func fableIn(_ x: Double) -> Double {
         let t = min(max(x, 0), 1)
         return t * t * t
-    }
-}
-
-/// Writes a word in: a soft-edged, slightly slanted wipe in reading direction.
-struct FableStroke: ViewModifier {
-    var progress: Double
-    var rightToLeft: Bool
-
-    /// The share of the word the soft edge covers.
-    static let edge = 0.3
-
-    func body(content: Content) -> some View {
-        let stops = Self.stops(progress)
-        content.mask {
-            LinearGradient(stops: [Gradient.Stop(color: .white, location: stops.solid),
-                                   Gradient.Stop(color: .white.opacity(0), location: stops.clear)],
-                           startPoint: UnitPoint(x: rightToLeft ? 1 : 0, y: 0.35),
-                           endPoint: UnitPoint(x: rightToLeft ? 0 : 1, y: 0.65))
-                .opacity(progress <= 0 ? 0 : 1)
-        }
-    }
-
-    /// Where the solid ink ends and the clear part starts, 0...1 across the word.
-    static func stops(_ progress: Double) -> (solid: Double, clear: Double) {
-        if progress >= 1 { return (1, 1) }
-        let head = max(0, progress) * (1 + edge)
-        let clear = min(1, head)
-        let solid = min(max(head - edge, 0), clear)
-        return (solid, max(clear, solid))
     }
 }
 
