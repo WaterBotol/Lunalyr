@@ -1121,7 +1121,7 @@ private struct ScatteredRunInk: View, Equatable {
                         .environment(\.lyricLivelyParticles, false)
                         .mask {
                             LyricHighlightMask(marks: highlight.marks, pointSize: size, rightToLeft: run.rightToLeft,
-                                               switchAt: highlight.textSwitch)
+                                               switchAt: highlight.textSwitch, ink: run.inkReach)
                         }
                 }
             }
@@ -1129,7 +1129,7 @@ private struct ScatteredRunInk: View, Equatable {
             .background {
                 if let highlight = frame.highlight {
                     LyricHighlightTiles(marks: highlight.marks, colour: highlight.tile, pointSize: size,
-                                        rightToLeft: run.rightToLeft)
+                                        rightToLeft: run.rightToLeft, ink: run.inkReach)
                 }
             }
     }

@@ -435,7 +435,7 @@ extension StageLyricView {
                     .font(font(size, hero: true, id: run.id))
                     .livelyLetters()
                     .lineLimit(1).minimumScaleFactor(shrink)
-                    .background { tileBackground(tile, size: size) }
+                    .background { tileBackground(tile, size: size, run: run) }
                     .highlightLayer(tile)
             }
         }

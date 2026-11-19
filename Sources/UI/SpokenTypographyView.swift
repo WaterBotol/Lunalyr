@@ -237,10 +237,10 @@ struct SpokenTypographyView: View {
             ? .init(width: RollingUnit.tileWidth(arrival: presentation.arrival, reduceMotion: reduceMotion),
                     pose: .leaving(RollingUnit.labelLeaving(rank: rank, time: time, handover: handover),
                                    reduceMotion: reduceMotion),
-                    pointSize: token.pointSize, textSwitch: ink.tileTextSwitch)
+                    pointSize: token.pointSize, textSwitch: ink.tileTextSwitch, ink: token.inkReach)
             : highlight.isVisible
             ? .init(width: CGFloat(highlight.width), pose: highlight, pointSize: token.pointSize,
-                    reach: RollingUnit.labelReach, textSwitch: ink.tileTextSwitch) : nil
+                    reach: RollingUnit.labelReach, textSwitch: ink.tileTextSwitch, ink: token.inkReach) : nil
         // Word symbols and action words: the plan is keyed by the run.
         let wordAccent = accents[token.source.presentationID]
         return RollingUnit(token: token,
@@ -267,7 +267,7 @@ struct SpokenTypographyView: View {
                     CutoutTile(colour: token.tile ? labelColour : ink.tileColour, width: tile.width,
                                rightToLeft: token.rightToLeft)
                         .padding(.horizontal, -tile.reach.width)
-                        .padding(.vertical, -tile.reach.height)
+                        .padding(.top, -tile.top).padding(.bottom, -tile.bottom)
                         .scaleEffect(tile.scale)
                         .blur(radius: tile.blur)
                         .opacity(tile.opacity)
@@ -508,6 +508,12 @@ struct RollingUnit: View {
         var opacity: Double
         /// How far it reaches past the unit on each side.
         var reach: CGSize = .zero
+        /// How far the word's letters reach past its line box, added above
+        /// and below (`LyricInkReach`).
+        var ink = LyricInkReach.none
+        /// The tile's reach above and below the unit.
+        var top: CGFloat { reach.height + ink.top }
+        var bottom: CGFloat { reach.height + ink.bottom }
         /// The opacity at which the word on it changes colour (`LyricHighlight.textSwitch`).
         var textSwitch = 0.4
         /// While it leaves (`LyricHighlightTiming.Pose`): how much of the
@@ -524,8 +530,9 @@ struct RollingUnit: View {
         /// A tile at `pose`'s strength, shrink and softness; a label's
         /// strength is its hold and its own press `width`.
         init(width: CGFloat, pose: LyricHighlightTiming.Pose, pointSize: CGFloat, reach: CGSize = .zero,
-             textSwitch: Double) {
+             textSwitch: Double, ink: LyricInkReach = .none) {
             self.init(width: width, opacity: pose.opacity, reach: reach, textSwitch: textSwitch)
+            self.ink = ink
             leaving = pose.leaving
             scale = CGFloat(pose.scale)
             blur = CGFloat(pose.blur) * pointSize
@@ -590,9 +597,9 @@ struct RollingUnit: View {
 
         var body: some View {
             GeometryReader { proxy in
-                let full = CGRect(x: -tile.reach.width, y: -tile.reach.height,
+                let full = CGRect(x: -tile.reach.width, y: -tile.top,
                                   width: proxy.size.width + 2 * tile.reach.width,
-                                  height: proxy.size.height + 2 * tile.reach.height)
+                                  height: proxy.size.height + tile.top + tile.bottom)
                 let pressed = full.width * min(1, max(0, tile.width))
                 Rectangle()
                     .frame(width: pressed, height: full.height)

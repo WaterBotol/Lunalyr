@@ -143,7 +143,7 @@ extension StageLyricView {
                     if live < 0.999 { word(run, restColour, size: size).livelyLetters() }
                     if live > 0.001 { word(run, liveColour, size: size).livelyLetters(particles: live >= 0.999).opacity(live) }
                 }
-                .background { tileBackground(tile, size: size) }
+                .background { tileBackground(tile, size: size, run: run) }
                 .highlightLayer(tile)
             }
             .wordAction(accent(run), start: run.start, end: run.end, time: time, size: size, glow: sample.glow)

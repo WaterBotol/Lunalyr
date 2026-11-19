@@ -117,7 +117,7 @@ extension StageLyricView {
             if live > 0.001 { self.word(run, lit, size: size).font(face).livelyLetters(particles: live >= 0.999).opacity(live) }
         }
         .lineLimit(1).fixedSize()
-        .background { tileBackground(tile, size: size) }
+        .background { tileBackground(tile, size: size, run: run) }
         .highlightLayer(tile)
         .wordAction(accent(run), start: run.start, end: run.end, time: time, size: size, glow: sample.glow)
         // Word presence, about the word's centre with its action.
