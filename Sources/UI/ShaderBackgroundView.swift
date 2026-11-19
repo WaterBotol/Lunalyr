@@ -244,6 +244,8 @@ struct ShaderBackgroundView: NSViewRepresentable {
     /// The display this surface is on, whose GPU draws it; nil for the
     /// Settings preview, which takes the GPU the visualisers prefer.
     var displayID: CGDirectDisplayID?
+    /// Called with how bright the effect is behind the lyrics (`StageMeter`).
+    var onStageMeasured: ((Double) -> Void)? = nil
 
     func makeCoordinator() -> ShaderBackgroundRenderer { ShaderBackgroundRenderer() }
 
@@ -258,6 +260,7 @@ struct ShaderBackgroundView: NSViewRepresentable {
         renderer.frame = .init(style: style, time: time, flow: flow, palette: palette,
             vividness: vividness, budget: ShaderRenderBudget.pixels(for: style, preview: preview, economical: economical))
         renderer.paused = paused
+        renderer.meter.onReading = onStageMeasured
         if paused { renderer.showStillIfNeeded(in: view) } else { view.draw() }
     }
 
@@ -279,7 +282,8 @@ final class ShaderSurfaceView: MTKView {
         let view = ShaderSurfaceView(frame: .zero, device: renderer.adoptDisplayGPU())
         view.colorPixelFormat = .bgra8Unorm
         view.colorspace = CGColorSpace(name: CGColorSpace.sRGB)
-        view.framebufferOnly = true
+        // The stage meter copies the frame it measures (`StageMeter`).
+        view.framebufferOnly = false
         view.autoResizeDrawable = false
         view.enableSetNeedsDisplay = false
         view.isPaused = true // Drawn only from the wallpaper's own frame clock.
@@ -382,6 +386,8 @@ final class ShaderBackgroundRenderer: NSObject, MTKViewDelegate {
     private(set) var gpu: ShaderGPU?
     /// Frames this surface has presented.
     private(set) var framesPresented = 0
+    /// How bright the effect is behind the lyrics.
+    let meter = StageMeter()
     private let cache: ShaderPipelineCache
     private var timeBase = ShaderTimeBase()
     private let inFlight = DispatchSemaphore(value: 2)
@@ -496,6 +502,7 @@ final class ShaderBackgroundRenderer: NSObject, MTKViewDelegate {
         let clock = timeBase.uniforms(time: frame.time, flow: frame.flow)
         guard Self.encode(pipeline, frame: frame, clock: clock, points: points, pixels: drawable,
                           pass: pass, command: command) else { inFlight.signal(); return }
+        meter.measure(target.texture, on: command, at: CACurrentMediaTime())
         let semaphore = inFlight
         command.addCompletedHandler { _ in semaphore.signal() }
         command.present(target)

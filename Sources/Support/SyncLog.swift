@@ -210,3 +210,15 @@ enum LookAheadLog {
         logger.error("\(text, privacy: .public)")
     }
 }
+
+/// What a generated wallpaper measured behind the lyrics (`StageMeter`),
+/// logged when it changes: category `backdrop`.
+enum BackdropLog {
+    private static let logger = Logger(subsystem: "local.verso.custom", category: "backdrop")
+    private static let enabled = !AppRuntime.isUnitTesting
+
+    static func drawn(_ value: Double, layer: String) {
+        guard enabled else { return }
+        logger.log("drawn \(value, format: .fixed(precision: 2), privacy: .public) behind the stage on \(layer, privacy: .public)")
+    }
+}

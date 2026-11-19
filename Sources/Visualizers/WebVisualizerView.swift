@@ -134,6 +134,8 @@ struct WebVisualizerView: View {
     /// Called once the scene has drawn its first frame (see
     /// `AudioVisualizerView.onFirstFrame`).
     var onFirstFrame: (() -> Void)? = nil
+    /// Called with how bright the scene is behind the lyrics (`StageMeter`).
+    var onStageMeasured: ((Double) -> Void)? = nil
     @ObservedObject var preferences: VisualizerPreferences = .shared
     @ObservedObject private var mainDisplay = MainDisplayMonitor.shared
 
@@ -150,10 +152,11 @@ struct WebVisualizerView: View {
             // NowPlayingView applies Colour richness to the whole web layer,
             // so the stand-in's shader leaves it at 1.
             AudioVisualizerView(style: standIn, time: tick, paused: paused, palette: colours, vividness: 1,
-                                onFirstFrame: onFirstFrame)
+                                onFirstFrame: onFirstFrame, onStageMeasured: onStageMeasured)
         case .live:
             WebVisualizerSurface(engine: engine, preset: preset, projection: projection, sensitivity: sensitivity,
-                motion: motion, tick: tick, paused: paused, palette: colours, onFirstFrame: onFirstFrame)
+                motion: motion, tick: tick, paused: paused, palette: colours, onFirstFrame: onFirstFrame,
+                onStageMeasured: onStageMeasured)
         }
     }
 
@@ -371,6 +374,7 @@ private struct WebVisualizerSurface: NSViewRepresentable {
     let paused: Bool
     let palette: AlbumWallpaperPalette?
     var onFirstFrame: (() -> Void)?
+    var onStageMeasured: ((Double) -> Void)?
     @Environment(\.accessibilityReduceMotion) private var reduced
 
     func makeCoordinator() -> WebVisualizerCoordinator { WebVisualizerCoordinator(engine: engine) }
@@ -387,7 +391,9 @@ private struct WebVisualizerSurface: NSViewRepresentable {
 
     func updateNSView(_ view: WKWebView, context: Context) {
         context.coordinator.onFirstFrame = onFirstFrame
+        context.coordinator.meter.onReading = onStageMeasured
         guard tick.isFinite, view.bounds.width >= 2, view.bounds.height >= 2 else { return }
+        context.coordinator.measureStage(view)
         let response = VisualizerResponse.current(reduceMotion: reduced)
         context.coordinator.schedule(view, request: .init(
             width: Int(view.bounds.width), height: Int(view.bounds.height),
@@ -428,6 +434,22 @@ final class WebVisualizerCoordinator: NSObject, WKNavigationDelegate {
 
     /// The page has loaded and accepts frames.
     var isReady: Bool { ready }
+    /// How bright the scene is behind the lyrics, from a small snapshot.
+    let meter = StageMeter()
+
+    /// Takes a small snapshot of the page when a reading is due.
+    func measureStage(_ view: WKWebView, now: Double = CACurrentMediaTime()) {
+        guard hasDrawn, !stopped, meter.isDue(at: now) else { return }
+        meter.begin(at: now)
+        let configuration = WKSnapshotConfiguration()
+        configuration.snapshotWidth = 64
+        configuration.afterScreenUpdates = false
+        view.takeSnapshot(with: configuration) { [weak self] image, _ in
+            let picture = image?.cgImage(forProposedRect: nil, context: nil, hints: nil)
+            let value = picture.flatMap { StageMeter.stageLuminance(of: $0) }
+            Task { @MainActor [weak self] in self?.meter.record(value, at: now) }
+        }
+    }
     /// Told once, after the page's first successful draw: until then the
     /// page is black (or, before it loads, possibly white).
     var onFirstFrame: (() -> Void)?

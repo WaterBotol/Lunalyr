@@ -82,13 +82,16 @@ struct AudioVisualizerView: NSViewRepresentable {
     /// pipeline compiles on first use, and until then there is nothing to
     /// show, so the wallpaper's crossfade into it waits for this.
     var onFirstFrame: (() -> Void)? = nil
+    /// Called with how bright the scene is behind the lyrics (`StageMeter`).
+    var onStageMeasured: ((Double) -> Void)? = nil
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     func makeCoordinator() -> Coordinator { Coordinator(preview: preview) }
     func makeNSView(context: Context) -> MTKView {
         let view = MTKView(frame: .zero, device: context.coordinator.device)
         view.colorPixelFormat = .bgra8Unorm
-        view.framebufferOnly = true
+        // The stage meter copies the frame it measures (`StageMeter`).
+        view.framebufferOnly = false
         view.autoResizeDrawable = false
         view.enableSetNeedsDisplay = false
         view.isPaused = true // Draw only from the containing scheduled frame.
@@ -99,6 +102,7 @@ struct AudioVisualizerView: NSViewRepresentable {
         context.coordinator.prepare(style: style, time: time,
             response: .current(reduceMotion: reduceMotion), palette: palette, vividness: vividness)
         context.coordinator.onFirstFrame = onFirstFrame
+        context.coordinator.meter.onReading = onStageMeasured
         if !paused { view.draw() }
     }
     static func dismantleNSView(_ view: MTKView, coordinator: Coordinator) {
@@ -124,6 +128,8 @@ struct AudioVisualizerView: NSViewRepresentable {
 
     @MainActor
     final class Coordinator: NSObject, MTKViewDelegate {
+        /// How bright the scene is behind the lyrics.
+        let meter = StageMeter()
         /// The shared device, queue and pipelines for this surface's GPU.
         private var gpu: VisualizerGPU.Context?
         private var probe: ExposureProbe?
@@ -318,6 +324,7 @@ struct AudioVisualizerView: NSViewRepresentable {
                               sensitivity: Settings.shared.audioSensitivity, at: CACurrentMediaTime()) != nil else {
                 inFlight.signal(); return
             }
+            meter.measure(drawable.texture, on: command, at: CACurrentMediaTime())
             let timer = gpuTimer, semaphore = inFlight
             command.addCompletedHandler { buffer in
                 timer.record(buffer.gpuEndTime - buffer.gpuStartTime)
