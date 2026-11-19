@@ -17,7 +17,7 @@ final class LayoutColourMatrixTests: XCTestCase {
     static func ink(_ mode: LyricColourMode, backdrop: Double = 0.05) -> LyricInk {
         let director = LyricInkDirector()
         let inputs = LyricInkDirector.Inputs(mode: mode, custom: mode == .customGradient ? custom : [],
-                                             album: album, backdrop: backdrop, vocal: 0.6)
+                                             album: album, backdrop: backdrop)
         var ink = director.ink(inputs, wall: 0)
         for frame in 1...300 { ink = director.ink(inputs, wall: Double(frame) / 60) }
         return ink
@@ -85,7 +85,7 @@ final class LayoutColourMatrixTests: XCTestCase {
     }
 
     func testEveryLayoutCarriesEveryColourMode() throws {
-        let modes: [LyricColourMode] = [.standard, .albumDrift, .customGradient, .sungSweep, .musicReactive]
+        let modes: [LyricColourMode] = [.standard, .albumDrift, .customGradient, .sungSweep]
         let inks = Dictionary(uniqueKeysWithValues: modes.map { ($0, Self.ink($0)) })
         var table = "layout | " + modes.map(\.title).joined(separator: " | ") + "\n"
         for composition in LyricComposition.allCases {
@@ -120,7 +120,7 @@ final class LayoutColourMatrixTests: XCTestCase {
         if let folder, !folder.isEmpty {
             try FileManager.default.createDirectory(at: URL(fileURLWithPath: folder), withIntermediateDirectories: true)
         }
-        let modes: [LyricColourMode] = [.standard, .albumDrift, .customGradient, .sungSweep, .musicReactive]
+        let modes: [LyricColourMode] = [.standard, .albumDrift, .customGradient, .sungSweep]
         for wallpaper in [0.5, 0.7] {
             var table = "LIGHT-WALLPAPER \(wallpaper)\nlayout | " + modes.map(\.title).joined(separator: " | ") + "\n"
             let inks = Dictionary(uniqueKeysWithValues: modes.map { ($0, Self.ink($0, backdrop: wallpaper)) })

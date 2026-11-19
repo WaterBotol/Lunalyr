@@ -147,9 +147,7 @@ struct LyricLayer: View {
     static let noticeHoldTotal = WallpaperMotion.idleNoticeHold + WallpaperMotion.noticeFade
 
     /// The text colours for this frame, eased and made readable.
-    private func ink(energy: Double, wall: Double) -> LyricInk {
-        let audio = AudioReactiveController.shared
-        let active = lyricsVM.activeLineIndex(at: time).flatMap { lyricsVM.lines.indices.contains($0) ? $0 : nil }
+    private func ink(wall: Double) -> LyricInk {
         let backdropSettings = wallpaper.settings
         let mode = backdropSettings.effectiveBackgroundMode
         let chosenColour = memory.remembered(for: nowPlaying.current)?.style.colourMode ?? colours.mode
@@ -175,9 +173,7 @@ struct LyricLayer: View {
             pastelText: false, increaseContrast: contrast == .increased,
             videoDim: backdropSettings.musicVideoDim)
         return cache.ink(.init(mode: colour, speed: colours.speed, strength: colours.strength, custom: colours.customColours,
-            album: palette, backdrop: backdrop, audio: audio.running ? audio.levels : nil,
-            vocal: active.map { OrganicMotion.vocalIntensity(lyricsVM.lines[$0].words, at: time) } ?? energy,
-            reduceMotion: reduceMotion, increaseContrast: contrast == .increased, accent: cache.oklab(accent),
+            album: palette, backdrop: backdrop, reduceMotion: reduceMotion, increaseContrast: contrast == .increased, accent: cache.oklab(accent),
             highlight: highlights.mode, highlightCustom: highlights.customColour,
             toneBackdrop: unbacked, publishesTone: backdropOverride == nil,
             pastel: colours.pastelApplies(to: colour)),
@@ -217,7 +213,7 @@ struct LyricLayer: View {
         let transition = scenes.observe(key: key, content: content, time: time, wall: wall,
                                         jump: LyricClock.shared.lastJump)
         let energy = cache.liveEnergy(wall: wall)
-        let ink = ink(energy: energy, wall: wall)
+        let ink = ink(wall: wall)
         let shown = animating ? extras.visibility.presence(at: wall) : (extras.lyricsVisible ? 1 : 0)
         // A cover fading in needs every frame for its short fade.
         let coverFading = content.artwork != nil && coverFade.value < 1
@@ -289,7 +285,7 @@ struct LyricLayer: View {
         if key.kind == .loading, let since = cache.loadingSince,
            (WallpaperMotion.loadingDelay - 0.1)...(WallpaperMotion.loadingDelay + WallpaperMotion.loadingIn + 0.05)
             ~= wall - since { return .active }
-        let drifting = ink.mode.drifts || ink.mode == .musicReactive || !ink.settled
+        let drifting = ink.mode.drifts || !ink.settled
         let noticeAge: TimeInterval?
         switch key.kind {
         case .idle: noticeAge = idleNoticeSince(nowPlaying.idleSince).map { Date().timeIntervalSince($0) }

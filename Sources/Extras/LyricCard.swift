@@ -145,10 +145,10 @@ enum LyricCard {
                           height: size.height - top - LyricCard.inset - footer - 28)
         }
 
-        func inkInputs(vocal: Double) -> LyricInkDirector.Inputs {
+        func inkInputs() -> LyricInkDirector.Inputs {
             let backdrop = LyricLegibility.darkened(palette.gradientLuminance(vividness: 1), by: LyricCard.lightestScrim)
             return .init(mode: mode, speed: speed, strength: strength, custom: custom, album: palette.artworkStops,
-                         backdrop: max(0.06, backdrop), vocal: vocal, reduceMotion: reduceMotion,
+                         backdrop: max(0.06, backdrop), reduceMotion: reduceMotion,
                          increaseContrast: increaseContrast, highlight: highlight, highlightCustom: highlightCustom,
                          pastel: pastel)
         }
@@ -318,7 +318,7 @@ enum LyricCard {
         let director = LyricInkDirector()
         var ink = LyricInk.white
         for step in 0...24 {
-            ink = director.ink(content.inkInputs(vocal: 0.6), wall: Double(step) * 0.25)
+            ink = director.ink(content.inkInputs(), wall: Double(step) * 0.25)
         }
         return ink
     }
@@ -427,7 +427,7 @@ enum LyricCard {
         }
         let director = LyricInkDirector()
         for step in 0..<24 {
-            _ = director.ink(content.inkInputs(vocal: 0), wall: Double(step) * 0.25)
+            _ = director.ink(content.inkInputs(), wall: Double(step) * 0.25)
         }
         func backgroundFrame(_ background: LyricCardBackground, at time: Double) async -> CGImage {
             if let loop = plan?.backgroundLoop { return await background.frame(at: time, loop: loop) }
@@ -468,8 +468,7 @@ enum LyricCard {
                     guard !Task.isCancelled else { return false }
                     let offset = Double(index) * step
                     let time = min(lastInk, max(firstInk, min(lastTime, clip.start + offset)))
-                    let vocal = animation.line.wordTimed ? OrganicMotion.vocalIntensity(animation.words, at: time) : 0
-                    let ink = director.ink(content.inkInputs(vocal: vocal), wall: 6 + elapsed + offset)
+                    let ink = director.ink(content.inkInputs(), wall: 6 + elapsed + offset)
                     if movingBackground, let background = content.background {
                         let still = await backgroundFrame(background, at: elapsed + offset)
                         let plate = ImageRenderer(content: LyricCardView(content: content, ink: stillInk, hideLyrics: true, backgroundImage: still))

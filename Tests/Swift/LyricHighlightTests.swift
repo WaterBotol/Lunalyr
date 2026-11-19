@@ -311,10 +311,8 @@ final class LyricHighlightTests: XCTestCase {
                         let director = LyricInkDirector()
                         let ratio = increased ? LyricHighlight.increasedTextContrast : LyricHighlight.textContrast
                         for frame in 0..<45 {
-                            let audio = VCAudioLevels(rms: frame % 20 < 10 ? 0.4 : 0.05, bass: 0.3, mid: 0.2,
-                                                      treble: frame % 30 < 15 ? 0.4 : 0, pulse: 0)
                             let ink = director.ink(.init(mode: mode, custom: custom, album: cover, backdrop: backdrop,
-                                                         audio: audio, increaseContrast: increased), wall: Double(frame) / 20)
+                                                         increaseContrast: increased), wall: Double(frame) / 20)
                             guard let tone = ink.highlight else { return XCTFail("\(mode): no highlight") }
                             // Where the tile is heading is always clean and readable.
                             assertClean(director.goalTile, backdrop: ink.backdrop, ratio: ratio, "\(mode) over \(backdrop)")

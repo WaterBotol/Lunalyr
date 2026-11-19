@@ -66,10 +66,8 @@ final class LyricColourTests: XCTestCase {
                 for backdrop in [0.0, 0.04, 0.1, 0.18, 0.3, 0.45] {
                     let director = LyricInkDirector()
                     for frame in 0..<240 {
-                        let audio = VCAudioLevels(rms: frame % 20 < 10 ? 0.4 : 0.05, bass: 0.3, mid: 0.2,
-                                                  treble: frame % 30 < 15 ? 0.4 : 0, pulse: 0)
-                        let ink = director.ink(.init(mode: mode, custom: custom, album: album, backdrop: backdrop,
-                                                     audio: audio), wall: Double(frame) / 60)
+                        let ink = director.ink(.init(mode: mode, custom: custom, album: album, backdrop: backdrop),
+                                               wall: Double(frame) / 60)
                         guard frame % 8 == 0 || frame > 230 else { continue }
                         for slot in stride(from: 0.0, through: 1.0, by: 0.25) {
                             let sample = ink.sample(slot: slot, seed: UInt64(frame))
@@ -90,17 +88,14 @@ final class LyricColourTests: XCTestCase {
     }
 
     @MainActor
-    func testColourNeverFlashesEvenOnPulsingAudio() {
-        for mode in [LyricColourMode.musicReactive, .albumDrift, .sungSweep] {
+    func testColourNeverFlashesEvenWhenTheCoverKeepsChanging() {
+        for mode in [LyricColourMode.albumDrift, .sungSweep] {
             let director = LyricInkDirector()
             var lightness: [Double] = [], luminances: [Double] = []
             for frame in 0..<600 {
                 let wall = Double(frame) / 60
-                // An 8 Hz full-scale pulse, and the album swapping five times a second.
-                let on = frame % 8 < 4
-                let audio = VCAudioLevels(rms: on ? 1 : 0, bass: on ? 1 : 0, mid: 0.5, treble: on ? 0 : 1, pulse: on ? 1 : 0)
-                let ink = director.ink(.init(mode: mode, album: frame % 24 < 12 ? vivid : dark, backdrop: 0.05,
-                                             audio: audio), wall: wall)
+                // The album swapping five times a second.
+                let ink = director.ink(.init(mode: mode, album: frame % 24 < 12 ? vivid : dark, backdrop: 0.05), wall: wall)
                 let colour = rgb(mode == .sungSweep ? ink.base.sung : ink.sample(slot: 0.3).rest)
                 lightness.append(Perceptual.oklab(sRGB: colour).l)
                 luminances.append(Perceptual.luminance(sRGB: colour))
@@ -131,17 +126,37 @@ final class LyricColourTests: XCTestCase {
         let thirty = LyricInkDirector(), sixty = LyricInkDirector()
         for frame in 0...600 {
             let wall = Double(frame) / 60
-            let audio = VCAudioLevels(rms: 0.3 + 0.2 * sin(wall * 2), bass: 0.3 + 0.2 * sin(wall), mid: 0.2,
-                                      treble: 0.2 + 0.2 * cos(wall * 1.3), pulse: 0)
-            let mode: LyricColourMode = wall < 5 ? .albumDrift : .musicReactive
-            let fast = sixty.ink(.init(mode: mode, album: vivid, backdrop: 0.06, audio: audio), wall: wall)
+            let mode: LyricColourMode = wall < 5 ? .albumDrift : .sungSweep
+            let fast = sixty.ink(.init(mode: mode, album: vivid, backdrop: 0.06), wall: wall)
             guard frame % 2 == 0 else { continue }
-            let slow = thirty.ink(.init(mode: mode, album: vivid, backdrop: 0.06, audio: audio), wall: wall)
+            let slow = thirty.ink(.init(mode: mode, album: vivid, backdrop: 0.06), wall: wall)
             let a = slow.gradient(slot: 0.3), b = fast.gradient(slot: 0.3)
             XCTAssertEqual(a.l, b.l, accuracy: 0.012, "at \(wall)")
             XCTAssertEqual(a.a, b.a, accuracy: 0.012, "at \(wall)")
             XCTAssertEqual(a.b, b.b, accuracy: 0.012, "at \(wall)")
         }
+    }
+
+    /// The owner (20 Nov 2026): Sung sweep fills with Album drift's colours.
+    @MainActor
+    func testSungSweepFillsWithAlbumDriftsColours() {
+        for pastel in [true, false] {
+            let drift = LyricInkDirector(), sweep = LyricInkDirector()
+            var a = LyricInk.white, b = LyricInk.white
+            for frame in 0...240 {
+                let wall = Double(frame) / 60
+                a = drift.ink(.init(mode: .albumDrift, album: vivid, backdrop: 0.06, pastel: pastel), wall: wall)
+                b = sweep.ink(.init(mode: .sungSweep, album: vivid, backdrop: 0.06, pastel: pastel), wall: wall)
+            }
+            for slot in [0.0, 0.3, 0.7] {
+                XCTAssertEqual(a.sample(slot: slot).rest, b.sample(slot: slot).sung, "pastel \(pastel) at \(slot)")
+            }
+        }
+    }
+
+    func testRetiredMusicReactiveReadsAsTheDefault() {
+        XCTAssertEqual(LyricColourMode.savedChoice("musicReactive"), LyricColourMode.defaultMode)
+        XCTAssertFalse(LyricColourMode.choices.map(\.rawValue).contains("musicReactive"))
     }
 
     @MainActor
@@ -151,10 +166,7 @@ final class LyricColourTests: XCTestCase {
             var start: OKLab?, end = OKLab.white
             for frame in 0...960 {
                 let wall = Double(frame) / 60
-                let audio = VCAudioLevels(rms: frame % 30 < 15 ? 0.6 : 0, bass: frame % 40 < 20 ? 0.6 : 0, mid: 0,
-                                          treble: frame % 40 < 20 ? 0 : 0.6, pulse: 0)
-                let ink = director.ink(.init(mode: mode, album: vivid, backdrop: 0.05, audio: audio,
-                                             reduceMotion: calm), wall: wall)
+                let ink = director.ink(.init(mode: mode, album: vivid, backdrop: 0.05, reduceMotion: calm), wall: wall)
                 // Measured once the opening fade from white has settled.
                 if frame == 360 { start = ink.gradient(slot: 0.5) }
                 end = ink.gradient(slot: 0.5)
@@ -165,7 +177,6 @@ final class LyricColourTests: XCTestCase {
         }
         XCTAssertLessThan(change(.albumDrift, calm: true), 0.03)
         XCTAssertGreaterThan(change(.albumDrift, calm: false), 0.03)
-        XCTAssertLessThan(change(.musicReactive, calm: true), 0.01)
     }
 
     @MainActor
@@ -228,7 +239,7 @@ final class LyricColourTests: XCTestCase {
         for mode in LyricColourMode.choices {
             let preview = LyricHighlightSwatchModel()
             var inputs = LyricInkDirector.Inputs(mode: mode, strength: 0,
-                custom: LyricColourOptions.defaultCustom.compactMap(LyricColourOptions.oklab(hex:)), vocal: 0.6)
+                custom: LyricColourOptions.defaultCustom.compactMap(LyricColourOptions.oklab(hex:)))
             func chroma(_ ink: LyricInk) -> Double {
                 [0.2, 0.5, 0.8].map { Perceptual.oklab(sRGB: rgb(ink.sample(slot: $0).sung)).chroma }.max() ?? 0
             }
@@ -253,7 +264,7 @@ final class LyricColourTests: XCTestCase {
             let director = LyricInkDirector()
             var ink = LyricInk.white
             for frame in 0..<160 {
-                ink = director.ink(.init(mode: mode, custom: custom, album: neutral, backdrop: backdrop, vocal: 0.6),
+                ink = director.ink(.init(mode: mode, custom: custom, album: neutral, backdrop: backdrop),
                                    wall: Double(frame) / 30)
             }
             let sample = ink.sample(slot: 0.5)
@@ -353,12 +364,11 @@ final class LyricColourTests: XCTestCase {
         let tint = SIMD3<Float>(0.53, 0.49, 0.51)
         let coverHue = Perceptual.oklab(sRGB: SIMD3<Double>(tint)).hue
         let album = [SIMD3<Float>.zero, tint, SIMD3<Float>(repeating: 1)]
-        for mode in [LyricColourMode.albumDrift, .sungSweep, .musicReactive] {
+        for mode in [LyricColourMode.albumDrift, .sungSweep] {
             let director = LyricInkDirector()
             var ink = LyricInk.white
             for step in 0...32 {
-                let audio = VCAudioLevels(rms: 0.3, bass: 0.4, mid: 0.2, treble: 0.1, pulse: 0)
-                ink = director.ink(.init(mode: mode, album: album, backdrop: 0.1, audio: audio), wall: Double(step) / 4)
+                ink = director.ink(.init(mode: mode, album: album, backdrop: 0.1), wall: Double(step) / 4)
             }
             let colour = Perceptual.oklab(sRGB: rgb(ink.sample(slot: 0.5).sung))
             XCTAssertLessThan(LyricHighlight.hueDistance(colour.hue, coverHue), 0.04, mode.title)

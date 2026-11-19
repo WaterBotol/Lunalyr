@@ -312,7 +312,7 @@ enum SettingsCatalogue {
         .init(.typography, "Typeface", "Find new fonts", .action, keys: ["custom.installedFontFamily"],
               keywords: ["refresh fonts", "newly installed", "font book"]),
         .init(.typography, "Colour", "Colour", .choice, keys: ["custom.lyricColourMode"],
-              keywords: ["color", "text colour", "pastel", "album", "gradient", "music reactive"]),
+              keywords: ["color", "text colour", "pastel", "album", "gradient", "sung sweep"]),
         .init(.typography, "Colour", "Highlight colour", .choice, keys: ["custom.lyricHighlightMode"],
               keywords: ["color", "cutout", "tiles", "cascade", "accent"]),
         .init(.typography, "Colour", "Colour strength", .slider, keys: ["custom.lyricColourStrength"],
