@@ -37,12 +37,6 @@ final class MachineTranslationOptions: ObservableObject {
 
     /// The language lines are translated into.
     var resolvedTarget: String { target.isEmpty ? MachineTranslationPolicy.systemLanguage() : target }
-
-    /// Whether this Mac can translate lyrics at all.
-    static var isSupported: Bool {
-        if #available(macOS 15.0, *) { return true }
-        return false
-    }
 }
 
 /// Finds the language lyrics are written in.

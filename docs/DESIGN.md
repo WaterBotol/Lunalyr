@@ -237,7 +237,7 @@ squircle-shaped badges or icon tiles as ornament).
 
 ### Windows
 `ThemeComponents.swift` builds every control for Calm and Bold (`ThemedButtonStyle`,
-`ThemedToggleStyle`, `ThemedSegments`, `ThemedSlider`, `ThemedCard`, `ThemedSectionHeader`,
+`ThemedToggleStyle`, `ThemedSegments`, `ThemedCard`, `ThemedSectionHeader`,
 `ThemedInfoButton`); states are in `design/spec.md`.
 
 - **Cards** (Calm): the face colour on the window's canvas, no edge (an edge only under Increase

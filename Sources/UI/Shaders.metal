@@ -3,8 +3,9 @@
 
 using namespace metal;
 
-// Per-pixel background effects, run on the GPU via SwiftUI's `colorEffect`.
-// These do work the Canvas styles cannot: raymarched geometry, escape-time
+// Per-pixel background effects, drawn by Lunalyr's own Metal view: each
+// fragment under "direct rendering" below calls its effect directly. These
+// do work the Canvas styles cannot: raymarched geometry, escape-time
 // fractals and volumetric layering, evaluated for every pixel every frame.
 //
 // Each takes the album's two dominant colours so the piece is tinted by the
@@ -24,7 +25,6 @@ static float hash21(float2 p) {
 
 // Ambient light varies only with its own continuous clock.
 static float ambientLight(float time) { return 0.98 + 0.025 * sin(time * 0.21); }
-static half3 bloom(half3 colour, float intensity) { return colour; }
 
 /// Normalised, origin-centred coordinates with the aspect ratio preserved.
 static float2 uvCentered(float2 position, float2 size) {
@@ -49,7 +49,7 @@ static float2 uvCentered(float2 position, float2 size) {
     half3 colour = mix(tintA, tintB, half(band));
     float vignette = 1.0 - 0.35 * length(uvCentered(position, size));
     float intensity = (0.55 + 0.45 * band) * vignette * ambientLight(time);
-    return half4(bloom(colour * half(intensity), intensity), 1.0h);
+    return half4(colour * half(intensity), 1.0h);
 }
 
 // ----------------------------------------------------------- kaleidoscope
@@ -77,7 +77,7 @@ static float2 uvCentered(float2 position, float2 size) {
     half3 colour = mix(tintA, tintB, half(intensity));
     float falloff = smoothstep(1.05, 0.15, radius);
     float lit = intensity * falloff * ambientLight(time);
-    return half4(bloom(colour * half(lit), lit), 1.0h);
+    return half4(colour * half(lit), 1.0h);
 }
 
 // ---------------------------------------------------------------- aurora
@@ -104,7 +104,7 @@ static float2 uvCentered(float2 position, float2 size) {
 
     glow = clamp(glow * 0.28, 0.0, 1.4) * ambientLight(time);
     half3 colour = mix(tintA, tintB, half(clamp(uv.y * 1.2, 0.0, 1.0)));
-    return half4(bloom(colour * half(glow), glow), 1.0h);
+    return half4(colour * half(glow), 1.0h);
 }
 
 // --------------------------------------------------------------- fractal
@@ -131,7 +131,7 @@ static float2 uvCentered(float2 position, float2 size) {
     float shade = pow(t, 0.55);
     half3 colour = mix(tintA, tintB, half(shade));
     float lit = shade * 1.15 * ambientLight(time);
-    return half4(bloom(colour * half(lit), lit), 1.0h);
+    return half4(colour * half(lit), 1.0h);
 }
 
 // ---------------------------------------------------------------- liquid
@@ -159,7 +159,7 @@ static float2 uvCentered(float2 position, float2 size) {
     float rim = smoothstep(3.4, 6.5, field);
     half3 colour = mix(tintA, tintB, half(rim));
     float lit = surface * 0.95 * ambientLight(time);
-    return half4(bloom(colour * half(lit), lit), 1.0h);
+    return half4(colour * half(lit), 1.0h);
 }
 
 // ---------------------------------------------------------------- warp
@@ -184,7 +184,7 @@ static float2 uvCentered(float2 position, float2 size) {
     float grain = hash21(floor(position * 0.5)) * 0.03;
     half3 colour = mix(tintA, tintB, half(clamp(value, 0.0, 1.0)));
     float lit = (0.45 + 0.65 * value + grain) * ambientLight(time);
-    return half4(bloom(colour * half(lit), lit), 1.0h);
+    return half4(colour * half(lit), 1.0h);
 }
 
 // ============================================================ additional
@@ -219,7 +219,7 @@ static float fbmNoise(float2 p) {
 
     half3 colour = mix(tintA, tintB, half(shaped));
     float lit = (0.22 + shaped * 0.95) * ambientLight(time);
-    return half4(bloom(colour * half(lit), lit), 1.0h);
+    return half4(colour * half(lit), 1.0h);
 }
 
 // --------------------------------------------------------------- voronoi
@@ -248,7 +248,7 @@ static float fbmNoise(float2 p) {
     float glow = 1.0 - edge;
     half3 colour = mix(tintA, tintB, half(clamp(nearest * 0.9, 0.0, 1.0)));
     float lit = (0.16 + glow * 0.95) * ambientLight(time);
-    return half4(bloom(colour * half(lit), lit), 1.0h);
+    return half4(colour * half(lit), 1.0h);
 }
 
 // ------------------------------------------------------------------ orbs
@@ -278,7 +278,7 @@ static float fbmNoise(float2 p) {
     float shaped = clamp(light * 0.5, 0.0, 1.6);
     half3 colour = mix(tintA, tintB, half(clamp(tintMix / max(light, 0.001), 0.0, 1.0)));
     float lit = shaped * ambientLight(time);
-    return half4(bloom(colour * half(lit), lit), 1.0h);
+    return half4(colour * half(lit), 1.0h);
 }
 
 // ------------------------------------------------------------------ silk
@@ -302,7 +302,7 @@ static float fbmNoise(float2 p) {
     float shaped = clamp(sheen * 0.30, 0.0, 1.5);
     half3 colour = mix(tintA, tintB, half(clamp(uv.y + 0.5, 0.0, 1.0)));
     float lit = shaped * ambientLight(time);
-    return half4(bloom(colour * half(lit), lit), 1.0h);
+    return half4(colour * half(lit), 1.0h);
 }
 
 // ================================================== raymarched 3D effects
@@ -322,7 +322,7 @@ static half4 shadeSurface(float3 normal, float3 rayDir, float depth,
 
     half3 colour = mix(tintA, tintB, half(clamp(diffuse, 0.0, 1.0)));
     float intensity = (0.16 + diffuse * 0.75 + rim * 0.55) * fog * ambientLight(time);
-    return half4(bloom(colour * half(intensity), intensity), 1.0h);
+    return half4(colour * half(intensity), 1.0h);
 }
 
 // ---------------------------------------------------------------- waves
@@ -557,7 +557,7 @@ static half3 litSurface(float3 normal, float3 dir, half3 tintA, half3 tintB, flo
     float fresnel = pow(1.0 - max(-dir.y, 0.0), 4.0);
     colour = mix(colour * half(0.35), colour, half(fresnel));
     colour = haze(colour, sky, t, 0.05);
-    return half4(bloom(colour, rippled * fresnel), 1.0h);
+    return half4(colour, 1.0h);
 }
 
 // -------------------------------------------------------------- wormhole
@@ -579,7 +579,7 @@ static half3 litSurface(float3 normal, float3 dir, half3 tintA, half3 tintB, flo
     half3 colour = mix(tintB, tintA, half(strands));
     float near = clamp(r * 1.5, 0.0, 1.0);
     float intensity = (0.08 + pattern * 0.95) * near * lift;
-    return half4(bloom(colour * half(intensity), intensity), 1.0h);
+    return half4(colour * half(intensity), 1.0h);
 }
 
 // ----------------------------------------------------------------- rings
@@ -603,7 +603,7 @@ static half3 litSurface(float3 normal, float3 dir, half3 tintA, half3 tintB, flo
 
     half3 colour = mix(tintB, tintA, half(clamp(r * 1.4, 0.0, 1.0)));
     float intensity = clamp(glow, 0.0, 1.6) * 0.7 * lift;
-    return half4(bloom(colour * half(intensity), intensity), 1.0h);
+    return half4(colour * half(intensity), 1.0h);
 }
 
 // ---------------------------------------------------------------- vortex
@@ -622,7 +622,7 @@ static half3 litSurface(float3 normal, float3 dir, half3 tintA, half3 tintB, flo
     float core = exp(-r * 3.4);
     half3 colour = mix(tintB, tintA, half(arms));
     float intensity = (arms * 0.62 * smoothstep(0.0, 0.35, r) + core * 0.85) * lift;
-    return half4(bloom(colour * half(intensity), intensity), 1.0h);
+    return half4(colour * half(intensity), 1.0h);
 }
 
 // ----------------------------------------------------------------- orbit
@@ -653,7 +653,7 @@ static half3 litSurface(float3 normal, float3 dir, half3 tintA, half3 tintB, flo
     if (nearest > 1e8) return half4(sky, 1.0h);
 
     half3 colour = haze(litSurface(normal, dir, tintA, tintB, lift), sky, nearest, 0.045);
-    return half4(bloom(colour, 0.6), 1.0h);
+    return half4(colour, 1.0h);
 }
 
 // --------------------------------------------------------------- bubbles
@@ -684,7 +684,7 @@ static half3 litSurface(float3 normal, float3 dir, half3 tintA, half3 tintB, flo
         float sheen = pow(max(dot(normal, normalize(float3(0.5, 0.8, -0.4))), 0.0), 32.0);
         colour += mix(tintA, tintB, half(fract(fi * 0.37))) * half((fresnel * 0.75 + sheen * 0.6) * lift);
     }
-    return half4(bloom(colour, 0.55), 1.0h);
+    return half4(colour, 1.0h);
 }
 
 // ---------------------------------------------------------------- galaxy
@@ -706,7 +706,7 @@ static half3 litSurface(float3 normal, float3 dir, half3 tintA, half3 tintB, flo
 
     half3 colour = mix(tintB, tintA, half(arms));
     float intensity = (arms * grain * 0.7 + core * 1.1) * lift;
-    return half4(bloom(colour * half(intensity), intensity), 1.0h);
+    return half4(colour * half(intensity), 1.0h);
 }
 
 // ---------------------------------------------------------------- strata
@@ -731,7 +731,7 @@ static half3 litSurface(float3 normal, float3 dir, half3 tintA, half3 tintB, flo
         half3 band = mix(tintA, tintB, half(fi / 5.0)) * half((1.0 - fi * 0.13) * lift);
         colour = mix(colour, band, half(mask * 0.85));
     }
-    return half4(bloom(colour, 0.4), 1.0h);
+    return half4(colour, 1.0h);
 }
 
 // ---------------------------------------------------------------- clouds
@@ -753,7 +753,7 @@ static half3 litSurface(float3 normal, float3 dir, half3 tintA, half3 tintB, flo
         float body = smoothstep(0.48, 0.78, n) * (1.0 - fi * 0.22);
         colour += mix(tintA, tintB, half(fi * 0.4)) * half(body * 0.55 * lift);
     }
-    return half4(bloom(colour, 0.5), 1.0h);
+    return half4(colour, 1.0h);
 }
 
 // -------------------------------------------------------------- curtains
@@ -777,7 +777,7 @@ static half3 litSurface(float3 normal, float3 dir, half3 tintA, half3 tintB, flo
         float grain = 0.65 + 0.35 * sin(uv.x * 30.0 + flow * 0.5 + fi * 3.1);
         colour += mix(tintA, tintB, half(fi / 4.0)) * half(sheet * grain * (0.75 / depth) * lift);
     }
-    return half4(bloom(colour, 0.6), 1.0h);
+    return half4(colour, 1.0h);
 }
 
 // --------------------------------------------------------------- ribbons
@@ -798,7 +798,7 @@ static half3 litSurface(float3 normal, float3 dir, half3 tintA, half3 tintB, flo
         float band = smoothstep(thickness, 0.0, abs(uv.y - wave - (fi - 3.0) * 0.055));
         colour += mix(tintA, tintB, half(fi / 6.0)) * half(band * (0.9 / depth) * lift);
     }
-    return half4(bloom(colour, 0.65), 1.0h);
+    return half4(colour, 1.0h);
 }
 
 // ----------------------------------------------------------------- prism
@@ -825,8 +825,7 @@ static half3 litSurface(float3 normal, float3 dir, half3 tintA, half3 tintB, flo
     }
     // Pulled back toward the album so it tints rather than going full rainbow.
     colour = mix(colour, mix(tintA, tintB, half(0.5)) * half(length(float3(colour)) * 0.6), half(0.55));
-    float intensity = clamp(float(colour.r + colour.g + colour.b) * 0.4, 0.0, 1.4) * lift;
-    return half4(bloom(colour * half(lift), intensity), 1.0h);
+    return half4(colour * half(lift), 1.0h);
 }
 
 

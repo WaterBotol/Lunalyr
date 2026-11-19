@@ -64,7 +64,7 @@ enum SettingsPage: CaseIterable, Identifiable, RawRepresentable {
         }
     }
 
-    /// The white symbol on the row's badge (`SettingsIcon`).
+    /// The page's SF Symbol.
     var symbol: String {
         switch self {
         case .wallpaper: return "photo.artframe"
@@ -76,21 +76,6 @@ enum SettingsPage: CaseIterable, Identifiable, RawRepresentable {
         case .general: return "gearshape.fill"
         case .share: return "square.and.arrow.up.fill"
         case .performance: return "leaf.fill"
-        }
-    }
-
-    /// The badge's colour, as System Settings colours its own.
-    var tint: Color {
-        switch self {
-        case .wallpaper: return .indigo
-        case .typography: return .pink
-        case .animation: return .purple
-        case .covers: return .orange
-        case .lyrics: return .blue
-        case .readings: return .teal
-        case .general: return .gray
-        case .share: return .purple
-        case .performance: return .green
         }
     }
 

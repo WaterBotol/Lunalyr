@@ -287,8 +287,6 @@ final class MusicVideoOffsets: ObservableObject {
         captioned[key] = value
     }
 
-    func hasCaptioned(_ songKey: String, video: String) -> Bool { captioned[Self.estimateKey(songKey, video)] != nil }
-
     /// The offset from captions for the song and video, if any.
     func captionedOffset(_ songKey: String, video: String) -> Double? { captioned[Self.estimateKey(songKey, video)] }
 

@@ -196,9 +196,6 @@ final class LyricsViewModel: ObservableObject {
     func activeLineIndex(at time:TimeInterval)->Int? {
         lineIndex.line(at: time)
     }
-    func activeWordIndex(in line:LyricsFetcher.Line,at time:TimeInterval)->Int? {
-        line.words.firstIndex {time >= $0.start && time < $0.end}
-    }
     private func handleTrackChange(_ track:NowPlayingMonitor.Track?) {
         let next=track.map {LyricQuery(title:$0.title,artist:$0.artist,album:$0.album,duration:$0.duration).recordingKey}
         guard next != lastKey else {return}

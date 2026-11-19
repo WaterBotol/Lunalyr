@@ -86,7 +86,6 @@ struct LookValues: Equatable, Hashable {
     }
 
     var layoutTitle: String { layout?.title ?? "Custom Mix" }
-    var entranceTitle: String { entrance?.title ?? "Each layout’s own" }
 
     /// "Visualisers · Cascade · Avenir Next". Repeats collapse, so
     /// Custom Mix for both wallpaper and layout reads once.

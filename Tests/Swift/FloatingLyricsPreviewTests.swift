@@ -106,11 +106,6 @@ final class FloatingLyricsPreviewTests: XCTestCase {
                 try DesktopPlayerPreviewTests.write(image, to: folder.appendingPathComponent("\(shot.name)\(suffix).png"))
             }
         }
-
-        let picker = ImageRenderer(content: PickerSheet())
-        picker.scale = 2
-        try DesktopPlayerPreviewTests.write(try XCTUnwrap(picker.cgImage),
-                                            to: folder.appendingPathComponent("10-settings-location-picker.png"))
     }
 
     func scene(_ shot: Shot, time: Double, wall: Double, monitor: NowPlayingMonitor) -> PreviewScene {
@@ -246,27 +241,6 @@ final class FloatingLyricsPreviewTests: XCTestCase {
                     .offset(x: (screen.width - 520) / 2, y: screen.height - FloatingLyricsPreviewTests.dock + 4)
             }
             .frame(width: screen.width, height: screen.height, alignment: .topLeading)
-        }
-    }
-
-    /// The location picker as Settings shows it, in each scheme.
-    struct PickerSheet: View {
-        var body: some View {
-            HStack(spacing: 24) {
-                ForEach([(ColorScheme.light, FloatingPlacement.bottom), (.dark, .topRight)], id: \.1) { scheme, placement in
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Place").font(.system(size: 13, weight: .semibold))
-                        FloatingLocationPicker(placement: .constant(placement))
-                        Text(placement.title).font(.system(size: 11)).foregroundStyle(.secondary)
-                    }
-                    .padding(16)
-                    .background(scheme == .dark ? Color(white: 0.16) : Color(white: 0.96))
-                    .environment(\.colorScheme, scheme)
-                    .foregroundStyle(scheme == .dark ? Color.white : Color.black)
-                }
-            }
-            .padding(16)
-            .background(Color(white: 0.5))
         }
     }
 }

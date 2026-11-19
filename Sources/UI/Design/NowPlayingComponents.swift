@@ -8,7 +8,6 @@ import SwiftUI
 //
 //     TrackSummary()                       // cover, title, artist, from the models
 //     TransportControls()                  // previous, play/pause, next
-//     CurrentLyricLine()                   // the line being sung, kept current
 //
 // Each reads `NowPlayingMonitor` through `@Model(\.nowPlaying)`; the lower
 // level views (`ArtworkView`, `LyricQuoteView`) take plain values, for
@@ -261,7 +260,7 @@ struct TransportControls: View {
 }
 
 /// The line being sung, with the next one faint beneath it, for a value
-/// that is already known. `CurrentLyricLine` keeps one current.
+/// that is already known.
 struct LyricQuoteView: View {
     let now: LyricNow
     /// Whether anything is playing; without it the view says so.
@@ -325,26 +324,5 @@ struct LyricQuoteView: View {
         if now.isLoading { return "Looking for lyrics…" }
         if now.notFound { return "No synced lyrics for this song." }
         return now.source == nil ? "Waiting for lyrics…" : "♪"
-    }
-}
-
-/// `LyricQuoteView` for the song playing now, refreshed a few times a second
-/// while the music plays, from `LunalyrModels.lyricNow` (the app's lyrics,
-/// global and song offsets, readings shown in place of the lyrics).
-struct CurrentLyricLine: View {
-    var showsSource: Bool
-    @Environment(\.lunalyrModels) private var models
-    @Model(\.nowPlaying) private var playing
-    @Model(\.lyrics) private var lyrics
-
-    init(showsSource: Bool = true) {
-        self.showsSource = showsSource
-    }
-
-    var body: some View {
-        let models = models.resolved
-        TimelineView(.periodic(from: .now, by: playing.isPlaying ? 0.25 : 30)) { _ in
-            LyricQuoteView(now: models.lyricNow(models), hasTrack: playing.current != nil, showsSource: showsSource)
-        }
     }
 }

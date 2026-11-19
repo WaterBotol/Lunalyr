@@ -41,14 +41,6 @@ enum WordArrival: String, CaseIterable, Identifiable {
     var highlightsSungWords: Bool { self == .cutoutHighlight }
     var isSwipe: Bool { self == .satinRibbon || self == .splitInk }
     var requiresReveal: Bool { isCutout || isSwipe }
-    var travelRotation: Double { self == .orbit || self == .cutoutSlide ? 12 : 0 }
-
-    func travelBounds(pointSize: CGFloat, active: Bool = true) -> CGSize {
-        guard active else { return .zero }
-        let horizontal: CGFloat = self == .orbit ? 0.32 : (self == .glide || self == .cutoutSlide ? 0.72 : 0)
-        let vertical: CGFloat = self == .lift ? 0.48 : (self == .glide || self == .orbit ? 0.20 : 0)
-        return CGSize(width: horizontal * pointSize * 2, height: vertical * pointSize * 2)
-    }
 
     /// The entrance a word makes: "Cutout · Highlight" keeps the layout's
     /// own (what Match the style picks); every other entrance is its own.

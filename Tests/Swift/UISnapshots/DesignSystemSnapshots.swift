@@ -11,8 +11,6 @@ extension UISnapshotCatalogue {
     static var designSystem: [UISnapshotCase] {
         let every: [UISnapshotRenderer.Look] = [.light, .dark, .lightContrast, .darkContrast]
         return [
-            UISnapshotCase("design/style-gallery", note: "Calm and Bold: every component, every state",
-                           chrome: .plain, size: .fitting(width: 1080), looks: every, view: { _ in StyleGallery() }),
             UISnapshotCase("design/tokens", note: "colours, status, type scale", chrome: .plain, size: .fitting(width: 640),
                            looks: every, view: { _ in DesignTokensGallery() }),
             UISnapshotCase("design/status", note: "StatusBanner and StatusChip", chrome: .plain, size: .fitting(width: 420),
@@ -20,14 +18,14 @@ extension UISnapshotCatalogue {
             UISnapshotCase("design/now-playing", note: "TrackSummary, TransportControls, LyricQuoteView",
                            chrome: .plain, size: .fitting(width: 360), player: .playing,
                            view: { _ in NowPlayingGallery() }),
-            UISnapshotCase("design/quick-controls", note: "WallpaperModeGrid, ToggleTile, TimingNudge, menu rows",
+            UISnapshotCase("design/quick-controls", note: "SongTimingNudge, TimingNudge, LunalyrPlayerPicker",
                            chrome: .plain, size: .fitting(width: 340), looks: every, player: .playing,
                            prepare: { $0.setSongOffset(0.25) }, view: { _ in QuickControlsGallery() }),
-            UISnapshotCase("design/form", note: "captions, disabled reasons, value sliders, sidebar icons",
+            UISnapshotCase("design/form", note: "captions, disabled reasons, value sliders",
                            chrome: .plain, size: .fitting(width: 420), view: { _ in FormGallery() }),
             UISnapshotCase("design/player-access", note: "PlayerAccessRow in every state", chrome: .plain,
                            size: .fitting(width: 420), view: { _ in PlayerAccessGallery() }),
-            UISnapshotCase("design/sketch-menu-panel", note: "reference: the menu-bar panel as the spec lays it out",
+            UISnapshotCase("design/sketch-menu-panel", note: "reference: shared components in the menu-bar panel's frame",
                            chrome: .menuBarPanel, size: .menuBarPanel, player: .playing,
                            prepare: { scene in
                                scene.lyricNow = LyricNow(line: "Static on the radio, gold across the bay",
@@ -194,21 +192,8 @@ private struct NowPlayingGallery: View {
 private struct QuickControlsGallery: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            PanelSectionHeader("Wallpaper")
-            WallpaperModeGrid(chooseImport: {})
-            HStack(spacing: 6) {
-                ToggleTile("Pause", symbol: "pause.fill", isOn: true, detail: "⌃⌥⌘P", accessibilityTitle: "Resume Wallpaper") {}
-                ToggleTile("Hide lyrics", symbol: "eye.slash", detail: "⌃⌥⌘L") {}
-                ToggleTile("Copy card", symbol: "photo.on.rectangle", detail: "⌃⌥⌘C") {}.disabled(true)
-            }
-            PanelSectionHeader("Lyric timing") { SongTimingNudge() }
+            SongTimingNudge()
             TimingNudge(offset: 0, earlier: {}, later: {}, reset: {})
-            Divider()
-            VStack(spacing: 0) {
-                Button("Settings…") {}.buttonStyle(MenuRowButtonStyle(shortcut: "⌘,"))
-                Button("Check for Updates…") {}.buttonStyle(MenuRowButtonStyle())
-                Button("Quit Lunalyr") {}.buttonStyle(MenuRowButtonStyle(shortcut: "⌘Q"))
-            }
             LunalyrPlayerPicker().controlSize(.small)
         }
         .padding(16)
@@ -221,30 +206,19 @@ private struct FormGallery: View {
     @State private var offset = 0.25
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Form {
-                Section("Music response") {
-                    Toggle("System audio", isOn: .constant(false)).disabled(true)
-                    DisabledReason("Available once Visualisers return; power saving is showing Line patterns for now.")
-                    ValueSlider("Lyric size", value: $size, in: 0.7...1.5,
-                                format: { $0.formatted(.percent.precision(.fractionLength(0))) })
-                    ValueSlider("Global offset", value: $offset, in: -3...3, step: 0.05, format: TimingNudge.format,
-                                spoken: TimingNudge.spoken)
-                    InspectorCaption("Saved for this recording and the lyric source showing. Positive offsets bring lyrics in earlier.")
-                }
+        Form {
+            Section("Music response") {
+                Toggle("System audio", isOn: .constant(false)).disabled(true)
+                DisabledReason("Available once Visualisers return; power saving is showing Line patterns for now.")
+                ValueSlider("Lyric size", value: $size, in: 0.7...1.5,
+                            format: { $0.formatted(.percent.precision(.fractionLength(0))) })
+                ValueSlider("Global offset", value: $offset, in: -3...3, step: 0.05, format: TimingNudge.format,
+                            spoken: TimingNudge.spoken)
+                InspectorCaption("Saved for this recording and the lyric source showing. Positive offsets bring lyrics in earlier.")
             }
-            .formStyle(.grouped)
-            .frame(height: 250)
-            VStack(alignment: .leading, spacing: 8) {
-                GalleryTitle("SettingsIcon")
-                HStack(spacing: 14) {
-                    ForEach(SettingsSketch.pages, id: \.title) { page in
-                        SettingsIcon(symbol: page.symbol, tint: page.tint)
-                    }
-                }
-            }
-            .padding(.horizontal, 20).padding(.bottom, 20)
         }
+        .formStyle(.grouped)
+        .frame(height: 250)
         .lunalyrTint()
     }
 }
@@ -267,11 +241,9 @@ private struct PlayerAccessGallery: View {
 
 // MARK: - Reference sketches
 
-/// The menu-bar panel as gui/spec.md lays it out, from shared components.
+/// The shared now-playing, access, timing and player components, stacked
+/// in the menu-bar panel's frame.
 private struct MenuPanelSketch: View {
-    @Model(\.extras) private var extras
-    @Model(\.nowPlaying) private var playing
-
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             TrackSummary()
@@ -280,35 +252,14 @@ private struct MenuPanelSketch: View {
                 TransportControls()
                 Spacer()
             }
-            CurrentLyricLine()
             AutomationStatusBanner(density: .compact)
             Divider()
-            PanelSectionHeader("Wallpaper") {
-                Button("Options…") {}
-                    .buttonStyle(.borderless).controlSize(.small).foregroundStyle(Color.lunalyrAccentText)
-                    .help("Open Settings at Wallpaper")
-            }
-            WallpaperModeGrid()
-            HStack(spacing: 6) {
-                ToggleTile(extras.wallpaperPaused ? "Resume" : "Pause", symbol: extras.wallpaperPaused ? "play.fill" : "pause.fill",
-                           isOn: extras.wallpaperPaused, accessibilityTitle: extras.pauseActionTitle) {}
-                ToggleTile("Hide lyrics", symbol: "eye.slash", isOn: extras.lyricsHidden) {}
-                ToggleTile("Copy card", symbol: "photo.on.rectangle") {}
-                    .disabled(playing.current == nil)
-            }
-            PanelSectionHeader("Lyric timing") { SongTimingNudge() }
+            SongTimingNudge()
             Divider()
-            VStack(spacing: 0) {
-                HStack {
-                    LunalyrPlayerPicker().controlSize(.small).fixedSize()
-                    Spacer()
-                }
-                .padding(.horizontal, 8).padding(.bottom, 4)
-                Button("Settings…") {}.buttonStyle(MenuRowButtonStyle(shortcut: "⌘,"))
-                Button("Check for Updates…") {}.buttonStyle(MenuRowButtonStyle())
-                Button("Quit Lunalyr") {}.buttonStyle(MenuRowButtonStyle(shortcut: "⌘Q"))
+            HStack {
+                LunalyrPlayerPicker().controlSize(.small).fixedSize()
+                Spacer()
             }
-            .padding(.horizontal, -8)
         }
         .padding(LunalyrDesign.Spacing.panel)
         .frame(width: LunalyrDesign.Layout.menuPanelWidth)
@@ -322,19 +273,18 @@ struct SettingsSketch: View {
     struct Page {
         let title: String
         let symbol: String
-        let tint: Color
     }
 
     static let pages = [
-        Page(title: "Wallpaper", symbol: "photo.artframe", tint: .indigo),
-        Page(title: "Lyric style", symbol: "textformat", tint: .pink),
-        Page(title: "Animated covers", symbol: "square.stack.fill", tint: .orange),
-        Page(title: "Timing & sources", symbol: "clock.fill", tint: .blue),
-        Page(title: "Romanisation", symbol: "character.book.closed.fill", tint: .teal),
-        Page(title: "General", symbol: "gearshape.fill", tint: .gray),
-        Page(title: "Menu bar & shortcuts", symbol: "command", tint: .gray),
-        Page(title: "Performance", symbol: "leaf.fill", tint: .green),
-        Page(title: "About", symbol: "info.circle.fill", tint: .gray),
+        Page(title: "Wallpaper", symbol: "photo.artframe"),
+        Page(title: "Lyric style", symbol: "textformat"),
+        Page(title: "Animated covers", symbol: "square.stack.fill"),
+        Page(title: "Timing & sources", symbol: "clock.fill"),
+        Page(title: "Romanisation", symbol: "character.book.closed.fill"),
+        Page(title: "General", symbol: "gearshape.fill"),
+        Page(title: "Menu bar & shortcuts", symbol: "command"),
+        Page(title: "Performance", symbol: "leaf.fill"),
+        Page(title: "About", symbol: "info.circle.fill"),
     ]
     @State private var selection = "Wallpaper"
     @State private var speed = 1.0
@@ -365,7 +315,6 @@ struct SettingsSketch: View {
                 Divider()
                 Form {
                     Section("Wallpaper") {
-                        WallpaperModeGrid()
                         InspectorCaption(Settings.BackgroundMode.auto.summary)
                     }
                     Section("Adjustments") {
@@ -390,12 +339,8 @@ struct SettingsSketch: View {
 
     private func rows(_ range: Range<Int>) -> some View {
         ForEach(Self.pages[range], id: \.title) { page in
-            Label {
-                Text(page.title)
-            } icon: {
-                SettingsIcon(symbol: page.symbol, tint: page.tint)
-            }
-            .tag(page.title)
+            Label(page.title, systemImage: page.symbol)
+                .tag(page.title)
         }
     }
 }

@@ -132,12 +132,6 @@ extension Color {
             style.canvas(dark: LunalyrAppearance(appearance).dark)
         })
     }
-
-    static func lunalyrFace(_ style: SettingsVisualStyle) -> Color {
-        Color(nsColor: NSColor(name: "LunalyrFace.\(style.rawValue)") { appearance in
-            style.face(dark: LunalyrAppearance(appearance).dark)
-        })
-    }
 }
 
 extension View {

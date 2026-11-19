@@ -106,17 +106,3 @@ extension Notification.Name {
     /// that could not load earlier (offline at launch) is tried again.
     static let fontFilesAvailable = Notification.Name("LunalyrFontFilesAvailable")
 }
-
-/// Redraws its content once Manrope finishes downloading.
-struct AppFontScope<Content: View>: View {
-    @State private var revision = 0
-    @ViewBuilder var content: Content
-
-    var body: some View {
-        content
-            .id(revision)
-            .onReceive(NotificationCenter.default.publisher(for: .appFontLoaded)) { _ in
-                revision += 1
-            }
-    }
-}

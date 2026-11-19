@@ -153,28 +153,3 @@ struct PlaybackClock {
         return correction.offset * (1 - max(0, progress))
     }
 }
-
-/// An expanding ring of displacement fired when vocals return after a long
-/// instrumental -- the geometry gets shoved outward as the wave passes
-/// through it, so a drop deforms the pattern instead of restarting it.
-struct Shockwave {
-    var radius: Double
-    var strength: Double
-
-    /// Outward push applied to a point as the wavefront sweeps past.
-    func offset(for point: CGPoint, center: CGPoint) -> CGSize {
-        guard strength > 0.001 else { return .zero }
-        let dx = Double(point.x - center.x)
-        let dy = Double(point.y - center.y)
-        let distance = max((dx * dx + dy * dy).squareRoot(), 1)
-
-        // Only points near the wavefront move; a gaussian keeps the band soft.
-        let band = 110.0
-        let delta = abs(distance - radius)
-        guard delta < band * 1.8 else { return .zero }
-        let falloff = exp(-(delta * delta) / (2 * (band / 2) * (band / 2)))
-
-        let push = strength * 42 * falloff
-        return CGSize(width: dx / distance * push, height: dy / distance * push)
-    }
-}

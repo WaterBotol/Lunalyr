@@ -175,18 +175,3 @@ final class InstalledPlayers: @unchecked Sendable {
         return players
     }
 }
-
-/// "Player: Automatic / Apple Music / Spotify / …", for the menu and Settings.
-struct PlayerChoicePicker: View {
-    @ObservedObject private var options = PlayerOptions.shared
-
-    var body: some View {
-        Picker("Player", selection: $options.choice) {
-            ForEach(PlayerOptions.Choice.offered(installed: PlayerOptions.installedPlayers, current: options.choice,
-                                                 webPlayers: options.followsWebPlayers,
-                                                 localPlayers: options.followsLocalPlayers)) { Text($0.title).tag($0) }
-        }
-        .pickerStyle(.menu)
-        .help("Which music player Lunalyr follows")
-    }
-}
