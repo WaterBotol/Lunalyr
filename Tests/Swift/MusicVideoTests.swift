@@ -118,6 +118,36 @@ final class MusicVideoTests: XCTestCase {
         XCTAssertEqual(online, .found(.youTube("4NRXx6U8ABQ")))
     }
 
+    /// Nothing official for "Feel So Close - Radio Edit": the plain title
+    /// is searched next, and its video found (the owner, 20 Nov 2026).
+    func testAVersionWithNoVideoOfItsOwnSearchesItsPlainTitle() async throws {
+        let edit = MusicVideoSong(title: "Feel So Close - Radio Edit", artist: "Calvin Harris", duration: 205)
+        let http = FakeHTTP()
+        let first = YouTubeSearchPage.requestURL(title: edit.title, artist: edit.artist)!.absoluteString
+        let plain = YouTubeSearchPage.requestURL(title: "Feel So Close", artist: edit.artist)!.absoluteString
+        http.byURL[first] = .init(status: 200, body: Fixtures.searchPage([
+            ("BBBBBBBBBBB", "Calvin Harris - Feel So Close (Lyrics)", "Lyrics Hub"),
+        ]))
+        http.byURL[plain] = .init(status: 200, body: Fixtures.searchPage([
+            ("4NRXx6U8ABQ", "Calvin Harris - Feel So Close (Official Video)", "CalvinHarrisVEVO"),
+        ]))
+        let result = await resolver(http: http).resolve(edit, online: true)
+        XCTAssertEqual(result, .found(.youTube("4NRXx6U8ABQ")))
+        let searches = http.urls.filter { $0.host == "www.youtube.com" }.map(\.absoluteString)
+        XCTAssertEqual(searches, [first, plain])
+    }
+
+    func testAVideoForTheTitleAsGivenNeedsNoSecondSearch() async {
+        let http = FakeHTTP()
+        http.replies["www.youtube.com"] = .init(status: 200, body: Fixtures.searchPage([
+            ("4NRXx6U8ABQ", "Calvin Harris - Feel So Close (Official Video)", "CalvinHarrisVEVO"),
+        ]))
+        let edit = MusicVideoSong(title: "Feel So Close - Radio Edit", artist: "Calvin Harris", duration: 205)
+        let result = await resolver(http: http).resolve(edit, online: true)
+        XCTAssertEqual(result, .found(.youTube("4NRXx6U8ABQ")))
+        XCTAssertEqual(http.urls.filter { $0.host == "www.youtube.com" }.count, 1)
+    }
+
     func testYouTubeSearchSendsOnlyTitleAndArtist() async throws {
         let http = FakeHTTP()
         http.replies["www.youtube.com"] = officialPage()
