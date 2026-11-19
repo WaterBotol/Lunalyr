@@ -40,24 +40,40 @@ final class DesktopOptions: ObservableObject {
     init(defaults: UserDefaults) {
         self.defaults = defaults
         showsControlsOnHover = defaults.object(forKey: Keys.controlsOnHover) as? Bool ?? true
-        shadesMenuBar = defaults.object(forKey: Keys.menuBarShade) as? Bool ?? true
-        automaticTextBacking = defaults.object(forKey: Keys.automaticTextBacking) as? Bool ?? ShippedDefaults.automaticTextBacking
-        let stored = defaults.object(forKey: Keys.textBacking) as? Double ?? ShippedDefaults.textBacking
-        textBacking = stored.isFinite ? min(1, max(0, stored)) : ShippedDefaults.textBacking
+        shadesMenuBar = Self.storedShadesMenuBar(defaults)
+        automaticTextBacking = Self.storedAutomaticTextBacking(defaults)
+        textBacking = Self.storedTextBacking(defaults)
     }
 
     /// The readability choices a monitor's look keeps (`MonitorLookKeys.wallpaper`).
     static let lookKeys = [Keys.automaticTextBacking, Keys.textBacking, Keys.menuBarShade]
 
-    /// Rereads them, after Settings moved to another monitor.
+    /// Rereads them, after Settings moved to another monitor, as `init`
+    /// reads them.
     func reload() {
-        let shades = defaults.object(forKey: Keys.menuBarShade) as? Bool ?? true
+        let shades = Self.storedShadesMenuBar(defaults)
         if shadesMenuBar != shades { shadesMenuBar = shades }
-        let automatic = defaults.object(forKey: Keys.automaticTextBacking) as? Bool ?? true
+        let automatic = Self.storedAutomaticTextBacking(defaults)
         if automaticTextBacking != automatic { automaticTextBacking = automatic }
-        let stored = defaults.object(forKey: Keys.textBacking) as? Double ?? 0.35
-        let backing = stored.isFinite ? min(1, max(0, stored)) : 0.35
+        let backing = Self.storedTextBacking(defaults)
         if textBacking != backing { textBacking = backing }
+    }
+
+    // One reader per value, shared by `init` and `reload`.
+
+    private static func storedShadesMenuBar(_ defaults: UserDefaults) -> Bool {
+        defaults.object(forKey: Keys.menuBarShade) as? Bool ?? true
+    }
+
+    private static func storedAutomaticTextBacking(_ defaults: UserDefaults) -> Bool {
+        defaults.object(forKey: Keys.automaticTextBacking) as? Bool ?? ShippedDefaults.automaticTextBacking
+    }
+
+    /// 0...1; a stored value that is not a number reads as the default.
+    private static func storedTextBacking(_ defaults: UserDefaults) -> Double {
+        let stored: Double = defaults.object(forKey: Keys.textBacking) as? Double ?? ShippedDefaults.textBacking
+        guard stored.isFinite else { return ShippedDefaults.textBacking }
+        return min(1, max(0, stored))
     }
 
     /// Takes on the app's choice that no monitor keeps for itself.

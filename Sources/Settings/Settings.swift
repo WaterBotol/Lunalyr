@@ -516,41 +516,37 @@ final class Settings: ObservableObject {
          loginItem: LoginItemService = SMAppService.mainApp) {
         defaults = d
         self.loginItem = loginItem
-        fontChoice = FontChoice(rawValue: d.string(forKey: "fontChoice") ?? "") ?? ShippedDefaults.fontChoice
-        googleFontFamily = d.string(forKey: "googleFontFamily") ?? ""
-        installedFontFamily = d.string(forKey: Self.installedFontFamilyKey) ?? ""
-        backgroundMode = BackgroundMode(rawValue: d.string(forKey: "backgroundMode") ?? "") ?? ShippedDefaults.backgroundMode
-        let fallback = BackgroundMode(rawValue: d.string(forKey: "custom.musicVideoFallback") ?? "") ?? .auto
-        musicVideoFallback = fallback == .musicVideo ? .auto : fallback
+        fontChoice = Stored.fontChoice(d)
+        googleFontFamily = Stored.googleFontFamily(d)
+        installedFontFamily = Stored.installedFontFamily(d)
+        backgroundMode = Stored.backgroundMode(d)
+        musicVideoFallback = Stored.musicVideoFallback(d)
         musicVideoOnline = d.bool(forKey: "custom.musicVideoOnline")
-        musicVideoDim = min(Self.musicVideoDimRange.upperBound,
-                            max(0, d.object(forKey: "custom.musicVideoDim") as? Double ?? 0.35))
-        musicVideoBlur = min(Self.musicVideoBlurRange.upperBound, max(0, d.object(forKey: "custom.musicVideoBlur") as? Double ?? 0))
+        musicVideoDim = Stored.musicVideoDim(d)
+        musicVideoBlur = Stored.musicVideoBlur(d)
         musicVideoDisplays = MusicVideoDisplayChoice(stored: d.object(forKey: MusicVideoDisplayChoice.key))
         musicVideoFraming = MusicVideoFraming(stored: d.object(forKey: MusicVideoFraming.youTubeKey))
         libraryVideoFraming = MusicVideoFraming(stored: d.object(forKey: MusicVideoFraming.libraryKey))
-        albumGradientWallpaper = d.object(forKey: "custom.albumGradientWallpaper") as? Bool ?? true
-        patternStyle = (d.object(forKey: "patternStyle") as? Int).map(BackgroundStyle.init(rawValue:)) ?? ShippedDefaults.patternStyle
-        shaderStyle = (d.string(forKey: "shaderStyle")).map(ShaderStyle.init(rawValue:)) ?? ShippedDefaults.shaderStyle
-        useMotionArtwork = d.object(forKey: "useMotionArtwork") as? Bool ?? ShippedDefaults.useMotionArtwork
-        let savedComposition = d.string(forKey: "lyricComposition")
-        lyricComposition = savedComposition == "automatic" ? nil
-            : savedComposition.flatMap(LyricComposition.saved) ?? ShippedDefaults.lyricComposition
-        constellationSpread = d.object(forKey: "constellationSpread") as? Double ?? ShippedDefaults.constellationSpread
-        constellationLinkOpacity = d.object(forKey: "constellationLinkOpacity") as? Double ?? ShippedDefaults.constellationLinkOpacity
-        wordRevealByStyle = d.dictionary(forKey: "custom.wordRevealByStyle") as? [String: Bool] ?? ShippedDefaults.wordRevealByStyle
-        wordArrivalByStyle = d.dictionary(forKey: "custom.wordArrivalByStyle") as? [String: String] ?? ShippedDefaults.wordArrivalByStyle
-        nextWordPreviewByStyle = d.dictionary(forKey: "custom.nextWordPreviewByStyle") as? [String: Bool] ?? ShippedDefaults.nextWordPreviewByStyle
-        echoStrength = d.object(forKey: "echoStrength") as? Double ?? ShippedDefaults.echoStrength
+        albumGradientWallpaper = Stored.albumGradientWallpaper(d)
+        patternStyle = Stored.patternStyle(d)
+        shaderStyle = Stored.shaderStyle(d)
+        useMotionArtwork = Stored.useMotionArtwork(d)
+        lyricComposition = Stored.lyricComposition(d)
+        constellationSpread = Stored.constellationSpread(d)
+        constellationLinkOpacity = Stored.constellationLinkOpacity(d)
+        wordRevealByStyle = Stored.wordRevealByStyle(d)
+        wordArrivalByStyle = Stored.wordArrivalByStyle(d)
+        nextWordPreviewByStyle = Stored.nextWordPreviewByStyle(d)
+        echoStrength = Stored.echoStrength(d)
         lyricOffset = d.object(forKey: "custom.lyricOffset") as? Double ?? 0
-        lyricScale = d.object(forKey: "lyricScale") as? Double ?? ShippedDefaults.lyricScale
-        showInterludes = d.object(forKey: "custom.showInterludes") as? Bool ?? true
-        thinkingOrbStyle = ThinkingOrb.normalised(d.string(forKey: ThinkingOrb.styleKey))
-        wordSymbols = d.object(forKey: Self.wordSymbolsKey) as? Bool ?? true
+        lyricScale = Stored.lyricScale(d)
+        showInterludes = Stored.showInterludes(d)
+        thinkingOrbStyle = Stored.thinkingOrbStyle(d)
+        wordSymbols = Stored.wordSymbols(d)
         wordSymbolList = d.dictionary(forKey: Self.wordSymbolListKey) as? [String: String]
-        actionWords = d.object(forKey: Self.actionWordsKey) as? Bool ?? true
+        actionWords = Stored.actionWords(d)
         actionWordList = d.dictionary(forKey: Self.actionWordListKey) as? [String: String]
-        actionWordStrength = ActionWordStrength(rawValue: d.string(forKey: Self.actionWordStrengthKey) ?? "") ?? .wild
+        actionWordStrength = Stored.actionWordStrength(d)
         animationRate = AnimationRate(rawValue: d.object(forKey: "custom.animationRate") as? Int
             ?? ShippedDefaults.animationRate.rawValue) ?? .balanced
         pauseWhenCovered = d.object(forKey: "custom.pauseWhenCovered") as? Bool ?? true
@@ -559,33 +555,29 @@ final class Settings: ObservableObject {
         onBattery = PowerBehaviour(rawValue: d.string(forKey: "onBattery") ?? "") ?? ShippedDefaults.onBattery
         noLyrics = NoLyricsBehaviour(rawValue: d.string(forKey: "noLyrics") ?? "") ?? ShippedDefaults.noLyrics
         launchAtLogin = Self.launchesAtLogin(loginItem.status)
-        effectSpeed = d.object(forKey: "effectSpeed") as? Double ?? 1.0
+        effectSpeed = Stored.effectSpeed(d)
         audioReactiveEnabled = d.object(forKey: "custom.audioReactiveEnabled") as? Bool ?? ShippedDefaults.audioReactiveEnabled
         audioSensitivity = d.object(forKey: "custom.audioSensitivity") as? Double ?? ShippedDefaults.audioSensitivity
         audioCaptureMethod = AudioCaptureMethod(rawValue: d.string(forKey: "custom.audioCaptureMethod") ?? "") ?? .automatic
-        let wavefieldPreset = d.string(forKey: "custom.wavefieldPreset") ?? "default"
-        self.wavefieldPreset = WavefieldWebPreset.catalogue.contains { $0.id == wavefieldPreset } ? wavefieldPreset : "default"
-        wavefieldProjection = WavefieldProjection(rawValue: d.string(forKey: "custom.wavefieldProjection") ?? "")
-            ?? ShippedDefaults.wavefieldProjection
-        audioVisualizerStyle = AudioVisualizerStyle(rawValue: d.string(forKey: "custom.visualizerStyle") ?? "")
-            ?? ShippedDefaults.visualizerStyle
-        patternOpacity = d.object(forKey: "patternOpacity") as? Double ?? 0.85
-        preferredScrimStrength = d.object(forKey: "scrimStrength") as? Double ?? ShippedDefaults.scrimStrength
-        vividness = d.object(forKey: "vividness") as? Double ?? 1.0
-        motionBlur = d.object(forKey: "motionBlur") as? Double ?? 5.0
-        motionPlacement = MotionPlacement(rawValue: d.string(forKey: "motionPlacement") ?? "") ?? ShippedDefaults.motionPlacement
+        wavefieldPreset = Stored.wavefieldPreset(d)
+        wavefieldProjection = Stored.wavefieldProjection(d)
+        audioVisualizerStyle = Stored.audioVisualizerStyle(d)
+        patternOpacity = Stored.patternOpacity(d)
+        preferredScrimStrength = Stored.scrimStrength(d)
+        vividness = Stored.vividness(d)
+        motionBlur = Stored.motionBlur(d)
+        motionPlacement = Stored.motionPlacement(d)
         motionExclusions = d.stringArray(forKey: "motionExclusions") ?? []
-        nextWordPreviewLead = d.object(forKey: "custom.nextWordPreviewLead") as? Double ?? 0.45
-        wordEntranceMix = d.stringArray(forKey: "custom.wordEntranceMix")
-            ?? ShippedDefaults.wordEntranceMix
+        nextWordPreviewLead = Stored.nextWordPreviewLead(d)
+        wordEntranceMix = Stored.wordEntranceMix(d)
         lowPowerVisuals = d.bool(forKey: "custom.lowPowerVisuals")
-        editorialTypography = d.bool(forKey: "custom.editorialTypography")
-        editorialAmount = d.object(forKey: "custom.editorialAmount") as? Double ?? 1
-        randomizeLyricFonts = d.bool(forKey: "custom.randomizeLyricFonts")
-        customWallpaperPath = d.string(forKey: "custom.wallpaperPath") ?? ""
-        customWallpaperName = d.string(forKey: "custom.wallpaperName") ?? ""
-        customWallpaperPlacement = MotionPlacement(rawValue: d.string(forKey: "custom.wallpaperPlacement") ?? "") ?? .fill
-        light3DColours = Light3DColours(rawValue: d.string(forKey: "custom.light3DColours") ?? "") ?? ShippedDefaults.light3DColours
+        editorialTypography = Stored.editorialTypography(d)
+        editorialAmount = Stored.editorialAmount(d)
+        randomizeLyricFonts = Stored.randomizeLyricFonts(d)
+        customWallpaperPath = Stored.customWallpaperPath(d)
+        customWallpaperName = Stored.customWallpaperName(d)
+        customWallpaperPlacement = Stored.customWallpaperPlacement(d)
+        light3DColours = Stored.light3DColours(d)
         increaseContrast = NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast
         if launchAtLogin && loginItem.status == .requiresApproval { launchAtLoginError = Self.loginItemNeedsApproval }
         refreshWordAccentLists()
@@ -635,30 +627,27 @@ final class Settings: ObservableObject {
         func set<T: Equatable>(_ path: ReferenceWritableKeyPath<Settings, T>, _ value: T) {
             if self[keyPath: path] != value { self[keyPath: path] = value }
         }
-        let savedComposition = d.string(forKey: "lyricComposition")
-        set(\.lyricComposition, savedComposition == "automatic" ? nil
-            : savedComposition.flatMap(LyricComposition.saved) ?? ShippedDefaults.lyricComposition)
-        set(\.constellationSpread, d.object(forKey: "constellationSpread") as? Double ?? ShippedDefaults.constellationSpread)
-        set(\.constellationLinkOpacity, d.object(forKey: "constellationLinkOpacity") as? Double ?? ShippedDefaults.constellationLinkOpacity)
-        set(\.wordRevealByStyle, d.dictionary(forKey: "custom.wordRevealByStyle") as? [String: Bool] ?? ShippedDefaults.wordRevealByStyle)
-        set(\.wordArrivalByStyle, d.dictionary(forKey: "custom.wordArrivalByStyle") as? [String: String] ?? ShippedDefaults.wordArrivalByStyle)
-        set(\.nextWordPreviewByStyle, d.dictionary(forKey: "custom.nextWordPreviewByStyle") as? [String: Bool] ?? ShippedDefaults.nextWordPreviewByStyle)
-        set(\.nextWordPreviewLead, d.object(forKey: "custom.nextWordPreviewLead") as? Double ?? 0.45)
-        set(\.wordEntranceMix, d.stringArray(forKey: "custom.wordEntranceMix")
-            ?? ShippedDefaults.wordEntranceMix)
-        set(\.echoStrength, d.object(forKey: "echoStrength") as? Double ?? ShippedDefaults.echoStrength)
-        set(\.lyricScale, d.object(forKey: "lyricScale") as? Double ?? ShippedDefaults.lyricScale)
-        set(\.showInterludes, d.object(forKey: "custom.showInterludes") as? Bool ?? true)
-        set(\.thinkingOrbStyle, ThinkingOrb.normalised(d.string(forKey: ThinkingOrb.styleKey)))
-        set(\.wordSymbols, d.object(forKey: Self.wordSymbolsKey) as? Bool ?? true)
-        set(\.actionWords, d.object(forKey: Self.actionWordsKey) as? Bool ?? true)
-        set(\.actionWordStrength, ActionWordStrength(rawValue: d.string(forKey: Self.actionWordStrengthKey) ?? "") ?? .wild)
-        set(\.editorialTypography, d.bool(forKey: "custom.editorialTypography"))
-        set(\.editorialAmount, d.object(forKey: "custom.editorialAmount") as? Double ?? 1)
-        set(\.randomizeLyricFonts, d.bool(forKey: "custom.randomizeLyricFonts"))
-        let choice = FontChoice(rawValue: d.string(forKey: "fontChoice") ?? "") ?? ShippedDefaults.fontChoice
-        let family = d.string(forKey: "googleFontFamily") ?? ""
-        let installed = d.string(forKey: Self.installedFontFamilyKey) ?? ""
+        set(\.lyricComposition, Stored.lyricComposition(d))
+        set(\.constellationSpread, Stored.constellationSpread(d))
+        set(\.constellationLinkOpacity, Stored.constellationLinkOpacity(d))
+        set(\.wordRevealByStyle, Stored.wordRevealByStyle(d))
+        set(\.wordArrivalByStyle, Stored.wordArrivalByStyle(d))
+        set(\.nextWordPreviewByStyle, Stored.nextWordPreviewByStyle(d))
+        set(\.nextWordPreviewLead, Stored.nextWordPreviewLead(d))
+        set(\.wordEntranceMix, Stored.wordEntranceMix(d))
+        set(\.echoStrength, Stored.echoStrength(d))
+        set(\.lyricScale, Stored.lyricScale(d))
+        set(\.showInterludes, Stored.showInterludes(d))
+        set(\.thinkingOrbStyle, Stored.thinkingOrbStyle(d))
+        set(\.wordSymbols, Stored.wordSymbols(d))
+        set(\.actionWords, Stored.actionWords(d))
+        set(\.actionWordStrength, Stored.actionWordStrength(d))
+        set(\.editorialTypography, Stored.editorialTypography(d))
+        set(\.editorialAmount, Stored.editorialAmount(d))
+        set(\.randomizeLyricFonts, Stored.randomizeLyricFonts(d))
+        let choice = Stored.fontChoice(d)
+        let family = Stored.googleFontFamily(d)
+        let installed = Stored.installedFontFamily(d)
         let fontChanged = choice != fontChoice || family != googleFontFamily || installed != installedFontFamily
         set(\.googleFontFamily, family)
         set(\.installedFontFamily, installed)
@@ -684,35 +673,31 @@ final class Settings: ObservableObject {
         }
         // Read both first: entering Music video stores the type it leaves as
         // the fallback, which would overwrite the one being loaded.
-        let mode = BackgroundMode(rawValue: d.string(forKey: "backgroundMode") ?? "") ?? .auto
-        let storedFallback = BackgroundMode(rawValue: d.string(forKey: "custom.musicVideoFallback") ?? "") ?? .auto
-        let fallback = storedFallback == .musicVideo ? .auto : storedFallback
+        let mode = Stored.backgroundMode(d)
+        let fallback = Stored.musicVideoFallback(d)
         set(\.backgroundMode, mode)
         set(\.musicVideoFallback, fallback)
-        set(\.musicVideoDim, min(Self.musicVideoDimRange.upperBound,
-                                 max(0, d.object(forKey: "custom.musicVideoDim") as? Double ?? 0.35)))
-        set(\.musicVideoBlur, min(Self.musicVideoBlurRange.upperBound,
-                                  max(0, d.object(forKey: "custom.musicVideoBlur") as? Double ?? 0)))
+        set(\.musicVideoDim, Stored.musicVideoDim(d))
+        set(\.musicVideoBlur, Stored.musicVideoBlur(d))
         set(\.musicVideoFraming, MusicVideoFraming(stored: d.object(forKey: MusicVideoFraming.youTubeKey)))
         set(\.libraryVideoFraming, MusicVideoFraming(stored: d.object(forKey: MusicVideoFraming.libraryKey)))
-        set(\.albumGradientWallpaper, d.object(forKey: "custom.albumGradientWallpaper") as? Bool ?? true)
-        set(\.patternStyle, (d.object(forKey: "patternStyle") as? Int).flatMap(BackgroundStyle.init(rawValue:)))
-        set(\.shaderStyle, d.string(forKey: "shaderStyle").flatMap(ShaderStyle.init(rawValue:)))
-        set(\.useMotionArtwork, d.object(forKey: "useMotionArtwork") as? Bool ?? true)
-        set(\.effectSpeed, d.object(forKey: "effectSpeed") as? Double ?? 1.0)
-        let preset = d.string(forKey: "custom.wavefieldPreset") ?? "default"
-        set(\.wavefieldPreset, WavefieldWebPreset.catalogue.contains { $0.id == preset } ? preset : "default")
-        set(\.wavefieldProjection, WavefieldProjection(rawValue: d.string(forKey: "custom.wavefieldProjection") ?? "") ?? .preset)
-        set(\.audioVisualizerStyle, AudioVisualizerStyle(rawValue: d.string(forKey: "custom.visualizerStyle") ?? "") ?? .silk)
-        set(\.patternOpacity, d.object(forKey: "patternOpacity") as? Double ?? 0.85)
-        set(\.preferredScrimStrength, d.object(forKey: "scrimStrength") as? Double ?? 1.0)
-        set(\.vividness, d.object(forKey: "vividness") as? Double ?? 1.0)
-        set(\.motionBlur, d.object(forKey: "motionBlur") as? Double ?? 5.0)
-        set(\.motionPlacement, MotionPlacement(rawValue: d.string(forKey: "motionPlacement") ?? "") ?? .fill)
-        set(\.customWallpaperPath, d.string(forKey: "custom.wallpaperPath") ?? "")
-        set(\.customWallpaperName, d.string(forKey: "custom.wallpaperName") ?? "")
-        set(\.customWallpaperPlacement, MotionPlacement(rawValue: d.string(forKey: "custom.wallpaperPlacement") ?? "") ?? .fill)
-        set(\.light3DColours, Light3DColours(rawValue: d.string(forKey: "custom.light3DColours") ?? "") ?? .album)
+        set(\.albumGradientWallpaper, Stored.albumGradientWallpaper(d))
+        set(\.patternStyle, Stored.patternStyle(d))
+        set(\.shaderStyle, Stored.shaderStyle(d))
+        set(\.useMotionArtwork, Stored.useMotionArtwork(d))
+        set(\.effectSpeed, Stored.effectSpeed(d))
+        set(\.wavefieldPreset, Stored.wavefieldPreset(d))
+        set(\.wavefieldProjection, Stored.wavefieldProjection(d))
+        set(\.audioVisualizerStyle, Stored.audioVisualizerStyle(d))
+        set(\.patternOpacity, Stored.patternOpacity(d))
+        set(\.preferredScrimStrength, Stored.scrimStrength(d))
+        set(\.vividness, Stored.vividness(d))
+        set(\.motionBlur, Stored.motionBlur(d))
+        set(\.motionPlacement, Stored.motionPlacement(d))
+        set(\.customWallpaperPath, Stored.customWallpaperPath(d))
+        set(\.customWallpaperName, Stored.customWallpaperName(d))
+        set(\.customWallpaperPlacement, Stored.customWallpaperPlacement(d))
+        set(\.light3DColours, Stored.light3DColours(d))
     }
 
     /// Takes on `source`'s settings that no monitor's look keeps (power,
@@ -1136,16 +1121,20 @@ final class Settings: ObservableObject {
 
     /// Restores every advanced control to its shipped value.
     func resetAdvanced() {
-        effectSpeed = 1.0
-        patternOpacity = 0.85
+        effectSpeed = ShippedDefaults.effectSpeed
+        patternOpacity = ShippedDefaults.patternOpacity
         scrimStrength = ShippedDefaults.scrimStrength
-        vividness = 1.0
-        motionBlur = 5.0
+        vividness = ShippedDefaults.vividness
+        motionBlur = ShippedDefaults.motionBlur
     }
 
     var advancedIsDefault: Bool {
-        effectSpeed == 1.0 && patternOpacity == 0.85
-            && preferredScrimStrength == ShippedDefaults.scrimStrength && vividness == 1.0 && motionBlur == 5.0
+        let speed: Bool = effectSpeed == ShippedDefaults.effectSpeed
+        let opacity: Bool = patternOpacity == ShippedDefaults.patternOpacity
+        let scrim: Bool = preferredScrimStrength == ShippedDefaults.scrimStrength
+        let vivid: Bool = vividness == ShippedDefaults.vividness
+        let blur: Bool = motionBlur == ShippedDefaults.motionBlur
+        return speed && opacity && scrim && vivid && blur
     }
 
     /// Login items are managed by the system; if registration fails the

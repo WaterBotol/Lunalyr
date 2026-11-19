@@ -29,6 +29,12 @@ enum ShippedDefaults {
     /// Captures only after macOS's own permission prompt is answered.
     static let audioReactiveEnabled = true
     static let audioSensitivity = 3.0
+    // The wallpaper's adjustments, unchanged in November 2026 (no `legacy`
+    // entry): kept here as Reset Adjustments' values too.
+    static let effectSpeed = 1.0
+    static let patternOpacity = 0.85
+    static let vividness = 1.0
+    static let motionBlur = 5.0
 
     // Behaviour
     static let noLyrics = Settings.NoLyricsBehaviour.trackName
