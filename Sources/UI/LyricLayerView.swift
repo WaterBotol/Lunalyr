@@ -28,6 +28,9 @@ struct LyricLayer: View {
     /// The luminance the wallpaper measured behind the stage, when it shows
     /// a picture (Your wallpaper, an imported image or video).
     var measuredBackdrop: Double?
+    /// What a generated wallpaper measured of the frame it drew behind the
+    /// stage (`StageMeter`); nil for pictures, videos and until it is known.
+    var drawnBackdrop: Double? = nil
     /// False while the wallpaper is paused: no further frames will come, so
     /// fades jump to where they are heading instead of stopping part-way.
     var animating = true
@@ -165,7 +168,7 @@ struct LyricLayer: View {
             backing: wallpaper.desktop.manualTextBacking,
             target: LyricLegibility.targetContrast(baseSize: baseSize), tinted: nowPlaying.artwork != nil,
             pastelText: colour != .standard, increaseContrast: contrast == .increased,
-            videoDim: backdropSettings.musicVideoDim)
+            videoDim: backdropSettings.musicVideoDim, drawn: drawnBackdrop)
         // Without the automatic dark backing: what decides dark text.
         let unbacked = backdropOverride ?? LyricBackdrop.luminance(mode: mode,
             motion: mode == .auto && backdropSettings.motionArtworkEnabled && nowPlaying.motionArtwork != nil,
@@ -173,7 +176,7 @@ struct LyricLayer: View {
             backing: wallpaper.desktop.manualTextBacking ?? 0,
             target: LyricLegibility.targetContrast(baseSize: baseSize), tinted: nowPlaying.artwork != nil,
             pastelText: false, increaseContrast: contrast == .increased,
-            videoDim: backdropSettings.musicVideoDim)
+            videoDim: backdropSettings.musicVideoDim, drawn: drawnBackdrop)
         return cache.ink(.init(mode: colour, speed: colours.speed, strength: colours.strength, custom: colours.customColours,
             album: palette, backdrop: backdrop, audio: audio.running ? audio.levels : nil,
             vocal: active.map { OrganicMotion.vocalIntensity(lyricsVM.lines[$0].words, at: time) } ?? energy,
@@ -1804,6 +1807,9 @@ struct LyricStage: View, Equatable {
     /// What the wallpaper measured behind the stage, for a picture (see
     /// `LyricBackdrop`); nil for generated wallpapers or until it is known.
     var backdrop: Double? = nil
+    /// What a generated wallpaper measured of the frame it drew behind the
+    /// stage (`StageMeter`); nil for pictures and videos, or until known.
+    var drawnBackdrop: Double? = nil
     /// The display this stage is on: a drag on that display's seek bar
     /// previews its lyric here (`ScrubPreview`). Nil for previews elsewhere.
     var displayID: CGDirectDisplayID? = nil
@@ -1821,7 +1827,7 @@ struct LyricStage: View, Equatable {
     static func == (lhs: Self, rhs: Self) -> Bool {
         lhs.size == rhs.size && lhs.mood == rhs.mood && lhs.accent == rhs.accent && lhs.trackSeed == rhs.trackSeed
             && lhs.palette == rhs.palette && lhs.interval == rhs.interval && lhs.paused == rhs.paused
-            && lhs.backdrop == rhs.backdrop && lhs.displayID == rhs.displayID && lhs.textSize == rhs.textSize
+            && lhs.backdrop == rhs.backdrop && lhs.drawnBackdrop == rhs.drawnBackdrop && lhs.displayID == rhs.displayID && lhs.textSize == rhs.textSize
             && lhs.titleMode == rhs.titleMode
     }
 
@@ -1840,7 +1846,7 @@ struct LyricStage: View, Equatable {
                 playing: nowPlaying.isPlaying)
             LyricLayer(time: time, baseSize: layout.baseSize, maxWidth: layout.stageSize.width,
                        maxHeight: layout.stageSize.height, mood: mood, accent: accent, trackSeed: trackSeed,
-                       wall: now, palette: palette, measuredBackdrop: backdrop, animating: !paused, pace: pace,
+                       wall: now, palette: palette, measuredBackdrop: backdrop, drawnBackdrop: drawnBackdrop, animating: !paused, pace: pace,
                        titleMode: titleMode)
         }
     }

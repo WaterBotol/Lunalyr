@@ -39,6 +39,9 @@ struct NowPlayingView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ObservedObject private var extras = LunalyrExtras.shared
     @State private var paletteGeneration = UUID()
+    /// What the layer on screen measured of the frame it drew behind the
+    /// lyrics (`StageMeter`): GPU effects and visualisers only.
+    @State private var drawnStage: DrawnStage?
     @State private var palette = ColorExtractor.fallbackHSBPalette
     @State private var wallpaperPalette = AlbumWallpaperPalette(grid: ColorExtractor.fallbackHSBPalette)
     @State private var previousWallpaperPalette: AlbumWallpaperPalette?
@@ -344,6 +347,31 @@ struct NowPlayingView: View {
         videoCovers[source] = artwork
     }
 
+    /// A generated layer's reading of what it drew behind the lyrics.
+    struct DrawnStage: Equatable {
+        var layer: BackgroundLayer
+        var value: Double
+    }
+
+    /// Keeps `layer`'s readings, when it is the layer on screen (the one a
+    /// crossfade is heading to); the layer fading out reports none.
+    private func stageMeasured(_ layer: BackgroundLayer) -> ((Double) -> Void)? {
+        guard layer == currentLayer else { return nil }
+        return { value in
+            let reading = DrawnStage(layer: layer, value: value)
+            if drawnStage != reading {
+                drawnStage = reading
+                BackdropLog.drawn(value, layer: layer.traceName)
+            }
+        }
+    }
+
+    /// What `layer` measured behind the lyrics, if it is the layer that did.
+    private func drawnBackdrop(for layer: BackgroundLayer) -> Double? {
+        guard let drawnStage, drawnStage.layer == layer else { return nil }
+        return drawnStage.value
+    }
+
     /// Records that `layer`'s view has drawn, outside the view update that
     /// drew it.
     private func firstFrameDrawn(_ layer: BackgroundLayer) -> () -> Void {
@@ -506,6 +534,8 @@ struct NowPlayingView: View {
                         // colours over Your wallpaper or an imported picture
                         // are judged against what is really there.
                         backdrop: lyricBackdrop(for: cover),
+                        // What a GPU effect or visualiser really drew there.
+                        drawnBackdrop: drawnBackdrop(for: currentLayer),
                         displayID: effectDisplay
                     )
                     .equatable()
@@ -789,7 +819,7 @@ struct NowPlayingView: View {
                 ShaderBackgroundView(style: style, time: phases.colour, flow: phases.flow, palette: cover,
                                      vividness: wall.vividness, paused: renderingPaused,
                                      preview: isSettingsPreview, economical: phases.economical,
-                                     displayID: effectDisplay)
+                                     displayID: effectDisplay, onStageMeasured: stageMeasured(layer))
                     .ignoresSafeArea()
                 scrim
                 textBacking(backing, presence: stage, size: size)
@@ -802,13 +832,14 @@ struct NowPlayingView: View {
                     WebVisualizerView(engine: engine, preset: wall.wavefieldPreset, projection: wall.wavefieldProjection,
                         sensitivity: wall.audioSensitivity, motion: wall.effectSpeed, tick: phases.visualizer, paused: renderingPaused, preview: isSettingsPreview, palette: hasAlbumPalette && !originalLight3D ? cover : nil,
                         displayID: effectDisplay, placement: web, onFirstFrame: firstFrameDrawn(layer),
-                        preferences: scenes)
+                        onStageMeasured: stageMeasured(layer), preferences: scenes)
                         .id(engine)
                         .ignoresSafeArea()
                         .saturation(originalLight3D ? 1 : wall.vividness)
                 } else {
                     AudioVisualizerView(style: style, time: phases.visualizer, paused: renderingPaused, preview: isSettingsPreview,
-                        palette: hasAlbumPalette ? cover : nil, onFirstFrame: firstFrameDrawn(layer))
+                        palette: hasAlbumPalette ? cover : nil, onFirstFrame: firstFrameDrawn(layer),
+                        onStageMeasured: stageMeasured(layer))
                         .ignoresSafeArea()
                 }
                 scrim
@@ -934,10 +965,10 @@ struct NowPlayingView: View {
             luminance = Self.coverLuminance(cover)
             existing = 1 - (1 - min(1, 0.40 * strength)) * 0.5
         case .shader:
-            luminance = LyricLegibility.shaderLuminance(cover)
+            luminance = drawnBackdrop(for: layer) ?? LyricLegibility.shaderLuminance(cover)
             existing = scrim
         case .visualizer:
-            luminance = LyricLegibility.visualizerLuminance(cover)
+            luminance = drawnBackdrop(for: layer) ?? LyricLegibility.visualizerLuminance(cover)
             existing = scrim
         case .albumGradient:
             luminance = cover.gradientLuminance(vividness: wall.vividness)

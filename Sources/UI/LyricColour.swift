@@ -483,12 +483,14 @@ enum LyricBackdrop {
     ///     in the middle of the stage.
     ///   - tinted: whether the wallpaper lays the album's colours over an
     ///     imported picture, as it does whenever the song has a cover.
+    ///   - drawn: what a generated wallpaper (a GPU effect, a visualiser)
+    ///     measured of the frame it drew behind the stage (`StageMeter`).
     static func luminance(mode: Settings.BackgroundMode, motion: Bool, palette: [SIMD3<Float>], scrim: Double,
                           measured: Double? = nil, backing: Double? = nil, target: Double = 4.5,
                           tinted: Bool = false, pastelText: Bool = false, increaseContrast: Bool = false,
-                          videoDim: Double = 0) -> Double {
+                          videoDim: Double = 0, drawn: Double? = nil) -> Double {
         let behind = beforeBacking(mode: mode, motion: motion, palette: palette, scrim: scrim, measured: measured,
-                                   tinted: tinted, videoDim: videoDim)
+                                   tinted: tinted, videoDim: videoDim, drawn: drawn)
         if backing == nil, pastelText {
             let target = LyricLegibility.pastelBackingTarget(increaseContrast: increaseContrast)
             let shade = LyricLegibility.stageBacking(forLuminance: behind, existingDarkening: 0, target: target)
@@ -506,9 +508,20 @@ enum LyricBackdrop {
     }
 
     /// The wallpaper and its scrim, before the text backing.
+    ///
+    /// `drawn`, when a generated wallpaper has measured what it drew behind
+    /// the stage (`StageMeter`), wins over every estimate below: whatever
+    /// the mode (Custom Mix, a music video's fallback), that is the layer
+    /// on screen, and only the scrim is laid over it. The estimates from the
+    /// cover's colours took a pale cover for a pale wallpaper, though most
+    /// effects draw dark scenes whatever the cover.
     static func beforeBacking(mode: Settings.BackgroundMode, motion: Bool, palette: [SIMD3<Float>],
                               scrim: Double, measured: Double? = nil, tinted: Bool = false,
-                              videoDim: Double = 0) -> Double {
+                              videoDim: Double = 0, drawn: Double? = nil) -> Double {
+        if let drawn {
+            let shade: Double = WallpaperShade.scrimAtStage(strength: min(2, max(0, scrim)))
+            return LyricLegibility.darkened(min(1, max(0, drawn)), by: shade)
+        }
         // Called every frame: a plain loop, no intermediate arrays.
         var brightest = 0.0, total = 0.0
         for stop in palette {
