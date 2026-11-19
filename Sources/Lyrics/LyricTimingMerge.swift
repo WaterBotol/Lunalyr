@@ -79,7 +79,7 @@ extension LyricsFetcher {
     static func isTimingDonor(_ candidate: LyricCandidate, query: LyricQuery) -> Bool {
         guard case .synced = candidate.result, timingDonor(candidate) == nil, fitsVersion(candidate, query),
               candidate.agreement.shift == nil, !(candidate.source == .lrclib && candidate.agreement.timingOutlier) else { return false }
-        return rankedTiming(candidate.result) == 2 && !hasTimingFault(candidate.result)
+        return rankedTiming(candidate.result) >= 2 && !hasTimingFault(candidate.result)
     }
     /// Line-timed lyrics from a source that leads line timing
     /// (Music's own, Apple Music's via Lyrics+, Musixmatch), for the playing version.

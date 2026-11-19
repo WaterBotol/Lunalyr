@@ -1,9 +1,9 @@
 import XCTest
 @testable import VersoCustom
 
-/// The order matches are ranked in. Word-by-word or mixed timing comes
-/// first: Music's own lyrics, then LRCLIB, then the other sources. Line
-/// timing is next, Music's own first, then plain text. The configured order
+/// The order matches are ranked in. Timing comes first: word-by-word, then
+/// mixed, then line timing, then plain text. Within the same timing, Music's
+/// own lyrics lead, then LRCLIB (word or mixed only), then the other sources. The configured order
 /// only orders the other sources, in both match modes; saved choices and the
 /// recording check still come before any of it.
 final class LyricPriorityTests: XCTestCase {
@@ -38,8 +38,7 @@ final class LyricPriorityTests: XCTestCase {
             return line
         }
         let provenance = LyricsFetcher.Provenance(precision: "fixture", source: source.title)
-        // Mixed: word-timed but for its last line, 4 of 5 -- enough to rank
-        // with word-by-word (`LyricsFetcher.fullWordTimingShare`).
+        // Mixed: word-timed but for its last line, 4 of 5.
         let result: LyricsFetcher.Result = timing == .plain ? .plain(["Sing along", "Hold on"], provenance)
             : timing == .mixed ? .synced([line("Sing along", at: 1, timed: true), line("Hold me", at: 4, timed: true),
                                           line("Hold you", at: 7, timed: true), line("Hold us", at: 10, timed: true),
@@ -94,15 +93,16 @@ final class LyricPriorityTests: XCTestCase {
                      title: "Our Song", artist: "Our Artist", duration: 180, score: 0)
     }
 
-    /// The owner's call (17 Nov 2026): Apple Music's Mixed timing leads
-    /// word-by-word only while most of its lines (80%) are word-timed.
-    func testThinMixedTimingLosesToFullWordTiming() {
+    /// The owner's call (20 Nov 2026): Apple Music leads only among lyrics
+    /// with the same timing. Its Mixed timing, however nearly complete,
+    /// loses to another source's word-by-word.
+    func testAnyMixedTimingLosesToWordByWord() {
         for options in modes(userOrder) {
             XCTAssertEqual(winner([share(.appleMusicCache, timed: 3, of: 10), share(.kugou, timed: 10, of: 10)], options), .kugou)
-            XCTAssertEqual(winner([share(.appleMusicCache, timed: 9, of: 10), share(.kugou, timed: 10, of: 10)], options), .appleMusicCache)
-            XCTAssertEqual(winner([share(.appleMusicCache, timed: 8, of: 10), share(.kugou, timed: 10, of: 10)], options), .appleMusicCache)
-            // Two thin ones: the leads decide, as before.
-            XCTAssertEqual(winner([share(.appleMusicCache, timed: 3, of: 10), share(.kugou, timed: 4, of: 10)], options), .appleMusicCache)
+            XCTAssertEqual(winner([share(.appleMusicCache, timed: 9, of: 10), share(.kugou, timed: 10, of: 10)], options), .kugou)
+            // Same timing: the leads decide.
+            XCTAssertEqual(winner([share(.appleMusicCache, timed: 3, of: 10), share(.kugou, timed: 9, of: 10)], options), .appleMusicCache)
+            XCTAssertEqual(winner([share(.appleMusicCache, timed: 10, of: 10), share(.kugou, timed: 10, of: 10)], options), .appleMusicCache)
         }
     }
 
@@ -110,7 +110,7 @@ final class LyricPriorityTests: XCTestCase {
         XCTAssertEqual(candidate(.lrclib, .word).provenance.precision, "Word-by-word")
         XCTAssertEqual(candidate(.lrclib, .mixed).provenance.precision, "Mixed timing")
         XCTAssertEqual(candidate(.lrclib, .line).provenance.precision, "Line-synced")
-        XCTAssertEqual(candidate(.lrclib, .word).result.rankedTiming, 2)
+        XCTAssertEqual(candidate(.lrclib, .word).result.rankedTiming, 3)
         XCTAssertEqual(candidate(.lrclib, .mixed).result.rankedTiming, 2)
         XCTAssertEqual(candidate(.lrclib, .line).result.rankedTiming, 1)
         XCTAssertEqual(candidate(.lrclib, .plain).result.rankedTiming, 0)
@@ -124,9 +124,11 @@ final class LyricPriorityTests: XCTestCase {
         }
     }
 
-    func testMixedTimingRanksWithWordTimingSoMusicsMixedTimingStillWins() {
+    func testWordByWordBeatsMusicsMixedTiming() {
         for options in modes(userOrder) {
-            XCTAssertEqual(winner([candidate(.lrclib, .word), candidate(.appleMusicCache, .mixed)], options), .appleMusicCache, "\(options.mode)")
+            XCTAssertEqual(winner([candidate(.lrclib, .word), candidate(.appleMusicCache, .mixed)], options), .lrclib, "\(options.mode)")
+            XCTAssertEqual(winner([candidate(.netEase, .word), candidate(.appleMusicCache, .mixed)], options), .netEase, "\(options.mode)")
+            XCTAssertEqual(winner([candidate(.lrclib, .mixed), candidate(.appleMusicCache, .mixed)], options), .appleMusicCache, "\(options.mode)")
         }
     }
 
@@ -149,9 +151,10 @@ final class LyricPriorityTests: XCTestCase {
         }
     }
 
-    func testLRCLIBsMixedTimingBeatsOtherWordTiming() {
+    func testLRCLIBLeadsMixedTimingButNotWordByWord() {
         for options in modes([.netEase, .lyricsPlus, .lrclib]) {
-            XCTAssertEqual(winner([candidate(.netEase, .word), candidate(.lrclib, .mixed)], options), .lrclib, "\(options.mode)")
+            XCTAssertEqual(winner([candidate(.netEase, .word), candidate(.lrclib, .mixed)], options), .netEase, "\(options.mode)")
+            XCTAssertEqual(winner([candidate(.netEase, .mixed), candidate(.lrclib, .mixed)], options), .lrclib, "\(options.mode)")
         }
     }
 
@@ -174,7 +177,7 @@ final class LyricPriorityTests: XCTestCase {
         // Reordering changes which of the other sources wins, never the lead.
         for options in modes([.kugou, .netEase, .qqMusic, .lyricsPlus, .lrclib, .appleMusicCache]) {
             XCTAssertEqual(ranking(words, options), [.appleMusicCache, .lrclib, .kugou, .netEase, .qqMusic, .lyricsPlus], "\(options.mode)")
-            XCTAssertEqual(winner([candidate(.netEase, .word), candidate(.kugou, .mixed)], options), .kugou, "\(options.mode)")
+            XCTAssertEqual(winner([candidate(.netEase, .mixed), candidate(.kugou, .mixed)], options), .kugou, "\(options.mode)")
         }
     }
 
@@ -193,11 +196,11 @@ final class LyricPriorityTests: XCTestCase {
         let accuracy = LyricSourceOptions.Snapshot(enabled: order, mode: .smart, localFolder: "", localVersion: "")
         let sourceOrder = LyricSourceOptions.Snapshot(enabled: order, mode: .priority, localFolder: "", localVersion: "")
         // A credit is not a version, so only Accuracy first weighs it (another version always ranks lower: VersionTagTests).
-        let credited = candidate(.netEase, .word, title: "Our Song (feat. Guest)"), exact = candidate(.lyricsPlus, .mixed)
+        let credited = candidate(.netEase, .word, title: "Our Song (feat. Guest)"), exact = candidate(.lyricsPlus, .word)
         XCTAssertEqual(winner([credited, exact], accuracy), .lyricsPlus)
         XCTAssertEqual(winner([credited, exact], sourceOrder), .netEase)
         // A closer match never lifts another source above LRCLIB or Music.
-        let remaster = candidate(.lrclib, .mixed, title: "Our Song - Remastered 2011")
+        let remaster = candidate(.lrclib, .word, title: "Our Song - Remastered 2011")
         for options in [accuracy, sourceOrder] {
             XCTAssertEqual(winner([exact, remaster], options), .lrclib, "\(options.mode)")
             XCTAssertEqual(winner([exact, remaster, candidate(.appleMusicCache, .word)], options), .appleMusicCache, "\(options.mode)")
@@ -247,15 +250,17 @@ final class LyricPriorityTests: XCTestCase {
     func testOnlyTheBestPossibleMatchSettlesTheLookup() {
         for options in modes(userOrder) {
             let services = Set(options.enabled).subtracting([.appleMusicCache])
-            // Nothing can rank above Music's own word or mixed timing.
-            for timing in [Timing.word, .mixed] {
-                XCTAssertTrue(LyricsFetcher.isSettled(candidate(.appleMusicCache, timing), pending: services, query: query, options: options))
-            }
+            // Nothing can rank above Music's own word-by-word timing.
+            XCTAssertTrue(LyricsFetcher.isSettled(candidate(.appleMusicCache, .word), pending: services, query: query, options: options))
+            // Its mixed timing still waits for sources that could have word-by-word.
+            XCTAssertFalse(LyricsFetcher.isSettled(candidate(.appleMusicCache, .mixed), pending: services, query: query, options: options))
+            XCTAssertTrue(LyricsFetcher.couldBeat(candidate(.appleMusicCache, .mixed), from: .netEase, query: query, options: options))
             // Only Music's own lyrics can rank above LRCLIB's.
             XCTAssertFalse(LyricsFetcher.isSettled(candidate(.lrclib, .word), pending: [.appleMusicCache], query: query, options: options))
-            XCTAssertTrue(LyricsFetcher.isSettled(candidate(.lrclib, .mixed), pending: services.subtracting([.lrclib, .lyricsPlus]), query: query, options: options))
+            XCTAssertTrue(LyricsFetcher.isSettled(candidate(.lrclib, .word), pending: services.subtracting([.lrclib, .lyricsPlus]), query: query, options: options))
+            XCTAssertTrue(LyricsFetcher.couldBeat(candidate(.lrclib, .mixed), from: .netEase, query: query, options: options))
             // Lyrics+ may relay Apple Music's lyrics, which rank as Apple Music's.
-            XCTAssertTrue(LyricsFetcher.couldBeat(candidate(.lrclib, .mixed), from: .lyricsPlus, query: query, options: options))
+            XCTAssertTrue(LyricsFetcher.couldBeat(candidate(.lrclib, .word), from: .lyricsPlus, query: query, options: options))
             // Music's line timing waits for every source that can have word timing.
             let ownLines = candidate(.appleMusicCache, .line)
             for source in [LyricSourceID.lrclib, .lyricsPlus, .netEase, .qqMusic, .kugou, .kuwo] {
@@ -269,11 +274,10 @@ final class LyricPriorityTests: XCTestCase {
         }
     }
 
-    func testOnlyMusicsWordOrMixedTimingMakesEveryServiceUnnecessary() {
+    func testOnlyMusicsWordByWordTimingMakesEveryServiceUnnecessary() {
         for options in modes(userOrder) {
-            for timing in [Timing.word, .mixed] {
-                XCTAssertFalse(LyricsFetcher.matters(.lrclib, best: candidate(.appleMusicCache, timing), onlineBest: nil, query: query, options: options))
-            }
+            XCTAssertFalse(LyricsFetcher.matters(.lrclib, best: candidate(.appleMusicCache, .word), onlineBest: nil, query: query, options: options))
+            XCTAssertTrue(LyricsFetcher.matters(.lrclib, best: candidate(.appleMusicCache, .mixed), onlineBest: nil, query: query, options: options))
             let ownLines = candidate(.appleMusicCache, .line)
             for source in [LyricSourceID.lrclib, .netEase] {
                 XCTAssertTrue(LyricsFetcher.matters(source, best: ownLines, onlineBest: nil, query: query, options: options), "\(source)")
@@ -411,18 +415,34 @@ final class LyricPriorityTests: XCTestCase {
         }
     }
 
-    func testMusicsWordOrMixedTimingNeedsNoService() async {
+    func testMusicsWordByWordTimingNeedsNoService() async {
         for options in modes(userOrder) {
-            for timing in [Timing.word, .mixed] {
-                let log = Log()
-                let stub = stub([.appleMusicCache: candidate(.appleMusicCache, timing), .lrclib: candidate(.lrclib, .word)], log: log)
-                let report = await stub.fetcher.lookup(query, options: options)
-                XCTAssertEqual(source(of: report.result), music, "\(options.mode)")
-                XCTAssertEqual(report.revision, 1, "\(options.mode)")
-                XCTAssertEqual(report.states[.lrclib], LyricsFetcher.notNeeded + "Music’s own lyrics are showing", "\(options.mode)")
-                let asked = await log.calls
-                XCTAssertEqual(asked, [.appleMusicCache], "\(options.mode)")
-            }
+            let log = Log()
+            let stub = stub([.appleMusicCache: candidate(.appleMusicCache, .word), .lrclib: candidate(.lrclib, .word)], log: log)
+            let report = await stub.fetcher.lookup(query, options: options)
+            XCTAssertEqual(source(of: report.result), music, "\(options.mode)")
+            XCTAssertEqual(report.revision, 1, "\(options.mode)")
+            XCTAssertEqual(report.states[.lrclib], LyricsFetcher.notNeeded + "Music’s own lyrics are showing", "\(options.mode)")
+            let asked = await log.calls
+            XCTAssertEqual(asked, [.appleMusicCache], "\(options.mode)")
+        }
+    }
+
+    func testWordByWordFromAServiceReplacesMusicsMixedTiming() async {
+        for options in modes(userOrder) {
+            let stub = stub([.appleMusicCache: candidate(.appleMusicCache, .mixed), .lrclib: candidate(.lrclib, .word)], log: Log())
+            let report = await stub.fetcher.lookup(query, options: options)
+            XCTAssertEqual(source(of: report.result), lrclib, "\(options.mode)")
+        }
+    }
+
+    func testMusicsMixedTimingStaysWhenNoServiceHasWordByWord() async {
+        for options in modes(userOrder) {
+            let stub = stub([.appleMusicCache: candidate(.appleMusicCache, .mixed), .lrclib: candidate(.lrclib, .mixed),
+                             .netEase: candidate(.netEase, .line)], log: Log())
+            let report = await stub.fetcher.lookup(query, options: options)
+            XCTAssertEqual(source(of: report.result), music, "\(options.mode)")
+            XCTAssertEqual(report.revision, 1, "\(options.mode)")
         }
     }
 
@@ -455,7 +475,7 @@ final class LyricPriorityTests: XCTestCase {
         for options in modes(userOrder) {
             let log = Log(), never = Gate()
             let stub = stub([.lrclib: candidate(.lrclib, .word)], gates: Dictionary(uniqueKeysWithValues: others.map { ($0, never) }),
-                            log: log, musicLater: candidate(.appleMusicCache, .mixed))
+                            log: log, musicLater: candidate(.appleMusicCache, .word))
             let report = await stub.fetcher.lookup(query, options: options) { await log.update($0) }
             let first = await log.shown(1)
             XCTAssertEqual(source(of: first?.result), lrclib, "\(options.mode)")
@@ -502,8 +522,8 @@ final class LyricPriorityTests: XCTestCase {
     func testTimingAndSourcesStatesTheOrderInTheLabelsItShows() {
         XCTAssertEqual(music, AppleMusicCachedLyrics.sourceName)
         let text = LyricSourceOptions.ranking
-        // Word and mixed timing, Music, LRCLIB, the rest, then line timing -- in that order.
-        let labels = ["Word-by-word", "Mixed timing", music, lrclib, "your other sources", "Line-synced"]
+        // Timing first (word, mixed, line), then Music, LRCLIB and the rest -- in that order.
+        let labels = ["Word-by-word", "Mixed timing", "Line-synced", music, lrclib, "your other sources"]
         let positions = labels.compactMap { text.range(of: $0)?.lowerBound }
         XCTAssertEqual(positions.count, labels.count, text)
         XCTAssertEqual(positions, positions.sorted(), text)
