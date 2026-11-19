@@ -169,14 +169,16 @@ struct LyricPhraseTiming {
 
     /// `heldUntil`: a carrying stage line held until its hand-over to the
     /// next line (`StageCarry.heldUntil`); it leaves no earlier than that.
-    init(line: LyricsFetcher.Line, nextStart: Double, time: Double, heldUntil: Double? = nil) {
+    /// `leavesBy`: the latest the line may start to leave, whatever else it
+    /// is held for (`LyricLayer.stageClearance`).
+    init(line: LyricsFetcher.Line, nextStart: Double, time: Double, heldUntil: Double? = nil, leavesBy: Double? = nil) {
         let duration = max(0, min(line.end, nextStart) - line.start)
         let attack = line.wordTimed ? 0.22 : min(0.32, max(0.12, duration * 0.18))
         progress = vc_settle(time - line.start, attack)
         let seed = Self.timeSeed(line.start) ^ 0x51ED_C0DE
         arrival = vc_spring_step(time - line.start,
             VCSpring(omega: 3.36 / max(0.14, attack * 1.6), zeta: 0.82 + 0.06 * vc_jitter(seed, 1)))
-        exitStart = Self.exitStart(of: line, nextStart: nextStart, heldUntil: heldUntil)
+        exitStart = min(Self.exitStart(of: line, nextStart: nextStart, heldUntil: heldUntil), leavesBy ?? .infinity)
         exit = vc_settle(time - exitStart, Self.exitDuration)
     }
 
