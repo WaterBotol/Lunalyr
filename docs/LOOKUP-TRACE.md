@@ -107,7 +107,7 @@ A `candidate` (in `candidate`, `ranked` and `rejected`) carries:
 | `titleSimilarity`, `artistSimilarity` | 0…1 against the query (`LyricQuery.similarity`). |
 | `durationDelta` | Its length minus the query's, in seconds. |
 | `confidence` | Name closeness plus length fit, the Accuracy-first tie-break. |
-| `timing`, `timingFault`, `rankedTiming` | The timing tier, what is wrong with it, and how ranking counts it (2 word or mixed, 1 line, 0 plain). |
+| `timing`, `timingFault`, `rankedTiming` | The timing tier, what is wrong with it, and how ranking counts it (3 word, 2 mixed, 1 line, 0 plain). |
 | `versionTags`, `versionMismatch` | Version qualifiers in its title (live, remix, english…) and those that differ from the playing song's. |
 | `script`, `languageMismatch` | The script of its lyrics (latin, native, mixed) and whether that makes it another language's version. |
 | `lead` | Its place ahead of the source order at its timing: 0 Music's own, 1 Apple's lyrics via Lyrics+, 2 LRCLIB word timing, 3 any other, 4 LRCLIB whose timing the others disagree with. |
@@ -116,8 +116,8 @@ A `candidate` (in `candidate`, `ranked` and `rejected`) carries:
 | `viaOriginalTitle`, `appleRelay`, `provenance`, `lines`, `firstLine` | How it was found, whether Lyrics+ relayed Apple's lyrics, its label, its size and its first sung line. |
 
 Ranking, in order: timed before plain text; sound timing before faulty; the
-playing version before another version or language; word and mixed timing
-before line timing; then `lead`; then, in Accuracy first, `agreement.peers`
+playing version before another version or language; word-by-word before
+mixed timing before line timing; then `lead` (within the same timing only); then, in Accuracy first, `agreement.peers`
 (up to 2) and `confidence`; then the source order.
 
 ## Useful queries

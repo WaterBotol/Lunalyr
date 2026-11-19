@@ -239,7 +239,7 @@ final class LyricsFetcher {
     /// on timing, version or lead alone, before any tie-break (`couldBeat`).
     static func couldOutlead(_ best: LyricCandidate, from source: LyricSourceID, query: LyricQuery) -> Bool {
         guard source != best.source else { return false }
-        let timing = rankedTiming(best.result), ceiling = min(source.timingCeiling, 2)
+        let timing = rankedTiming(best.result), ceiling = source.timingCeiling
         if (ceiling > 0) != (timing > 0) { return ceiling > 0 }
         if timing > 0, !fitsVersion(best, query) { return true }
         if ceiling != timing { return ceiling > timing }
@@ -439,9 +439,10 @@ final class LyricsFetcher {
     /// upgrade waiting for a better match has been made.
     static func matters(_ source: LyricSourceID, best: LyricCandidate, onlineBest: LyricCandidate?,
                         query: LyricQuery, options: LyricSourceOptions.Snapshot, among found: [LyricCandidate] = []) -> Bool {
-        // Nothing outranks Music's own word-by-word or mixed timing, and a
-        // replay reads Music's cache again, so no service is needed at all.
-        if best.source == .appleMusicCache, rankedTiming(best.result) == 2 { return false }
+        // Nothing outranks Music's own word-by-word timing, and a replay
+        // reads Music's cache again, so no service is needed at all. Its
+        // mixed timing still loses to another source's word-by-word.
+        if best.source == .appleMusicCache, rankedTiming(best.result) == 3 { return false }
         if couldBeat(best, from: source, query: query, options: options) { return true }
         if couldDemote(best, from: source, among: found, query: query) { return true }
         if couldLendTiming(best, from: source, among: found, query: query, options: options) { return true }
@@ -458,7 +459,7 @@ final class LyricsFetcher {
     static func couldDemote(_ best: LyricCandidate, from source: LyricSourceID, among found: [LyricCandidate],
                             query: LyricQuery) -> Bool {
         if couldShift(best, from: source, among: found, query: query) { return true }
-        guard best.source == .lrclib, source != .lrclib, source.timingCeiling >= 1, rankedTiming(best.result) == 2,
+        guard best.source == .lrclib, source != .lrclib, source.timingCeiling >= 1, rankedTiming(best.result) >= 2,
               !best.agreement.timingOutlier, fitsVersion(best, query) else { return false }
         let others = found.filter { $0.source != .lrclib && fitsVersion($0, query) }
         let text = agreementText(best), timing = agreementTiming(best)
@@ -467,7 +468,7 @@ final class LyricsFetcher {
             return !theirs.isEmpty && sameWords(text, agreementText(other)) && timingAgrees(timing, theirs)
         }
         guard !backed else { return false }
-        let rival = others.contains { rankedTiming($0.result) == 2 && !hasTimingFault($0.result) }
+        let rival = others.contains { rankedTiming($0.result) >= 2 && !hasTimingFault($0.result) }
         return rival || source.timingCeiling >= 2
     }
     /// Whether `source`'s word timing could still be merged into line-timed
@@ -477,8 +478,9 @@ final class LyricsFetcher {
     static func couldLendTiming(_ best: LyricCandidate, from source: LyricSourceID, among found: [LyricCandidate],
                                 query: LyricQuery, options: LyricSourceOptions.Snapshot) -> Bool {
         // Below word timing, `couldBeat` already keeps every word-capable source.
-        guard source.timingCeiling >= 2, rankedTiming(best.result) == 2 else { return false }
-        let bestLead = lead(best, timing: 2)
+        let timing = rankedTiming(best.result)
+        guard source.timingCeiling >= 2, timing >= 2 else { return false }
+        let bestLead = lead(best, timing: timing)
         return found.contains { $0.source != source && isMergeRecipient($0, query: query) && lead($0, timing: 2) < bestLead }
     }
     /// Whether `source`'s answer could show the timing on screen to be
@@ -607,11 +609,12 @@ final class LyricsFetcher {
     /// Whether `a` ranks above `b`. Timed lyrics rank above plain text, and
     /// among timed lyrics a match for the playing version ranks above one
     /// for another version (Live, Remix, Acoustic…: `VersionTags`), whose
-    /// timing will not fit. Then word-by-word and mixed timing rank
-    /// together, first: Music's own lyrics, then LRCLIB's, then the other
-    /// sources'. Line timing is next, Music's own first, then plain text.
-    /// Beyond those leads, sources follow the configured order, which in
-    /// Accuracy first comes after a closer title and artist match.
+    /// timing will not fit. Then timing decides: word-by-word, then mixed,
+    /// then line timing, then plain text. A source's lead (`lead`: Music's
+    /// own lyrics, Apple Music's via Lyrics+, Musixmatch, LRCLIB) only
+    /// counts between matches with the same timing (the owner, 20 Nov
+    /// 2026). Beyond those leads, sources follow the configured order,
+    /// which in Accuracy first comes after a closer title and artist match.
     static func outranks(_ a: LyricCandidate, _ b: LyricCandidate, query: LyricQuery,
                          options: LyricSourceOptions.Snapshot) -> Bool {
         let timing = rankedTiming(a.result), other = rankedTiming(b.result)
@@ -623,12 +626,6 @@ final class LyricsFetcher {
         let fits = fitsVersion(a, query), otherFits = fitsVersion(b, query)
         if fits != otherFits { return fits }
         if timing != other { return timing > other }
-        // Mixed timing with few word-timed lines loses to timing that is
-        // word by word nearly throughout, whatever the source's lead.
-        if timing == 2 {
-            let full = isMostlyWordTimed(a.result), otherFull = isMostlyWordTimed(b.result)
-            if full != otherFull { return full }
-        }
         let lead = Self.lead(a, timing: timing), otherLead = Self.lead(b, timing: timing)
         if lead != otherLead { return lead < otherLead }
         if options.mode == .smart {
@@ -668,27 +665,28 @@ final class LyricsFetcher {
     static func fitsVersion(_ candidate: LyricCandidate, _ query: LyricQuery) -> Bool {
         !candidate.languageMismatch && VersionTags.mismatch(query, title: candidate.title).isEmpty
     }
-    /// The timing matches are ranked by: 2 for word-by-word or mixed timing,
-    /// which rank together, 1 for line timing and 0 for plain text. Word
+    /// The timing matches are ranked by: 3 for word-by-word, 2 for mixed
+    /// timing, 1 for line timing and 0 for plain text. Word
     /// stamps a tool spread over each line (`hasEvenlySpreadWordTiming`)
     /// rank as the line timing they are; `couldBeat` and `matters` weigh
     /// the same tier.
     static func rankedTiming(_ result: Result) -> Int {
-        let tier = min(timingTier(result), 2)
-        return tier == 2 && hasEvenlySpreadWordTiming(result) ? 1 : tier
+        let tier = timingTier(result)
+        return tier >= 2 && hasEvenlySpreadWordTiming(result) ? 1 : tier
     }
     /// Where a source stands ahead of the configured order at a ranked
     /// timing, at best: Music's own cache leads timed lyrics, then Apple
     /// Music's lyrics relayed by Lyrics+ (`isAppleRelay`; Music's own is the
     /// exact track, so it wins a tie), then Musixmatch, and LRCLIB follows
     /// them only with word-by-word or mixed timing. Every other source is 4.
-    /// (The user's order, 16 Nov 2026: Apple Music > Musixmatch > LRCLIB.)
+    /// (The user's order, 16 Nov 2026: Apple Music > Musixmatch > LRCLIB,
+    /// within each timing tier.)
     private static func lead(_ source: LyricSourceID, timing: Int) -> Int {
         switch source {
         case .appleMusicCache where timing >= 1: return 0
         case .lyricsPlus where timing >= 1: return 1
         case .musixmatch where timing >= 1: return 2
-        case .lrclib where timing == 2: return 3
+        case .lrclib where timing >= 2: return 3
         default: return 4
         }
     }
@@ -826,11 +824,11 @@ final class LyricsFetcher {
         }
     }
     /// Whether the best result a source could still return would rank above
-    /// `best`. Nothing ranks above Music's own word-by-word or mixed timing.
+    /// `best`. Nothing ranks above Music's own word-by-word timing.
     static func couldBeat(_ best: LyricCandidate, from source: LyricSourceID, query: LyricQuery,
                           options: LyricSourceOptions.Snapshot) -> Bool {
         guard source != best.source else { return false }
-        let timing = rankedTiming(best.result), ceiling = min(source.timingCeiling, 2)
+        let timing = rankedTiming(best.result), ceiling = source.timingCeiling
         if (ceiling > 0) != (timing > 0) { return ceiling > 0 }
         // Another version's timed lyrics: any timed source could still find the playing one.
         if timing > 0, !fitsVersion(best, query) { return true }
@@ -992,24 +990,6 @@ final class LyricsFetcher {
         let vocal = lines.filter { !$0.isInstrumental }
         return !vocal.isEmpty && vocal.allSatisfy { validWordTiming($0) } && hasWordTimingEvidence(vocal)
     }
-    /// The share of sung lines with real word timing at which Mixed timing
-    /// still ranks with word-by-word ahead of the sources' leads (the
-    /// owner's call, 17 Nov 2026): below it, a source timed word by word
-    /// nearly throughout wins, as Kugou's would over Apple's mostly line-timed lyrics.
-    static let fullWordTimingShare = 0.8
-
-    /// The share of sung lines with real word timing, 0...1.
-    static func wordTimedShare(_ lines: [Line]) -> Double {
-        let vocal = lines.filter { !$0.isInstrumental }
-        guard !vocal.isEmpty else { return 0 }
-        return Double(vocal.filter { validWordTiming($0) }.count) / Double(vocal.count)
-    }
-
-    static func isMostlyWordTimed(_ result: Result) -> Bool {
-        guard case .synced(let lines, _) = result else { return false }
-        return wordTimedShare(lines) >= fullWordTimingShare
-    }
-
     static func precision(_ lines: [Line]) -> String {
         let vocal = lines.filter { !$0.isInstrumental }
         // Real word timing must be there to show (`hasWordTimingEvidence`).

@@ -242,7 +242,7 @@ struct LyricTraceCandidate: Codable, Sendable {
     /// word, mixed, line, phrase-timed, plain, or faulty (`timingFault`).
     var timing: String
     var timingFault: String?
-    /// 2 word or mixed, 1 line, 0 plain (`LyricsFetcher.rankedTiming`).
+    /// 3 word, 2 mixed, 1 line, 0 plain (`LyricsFetcher.rankedTiming`).
     var rankedTiming: Int
     var titleSimilarity: Double
     var artistSimilarity: Double

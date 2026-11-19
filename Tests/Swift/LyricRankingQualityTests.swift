@@ -82,7 +82,7 @@ final class LyricRankingQualityTests: XCTestCase {
             let result = LyricsFetcher.Result.synced(lines, .init(precision: "", source: name))
             XCTAssertEqual(LyricsFetcher.timingTier(result) >= 2, true, "\(name) parses as word timing")
             XCTAssertFalse(LyricsFetcher.hasEvenlySpreadWordTiming(lines), name)
-            XCTAssertEqual(LyricsFetcher.rankedTiming(result), 2, name)
+            XCTAssertEqual(LyricsFetcher.rankedTiming(result), LyricsFetcher.timingTier(result), name)
         }
     }
 
@@ -218,9 +218,12 @@ final class LyricRankingQualityTests: XCTestCase {
     /// QQ's word-timed lines (the donor), and Musixmatch's text for them, timed
     /// by the line 0.1 s later: lower-cased from line 3, punctuation dropped
     /// from line 5, an ad-lib "(oh)" on line 4, different words on line 6,
-    /// and a translation on line 2.
+    /// and a translation on line 2. QQ times line 6 by the line only, so
+    /// both are Mixed timing and Musixmatch's lead decides: a merge never
+    /// beats a donor with better timing (`testAMixedMergeLosesToWordByWord`).
     func mergePair() -> (donor: LyricCandidate, recipient: LyricCandidate, donorLines: [Line], recipientLines: [Line]) {
-        let donorLines = Self.lines(LyricRankingFixtures.qrcLatin)
+        var donorLines = Self.lines(LyricRankingFixtures.qrcLatin)
+        donorLines[6] = LyricsFetcher.makeLine(text: donorLines[6].text, start: donorLines[6].start, end: donorLines[6].end)
         var recipientLines: [Line] = donorLines.enumerated().map { index, line in
             var text = line.text
             if index >= 3 { text = text.lowercased() }
@@ -266,6 +269,21 @@ final class LyricRankingQualityTests: XCTestCase {
         }
     }
 
+    /// The owner's rule (20 Nov 2026): a source's lead counts only within the
+    /// same timing. Musixmatch's text merged with QQ's word timing comes out
+    /// Mixed (line 6's words differ), so QQ's own word-by-word wins.
+    func testAMixedMergeLosesToWordByWord() throws {
+        let pair = mergePair()
+        let full = candidate(.qqMusic, Self.lines(LyricRankingFixtures.qrcLatin), provenance: "QQ Music")
+        for mode in LyricSourceOptions.Mode.allCases {
+            let top = try XCTUnwrap(LyricsFetcher.screen([full, pair.recipient], query: query,
+                                                         options: options([.musixmatch, .qqMusic], mode)).accepted.first)
+            XCTAssertEqual(top.source, .qqMusic, "\(mode)")
+            XCTAssertNil(LyricsFetcher.timingDonor(top), "\(mode)")
+            XCTAssertEqual(LyricsFetcher.rankedTiming(top.result), 3, "\(mode)")
+        }
+    }
+
     func testAnAdLibKeepsItsBracketsForBackingVocals() throws {
         let pair = mergePair()
         let top = try XCTUnwrap(LyricsFetcher.screen([pair.donor, pair.recipient], query: query, options: options([.musixmatch, .qqMusic])).accepted.first)
@@ -300,7 +318,8 @@ final class LyricRankingQualityTests: XCTestCase {
                                           query: query, options: options([.appleMusicCache, .kugou])).accepted
         XCTAssertEqual(ranked.first?.source, .appleMusicCache)
         XCTAssertEqual(LyricsFetcher.timingDonor(ranked[0]), "Kugou Music")
-        XCTAssertEqual(LyricsFetcher.rankedTiming(ranked[0].result), 2)
+        // Every line took Kugou's timing: word by word, as Kugou's own.
+        XCTAssertEqual(LyricsFetcher.rankedTiming(ranked[0].result), 3)
     }
 
     /// Readings are laid onto a merged line's words, and a credit row is
@@ -401,7 +420,8 @@ final class LyricRankingQualityTests: XCTestCase {
         let unrelated = pair.recipientLines.enumerated().map { index, line in
             LyricsFetcher.makeLine(text: index % 2 == 0 ? line.text : "Different words for line \(index) here", start: line.start, end: line.end)
         }
-        var found = LyricsFetcher.screen([pair.donor, candidate(.musixmatch, unrelated)], query: query, options: options).accepted
+        let full = candidate(.qqMusic, Self.lines(LyricRankingFixtures.qrcLatin), provenance: "QQ Music")
+        var found = LyricsFetcher.screen([full, candidate(.musixmatch, unrelated)], query: query, options: options).accepted
         let qq = try XCTUnwrap(found.first)
         XCTAssertEqual(qq.source, .qqMusic)
         // Kugou cannot beat QQ, but its word timing might still pair with Musixmatch's text; VIBE has none.
@@ -409,12 +429,13 @@ final class LyricRankingQualityTests: XCTestCase {
         XCTAssertTrue(LyricsFetcher.matters(.kugou, best: qq, onlineBest: qq, query: query, options: options, among: found))
         XCTAssertFalse(LyricsFetcher.isSettled(qq, pending: [.kugou], query: query, options: options, among: found))
         XCTAssertFalse(LyricsFetcher.matters(.vibe, best: qq, onlineBest: qq, query: query, options: options, among: found))
-        // Once merged, Musixmatch leads and Kugou is not needed.
+        // Once merged, Musixmatch leads Mixed timing; Kugou is still asked,
+        // as its word-by-word would rank above any Mixed timing. VIBE is not.
         found = LyricsFetcher.screen([pair.donor, pair.recipient], query: query, options: options).accepted
         let merged = try XCTUnwrap(found.first)
         XCTAssertEqual(merged.source, .musixmatch)
-        XCTAssertFalse(LyricsFetcher.matters(.kugou, best: merged, onlineBest: merged, query: query, options: options, among: found))
-        XCTAssertTrue(LyricsFetcher.isSettled(merged, pending: [.kugou], query: query, options: options, among: found))
+        XCTAssertTrue(LyricsFetcher.matters(.kugou, best: merged, onlineBest: merged, query: query, options: options, among: found))
+        XCTAssertTrue(LyricsFetcher.isSettled(merged, pending: [.vibe], query: query, options: options, among: found))
     }
 
     func testTheMergeReplacesTheSameSourceOnScreen() throws {

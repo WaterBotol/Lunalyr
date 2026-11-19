@@ -78,8 +78,9 @@ final class LyricSourceOptions: ObservableObject {
     static var ranking: String {
         let music = LyricSourceID.appleMusicCache.title, lrclib = LyricSourceID.lrclib.title
         let musixmatch = LyricSourceID.musixmatch.title
-        return "Word-by-word and Mixed timing lyrics come first: \(music), then Apple Music’s lyrics from Lyrics+, then \(musixmatch), then \(lrclib), then your other sources. "
-            + "Line-synced lyrics come next, again with \(music) first, then Apple Music’s from Lyrics+, then \(musixmatch)."
+        return "Better timing always comes first: Word-by-word, then Mixed timing, then Line-synced lyrics. "
+            + "Among Word-by-word or Mixed timing lyrics, \(music) comes first, then Apple Music’s lyrics from Lyrics+, then \(musixmatch), then \(lrclib), then your other sources. "
+            + "Among Line-synced lyrics, \(music) comes first, then Apple Music’s from Lyrics+, then \(musixmatch)."
             + " Timed lyrics for another version of the song (Live, Remix, Acoustic, English Version…), or in another language than the song’s, come after timed lyrics for the version playing."
     }
     /// What a lookup asks and ranks by. Timing, and the lead of Music's own
@@ -95,8 +96,10 @@ final class LyricSourceOptions: ObservableObject {
         /// Bump when matching, ranking or parsing changes, so automatic
         /// choices made under the old rules are looked up again. Saved
         /// explicit choices are keyed separately and are unaffected.
+        /// v19: Mixed timing ranks below every source's word-by-word timing;
+        /// a source's lead only counts within the same timing tier.
         /// v18: Mixed timing with under 80% of lines word-timed ranks below
-        /// word-by-word timing (`LyricsFetcher.fullWordTimingShare`).
+        /// word-by-word timing.
         /// v7: Music's own lyrics and LRCLIB lead word and mixed timing.
         /// v8: Lyrics+ keeps each syllable of an unspaced (Japanese,
         /// Chinese, Thai) line, which it had joined into one word.
@@ -118,7 +121,7 @@ final class LyricSourceOptions: ObservableObject {
         /// v17: word stamps spread evenly rank as line timing, a timeline
         /// shifted to another recording ranks lower, and the leading text
         /// timed by the line takes another match's word timing.
-        static let cachePolicy = "v18"
+        static let cachePolicy = "v19"
         /// Keys the cached online choice. Only settings that change which
         /// online result wins take part: local sources are always evaluated
         /// afresh.
