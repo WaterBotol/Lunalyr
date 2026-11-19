@@ -154,6 +154,52 @@ final class MusicVideoMatchTests: XCTestCase {
         XCTAssertNil(MusicVideoCache(defaults: defaults).lookup("song", now: now), "a pick from before the exact match")
     }
 
+    /// A version's plain title is searched and matched too (the owner,
+    /// 20 Nov 2026): "Feel So Close - Radio Edit" plays the song's video.
+    func testARadioEditFindsTheSongsOwnVideo() {
+        XCTAssertEqual(MusicVideoTitleMatch.titleVersions("Feel So Close - Radio Edit"), ["Feel So Close - Radio Edit", "Feel So Close"])
+        XCTAssertEqual(MusicVideoTitleMatch.titleVersions("Summer - Extended Mix").last, "Summer")
+        XCTAssertEqual(MusicVideoTitleMatch.titleVersions("Let It Be - Remastered 2009"), ["Let It Be - Remastered 2009"],
+                       "the same key already: nothing more to search")
+        let video = Result(videoID: "AAAAAAAAAAA", title: "Calvin Harris - Feel So Close (Official Video)",
+                           channel: "CalvinHarrisVEVO")
+        XCTAssertEqual(pick([video], title: "Feel So Close - Radio Edit", artist: "Calvin Harris"), "AAAAAAAAAAA")
+        // A video naming the version itself comes first.
+        let edit = Result(videoID: "BBBBBBBBBBB", title: "Calvin Harris - Feel So Close - Radio Edit (Official Video)",
+                          channel: "CalvinHarrisVEVO")
+        XCTAssertEqual(pick([video, edit], title: "Feel So Close - Radio Edit", artist: "Calvin Harris"), "BBBBBBBBBBB")
+        // The library too.
+        let song = MusicVideoSong(title: "Feel So Close - Radio Edit", artist: "Calvin Harris", duration: 205)
+        let hit = AppleMusicVideoLibrary.Hit(title: "Feel So Close", artist: "Calvin Harris", path: "/close.m4v")
+        XCTAssertEqual(AppleMusicVideoLibrary.pick([hit], for: song), URL(fileURLWithPath: "/close.m4v"))
+    }
+
+    /// A version with a recording of its own never takes the plain title's video.
+    func testLiveAcousticRemixAndLanguageVersionsKeepTheirOwnTitle() {
+        for title in ["Feel So Close - Live", "Feel So Close - Acoustic", "Feel So Close - Tiësto Remix",
+                      "Feel So Close - Sped Up", "Feel So Close - English Version"] {
+            XCTAssertEqual(MusicVideoTitleMatch.titleVersions(title), [title], title)
+            let video = Result(videoID: "AAAAAAAAAAA", title: "Calvin Harris - Feel So Close (Official Video)",
+                               channel: "CalvinHarrisVEVO")
+            XCTAssertNil(pick([video], title: title, artist: "Calvin Harris"), title)
+        }
+        // A title that is only its own words is searched once.
+        XCTAssertEqual(MusicVideoTitleMatch.titleVersions("Radio"), ["Radio"])
+        XCTAssertEqual(MusicVideoTitleMatch.titleVersions("Clean"), ["Clean"])
+    }
+
+    func testMissesFromBeforeThePlainTitleSearchAreLookedUpAgain() {
+        let name = "LunalyrTests.MusicVideoMatch.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: name)!
+        defer { defaults.removePersistentDomain(forName: name) }
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        defaults.set(["old": ["at": now.timeIntervalSince1970, "miss": "none"]], forKey: MusicVideoCache.key)
+        let cache = MusicVideoCache(defaults: defaults)
+        XCTAssertNil(cache.lookup("old", now: now), "a miss from before plain titles were searched")
+        cache.store(.missing(.notFound), for: "new", now: now)
+        XCTAssertEqual(cache.lookup("new", now: now), .missing(.notFound))
+    }
+
     // MARK: Embed page
 
     func testEmbedShowsOnlyTheVideo() {

@@ -151,7 +151,9 @@ enum YouTubeSearchPage {
 
     /// Candidate official videos among `results`, best first. Each must:
     /// - be this song: its title, artist and qualifiers taken off, equals
-    ///   the song title (`MusicVideoTitleMatch`), not merely contains it;
+    ///   the song title (`MusicVideoTitleMatch`), not merely contains it,
+    ///   or its plain title ("Feel So Close" for "Feel So Close - Radio
+    ///   Edit": `MusicVideoTitleMatch.titleVersions`), which ranks after;
     /// - come from the artist: the channel is the artist's own (its name
     ///   is or contains the artist's), a VEVO channel, or carries YouTube's
     ///   verified-artist badge; never an auto-generated "- Topic" channel;
@@ -166,12 +168,13 @@ enum YouTubeSearchPage {
         let song = LyricQuery.normalize(title)
         let singers = MusicVideoTitleMatch.artistParts(artist)
         guard !song.isEmpty, !singers.isEmpty else { return [] }
-        var ranked: [(result: Result, score: Int, sameLength: Bool, index: Int)] = []
+        var ranked: [(result: Result, score: Int, sameLength: Bool, version: Int, index: Int)] = []
         for (index, result) in results.prefix(12).enumerated() {
             let name = LyricQuery.normalize(result.title)
             let channel = LyricQuery.normalize(result.channel)
             let channelKey = CoverLookup.normal(result.channel)
-            guard MusicVideoTitleMatch.matches(videoTitle: result.title, songTitle: title, artist: artist) else { continue }
+            guard let version = MusicVideoTitleMatch.matchedVersion(videoTitle: result.title, songTitle: title,
+                                                                    artist: artist) else { continue }
             guard !channel.hasSuffix(" topic") else { continue }
             let ownChannel = singers.contains { Self.channel(channelKey, isOf: $0) }
             let vevo = channelKey.hasSuffix("vevo")
@@ -187,10 +190,11 @@ enum YouTubeSearchPage {
             let sameLength = namedAsVideo && songDuration.map { song in
                 song > 0 && result.duration.map { abs($0 - song) <= lengthMatch } == true
             } == true
-            ranked.append((result, score, sameLength, index))
+            ranked.append((result, score, sameLength, version, index))
         }
         return ranked.sorted {
             if $0.sameLength != $1.sameLength { return $0.sameLength }
+            if $0.version != $1.version { return $0.version < $1.version }
             return $0.score != $1.score ? $0.score > $1.score : $0.index < $1.index
         }.map(\.result)
     }

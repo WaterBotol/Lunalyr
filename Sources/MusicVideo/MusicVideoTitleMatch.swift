@@ -20,6 +20,37 @@ enum MusicVideoTitleMatch {
         "lyrics", "new", "single", "premiere",
     ]
 
+    /// The song's titles to look for, best first: as the player names it,
+    /// then its plain title without the version part ("Feel So Close -
+    /// Radio Edit" → "Feel So Close"), whose official video is usually the
+    /// one an edit or an extended cut shares. Not for a version with a
+    /// recording of its own (live, acoustic, remix, sped up, a language
+    /// version: `VersionTags`): its video, if any, names it.
+    static func titleVersions(_ title: String) -> [String] {
+        let plain = plainTitle(title)
+        guard !plain.isEmpty, songKey(plain) != songKey(title),
+              VersionTags.tags(title).isSubset(of: sharedVideoTags) else { return [title] }
+        return [title, plain]
+    }
+
+    /// Version tags whose song shares the plain title's video.
+    static let sharedVideoTags: Set<String> = ["edit", "extended"]
+
+    /// The title without brackets or anything after its first " - ".
+    static func plainTitle(_ title: String) -> String {
+        var plain = stripBrackets(title)
+        if let dash = plain.range(of: #"\s[-–—]\s"#, options: .regularExpression) {
+            plain = String(plain[..<dash.lowerBound])
+        }
+        return plain.trimmingCharacters(in: .whitespaces)
+    }
+
+    /// Which of the song's titles (`titleVersions`) a video names: 0 for
+    /// the title as given, 1 for its plain title, nil for neither.
+    static func matchedVersion(videoTitle: String, songTitle: String, artist: String) -> Int? {
+        titleVersions(songTitle).firstIndex { matches(videoTitle: videoTitle, songTitle: $0, artist: artist) }
+    }
+
     /// The song title as compared: brackets, "feat." credits and qualifier
     /// segments removed, then `CoverLookup.normal`.
     static func songKey(_ title: String) -> String {

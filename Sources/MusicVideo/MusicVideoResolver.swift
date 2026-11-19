@@ -40,6 +40,10 @@ final class MusicVideoCache {
     /// the still-image check, 3 the exact song-title match (older picks
     /// included live and fan uploads and other songs by the artist).
     static let version = 3
+    /// "Nothing official" stored before 4 is looked up again: 4 also
+    /// searches a version's plain title ("Feel So Close" for "Feel So
+    /// Close - Radio Edit", `MusicVideoTitleMatch.titleVersions`).
+    static let missVersion = 4
 
     private let defaults: UserDefaults
     private var entries: [String: [String: Any]]
@@ -78,7 +82,7 @@ final class MusicVideoCache {
             let checked = (entry["v"] as? Int ?? 1) >= Self.version
             return checked && age < Self.foundLifetime ? .found(.youTube(id)) : nil
         }
-        guard age < Self.missingLifetime else { return nil }
+        guard age < Self.missingLifetime, (entry["v"] as? Int ?? 1) >= Self.missVersion else { return nil }
         return .missing(entry["miss"] as? String == "embed" ? .notEmbeddable : .notFound)
     }
 
@@ -87,8 +91,8 @@ final class MusicVideoCache {
         var entry: [String: Any] = ["at": now.timeIntervalSince1970]
         switch resolution {
         case .found(.youTube(let id)): entry["video"] = id; entry["v"] = Self.version
-        case .missing(.notEmbeddable): entry["miss"] = "embed"
-        default: entry["miss"] = "none"
+        case .missing(.notEmbeddable): entry["miss"] = "embed"; entry["v"] = Self.missVersion
+        default: entry["miss"] = "none"; entry["v"] = Self.missVersion
         }
         entries[songKey] = entry
         if entries.count > Self.capacity {
@@ -471,23 +475,28 @@ final class MusicVideoResolver {
     /// Candidates checked for being a still image, per song.
     static let candidatesChecked = 3
 
-    /// YouTube's results for "<artist> <title> official music video". A
-    /// page with no results at all is taken as YouTube having changed its
+    /// YouTube's results for "<artist> <title> official music video", then,
+    /// when nothing official is among them, for the song's plain title
+    /// (`MusicVideoTitleMatch.titleVersions`: "Feel So Close" for "Feel So
+    /// Close - Radio Edit"). A page with no results at all is taken as YouTube having changed its
     /// format (or asking for consent), not as "no video": it is not cached.
     /// The best candidates are checked in turn for being a still image (the
     /// cover over the audio); when the first three are all stills, the song
     /// has no video, remembered like "nothing official".
     private func searchYouTube(_ song: MusicVideoSong) async -> MusicVideoResolution {
         do {
-            guard let url = YouTubeSearchPage.requestURL(title: song.title, artist: song.artist) else {
-                return .missing(.lookupFailed)
-            }
-            let data = try await fetch(url)
-            // About a megabyte of HTML and JSON: read off the main actor.
-            let results = await parse(data)
-            guard !results.isEmpty else { return .missing(.lookupFailed) }
-            let found = YouTubeSearchPage.officialVideos(in: results, title: song.title, artist: song.artist,
+            var found: [YouTubeSearchPage.Result] = []
+            for title in MusicVideoTitleMatch.titleVersions(song.title) where found.isEmpty {
+                guard let url = YouTubeSearchPage.requestURL(title: title, artist: song.artist) else {
+                    return .missing(.lookupFailed)
+                }
+                let data = try await fetch(url)
+                // About a megabyte of HTML and JSON: read off the main actor.
+                let results = await parse(data)
+                guard !results.isEmpty else { return .missing(.lookupFailed) }
+                found = YouTubeSearchPage.officialVideos(in: results, title: song.title, artist: song.artist,
                                                          songDuration: song.duration)
+            }
             let skipped = refused[song.key] ?? []
             let candidates = found.filter { !skipped.contains($0.videoID) }
             // Every official video was refused by the player already.
