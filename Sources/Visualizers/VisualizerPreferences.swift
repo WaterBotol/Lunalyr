@@ -50,9 +50,8 @@ final class VisualizerPreferences: ObservableObject {
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         punch = Self.clampedPunch(defaults.object(forKey: Key.punch) as? Double ?? ShippedDefaults.visualizerPunch)
-        wavefieldColours = VisualizerSceneColours(rawValue: defaults.string(forKey: Key.wavefieldColours) ?? "")
-            ?? ShippedDefaults.wavefieldColours
-        wavecoreColours = VisualizerSceneColours(rawValue: defaults.string(forKey: Key.wavecoreColours) ?? "") ?? .album
+        wavefieldColours = Self.storedWavefieldColours(defaults)
+        wavecoreColours = Self.storedWavecoreColours(defaults)
         starTrailsColours = VisualizerSceneColours(rawValue: defaults.string(forKey: Key.starTrailsColours) ?? "") ?? .album
         heavyScenesOnMainDisplayOnly = defaults.object(forKey: Key.heavyScenesOnMainDisplay) as? Bool
             ?? ShippedDefaults.heavyScenesOnMainDisplayOnly
@@ -64,13 +63,25 @@ final class VisualizerPreferences: ObservableObject {
     /// simulation with them.
     static let lookKeys = [Key.wavefieldColours, Key.wavecoreColours]
 
-    /// Rereads the scene choices, after Settings moved to another monitor.
+    /// Rereads the scene choices, after Settings moved to another monitor,
+    /// as `init` reads them.
     func reload() {
-        func colours(_ key: String) -> VisualizerSceneColours {
-            VisualizerSceneColours(rawValue: defaults.string(forKey: key) ?? "") ?? .album
-        }
-        if wavefieldColours != colours(Key.wavefieldColours) { wavefieldColours = colours(Key.wavefieldColours) }
-        if wavecoreColours != colours(Key.wavecoreColours) { wavecoreColours = colours(Key.wavecoreColours) }
+        let wavefield = Self.storedWavefieldColours(defaults)
+        if wavefieldColours != wavefield { wavefieldColours = wavefield }
+        let wavecore = Self.storedWavecoreColours(defaults)
+        if wavecoreColours != wavecore { wavecoreColours = wavecore }
+    }
+
+    // One reader per value, shared by `init` and `reload`.
+
+    private static func storedWavefieldColours(_ defaults: UserDefaults) -> VisualizerSceneColours {
+        VisualizerSceneColours(rawValue: defaults.string(forKey: Key.wavefieldColours) ?? "")
+            ?? ShippedDefaults.wavefieldColours
+    }
+
+    /// Unchanged in November 2026: the album's colours.
+    private static func storedWavecoreColours(_ defaults: UserDefaults) -> VisualizerSceneColours {
+        VisualizerSceneColours(rawValue: defaults.string(forKey: Key.wavecoreColours) ?? "") ?? .album
     }
 
     /// Takes on the app's choices that no monitor keeps for itself.
