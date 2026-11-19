@@ -1087,6 +1087,12 @@ enum YouTubeEmbed {
           return {time: player.getCurrentTime(), state: player.getPlayerState(), duration: player.getDuration()};
         };
         window.lunalyrCaptionsDone = function () { captionsWanted = false; hideCaptions(); };
+        // The track in the lyrics' language, when the player sent another first.
+        window.lunalyrWantCaptions = function (lang) {
+          if (!ready || !player || !captionsWanted) return;
+          try { player.loadModule('captions'); } catch (e) {}
+          try { player.setOption('captions', 'track', {languageCode: lang}); } catch (e) {}
+        };
         // Another video in this same player (`YouTubePlayerReuse`): cued at
         // `start`, not played (the sync loop plays it), numbered `pageNo`
         // so its messages are told apart from the last video's; its
@@ -1382,6 +1388,12 @@ final class YouTubeMusicVideoCoordinator: NSObject, WKNavigationDelegate, WKScri
     private var navigation: WKNavigation?
     /// The video whose captions this page already passed on.
     private var capturedCaptions: String?
+    /// The lyrics' language, when known (`MusicVideoController.captionLanguage`),
+    /// whether the player was asked for it again, and a track in another
+    /// language held in case none in it comes (`MusicVideoCaptionSync.choose`).
+    private var wantedCaptionLanguage: String?
+    private var askedForCaptionLanguage = false
+    private var otherLanguageTrack: (videoID: String, data: Data)?
     /// Logs that no captions came, if none have by then.
     private var captionTimeout: DispatchWorkItem?
     private var blur: Double = -1
@@ -1532,8 +1544,12 @@ final class YouTubeMusicVideoCoordinator: NSObject, WKNavigationDelegate, WKScri
                                                    videoDuration: nil) ?? 0
             capturedCaptions = nil
             let controller = MusicVideoController.shared
-            let captions = controller.wantsCaptions(for: .youTube(videoID))
-                ? (controller.captionLanguage() ?? YouTubeEmbed.playerLanguage()) : nil
+            let wantsCaptions = controller.wantsCaptions(for: .youTube(videoID))
+            let lyricLanguage = wantsCaptions ? controller.captionLanguage() : nil
+            wantedCaptionLanguage = MusicVideoCaptionSync.baseLanguage(lyricLanguage)
+            askedForCaptionLanguage = false
+            otherLanguageTrack = nil
+            let captions = wantsCaptions ? (lyricLanguage ?? YouTubeEmbed.playerLanguage()) : nil
             controller.logCaption(CaptionSyncLog.askedLine(language: captions.map { YouTubeEmbed.captionLanguage($0) ?? $0 }))
             watchForCaptions(videoID: videoID, wanted: captions != nil)
             if YouTubePlayerReuse.load(hasView: true, pageReady: pageReady) == .switchVideo {
@@ -1843,6 +1859,16 @@ final class YouTubeMusicVideoCoordinator: NSObject, WKNavigationDelegate, WKScri
                                                            bytes: data.count, type: body["type"] as? String ?? ""))
             return
         }
+        if case .askFor(let language) = MusicVideoCaptionSync.choose(capture, wanted: wantedCaptionLanguage,
+                                                                     alreadyAsked: askedForCaptionLanguage) {
+            askedForCaptionLanguage = true
+            otherLanguageTrack = (videoID, data)
+            controller.logCaption(CaptionSyncLog.otherLanguageLine(got: capture.language, asking: language))
+            // `language` is two or three ASCII letters (`baseLanguage`).
+            run("window.lunalyrWantCaptions && window.lunalyrWantCaptions('\(language)')")
+            return
+        }
+        otherLanguageTrack = nil
         capturedCaptions = videoID
         captionTimeout?.cancel()
         captionTimeout = nil
@@ -1863,6 +1889,15 @@ final class YouTubeMusicVideoCoordinator: NSObject, WKNavigationDelegate, WKScri
             MainActor.assumeIsolated {
                 guard let self, self.videoID == videoID, self.capturedCaptions != videoID,
                       MusicVideoController.shared.isShowing(.youTube(videoID)) else { return }
+                // Only another language's track came: matched all the same,
+                // in case the lyrics' language was read wrongly.
+                if let held = self.otherLanguageTrack, held.videoID == videoID {
+                    self.otherLanguageTrack = nil
+                    self.capturedCaptions = videoID
+                    MusicVideoController.shared.logCaption(CaptionSyncLog.fallbackLine)
+                    MusicVideoController.shared.noteCaptions(held.data, of: .youTube(videoID))
+                    return
+                }
                 MusicVideoController.shared.logCaption(CaptionSyncLog.noneLine(after: wait))
             }
         }

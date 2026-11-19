@@ -55,6 +55,13 @@ enum CaptionSyncLog {
 
     static func ignoredLine(_ why: String) -> String { "captions: reply ignored (\(why))" }
 
+    static func otherLanguageLine(got: String?, asking: String) -> String {
+        "captions: the player sent a \(got ?? "?") track, not the lyrics' \(asking): asked for \(asking), keeping this one if none comes"
+    }
+
+    static let fallbackLine = "captions: no track in the lyrics' language came; using the other one"
+
+
     /// `type`: how the player read the reply ("fetch", or an XHR's
     /// response type); one the capture script can't read arrives empty.
     static func emptyLine(status: Int, bytes: Int, type: String = "text") -> String {

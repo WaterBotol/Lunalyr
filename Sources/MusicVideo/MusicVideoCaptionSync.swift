@@ -111,8 +111,15 @@ enum MusicVideoCaptionSync {
         return normalized.split(separator: " ").map(String.init)
     }
 
+    /// Japanese, Chinese, and the scripts of Southeast Asia written without
+    /// spaces between words: Thai, Lao, Burmese and Khmer.
     private static func isUnspaced(_ text: String) -> Bool {
-        text.unicodeScalars.contains { (0x3040...0x9FFF).contains($0.value) || (0xF900...0xFAFF).contains($0.value) }
+        text.unicodeScalars.contains {
+            switch $0.value {
+            case 0x3040...0x9FFF, 0xF900...0xFAFF, 0x0E00...0x0EFF, 0x1000...0x109F, 0x1780...0x17FF: return true
+            default: return false
+            }
+        }
     }
 
     /// What speech recognition writes for music, applause or singing it
@@ -512,6 +519,28 @@ extension MusicVideoCaptionSync {
         func value(_ name: String) -> String? { items.first { $0.name == name }?.value }
         guard value("v") == videoID, value("tlang") == nil else { return nil }
         return Capture(automatic: value("kind") == "asr", language: value("lang"))
+    }
+
+    /// What to do with a captured track.
+    enum TrackChoice: Equatable {
+        case use
+        /// Another language than the lyrics' (an English translation of a
+        /// Japanese song): ask the player for the lyrics' language once,
+        /// keeping this track in case none comes.
+        case askFor(String)
+    }
+
+    /// `wanted`: the lyrics' language (two or three letters), when known.
+    static func choose(_ capture: Capture, wanted: String?, alreadyAsked: Bool) -> TrackChoice {
+        guard let wanted, !alreadyAsked, let got = baseLanguage(capture.language), got != wanted else { return .use }
+        return .askFor(wanted)
+    }
+
+    /// "en" for "en-US", "zh" for "zh-Hans"; nil for anything else.
+    static func baseLanguage(_ code: String?) -> String? {
+        guard let base = code?.split(separator: "-").first.map({ String($0).lowercased() }),
+              (2...3).contains(base.count), base.allSatisfy({ $0.isASCII && $0.isLetter }) else { return nil }
+        return base
     }
 }
 
