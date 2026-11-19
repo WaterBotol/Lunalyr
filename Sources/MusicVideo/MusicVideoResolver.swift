@@ -40,10 +40,11 @@ final class MusicVideoCache {
     /// the still-image check, 3 the exact song-title match (older picks
     /// included live and fan uploads and other songs by the artist).
     static let version = 3
-    /// "Nothing official" stored before 4 is looked up again: 4 also
+    /// "Nothing official" stored before 5 is looked up again: 4 also
     /// searches a version's plain title ("Feel So Close" for "Feel So
-    /// Close - Radio Edit", `MusicVideoTitleMatch.titleVersions`).
-    static let missVersion = 4
+    /// Close - Radio Edit", `MusicVideoTitleMatch.titleVersions`), 5 the
+    /// song's original title ("咲き誇れ" for "The Bloom") and a quoted title.
+    static let missVersion = 5
 
     private let defaults: UserDefaults
     private var entries: [String: [String: Any]]
@@ -352,6 +353,7 @@ final class MusicVideoResolver {
     private let uptime: () -> TimeInterval
     private let sleep: (TimeInterval) async -> Void
     private let parse: @Sendable (Data) async -> [YouTubeSearchPage.Result]
+    private let originalTitle: @Sendable (MusicVideoSong) async -> String?
     private(set) var rateLimit: MusicVideoRateLimit
     /// Waits longer than this are not sat out: the lookup reports
     /// `.rateLimited` and is tried again later.
@@ -362,7 +364,8 @@ final class MusicVideoResolver {
          now: @escaping () -> Date = Date.init,
          uptime: @escaping () -> TimeInterval = { ProcessInfo.processInfo.systemUptime },
          sleep: @escaping (TimeInterval) async -> Void = { try? await Task.sleep(for: .seconds($0)) },
-         parse: @escaping @Sendable (Data) async -> [YouTubeSearchPage.Result] = { await YouTubeSearchPage.resultsOffMainActor($0) }) {
+         parse: @escaping @Sendable (Data) async -> [YouTubeSearchPage.Result] = { await YouTubeSearchPage.resultsOffMainActor($0) },
+         originalTitle: @escaping @Sendable (MusicVideoSong) async -> String? = { _ in nil }) {
         self.library = library
         self.playability = playability
         self.http = http
@@ -373,6 +376,17 @@ final class MusicVideoResolver {
         self.uptime = uptime
         self.sleep = sleep
         self.parse = parse
+        self.originalTitle = originalTitle
+    }
+
+    /// The song's title in its own language when the player lists it under
+    /// another ("The Bloom" for YOASOBI's "咲き誇れ"): the lyric lookup's
+    /// `OriginalTitles`, usually already known from finding its lyrics.
+    /// Only with "Search under other names" on.
+    nonisolated static func originalTitle(of song: MusicVideoSong) async -> String? {
+        guard OriginalTitles.enabled else { return nil }
+        let query = LyricQuery(title: song.title, artist: song.artist, album: song.album, duration: song.duration)
+        return await OriginalTitles.shared.original(for: query)?.title
     }
 
     func resolve(_ song: MusicVideoSong, online: Bool) async -> MusicVideoResolution {
@@ -478,7 +492,9 @@ final class MusicVideoResolver {
     /// YouTube's results for "<artist> <title> official music video", then,
     /// when nothing official is among them, for the song's plain title
     /// (`MusicVideoTitleMatch.titleVersions`: "Feel So Close" for "Feel So
-    /// Close - Radio Edit"). A page with no results at all is taken as YouTube having changed its
+    /// Close - Radio Edit"), then for its original title when the player
+    /// lists it under another ("咲き誇れ" for YOASOBI's "The Bloom"). A page
+    /// with no results at all is taken as YouTube having changed its
     /// format (or asking for consent), not as "no video": it is not cached.
     /// The best candidates are checked in turn for being a still image (the
     /// cover over the audio); when the first three are all stills, the song
@@ -486,16 +502,23 @@ final class MusicVideoResolver {
     private func searchYouTube(_ song: MusicVideoSong) async -> MusicVideoResolution {
         do {
             var found: [YouTubeSearchPage.Result] = []
-            for title in MusicVideoTitleMatch.titleVersions(song.title) where found.isEmpty {
-                guard let url = YouTubeSearchPage.requestURL(title: title, artist: song.artist) else {
-                    return .missing(.lookupFailed)
-                }
+            // Each search: what to search for, and the song title a video must name.
+            func search(_ query: String, matching title: String) async throws -> Bool {
+                guard let url = YouTubeSearchPage.requestURL(title: query, artist: song.artist) else { return false }
                 let data = try await fetch(url)
                 // About a megabyte of HTML and JSON: read off the main actor.
                 let results = await parse(data)
-                guard !results.isEmpty else { return .missing(.lookupFailed) }
-                found = YouTubeSearchPage.officialVideos(in: results, title: song.title, artist: song.artist,
+                guard !results.isEmpty else { return false }
+                found = YouTubeSearchPage.officialVideos(in: results, title: title, artist: song.artist,
                                                          songDuration: song.duration)
+                return true
+            }
+            for title in MusicVideoTitleMatch.titleVersions(song.title) where found.isEmpty {
+                guard try await search(title, matching: song.title) else { return .missing(.lookupFailed) }
+            }
+            if found.isEmpty, let original = await originalTitle(song),
+               MusicVideoTitleMatch.songKey(original) != MusicVideoTitleMatch.songKey(song.title) {
+                _ = try await search(original, matching: original)
             }
             let skipped = refused[song.key] ?? []
             let candidates = found.filter { !skipped.contains($0.videoID) }

@@ -174,6 +174,18 @@ final class MusicVideoMatchTests: XCTestCase {
         XCTAssertEqual(AppleMusicVideoLibrary.pick([hit], for: song), URL(fileURLWithPath: "/close.m4v"))
     }
 
+    /// A title that quotes the song and goes on about its tie-in.
+    func testAQuotedTitleBesideATieInIsTheSong() {
+        let title = "YOASOBI「咲き誇れ」Official Music Video / NHK連続テレビ小説『ブラッサム』主題歌"
+        XCTAssertTrue(MusicVideoTitleMatch.matches(videoTitle: title, songTitle: "咲き誇れ", artist: "YOASOBI"))
+        XCTAssertFalse(MusicVideoTitleMatch.matches(videoTitle: title, songTitle: "ブラッサム", artist: "YOASOBI"),
+                       "the drama's name is quoted too, but it is the drama's")
+        XCTAssertFalse(MusicVideoTitleMatch.matches(videoTitle: title, songTitle: "祝福", artist: "YOASOBI"))
+        XCTAssertEqual(pick([Result(videoID: "AAAAAAAAAAA", title: title, channel: "YOASOBI")], title: "咲き誇れ",
+                            artist: "YOASOBI"), "AAAAAAAAAAA")
+        XCTAssertEqual(MusicVideoTitleMatch.quoted(#"Wallows - "Love" (Official Video)"#), ["Love"])
+    }
+
     /// A version with a recording of its own never takes the plain title's video.
     func testLiveAcousticRemixAndLanguageVersionsKeepTheirOwnTitle() {
         for title in ["Feel So Close - Live", "Feel So Close - Acoustic", "Feel So Close - Tiësto Remix",

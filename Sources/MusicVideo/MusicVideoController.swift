@@ -18,7 +18,8 @@ final class MusicVideoController: ObservableObject {
                 }
             }),
             playability: AVMusicVideoPlayability(), http: URLSessionMusicVideoHTTP(),
-            cache: MusicVideoCache(defaults: .standard), links: MusicVideoLinks(defaults: .standard))
+            cache: MusicVideoCache(defaults: .standard), links: MusicVideoLinks(defaults: .standard),
+            originalTitle: { await MusicVideoResolver.originalTitle(of: $0) })
         return MusicVideoController(resolver: resolver, offsets: MusicVideoOffsets(defaults: .standard))
     }()
 

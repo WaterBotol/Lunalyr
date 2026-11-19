@@ -73,13 +73,14 @@ final class MusicVideoTests: XCTestCase {
 
     private func resolver(library: FakeLibrary = FakeLibrary(), playability: FakePlayability = FakePlayability(),
                           http: FakeHTTP = FakeHTTP(), now: @escaping () -> Date = { Date(timeIntervalSince1970: 1_800_000_000) },
-                          clock: (() -> TimeInterval)? = nil) -> MusicVideoResolver {
+                          clock: (() -> TimeInterval)? = nil,
+                          originalTitle: @escaping @Sendable (MusicVideoSong) async -> String? = { _ in nil }) -> MusicVideoResolver {
         var time: TimeInterval = 0
         // The fake clock moves forward by each wait, so nothing really sleeps.
         let resolver = MusicVideoResolver(library: library, playability: playability, http: http,
                                           cache: MusicVideoCache(defaults: defaults),
                                           links: MusicVideoLinks(defaults: defaults), now: now,
-                                          uptime: clock ?? { time }, sleep: { time += $0 })
+                                          uptime: clock ?? { time }, sleep: { time += $0 }, originalTitle: originalTitle)
         return resolver
     }
 
@@ -135,6 +136,32 @@ final class MusicVideoTests: XCTestCase {
         XCTAssertEqual(result, .found(.youTube("4NRXx6U8ABQ")))
         let searches = http.urls.filter { $0.host == "www.youtube.com" }.map(\.absoluteString)
         XCTAssertEqual(searches, [first, plain])
+    }
+
+    /// "The Bloom" is YOASOBI's "咲き誇れ": nothing official under the
+    /// listed title, so its original title is searched, and the video that
+    /// quotes it beside its tie-in is found (the owner, 20 Nov 2026).
+    func testASongListedInEnglishSearchesItsOriginalTitle() async {
+        let bloom = MusicVideoSong(title: "The Bloom", artist: "YOASOBI", duration: 247)
+        let http = FakeHTTP()
+        let english = YouTubeSearchPage.requestURL(title: "The Bloom", artist: "YOASOBI")!.absoluteString
+        let original = YouTubeSearchPage.requestURL(title: "咲き誇れ", artist: "YOASOBI")!.absoluteString
+        http.byURL[english] = .init(status: 200, body: Fixtures.searchPage([
+            ("BBBBBBBBBBB", "The Bloom Full Lyrics (ROM/ENG/KANJ) By YOASOBI", "Mio_sama08"),
+        ]))
+        http.byURL[original] = .init(status: 200, body: Fixtures.searchPage([
+            ("4NRXx6U8ABQ", "YOASOBI「咲き誇れ」Official Music Video / NHK連続テレビ小説『ブラッサム』主題歌", "YOASOBI"),
+        ]))
+        let result = await resolver(http: http, originalTitle: { _ in "咲き誇れ" }).resolve(bloom, online: true)
+        XCTAssertEqual(result, .found(.youTube("4NRXx6U8ABQ")))
+        XCTAssertEqual(http.urls.filter { $0.host == "www.youtube.com" }.map(\.absoluteString), [english, original])
+        // Without an original title, nothing more is searched.
+        defaults.removeObject(forKey: MusicVideoCache.key)
+        let none = FakeHTTP()
+        none.byURL[english] = http.byURL[english]
+        let missing = await resolver(http: none).resolve(bloom, online: true)
+        XCTAssertEqual(missing, .missing(.notFound))
+        XCTAssertEqual(none.urls.filter { $0.host == "www.youtube.com" }.count, 1)
     }
 
     func testAVideoForTheTitleAsGivenNeedsNoSecondSearch() async {
