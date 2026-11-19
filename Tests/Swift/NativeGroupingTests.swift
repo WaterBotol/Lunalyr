@@ -25,6 +25,16 @@ final class NativeGroupingTests: XCTestCase {
         }
     }
 
+    func testMosaicKeepsAWholeWordInsideTheFrame() {
+        XCTAssertEqual(StageLyricView.mosaicHugeWidth("dreaming", sway: 0.9), 1.1)
+        for sway in stride(from: 0.0, through: 1.0, by: 0.1) {
+            let width = Double(StageLyricView.mosaicHugeWidth("ショートケーキを", sway: sway))
+            let centre = 0.5 + (sway - 0.5) * 0.24
+            XCTAssertGreaterThanOrEqual(centre - width / 2, 0, "\(sway)")
+            XCTAssertLessThanOrEqual(centre + width / 2, 1, "\(sway)")
+        }
+    }
+
     // MARK: Stage runs cut only between words
 
     private func stageRuns(_ text: String) -> [String] {

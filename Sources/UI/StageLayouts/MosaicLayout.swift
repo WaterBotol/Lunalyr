@@ -70,6 +70,15 @@ extension StageLyricView {
     /// marks on their consonants (เ before the consonant it follows in
     /// speech), Arabic and Hebrew join and run right to left: set one
     /// character to a view, each would be broken.
+    /// How wide, in stage widths, the huge setting may run. A word of the
+    /// alphabets may run off the edge: its letters still read. A whole word
+    /// of the other scripts would lose a character that way, so it stays
+    /// inside the frame wherever its sway (`chance(id, 21)`) set it down.
+    static func mosaicHugeWidth(_ text: String, sway: Double) -> CGFloat {
+        guard !mosaicSetsLetters(text) else { return 1.1 }
+        return CGFloat(0.94 - 2 * abs(sway - 0.5) * 0.24)
+    }
+
     static func mosaicSetsLetters(_ text: String) -> Bool {
         text.unicodeScalars.allSatisfy { scalar in
             !scalar.properties.isAlphabetic || standingLetters.contains { $0.contains(scalar.value) }
@@ -162,12 +171,14 @@ extension StageLyricView {
                         if kinds[run.id] == 0 {
                             // Huge, running off the edge, with a star beside it.
                             let size = unit * 3.0
+                            let room = stage.width * Self.mosaicHugeWidth(run.text, sway: chance(run.id, 21))
                             ZStack(alignment: .topTrailing) {
-                                withReading(run, size: size, colour: sample.reading, maxWidth: stage.width * 1.1) {
+                                withReading(run, size: size, colour: sample.reading, maxWidth: room) {
                                     word(run, tile ? ink.tileText : sample.sung, size: size)
                                         .font(font(size, hero: true, id: run.id))
                                         .livelyLetters()
-                                        .lineLimit(1).minimumScaleFactor(0.5).frame(maxWidth: stage.width * 1.1)
+                                        .lineLimit(1).minimumScaleFactor(Self.mosaicSetsLetters(run.text) ? 0.5 : 0.25)
+                                        .frame(maxWidth: room)
                                         .background { tileBackground(tile, size: size, run: run) }
                                         .highlightLayer(tile)
                                         .lyricShadow(0.28, radius: 8, y: 3)
