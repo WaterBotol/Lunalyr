@@ -236,7 +236,8 @@ final class LyricsFetcher {
         }
     }
     /// Whether the best answer `source` could give would rank above `best`
-    /// on timing, version or lead alone, before any tie-break (`couldBeat`).
+    /// on timing, version or lead alone, before any tie-break (`couldBeat`
+    /// adds the tie-breaks).
     static func couldOutlead(_ best: LyricCandidate, from source: LyricSourceID, query: LyricQuery) -> Bool {
         guard source != best.source else { return false }
         let timing = rankedTiming(best.result), ceiling = source.timingCeiling
@@ -827,16 +828,13 @@ final class LyricsFetcher {
     /// `best`. Nothing ranks above Music's own word-by-word timing.
     static func couldBeat(_ best: LyricCandidate, from source: LyricSourceID, query: LyricQuery,
                           options: LyricSourceOptions.Snapshot) -> Bool {
-        guard source != best.source else { return false }
-        let timing = rankedTiming(best.result), ceiling = source.timingCeiling
-        if (ceiling > 0) != (timing > 0) { return ceiling > 0 }
-        // Another version's timed lyrics: any timed source could still find the playing one.
-        if timing > 0, !fitsVersion(best, query) { return true }
-        if ceiling != timing { return ceiling > timing }
-        let lead = Self.lead(source, timing: timing), bestLead = Self.lead(best, timing: timing)
-        // Agreement is weighed only among the answers in hand: waiting for more would undo
-        // stopping the other services once LRCLIB's word timing or Music's lyrics lead.
-        if lead != bestLead { return lead < bestLead }
+        if couldOutlead(best, from: source, query: query) { return true }
+        // Only a tie on timing, version and lead is left to break. Agreement is weighed
+        // only among the answers in hand: waiting for more would undo stopping the other
+        // services once LRCLIB's word timing or Music's lyrics lead.
+        let timing = rankedTiming(best.result)
+        guard source != best.source, source.timingCeiling == timing,
+              lead(source, timing: timing) == lead(best, timing: timing) else { return false }
         // Accuracy first: a closer match could still arrive, the same names
         // with a length that fits (as `outranks` weighs it) included. A match
         // naming no length stopped such a source, so which one showed, was
