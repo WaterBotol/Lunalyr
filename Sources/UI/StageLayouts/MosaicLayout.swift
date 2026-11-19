@@ -61,6 +61,25 @@ extension StageLyricView {
     // across a pale panel, or letter by letter on jumping baselines -- while the
     // words before it shrink into a small stack above.
 
+    /// Whether Mosaic may set a word letter by letter on jumping baselines.
+    /// Only an alphabet whose letters stand on their own, left to right
+    /// (Latin, Greek, Cyrillic): a kanji, kana or Hangul block is not a
+    /// letter of a word, and tilting each one apart on its own beat, with
+    /// no regard for when it is sung, reads as noise to a native reader.
+    /// Thai, Lao, Myanmar, Khmer and the Indic scripts stack vowels and
+    /// marks on their consonants (เ before the consonant it follows in
+    /// speech), Arabic and Hebrew join and run right to left: set one
+    /// character to a view, each would be broken.
+    static func mosaicSetsLetters(_ text: String) -> Bool {
+        text.unicodeScalars.allSatisfy { scalar in
+            !scalar.properties.isAlphabetic || standingLetters.contains { $0.contains(scalar.value) }
+        }
+    }
+    /// Latin, Greek and Cyrillic, with their extensions (Vietnamese's
+    /// stacked vowels are precomposed in Latin Extended Additional).
+    private static let standingLetters: [ClosedRange<UInt32>] = [0x0000...0x052F, 0x1D00...0x1FFF, 0x2C60...0x2C7F,
+                                                                 0xA720...0xA7FF, 0xAB30...0xAB6F]
+
     /// The size Mosaic's small stack sets its words at.
     static func mosaicSmallSize(unit: CGFloat) -> CGFloat { unit * 0.6 }
 
@@ -106,7 +125,11 @@ extension StageLyricView {
         // eased exit, not the settle, which dropped them a seventh at once.
         let leaving = StageMotion.highlightLeave(at: time, exitStart: exitStart)
         // A word on a tile (Cutout · Highlight) is always the huge kind, which can carry one.
-        let kinds = runs.map { tiled($0) ? 0 : Int(chance($0.id, 20) * 3) % 3 }
+        let kinds = runs.map { run in
+            // Letter by letter is the third kind, for alphabets only.
+            let count = Self.mosaicSetsLetters(run.text) ? 3 : 2
+            return tiled(run) ? 0 : Int(chance(run.id, 20) * Double(count)) % count
+        }
         let stage = stageSize
         let u = unit
         // The stack's rows make room for readings when the line has any.
