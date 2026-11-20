@@ -261,6 +261,58 @@ final class MusicVideoMatchTests: XCTestCase {
         XCTAssertEqual(pick([unbadged], title: "告白气球", artist: "周杰伦"), "bu7nU9Mhpyo")
     }
 
+    /// IU's 밤편지 (YouTube's results page, 20 Nov 2026): the MV is on her
+    /// label's channel, 1theK, without the artist badge, named in both
+    /// scripts; her own verified channel has only the art track, and
+    /// 1theK also has the teaser.
+    func testANamePairedAcrossScriptsOnTheLabelsChannelIsTheSong() {
+        let mv = "[MV] IU(아이유) _ Through the Night(밤편지)"
+        for (song, artist) in [("밤편지", "아이유"), ("Through the Night", "IU"), ("밤편지", "IU"),
+                               ("Through the Night", "아이유")] {
+            XCTAssertTrue(MusicVideoTitleMatch.matches(videoTitle: mv, songTitle: song, artist: artist), "\(song) \(artist)")
+            XCTAssertTrue(MusicVideoTitleMatch.matches(videoTitle: "아이유(IU) - 밤편지(Through the Night)", songTitle: song,
+                                                       artist: artist), "\(song) \(artist), the other way round")
+        }
+        XCTAssertFalse(MusicVideoTitleMatch.matches(videoTitle: mv, songTitle: "Through", artist: "IU"))
+        XCTAssertFalse(MusicVideoTitleMatch.matches(videoTitle: mv, songTitle: "밤편지", artist: "BTS"))
+        // A bracket in the same script, or in both, is not a pair.
+        XCTAssertEqual(MusicVideoTitleMatch.pairReadings("Wallows - Love (Official Video)", artists: ["wallows"]), [])
+        XCTAssertEqual(MusicVideoTitleMatch.pairReadings("밤편지 (Live 라이브)", artists: []), [])
+        XCTAssertEqual(MusicVideoTitleMatch.pairReadings(mv, artists: ["iu"]),
+                       ["[MV] IU _ Through the Night", "[MV] IU _ 밤편지"])
+
+        let results = [
+            Result(videoID: "BzYnNdJhZQw", title: mv, channel: "1theK (원더케이)", duration: 283),
+            Result(videoID: "6744glqD6lk", title: "Through the Night (밤편지)", channel: "이지금 [IU Official]",
+                   verifiedArtist: true, duration: 254, artTrack: true),
+            Result(videoID: "cj_8wUhYk_o", title: "[Teaser] IU(아이유) _ Through the Night(밤편지)", channel: "1theK (원더케이)",
+                   duration: 39),
+        ]
+        XCTAssertEqual(pick(results, title: "밤편지", artist: "아이유"), "BzYnNdJhZQw")
+        XCTAssertEqual(pick(results, title: "Through the Night", artist: "IU"), "BzYnNdJhZQw")
+        XCTAssertNil(pick(Array(results.dropFirst()), title: "Through the Night", artist: "IU"),
+                     "never the art track, even on the artist's verified channel; never the teaser")
+        XCTAssertNil(pick([Result(videoID: "AAAAAAAAAAA", title: "IU - 밤편지 (Official MV)", channel: "Fan Uploads")],
+                          title: "밤편지", artist: "IU"), "another channel still doesn't count")
+    }
+
+    /// An art track's description, in both page layouts.
+    func testArtTracksAreRecognisedFromTheirDescription() {
+        let html = """
+        <html><script>var ytInitialData = {"contents":[{"videoRenderer":{"videoId":"6744glqD6lk",
+        "title":{"runs":[{"text":"Through the Night (밤편지)"}]},"ownerText":{"runs":[{"text":"이지금 [IU Official]"}]},
+        "detailedMetadataSnippets":[{"snippetText":{"runs":[{"text":"Provided to YouTube by Kakao Entertainment "},
+        {"text":"Through the Night"}]}}]}},{"videoRenderer":{"videoId":"BzYnNdJhZQw",
+        "title":{"runs":[{"text":"[MV] IU(아이유) _ Through the Night(밤편지)"}]},"ownerText":{"runs":[{"text":"1theK"}]},
+        "detailedMetadataSnippets":[{"snippetText":{"runs":[{"text":"*English subtitles are now available."}]}}]}},
+        {"lockupViewModel":{"contentId":"AAAAAAAAAAA","contentType":"LOCKUP_CONTENT_TYPE_VIDEO",
+        "metadata":{"lockupMetadataViewModel":{"title":{"content":"Song"},"metadata":{"contentMetadataViewModel":{
+        "metadataRows":[{"metadataParts":[{"text":{"content":"Provided to YouTube by Label"}}],
+        "lockupContentMetadataRowExtension":{"contentType":"METADATA_ROW_CONTENT_TYPE_DESCRIPTION"}}]}}}}}}]};</script></html>
+        """
+        XCTAssertEqual(YouTubeSearchPage.results(fromHTML: html).map(\.artTrack), [true, false, true])
+    }
+
     /// A version with a recording of its own never takes the plain title's video.
     func testLiveAcousticRemixAndLanguageVersionsKeepTheirOwnTitle() {
         for title in ["Feel So Close - Live", "Feel So Close - Acoustic", "Feel So Close - Tiësto Remix",

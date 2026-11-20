@@ -46,8 +46,10 @@ final class MusicVideoCache {
     /// song's original title ("咲き誇れ" for "The Bloom") and a quoted title,
     /// 6 "<artist> <title>" alone, as Search YouTube… sends it, 7 titles
     /// in 【】 or 《》 and traditional Chinese for simplified ("周杰倫
-    /// Jay Chou【告白氣球 Love Confession】Official MV" for 告白气球).
-    static let missVersion = 7
+    /// Jay Chou【告白氣球 Love Confession】Official MV" for 告白气球), 8 names
+    /// paired across scripts and label channels ("[MV] IU(아이유) _ Through
+    /// the Night(밤편지)" on 1theK for 밤편지).
+    static let missVersion = 8
 
     private let defaults: UserDefaults
     private var entries: [String: [String: Any]]

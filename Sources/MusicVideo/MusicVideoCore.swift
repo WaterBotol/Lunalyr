@@ -96,9 +96,12 @@ enum YouTubeSearchPage {
         var views: String?
         /// How long ago it was uploaded, as shown ("3 years ago"), when given.
         var uploaded: String?
+        /// An auto-generated art track (the song over its cover): its
+        /// description starts "Provided to YouTube by".
+        var artTrack = false
 
         init(videoID: String, title: String, channel: String, verifiedArtist: Bool = false, duration: Double? = nil,
-             views: String? = nil, uploaded: String? = nil) {
+             views: String? = nil, uploaded: String? = nil, artTrack: Bool = false) {
             self.videoID = videoID
             self.title = title
             self.channel = channel
@@ -106,6 +109,7 @@ enum YouTubeSearchPage {
             self.duration = duration
             self.views = views
             self.uploaded = uploaded
+            self.artTrack = artTrack
         }
     }
 
@@ -147,7 +151,13 @@ enum YouTubeSearchPage {
     /// cover and edited versions. Allowed when the song's own title has them.
     static let excludedWords = ["lyric", "lyrics", "audio", "official audio", "audio only", "art track",
                                 "visualizer", "visualiser", "live", "cover", "karaoke", "instrumental", "reaction",
-                                "remix", "sped up", "slowed", "8d", "nightcore", "tutorial"]
+                                "remix", "sped up", "slowed", "8d", "nightcore", "tutorial", "teaser", "trailer",
+                                "making of", "behind the scenes", "practice", "choreography"]
+
+    /// Label channels that post their artists' official videos ("1theK
+    /// (원더케이)" for IU), counted like the artist's own, by the start of
+    /// the channel's name (`CoverLookup.normal`).
+    static let labelChannels = ["1thek", "stonemusicentertainment", "hybelabels", "smtown", "jypentertainment"]
 
     /// Candidate official videos among `results`, best first. Each must:
     /// - be this song: its title, artist and qualifiers taken off, equals
@@ -155,8 +165,9 @@ enum YouTubeSearchPage {
     ///   or its plain title ("Feel So Close" for "Feel So Close - Radio
     ///   Edit": `MusicVideoTitleMatch.titleVersions`), which ranks after;
     /// - come from the artist: the channel is the artist's own (its name
-    ///   is or contains the artist's), a VEVO channel, or carries YouTube's
-    ///   verified-artist badge; never an auto-generated "- Topic" channel;
+    ///   is or contains the artist's) or their label's (`labelChannels`),
+    ///   a VEVO channel, or carries YouTube's verified-artist badge; never
+    ///   an auto-generated "- Topic" channel nor an art track;
     /// - not be a live, concert or fan upload, nor any of `excludedWords`.
     /// "Official music video" ranks above "official video", which ranks
     /// above "official" or "music video"; ties keep YouTube's order. Given
@@ -175,8 +186,9 @@ enum YouTubeSearchPage {
             let channelKey = CoverLookup.normal(MusicVideoTitleMatch.fold(result.channel))
             guard let version = MusicVideoTitleMatch.matchedVersion(videoTitle: result.title, songTitle: title,
                                                                     artist: artist) else { continue }
-            guard !channel.hasSuffix(" topic") else { continue }
+            guard !channel.hasSuffix(" topic"), !result.artTrack else { continue }
             let ownChannel = singers.contains { Self.channel(channelKey, isOf: $0) }
+                || labelChannels.contains { channelKey.hasPrefix($0) }
             let vevo = channelKey.hasSuffix("vevo")
             guard ownChannel || vevo || result.verifiedArtist else { continue }
             if MusicVideoTitleMatch.isLiveOrFanUpload(result.title, songTitle: title) { continue }
@@ -242,7 +254,9 @@ enum YouTubeSearchPage {
                                     verifiedArtist: hasVerifiedArtistBadge(renderer["ownerBadges"]),
                                     duration: text(renderer["lengthText"]).flatMap(lengthSeconds),
                                     views: shown(text(renderer["shortViewCountText"]) ?? text(renderer["viewCountText"])),
-                                    uploaded: shown(text(renderer["publishedTimeText"]))))
+                                    uploaded: shown(text(renderer["publishedTimeText"])),
+                                    artTrack: isArtTrack(text(((renderer["detailedMetadataSnippets"] as? [Any])?.first
+                                            as? [String: Any])?["snippetText"]) ?? text(renderer["descriptionSnippet"]))))
             }
             if let lockup = dictionary["lockupViewModel"] as? [String: Any],
                lockup["contentType"] as? String == "LOCKUP_CONTENT_TYPE_VIDEO",
@@ -280,9 +294,18 @@ enum YouTubeSearchPage {
         let labelled = parts[split...].map { content($0["text"]) }
         let verified = channelParts.contains { ($0["icon"] as? [String: Any])?["name"] as? String == "AUDIO_BADGE" }
         let length = badgeTexts(lockup["contentImage"]).lazy.compactMap(lengthSeconds).first
+        let description = rows.first {
+            ($0["lockupContentMetadataRowExtension"] as? [String: Any])?["contentType"] as? String
+                == "METADATA_ROW_CONTENT_TYPE_DESCRIPTION"
+        }.flatMap { ($0["metadataParts"] as? [[String: Any]])?.first.flatMap { content($0["text"]) } }
         return Result(videoID: id, title: content(metadata?["title"]) ?? "", channel: channel, verifiedArtist: verified,
                       duration: length, views: labelled.first.flatMap { $0 },
-                      uploaded: labelled.dropFirst().first.flatMap { $0 })
+                      uploaded: labelled.dropFirst().first.flatMap { $0 }, artTrack: isArtTrack(description))
+    }
+
+    /// The description YouTube writes for an auto-generated art track.
+    static func isArtTrack(_ description: String?) -> Bool {
+        description?.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("Provided to YouTube by") == true
     }
 
     /// `{content: "…"}`, trimmed; nil when there is none.

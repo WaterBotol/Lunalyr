@@ -85,11 +85,19 @@ enum MusicVideoTitleMatch {
     /// name wholly in another script ("【告白氣球 Love Confession】" is 告白气球
     /// and Love Confession), and after 【】 only qualifiers may follow:
     /// "【告白氣球 Love Confession】MV花絮 Making of" is about the song.
+    /// Names paired across scripts ("[MV] IU(아이유) _ Through the
+    /// Night(밤편지)") are read each way (`pairReadings`).
     static func matches(videoTitle: String, songTitle: String, artist: String) -> Bool {
-        let videoTitle = fold(videoTitle)
         let song = songKey(songTitle)
         guard !song.isEmpty else { return false }
         let artists = artistParts(artist)
+        let title = fold(videoTitle)
+        return ([title] + pairReadings(title, artists: artists)).contains {
+            reads($0, as: song, songTitle: songTitle, artists: artists)
+        }
+    }
+
+    private static func reads(_ videoTitle: String, as song: String, songTitle: String, artists: [String]) -> Bool {
         if core(videoTitle, artists: artists) == song || core(videoTitle, artists: artists, loose: true) == song { return true }
         for quote in quotes(videoTitle) {
             guard quote.before.isEmpty || core(quote.before, artists: artists, loose: true).isEmpty else { continue }
@@ -101,6 +109,71 @@ enum MusicVideoTitleMatch {
             return true
         }
         return false
+    }
+
+    /// The title with each name paired across scripts read as one of its
+    /// names: a Latin name with its name in another script in brackets
+    /// right after it, or the reverse ("IU(아이유)", "Through the
+    /// Night(밤편지)", "밤편지(Through the Night)"). One reading keeps the
+    /// names outside the brackets, the other those inside; a pair naming
+    /// the artist reads as the artist's own form in both. Brackets holding
+    /// both scripts, or no letters, are left alone.
+    static func pairReadings(_ title: String, artists: [String]) -> [String] {
+        guard let regex = try? NSRegularExpression(pattern: #"[(（]([^()（）]+)[)）]"#) else { return [] }
+        let ns = title as NSString
+        var pairs: [(range: NSRange, outside: String, inside: String)] = []
+        for match in regex.matches(in: title, range: NSRange(location: 0, length: ns.length)) {
+            let inside = ns.substring(with: match.range(at: 1)).trimmingCharacters(in: .whitespaces)
+            guard let insideScript = script(of: inside) else { continue }
+            var start = match.range.location
+            while start > 0, ns.substring(with: NSRange(location: start - 1, length: 1)) == " " { start -= 1 }
+            var nameStart = start
+            while nameStart > 0 {
+                let character = ns.substring(with: NSRange(location: nameStart - 1, length: 1))
+                guard let kind = nameCharacter(character), kind == nil || kind == insideScript.other else { break }
+                nameStart -= 1
+            }
+            let outside = ns.substring(with: NSRange(location: nameStart, length: start - nameStart))
+                .trimmingCharacters(in: .whitespaces.union(CharacterSet(charactersIn: "'’.&!?,")))
+            guard !outside.isEmpty, script(of: outside) == insideScript.other else { continue }
+            let from = ns.range(of: outside, options: [], range: NSRange(location: nameStart, length: start - nameStart))
+            pairs.append((NSRange(location: from.location, length: match.range.location + match.range.length - from.location),
+                          outside, inside))
+        }
+        guard !pairs.isEmpty else { return [] }
+        let readings = [true, false].map { keepOutside in
+            pairs.reversed().reduce(title) { text, pair in
+                let artist = [pair.outside, pair.inside].first { artists.contains(CoverLookup.normal($0)) }
+                let name = artist ?? (keepOutside ? pair.outside : pair.inside)
+                return (text as NSString).replacingCharacters(in: pair.range, with: name)
+            }
+        }
+        return Array(NSOrderedSet(array: readings.filter { $0 != title })) as? [String] ?? []
+    }
+
+    private enum Script {
+        case latin, other
+        var other: Script { self == .latin ? .other : .latin }
+    }
+
+    /// Latin when every letter is a Latin letter, other when none is; nil
+    /// for both, or no letters.
+    private static func script(of text: String) -> Script? {
+        var latin = false, other = false
+        for scalar in text.unicodeScalars where scalar.properties.isAlphabetic {
+            if scalar.isASCII { latin = true } else { other = true }
+        }
+        return latin == other ? nil : latin ? .latin : .other
+    }
+
+    /// A character that can be part of a name before a bracket: a letter
+    /// of a script (`.some(script)`), or a digit, space or name punctuation
+    /// that belongs to either (`.some(nil)`). nil ends the name.
+    private static func nameCharacter(_ character: String) -> Script?? {
+        guard let scalar = character.unicodeScalars.first else { return nil }
+        if scalar.properties.isAlphabetic { return .some(scalar.isASCII ? .latin : .other) }
+        if CharacterSet.decimalDigits.contains(scalar) || " '’.&!?,".unicodeScalars.contains(scalar) { return .some(nil) }
+        return nil
     }
 
     /// "告白气球 Love Confession" names 告白气球 and Love Confession: the song,
@@ -215,11 +288,11 @@ enum MusicVideoTitleMatch {
         return false
     }
 
-    /// Cut at separators: dashes, bars and colons with spaces, double
+    /// Cut at separators: dashes, bars, colons and underscores with spaces, double
     /// quotes, Japanese corner brackets 「」『』, and single quotes that open
     /// or close a quotation ("BLACKPINK - 'Shut Down' MV"), not apostrophes.
     private static func segments(_ text: String) -> [String] {
-        let pattern = #"\s+[-–—|:]\s+|\s*[|“”"«»「」『』]\s*|\s+[-–—]|[-–—]\s+|:\s+"#
+        let pattern = #"\s+[-–—|:_]\s+|\s*[|“”"«»「」『』]\s*|\s+[-–—]|[-–—]\s+|:\s+"#
             + #"|(?:^|\s)['‘](?=\S)|(?<=\S)['’](?:\s|$)"#
         let marked = text.replacingOccurrences(of: pattern, with: "\u{1}", options: .regularExpression)
         return marked.split(separator: "\u{1}").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
