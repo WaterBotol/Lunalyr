@@ -67,25 +67,31 @@ enum MusicVideoTitleMatch {
     /// that are the artist beside qualifiers or the artist's name in its
     /// own script dropped ("米津玄師 MV「Lemon」", "IVE 아이브 'I AM' MV"); what
     /// is left must still equal the song title.
-    /// Or the song is the title's first quoted part: "YOASOBI「咲き誇れ」
-    /// Official Music Video / NHK連続テレビ小説『ブラッサム』主題歌" quotes its
-    /// song, then goes on about the tie-in, whose own quoted name is not it.
+    /// Or the song is the title's first quoted part, with nothing but the
+    /// artist and qualifiers before it: "YOASOBI「咲き誇れ」Official Music
+    /// Video / NHK連続テレビ小説『ブラッサム』主題歌" quotes its song, then goes
+    /// on about the tie-in, whose own quoted name is not it. "Dayglow - How
+    /// I Made "Hot Rod"" quotes the song too, but is a video about it.
     static func matches(videoTitle: String, songTitle: String, artist: String) -> Bool {
         let song = songKey(songTitle)
         guard !song.isEmpty else { return false }
         let artists = artistParts(artist)
-        return core(videoTitle, artists: artists) == song || core(videoTitle, artists: artists, loose: true) == song
-            || quoted(videoTitle).first.map { core($0, artists: artists) == song } == true
+        if core(videoTitle, artists: artists) == song || core(videoTitle, artists: artists, loose: true) == song { return true }
+        guard let first = quotes(videoTitle).first, core(first.text, artists: artists) == song else { return false }
+        return first.before.isEmpty || core(first.before, artists: artists, loose: true).isEmpty
     }
 
     /// The parts of a title in quotation marks: 「」『』“” and "".
-    static func quoted(_ title: String) -> [String] {
+    static func quoted(_ title: String) -> [String] { quotes(title).map(\.text) }
+
+    /// Each quoted part, with everything in the title before it.
+    private static func quotes(_ title: String) -> [(text: String, before: String)] {
         let pattern = #"「([^「」]+)」|『([^『』]+)』|“([^“”]+)”|"([^"]+)""#
         guard let regex = try? NSRegularExpression(pattern: pattern) else { return [] }
         let ns = title as NSString
         return regex.matches(in: title, range: NSRange(location: 0, length: ns.length)).compactMap { match in
             (1..<match.numberOfRanges).lazy.map { match.range(at: $0) }.first { $0.location != NSNotFound }
-                .map { ns.substring(with: $0) }
+                .map { (ns.substring(with: $0), ns.substring(to: match.range.location)) }
         }
     }
 

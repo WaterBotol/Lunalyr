@@ -184,6 +184,11 @@ final class MusicVideoMatchTests: XCTestCase {
         XCTAssertEqual(pick([Result(videoID: "AAAAAAAAAAA", title: title, channel: "YOASOBI")], title: "咲き誇れ",
                             artist: "YOASOBI"), "AAAAAAAAAAA")
         XCTAssertEqual(MusicVideoTitleMatch.quoted(#"Wallows - "Love" (Official Video)"#), ["Love"])
+        XCTAssertTrue(MusicVideoTitleMatch.matches(videoTitle: #"Wallows - "Love" (Official Video)"#, songTitle: "Love",
+                                                   artist: "Wallows"))
+        // A video about the song quotes it after words of its own (Windows, 20 Nov 2026).
+        XCTAssertFalse(MusicVideoTitleMatch.matches(videoTitle: #"Dayglow - How I Made "Hot Rod""#, songTitle: "Hot Rod",
+                                                    artist: "Dayglow"))
     }
 
     /// A version with a recording of its own never takes the plain title's video.

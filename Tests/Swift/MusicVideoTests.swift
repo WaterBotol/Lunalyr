@@ -185,6 +185,22 @@ final class MusicVideoTests: XCTestCase {
         XCTAssertEqual(http.urls.filter { $0.host == "www.youtube.com" }.map(\.absoluteString), [official, typed])
     }
 
+    /// A later search whose page has no results at all (YouTube's format,
+    /// a consent page) is a failed lookup, not "nothing official": it is
+    /// not remembered as a miss, so the song is looked up again.
+    func testAnEmptyPageOnALaterSearchIsNotRememberedAsAMiss() async {
+        let http = FakeHTTP()
+        let official = YouTubeSearchPage.requestURL(title: song.title, artist: song.artist)!.absoluteString
+        let typed = YouTubeSearchPage.requestURL(query: "The Weeknd Blinding Lights")!.absoluteString
+        http.byURL[official] = .init(status: 200, body: Fixtures.searchPage([
+            ("BBBBBBBBBBB", "The Weeknd - Blinding Lights (Lyrics)", "Lyrics Hub"),
+        ]))
+        http.byURL[typed] = .init(status: 200, body: Fixtures.searchPage([]))
+        let result = await resolver(http: http).resolve(song, online: true)
+        XCTAssertEqual(result, .missing(.lookupFailed))
+        XCTAssertNil(MusicVideoCache(defaults: defaults).lookup(song.key, now: Date(timeIntervalSince1970: 1_800_000_000)))
+    }
+
     func testAVideoForTheTitleAsGivenNeedsNoSecondSearch() async {
         let http = FakeHTTP()
         http.replies["www.youtube.com"] = .init(status: 200, body: Fixtures.searchPage([

@@ -523,7 +523,9 @@ final class MusicVideoResolver {
             }
             if found.isEmpty, let original = await originalTitle(song),
                MusicVideoTitleMatch.songKey(original) != MusicVideoTitleMatch.songKey(song.title) {
-                _ = try await search(original, matching: original)
+                // A page with no results is YouTube's format or a consent page,
+                // not "no video": not remembered as a miss (as the first search).
+                guard try await search(original, matching: original) else { return .missing(.lookupFailed) }
             }
             // Last, what Search YouTube… sends: "<artist> <title>" alone. The
             // owner found that search picked videos the automatic one missed
@@ -532,8 +534,8 @@ final class MusicVideoResolver {
             // checks pick from its results, so a lyric video or cover is still
             // never played.
             if found.isEmpty {
-                _ = try await search(YouTubeSearchPage.requestURL(query: MusicVideoSearchModel.prefill(for: song)),
-                                     matching: song.title)
+                guard try await search(YouTubeSearchPage.requestURL(query: MusicVideoSearchModel.prefill(for: song)),
+                                       matching: song.title) else { return .missing(.lookupFailed) }
             }
             let skipped = refused[song.key] ?? []
             let candidates = found.filter { !skipped.contains($0.videoID) }
