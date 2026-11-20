@@ -88,7 +88,7 @@ enum YouTubeSearchPage {
         var title: String
         var channel: String
         /// The channel carries YouTube's verified-artist badge (the music
-        /// note), from the result's `ownerBadges`.
+        /// note), from the result's `ownerBadges` (`AUDIO_BADGE` on a lockup).
         var verifiedArtist = false
         /// The length YouTube shows on the result ("3:45"), in seconds.
         var duration: Double?
@@ -214,7 +214,15 @@ enum YouTubeSearchPage {
         return " \(text) ".contains(" \(words) ")
     }
 
+    /// The page's `ytInitialData`: plain JSON in `<script id="yt-initial-data">`
+    /// on some pages, assigned in a script on others.
     private static func initialData(in html: String) -> String? {
+        if let tag = html.range(of: "id=\"yt-initial-data\""),
+           let open = html[tag.upperBound...].range(of: ">"),
+           let close = html[open.upperBound...].range(of: "</script>") {
+            let json = html[open.upperBound..<close.lowerBound].trimmingCharacters(in: .whitespacesAndNewlines)
+            if json.hasPrefix("{") { return json }
+        }
         for marker in ["var ytInitialData = ", "window[\"ytInitialData\"] = ", "ytInitialData = "] {
             guard let start = html.range(of: marker) else { continue }
             let rest = html[start.upperBound...]
@@ -236,10 +244,63 @@ enum YouTubeSearchPage {
                                     views: shown(text(renderer["shortViewCountText"]) ?? text(renderer["viewCountText"])),
                                     uploaded: shown(text(renderer["publishedTimeText"]))))
             }
-            for (key, value) in dictionary where key != "videoRenderer" { collect(value, into: &found) }
+            if let lockup = dictionary["lockupViewModel"] as? [String: Any],
+               lockup["contentType"] as? String == "LOCKUP_CONTENT_TYPE_VIDEO",
+               let id = lockup["contentId"] as? String, YouTubeVideoID.isValid(id) {
+                found.append(lockupResult(lockup, id: id))
+            }
+            for (key, value) in dictionary where key != "videoRenderer" && key != "lockupViewModel" {
+                collect(value, into: &found)
+            }
         } else if let array = node as? [Any] {
             for value in array { collect(value, into: &found) }
         }
+    }
+
+    /// A video in YouTube's newer layout (`lockupViewModel`), which some
+    /// pages use instead of `videoRenderer`. The byline row lists the
+    /// channel's names, then the views and the age, each with an
+    /// accessibility label; the channel's own names have none. The
+    /// verified-artist badge is the music note (`AUDIO_BADGE`), not the tick.
+    private static func lockupResult(_ lockup: [String: Any], id: String) -> Result {
+        let metadata = (lockup["metadata"] as? [String: Any])?["lockupMetadataViewModel"] as? [String: Any]
+        let rows = ((metadata?["metadata"] as? [String: Any])?["contentMetadataViewModel"] as? [String: Any])?[
+            "metadataRows"] as? [[String: Any]] ?? []
+        let byline = rows.first {
+            ($0["lockupContentMetadataRowExtension"] as? [String: Any])?["contentType"] as? String
+                == "METADATA_ROW_CONTENT_TYPE_BYLINE"
+        }
+        let parts = byline?["metadataParts"] as? [[String: Any]] ?? []
+        let split = parts.firstIndex { $0["accessibilityLabel"] != nil } ?? parts.endIndex
+        let channelParts = parts[..<split]
+        let channel = channelParts.compactMap { part in
+            content(part["text"])
+                ?? content(((part["avatarStack"] as? [String: Any])?["avatarStackViewModel"] as? [String: Any])?["text"])
+        }.joined(separator: " ")
+        let labelled = parts[split...].map { content($0["text"]) }
+        let verified = channelParts.contains { ($0["icon"] as? [String: Any])?["name"] as? String == "AUDIO_BADGE" }
+        let length = badgeTexts(lockup["contentImage"]).lazy.compactMap(lengthSeconds).first
+        return Result(videoID: id, title: content(metadata?["title"]) ?? "", channel: channel, verifiedArtist: verified,
+                      duration: length, views: labelled.first.flatMap { $0 },
+                      uploaded: labelled.dropFirst().first.flatMap { $0 })
+    }
+
+    /// `{content: "…"}`, trimmed; nil when there is none.
+    private static func content(_ node: Any?) -> String? {
+        shown((node as? [String: Any])?["content"] as? String)
+    }
+
+    /// Every `thumbnailBadgeViewModel` text under a lockup's image ("4:23").
+    private static func badgeTexts(_ node: Any?) -> [String] {
+        if let dictionary = node as? [String: Any] {
+            var texts: [String] = []
+            if let badge = dictionary["thumbnailBadgeViewModel"] as? [String: Any], let text = badge["text"] as? String {
+                texts.append(text)
+            }
+            for (key, value) in dictionary where key != "thumbnailBadgeViewModel" { texts += badgeTexts(value) }
+            return texts
+        }
+        return (node as? [Any])?.flatMap(badgeTexts) ?? []
     }
 
     /// "3:45" or "1:02:03" as seconds; nil for anything else ("LIVE").

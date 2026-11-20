@@ -103,6 +103,37 @@ final class MusicVideoMatchTests: XCTestCase {
         XCTAssertEqual(results.map(\.verifiedArtist), [true, false], "a plain verified tick is not the artist badge")
     }
 
+    /// YouTube's newer layout, trimmed from a real results page for
+    /// "YOASOBI The Bloom official music video" (20 Nov 2026): videos as
+    /// `lockupViewModel`, beside a channel and a playlist, which are not
+    /// videos. Served either way: assigned in a script, or as plain JSON in
+    /// `<script id="yt-initial-data">`. Either read as no videos would
+    /// fail the lookup.
+    func testVideosInYouTubesNewerLayoutAreRead() {
+        let json = #"""
+        {"contents":{"twoColumnSearchResultsRenderer":{"primaryContents":{"sectionListRenderer":{"contents":[{"itemSectionRenderer":{"contents":[{"lockupViewModel":{"contentId":"Y4nEEZwckuU","contentType":"LOCKUP_CONTENT_TYPE_VIDEO","metadata":{"lockupMetadataViewModel":{"title":{"content":"YOASOBI「群青」Official Music Video"},"metadata":{"contentMetadataViewModel":{"metadataRows":[{"metadataParts":[{"text":{"content":"YOASOBI"},"icon":{"name":"AUDIO_BADGE","accessibilityLabel":"Official Artist Channel"}},{"text":{"content":"and Echoes"}},{"text":{"content":"243M"},"accessibilityLabel":"243 million views"},{"text":{"content":"5y ago"},"accessibilityLabel":"5 years ago"}],"lockupContentMetadataRowExtension":{"contentType":"METADATA_ROW_CONTENT_TYPE_BYLINE"}}]}}}},"contentImage":{"thumbnailViewModel":{"overlays":[{"thumbnailBottomOverlayViewModel":{"badges":[{"thumbnailBadgeViewModel":{"text":"4:23"}}]}}]}}}},{"lockupViewModel":{"contentId":"UCvpredjG93ifbCP1Y77JyFA","contentType":"LOCKUP_CONTENT_TYPE_CHANNEL","metadata":{"lockupMetadataViewModel":{"title":{"content":"YOASOBI"},"metadata":{"contentMetadataViewModel":{"metadataRows":[]}}}}}},{"lockupViewModel":{"contentId":"qwYhKlY4Tx0","contentType":"LOCKUP_CONTENT_TYPE_VIDEO","metadata":{"lockupMetadataViewModel":{"title":{"content":"YOASOBI「咲き誇れ」Official Music Video / NHK連続テレビ小説『ブラッサム』主題歌"},"metadata":{"contentMetadataViewModel":{"metadataRows":[{"metadataParts":[{"text":{"content":"YOASOBI"},"icon":{"name":"AUDIO_BADGE","accessibilityLabel":"Official Artist Channel"}},{"text":{"content":"and Echoes"}},{"text":{"content":"6.3M"},"accessibilityLabel":"6.3 million views"},{"text":{"content":"1mo ago"},"accessibilityLabel":"1 month ago"}],"lockupContentMetadataRowExtension":{"contentType":"METADATA_ROW_CONTENT_TYPE_BYLINE"}}]}}}},"contentImage":{"thumbnailViewModel":{"overlays":[{"thumbnailBottomOverlayViewModel":{"badges":[{"thumbnailBadgeViewModel":{"text":"4:27"}}]}}]}}}},{"lockupViewModel":{"contentId":"t5oDcHxh2KU","contentType":"LOCKUP_CONTENT_TYPE_VIDEO","metadata":{"lockupMetadataViewModel":{"title":{"content":"咲き誇れ (The Bloom) - YOASOBI (romaji) Lyrics "},"metadata":{"contentMetadataViewModel":{"metadataRows":[{"metadataParts":[{"avatarStack":{"avatarStackViewModel":{"text":{"content":"Blu Blu"}}}},{"text":{"content":"1K"},"accessibilityLabel":"1 thousand views"},{"text":{"content":"1mo ago"},"accessibilityLabel":"1 month ago"}],"lockupContentMetadataRowExtension":{"contentType":"METADATA_ROW_CONTENT_TYPE_BYLINE"}}]}}}},"contentImage":{"thumbnailViewModel":{"overlays":[{"thumbnailBottomOverlayViewModel":{"badges":[{"thumbnailBadgeViewModel":{"text":"4:07"}}]}}]}}}},{"lockupViewModel":{"contentId":"PL_ykr4cserrqj6uLXPZzo0ZTupib7ZVZ9","contentType":"LOCKUP_CONTENT_TYPE_PLAYLIST","metadata":{"lockupMetadataViewModel":{"title":{"content":"YOASOBI - 公式MVまとめ"},"metadata":{"contentMetadataViewModel":{"metadataRows":[{"metadataParts":[{"text":{"content":"あらら"}},{"text":{"content":"Playlist"}}],"lockupContentMetadataRowExtension":{"contentType":"METADATA_ROW_CONTENT_TYPE_BYLINE"}}]}}}},"contentImage":{"thumbnailViewModel":{"overlays":[{"thumbnailBottomOverlayViewModel":{"badges":[{"thumbnailBadgeViewModel":{"text":"65 videos"}}]}}]}}}}]}}]}}}}}
+        """#
+        let pages = [
+            "<html><script nonce=\"x\">var ytInitialData = \(json);</script></html>",
+            "<html><script id=\"yt-initial-data\" type=\"application/json\">\(json)</script>"
+                + "<script>window['ytInitialData'] = JSON.parse(document.getElementById('yt-initial-data').textContent);</script></html>",
+        ]
+        for html in pages {
+            let results = YouTubeSearchPage.results(fromHTML: html)
+            XCTAssertEqual(results.map(\.videoID), ["Y4nEEZwckuU", "qwYhKlY4Tx0", "t5oDcHxh2KU"], "videos only")
+            let bloom = results[1]
+            XCTAssertEqual(bloom.title, "YOASOBI「咲き誇れ」Official Music Video / NHK連続テレビ小説『ブラッサム』主題歌")
+            XCTAssertEqual(bloom.channel, "YOASOBI and Echoes")
+            XCTAssertTrue(bloom.verifiedArtist)
+            XCTAssertEqual(bloom.duration, 267)
+            XCTAssertEqual(bloom.views, "6.3M")
+            XCTAssertEqual(bloom.uploaded, "1mo ago")
+            XCTAssertEqual(results[2].channel, "Blu Blu", "a channel shown with its picture")
+            XCTAssertFalse(results[2].verifiedArtist)
+            XCTAssertEqual(pick(results, title: "咲き誇れ", artist: "YOASOBI"), "qwYhKlY4Tx0")
+        }
+    }
+
     func testLibraryVideoMustBeTheSameSong() {
         let song = MusicVideoSong(title: "Love", artist: "Wallows", duration: 200)
         let hits = [
