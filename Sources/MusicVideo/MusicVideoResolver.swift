@@ -44,8 +44,10 @@ final class MusicVideoCache {
     /// searches a version's plain title ("Feel So Close" for "Feel So
     /// Close - Radio Edit", `MusicVideoTitleMatch.titleVersions`), 5 the
     /// song's original title ("咲き誇れ" for "The Bloom") and a quoted title,
-    /// 6 "<artist> <title>" alone, as Search YouTube… sends it.
-    static let missVersion = 6
+    /// 6 "<artist> <title>" alone, as Search YouTube… sends it, 7 titles
+    /// in 【】 or 《》 and traditional Chinese for simplified ("周杰倫
+    /// Jay Chou【告白氣球 Love Confession】Official MV" for 告白气球).
+    static let missVersion = 7
 
     private let defaults: UserDefaults
     private var entries: [String: [String: Any]]

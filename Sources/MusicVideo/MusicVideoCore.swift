@@ -172,7 +172,7 @@ enum YouTubeSearchPage {
         for (index, result) in results.prefix(12).enumerated() {
             let name = LyricQuery.normalize(result.title)
             let channel = LyricQuery.normalize(result.channel)
-            let channelKey = CoverLookup.normal(result.channel)
+            let channelKey = CoverLookup.normal(MusicVideoTitleMatch.fold(result.channel))
             guard let version = MusicVideoTitleMatch.matchedVersion(videoTitle: result.title, songTitle: title,
                                                                     artist: artist) else { continue }
             guard !channel.hasSuffix(" topic") else { continue }

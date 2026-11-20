@@ -191,6 +191,45 @@ final class MusicVideoMatchTests: XCTestCase {
                                                     artist: "Dayglow"))
     }
 
+    /// Jay Chou's 告白气球: the title in 【】 beside its English name, in
+    /// traditional characters, after the artist in both scripts (YouTube's
+    /// results page, 20 Nov 2026, as the Windows port read it).
+    func testATitleInLenticularBracketsInTraditionalCharactersIsTheSong() {
+        let official = "周杰倫 Jay Chou (特別演出: 派偉俊)【告白氣球 Love Confession】Official MV"
+        let making = "周杰倫 Jay Chou【告白氣球 Love Confession】MV花絮 Making of"
+        let rap = "周杰倫 Jay Chou【告白氣球 Love Confession】女生Rap版 - 蔡佩軒 Ariel Tsai"
+        for artist in ["周杰伦", "周杰倫", "Jay Chou"] {
+            XCTAssertTrue(MusicVideoTitleMatch.matches(videoTitle: official, songTitle: "告白气球", artist: artist), artist)
+            XCTAssertTrue(MusicVideoTitleMatch.matches(videoTitle: official, songTitle: "告白氣球", artist: artist), artist)
+            XCTAssertTrue(MusicVideoTitleMatch.matches(videoTitle: official, songTitle: "Love Confession", artist: artist),
+                          artist)
+            XCTAssertFalse(MusicVideoTitleMatch.matches(videoTitle: making, songTitle: "告白气球", artist: artist),
+                           "a making-of is about the song")
+            XCTAssertFalse(MusicVideoTitleMatch.matches(videoTitle: rap, songTitle: "告白气球", artist: artist),
+                           "another singer's version")
+        }
+        XCTAssertFalse(MusicVideoTitleMatch.matches(videoTitle: official, songTitle: "告白", artist: "周杰伦"))
+        XCTAssertFalse(MusicVideoTitleMatch.matches(videoTitle: official, songTitle: "Love", artist: "周杰伦"))
+        XCTAssertFalse(MusicVideoTitleMatch.matches(videoTitle: official, songTitle: "晴天", artist: "周杰伦"))
+        // A version beside the name is not the song.
+        XCTAssertFalse(MusicVideoTitleMatch.matches(videoTitle: "周杰倫【告白氣球 Piano Version】Official MV",
+                                                    songTitle: "告白气球", artist: "周杰伦"))
+        // 《》 quote too, with anything after, like 「」.
+        XCTAssertTrue(MusicVideoTitleMatch.matches(videoTitle: "周杰倫《晴天》官方MV", songTitle: "晴天", artist: "周杰伦"))
+        XCTAssertEqual(MusicVideoTitleMatch.songKey("告白氣球"), MusicVideoTitleMatch.songKey("告白气球"))
+
+        let results = [
+            Result(videoID: "AAAAAAAAAAA", title: making, channel: "周杰倫 Jay Chou", verifiedArtist: true),
+            Result(videoID: "BBBBBBBBBBB", title: rap, channel: "蔡佩軒 Ariel Tsai", verifiedArtist: true),
+            Result(videoID: "bu7nU9Mhpyo", title: official, channel: "周杰倫 Jay Chou", verifiedArtist: true),
+        ]
+        XCTAssertEqual(pick(results, title: "告白气球", artist: "周杰伦"), "bu7nU9Mhpyo")
+        // The channel is the artist's own in either script, badge or not.
+        var unbadged = results[2]
+        unbadged.verifiedArtist = false
+        XCTAssertEqual(pick([unbadged], title: "告白气球", artist: "周杰伦"), "bu7nU9Mhpyo")
+    }
+
     /// A version with a recording of its own never takes the plain title's video.
     func testLiveAcousticRemixAndLanguageVersionsKeepTheirOwnTitle() {
         for title in ["Feel So Close - Live", "Feel So Close - Acoustic", "Feel So Close - Tiësto Remix",

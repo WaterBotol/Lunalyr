@@ -54,44 +54,89 @@ enum MusicVideoTitleMatch {
     /// The song title as compared: brackets, "feat." credits and qualifier
     /// segments removed, then `CoverLookup.normal`.
     static func songKey(_ title: String) -> String {
-        core(title, artists: [])
+        core(fold(title), artists: [])
     }
 
     /// The video title's song part, compared the same way, with the
     /// artist's own segments (and an artist prefix or suffix) removed.
     static func videoKey(_ title: String, artist: String) -> String {
-        core(title, artists: artistParts(artist))
+        core(fold(title), artists: artistParts(artist))
+    }
+
+    /// Traditional Chinese written as simplified ("周杰倫" → "周杰伦",
+    /// "告白氣球" → "告白气球"), so a video in one script is the song in the
+    /// other. Titles, artists and channels are all compared this way; text
+    /// without Han characters is returned as it is.
+    static func fold(_ text: String) -> String {
+        guard text.unicodeScalars.contains(where: \.properties.isIdeographic) else { return text }
+        return text.applyingTransform(StringTransform("Traditional-Simplified"), reverse: false) ?? text
     }
 
     /// The song and the video name the same song. Also tried with segments
     /// that are the artist beside qualifiers or the artist's name in its
-    /// own script dropped ("米津玄師 MV「Lemon」", "IVE 아이브 'I AM' MV"); what
-    /// is left must still equal the song title.
-    /// Or the song is the title's first quoted part, with nothing but the
-    /// artist and qualifiers before it: "YOASOBI「咲き誇れ」Official Music
-    /// Video / NHK連続テレビ小説『ブラッサム』主題歌" quotes its song, then goes
-    /// on about the tie-in, whose own quoted name is not it. "Dayglow - How
-    /// I Made "Hot Rod"" quotes the song too, but is a video about it.
+    /// own script dropped ("米津玄師 MV「Lemon」", "IVE 아이브 'I AM' MV",
+    /// "周杰倫 Jay Chou"); what is left must still equal the song title.
+    /// Or the song is a quoted part with nothing but the artist and
+    /// qualifiers before it: "YOASOBI「咲き誇れ」Official Music Video /
+    /// NHK連続テレビ小説『ブラッサム』主題歌" quotes its song, then goes on about
+    /// the tie-in, whose own quoted name is not it. "Dayglow - How I Made
+    /// "Hot Rod"" quotes the song too, but is a video about it.
+    /// 【】 and 《》 quote as well. Inside them the song may sit beside its
+    /// name wholly in another script ("【告白氣球 Love Confession】" is 告白气球
+    /// and Love Confession), and after 【】 only qualifiers may follow:
+    /// "【告白氣球 Love Confession】MV花絮 Making of" is about the song.
     static func matches(videoTitle: String, songTitle: String, artist: String) -> Bool {
+        let videoTitle = fold(videoTitle)
         let song = songKey(songTitle)
         guard !song.isEmpty else { return false }
         let artists = artistParts(artist)
         if core(videoTitle, artists: artists) == song || core(videoTitle, artists: artists, loose: true) == song { return true }
-        guard let first = quotes(videoTitle).first, core(first.text, artists: artists) == song else { return false }
-        return first.before.isEmpty || core(first.before, artists: artists, loose: true).isEmpty
+        for quote in quotes(videoTitle) {
+            guard quote.before.isEmpty || core(quote.before, artists: artists, loose: true).isEmpty else { continue }
+            let named = core(quote.text, artists: artists) == song
+                || (quote.mark != .quote && namesBeside(quote.text, song: song, songTitle: songTitle, artists: artists))
+            guard named else { continue }
+            if quote.mark == .lenticular,
+               !segments(stripBrackets(quote.after)).allSatisfy({ isQualifier(stripCredits($0)) }) { continue }
+            return true
+        }
+        return false
     }
 
-    /// The parts of a title in quotation marks: 「」『』“” and "".
-    static func quoted(_ title: String) -> [String] { quotes(title).map(\.text) }
+    /// "告白气球 Love Confession" names 告白气球 and Love Confession: the song,
+    /// then (or after) a name wholly in another script, Latin beside a
+    /// title without Latin letters or the other way round. Not a version:
+    /// "Love Confession Piano Version" is not Love Confession.
+    private static func namesBeside(_ text: String, song: String, songTitle: String, artists: [String]) -> Bool {
+        guard VersionTags.tags("(\(text))").isSubset(of: VersionTags.tags(songTitle)) else { return false }
+        let key = core(text, artists: artists)
+        var rest = key
+        if key.hasPrefix(song) { rest.removeFirst(song.count) } else if key.hasSuffix(song) {
+            rest.removeLast(song.count)
+        } else { return false }
+        guard !rest.isEmpty, rest.count < key.count else { return false }
+        let latin = { (text: String) in text.unicodeScalars.contains { $0.isASCII && $0.properties.isAlphabetic } }
+        return latin(song)
+            ? !rest.unicodeScalars.contains(where: \.isASCII)
+            : rest.unicodeScalars.allSatisfy(\.isASCII) && latin(rest)
+    }
 
-    /// Each quoted part, with everything in the title before it.
-    private static func quotes(_ title: String) -> [(text: String, before: String)] {
-        let pattern = #"「([^「」]+)」|『([^『』]+)』|“([^“”]+)”|"([^"]+)""#
+    /// The parts of a title in quotation marks: 「」『』“” "" 【】 and 《》.
+    static func quoted(_ title: String) -> [String] { quotes(fold(title)).map(\.text) }
+
+    private enum Mark { case quote, lenticular, angle }
+
+    /// Each quoted part, with everything in the title before and after it.
+    private static func quotes(_ title: String) -> [(text: String, before: String, after: String, mark: Mark)] {
+        let pattern = #"「([^「」]+)」|『([^『』]+)』|“([^“”]+)”|"([^"]+)"|【([^【】]+)】|《([^《》]+)》"#
         guard let regex = try? NSRegularExpression(pattern: pattern) else { return [] }
         let ns = title as NSString
         return regex.matches(in: title, range: NSRange(location: 0, length: ns.length)).compactMap { match in
-            (1..<match.numberOfRanges).lazy.map { match.range(at: $0) }.first { $0.location != NSNotFound }
-                .map { (ns.substring(with: $0), ns.substring(to: match.range.location)) }
+            guard let group = (1..<match.numberOfRanges).first(where: { match.range(at: $0).location != NSNotFound })
+            else { return nil }
+            let end = match.range.location + match.range.length
+            return (ns.substring(with: match.range(at: group)), ns.substring(to: match.range.location),
+                    ns.substring(from: end), group == 5 ? .lenticular : group == 6 ? .angle : .quote)
         }
     }
 
@@ -116,6 +161,7 @@ enum MusicVideoTitleMatch {
     /// "A feat. B". Each is a channel or a title segment that may stand for
     /// the artist.
     static func artistParts(_ artist: String) -> [String] {
+        let artist = fold(artist)
         let whole = CoverLookup.normal(artist)
         var parts = [whole]
         let pattern = #"\s*(?:,|&|\+|/|\bx\b|\band\b|\bfeat\.?|\bft\.?|\bfeaturing\b|\bwith\b)\s*"#
@@ -150,7 +196,8 @@ enum MusicVideoTitleMatch {
     }
 
     /// A segment that is the artist plus qualifier words ("米津玄師 MV"), or
-    /// the artist plus their name in another script ("IVE 아이브").
+    /// the artist plus their name in another script ("IVE 아이브", and
+    /// "周杰伦 Jay Chou": a Latin name beside an artist written without one).
     private static func isLooseArtistSegment(_ segment: String, artists: [String]) -> Bool {
         let words = LyricQuery.normalize(segment).split(separator: " ").map(String.init)
         let rest = words.filter { !qualifierWords.contains($0) }.joined()
@@ -162,6 +209,8 @@ enum MusicVideoTitleMatch {
                 other.removeLast(artist.count)
             } else { continue }
             if !other.isEmpty, !other.unicodeScalars.contains(where: \.isASCII) { return true }
+            if !other.isEmpty, other.unicodeScalars.allSatisfy(\.isASCII),
+               !artist.unicodeScalars.contains(where: { $0.isASCII && $0.properties.isAlphabetic }) { return true }
         }
         return false
     }
