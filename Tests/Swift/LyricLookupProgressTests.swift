@@ -281,11 +281,12 @@ final class LyricLookupProgressTests: XCTestCase {
         func set() { value = true }
     }
 
-    func testASettledMatchStopsTheSourcesThatCouldNotBeatIt() async {
+    func testAnAutomaticLookupAsksEverySourceLikeASearch() async {
         let options = LyricSourceOptions.Snapshot(enabled: [.lyricsPlus, .netEase, .lrclib], mode: .smart, localFolder: "", localVersion: "")
         let words = candidate(.lyricsPlus, tier: 3), netEase = Gate(), stopped = Flag()
         // Lyrics+ has word timing and LRCLIB nothing better; NetEase, lower in
-        // the order, could only tie, so it is stopped rather than waited for.
+        // the order, could only tie, but it is asked all the same, as a search
+        // asks it (the owner, 20 Nov 2026).
         let lookup = LyricsFetcher(cacheFolder: folder, timing: fast, isOnline: { true }) { id, _, _ in
             switch id {
             case .lyricsPlus: return words
@@ -296,13 +297,15 @@ final class LyricLookupProgressTests: XCTestCase {
             default: return nil
             }
         }
-        let report = await lookup.lookup(query, options: options)
+        let report = await lookup.lookup(query, options: options) { update in
+            if update.revision == 1 { await netEase.release() }
+        }
         XCTAssertTrue(report.isComplete)
         XCTAssertEqual(source(of: report.result), LyricSourceID.lyricsPlus.title)
-        XCTAssertEqual(report.states[.netEase], "Not needed: it couldn’t beat the match showing")
+        XCTAssertEqual(report.states[.netEase], "No usable match / unavailable")
         let cancelled = await stopped.value
-        XCTAssertTrue(cancelled)
-        // Nothing stopped could have beaten it, so replays use it straight away.
+        XCTAssertFalse(cancelled, "NetEase is waited for, not stopped")
+        // Every source answered, so replays use it straight away.
         XCTAssertEqual(SavedLyrics.readCandidate(query.recordingKey + "|" + options.fingerprint, in: folder)?.source, .lyricsPlus)
 
         // A search asks every source, so all the alternatives are listed.

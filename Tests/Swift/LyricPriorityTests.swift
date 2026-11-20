@@ -13,7 +13,6 @@ final class LyricPriorityTests: XCTestCase {
     private let userOrder: [LyricSourceID] = [.lrclib, .appleMusicCache, .lyricsPlus, .netEase, .qqMusic, .kugou, .kuwo, .lyricsOVH]
     private let music = LyricSourceID.appleMusicCache.title, lrclib = LyricSourceID.lrclib.title
     private let fast = LyricsFetcher.Timing(grace: 0.2, upgradeSettle: 0.1, appleRetry: 0.3, lrclibLimit: 3, sourceLimit: 3)
-    private let couldNotBeat = LyricsFetcher.notNeeded + "it couldn’t beat the match showing"
     private var folder: URL!
 
     override func setUpWithError() throws {
@@ -446,10 +445,9 @@ final class LyricPriorityTests: XCTestCase {
         }
     }
 
-    func testLRCLIBsWordTimingStopsTheOtherServicesOnceMusicHasNone() async {
-        // Services with word timing keep answering: two of them agreeing against LRCLIB's timing
-        // would take its lead (`LyricsFetcher.couldDemote`), and Lyrics+ may relay Apple Music's.
-        // Those that cannot (plain text) are stopped.
+    func testLRCLIBsWordTimingStillAsksTheOtherServicesOnceMusicHasNone() async {
+        // An automatic lookup asks every service, as a search does (the owner,
+        // 20 Nov 2026): even plain text, which could not beat LRCLIB, is waited for.
         let others: [LyricSourceID] = [.lyricsOVH]
         for options in modes(userOrder) {
             // Music has line timing, or nothing even on its second look.
@@ -461,16 +459,16 @@ final class LyricPriorityTests: XCTestCase {
                 let report = await stub.fetcher.lookup(query, options: options)
                 XCTAssertEqual(source(of: report.result), lrclib, "\(options.mode)")
                 XCTAssertEqual(report.revision, 1, "\(options.mode)")
-                for id in others { XCTAssertEqual(report.states[id], couldNotBeat, "\(options.mode) \(id)") }
-                let stopped = await log.cancelled
-                XCTAssertEqual(stopped, Set(others), "\(options.mode)")
-                // Nothing stopped could have beaten it, so replays use it straight away.
+                for id in others {
+                    XCTAssertEqual(report.states[id]?.hasPrefix(LyricsFetcher.notNeeded), false, "\(options.mode) \(id)")
+                }
+                // Nothing that failed to answer could have beaten it, so replays use it straight away.
                 XCTAssertEqual(stub.saved(query, options), .lrclib, "\(options.mode)")
             }
         }
     }
 
-    func testMusicsSecondLookStillRunsAfterLRCLIBStopsTheOthers() async {
+    func testMusicsSecondLookStillRunsWhileTheOtherServicesAnswer() async {
         let others: [LyricSourceID] = [.lyricsOVH]
         for options in modes(userOrder) {
             let log = Log(), never = Gate()
@@ -479,7 +477,7 @@ final class LyricPriorityTests: XCTestCase {
             let report = await stub.fetcher.lookup(query, options: options) { await log.update($0) }
             let first = await log.shown(1)
             XCTAssertEqual(source(of: first?.result), lrclib, "\(options.mode)")
-            XCTAssertEqual(first?.states[.lyricsOVH], couldNotBeat, "\(options.mode)")
+            XCTAssertEqual(first?.states[.lyricsOVH], "Searching…", "\(options.mode)")
             XCTAssertEqual(report.revision, 2, "\(options.mode)")
             XCTAssertEqual(source(of: report.result), music, "\(options.mode)")
             XCTAssertEqual(report.states[.appleMusicCache], "Match found · showing", "\(options.mode)")

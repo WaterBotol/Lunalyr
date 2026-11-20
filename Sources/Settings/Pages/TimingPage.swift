@@ -213,7 +213,7 @@ struct TimingPage: View {
                 }
             }
             if model.sourceStates.values.contains(where: { $0.hasPrefix(LyricsFetcher.notNeeded) }) {
-                InspectorCaption("Search asks every source.", more: "Sources that couldn’t beat the match showing weren’t asked further. Search asks every source.")
+                InspectorCaption("Search asks every source.", more: "Music’s own word-by-word lyrics were showing, so the other sources weren’t asked further. Search asks every source.")
                     .environment(\.captionFollowsControl, false)
             }
             // A file that couldn't be imported warns; the cache's notes stay captions.

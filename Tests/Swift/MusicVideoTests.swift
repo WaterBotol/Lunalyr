@@ -155,13 +155,34 @@ final class MusicVideoTests: XCTestCase {
         let result = await resolver(http: http, originalTitle: { _ in "咲き誇れ" }).resolve(bloom, online: true)
         XCTAssertEqual(result, .found(.youTube("4NRXx6U8ABQ")))
         XCTAssertEqual(http.urls.filter { $0.host == "www.youtube.com" }.map(\.absoluteString), [english, original])
-        // Without an original title, nothing more is searched.
+        // Without an original title, only Search YouTube…'s own wording is tried after.
         defaults.removeObject(forKey: MusicVideoCache.key)
         let none = FakeHTTP()
+        let typed = YouTubeSearchPage.requestURL(query: "YOASOBI The Bloom")!.absoluteString
         none.byURL[english] = http.byURL[english]
+        none.byURL[typed] = http.byURL[english]
         let missing = await resolver(http: none).resolve(bloom, online: true)
         XCTAssertEqual(missing, .missing(.notFound))
-        XCTAssertEqual(none.urls.filter { $0.host == "www.youtube.com" }.count, 1)
+        XCTAssertEqual(none.urls.filter { $0.host == "www.youtube.com" }.map(\.absoluteString), [english, typed])
+    }
+
+    /// Nothing official under "official music video": the search Search
+    /// YouTube… sends, "<artist> <title>" alone, is tried last, and the same
+    /// checks pick from it (the owner, 20 Nov 2026).
+    func testSearchYouTubesOwnWordingIsTriedLast() async {
+        let http = FakeHTTP()
+        let official = YouTubeSearchPage.requestURL(title: song.title, artist: song.artist)!.absoluteString
+        let typed = YouTubeSearchPage.requestURL(query: "The Weeknd Blinding Lights")!.absoluteString
+        http.byURL[official] = .init(status: 200, body: Fixtures.searchPage([
+            ("BBBBBBBBBBB", "The Weeknd - Blinding Lights (Lyrics)", "Lyrics Hub"),
+        ]))
+        http.byURL[typed] = .init(status: 200, body: Fixtures.searchPage([
+            ("CCCCCCCCCCC", "Blinding Lights (cover)", "Someone"),
+            ("4NRXx6U8ABQ", "The Weeknd - Blinding Lights (Official Video)", "The Weeknd"),
+        ]))
+        let result = await resolver(http: http).resolve(song, online: true)
+        XCTAssertEqual(result, .found(.youTube("4NRXx6U8ABQ")))
+        XCTAssertEqual(http.urls.filter { $0.host == "www.youtube.com" }.map(\.absoluteString), [official, typed])
     }
 
     func testAVideoForTheTitleAsGivenNeedsNoSecondSearch() async {
@@ -900,6 +921,9 @@ final class MusicVideoTests: XCTestCase {
         first.title = "Save Your Tears"
         _ = await Task { await waiting.resolve(first, online: true) }.value
         XCTAssertEqual(waiting.rateLimit.sent.count, 1)
+        // Its second search (Search YouTube…'s wording) waited its turn and was
+        // skipped; the clock goes back, so the next lookup must wait too.
+        time = 0
         let sent = http.urls.count
         // Its own task, so only the lookup is cancelled, not the test.
         let second = await Task { await waiting.resolve(song, online: true) }.value

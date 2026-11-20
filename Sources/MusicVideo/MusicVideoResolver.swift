@@ -43,8 +43,9 @@ final class MusicVideoCache {
     /// "Nothing official" stored before 5 is looked up again: 4 also
     /// searches a version's plain title ("Feel So Close" for "Feel So
     /// Close - Radio Edit", `MusicVideoTitleMatch.titleVersions`), 5 the
-    /// song's original title ("咲き誇れ" for "The Bloom") and a quoted title.
-    static let missVersion = 5
+    /// song's original title ("咲き誇れ" for "The Bloom") and a quoted title,
+    /// 6 "<artist> <title>" alone, as Search YouTube… sends it.
+    static let missVersion = 6
 
     private let defaults: UserDefaults
     private var entries: [String: [String: Any]]
@@ -493,7 +494,8 @@ final class MusicVideoResolver {
     /// when nothing official is among them, for the song's plain title
     /// (`MusicVideoTitleMatch.titleVersions`: "Feel So Close" for "Feel So
     /// Close - Radio Edit"), then for its original title when the player
-    /// lists it under another ("咲き誇れ" for YOASOBI's "The Bloom"). A page
+    /// lists it under another ("咲き誇れ" for YOASOBI's "The Bloom"), then for
+    /// "<artist> <title>" alone, as Search YouTube… sends it. A page
     /// with no results at all is taken as YouTube having changed its
     /// format (or asking for consent), not as "no video": it is not cached.
     /// The best candidates are checked in turn for being a still image (the
@@ -502,9 +504,9 @@ final class MusicVideoResolver {
     private func searchYouTube(_ song: MusicVideoSong) async -> MusicVideoResolution {
         do {
             var found: [YouTubeSearchPage.Result] = []
-            // Each search: what to search for, and the song title a video must name.
-            func search(_ query: String, matching title: String) async throws -> Bool {
-                guard let url = YouTubeSearchPage.requestURL(title: query, artist: song.artist) else { return false }
+            // Each search: the results page to read, and the song title a video must name.
+            func search(_ url: URL?, matching title: String) async throws -> Bool {
+                guard let url else { return false }
                 let data = try await fetch(url)
                 // About a megabyte of HTML and JSON: read off the main actor.
                 let results = await parse(data)
@@ -513,12 +515,25 @@ final class MusicVideoResolver {
                                                          songDuration: song.duration)
                 return true
             }
+            func search(_ query: String, matching title: String) async throws -> Bool {
+                try await search(YouTubeSearchPage.requestURL(title: query, artist: song.artist), matching: title)
+            }
             for title in MusicVideoTitleMatch.titleVersions(song.title) where found.isEmpty {
                 guard try await search(title, matching: song.title) else { return .missing(.lookupFailed) }
             }
             if found.isEmpty, let original = await originalTitle(song),
                MusicVideoTitleMatch.songKey(original) != MusicVideoTitleMatch.songKey(song.title) {
                 _ = try await search(original, matching: original)
+            }
+            // Last, what Search YouTube… sends: "<artist> <title>" alone. The
+            // owner found that search picked videos the automatic one missed
+            // (20 Nov 2026): "official music video" can push a label's or an
+            // anime's upload of the song out of the results read. The same
+            // checks pick from its results, so a lyric video or cover is still
+            // never played.
+            if found.isEmpty {
+                _ = try await search(YouTubeSearchPage.requestURL(query: MusicVideoSearchModel.prefill(for: song)),
+                                     matching: song.title)
             }
             let skipped = refused[song.key] ?? []
             let candidates = found.filter { !skipped.contains($0.videoID) }

@@ -121,7 +121,9 @@ final class LyricSourceOptions: ObservableObject {
         /// v17: word stamps spread evenly rank as line timing, a timeline
         /// shifted to another recording ranks lower, and the leading text
         /// timed by the line takes another match's word timing.
-        static let cachePolicy = "v19"
+        /// v20: an automatic lookup asks every source, as a search does,
+        /// unless Music's own word-by-word lyrics are showing.
+        static let cachePolicy = "v20"
         /// Keys the cached online choice. Only settings that change which
         /// online result wins take part: local sources are always evaluated
         /// afresh.

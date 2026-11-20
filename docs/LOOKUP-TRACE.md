@@ -40,7 +40,7 @@ suite stays offline.
 |---|---|
 | `LUNALYR_LOOKUP_TRACE` | The songs file. Required. |
 | `LUNALYR_LOOKUP_TRACE_OUT` | Output folder. Default: the songs file's folder. |
-| `LUNALYR_LOOKUP_TRACE_ALL_SOURCES=1` | Run each song as a search: every source is asked and none is stopped early. The default is the app's automatic lookup, which stops sources once they can no longer change the pick. |
+| `LUNALYR_LOOKUP_TRACE_ALL_SOURCES=1` | Run each song as a search: every source is asked and none is stopped early, and saved choices are ignored. The default is the app's automatic lookup, which also asks every source, but stops them all once Music's own word-by-word lyrics are in hand. |
 | `LUNALYR_LOOKUP_TRACE_SKIP=lyricsPlus,…` | Leave these sources out (by id), for example to see what shows when Lyrics+ is slow or down. |
 | `LUNALYR_LOOKUP_TRACE_STOREFRONT=xx` | The iTunes storefront the original-title lookup starts from. Default: this Mac's region. |
 
@@ -59,7 +59,7 @@ The songs run one after another, about one to three seconds each.
   the timing of what it offered. `**PICK**` is what would be shown, `#n` an
   accepted match at rank n, `rej …` a match that failed the recording check
   (with the reason), `none` no match, `stopped` not needed (the automatic
-  lookup stopped it), `timeout`, or `error: …`. Timing is `word`, `mixed`,
+  lookup stopped it: Music's own word-by-word lyrics were in hand), `timeout`, or `error: …`. Timing is `word`, `mixed`,
   `spread` (word stamps a tool spread evenly over each line: ranked as line
   timing), `line`, `phrase-timed` (a whole line or long phrases timed as words),
   `plain`, or `faulty` (lines stamped faster than they could be sung).

@@ -394,19 +394,15 @@ final class LyricsFetcher {
                 default:
                     break
                 }
-                // Stop early once a source's answer could no longer change what
-                // shows or what replays use: everything stops only once the best
-                // possible match is in hand. A search asks every source, so all
-                // the alternatives are listed.
-                if automatic, publication.shown != nil, let best {
-                    let onlineBest = Self.choose(screened.accepted.filter { !$0.source.isLocal }, query: query, options: options)
-                    let idle = pending.filter {
-                        !Self.matters($0, best: best, onlineBest: onlineBest, query: query, options: options, among: screened.accepted)
-                    }
-                    if !idle.isEmpty {
-                        stop(idle, because: Self.notNeeded + (best.source == .appleMusicCache
-                             ? "Music’s own lyrics are showing" : "it couldn’t beat the match showing"))
-                    }
+                // An automatic lookup asks every source, as a search does, so
+                // it chooses among the same matches (the owner, 20 Nov 2026:
+                // the search found better lyrics than the automatic lookup,
+                // which stopped sources it judged could not beat the match
+                // showing). Only Music's own word-by-word lyrics end it early:
+                // nothing ranks above them, and a replay reads Music again.
+                if automatic, publication.shown != nil, let best,
+                   best.source == .appleMusicCache, Self.rankedTiming(best.result) == 3, !pending.isEmpty {
+                    stop(pending, because: Self.notNeeded + "Music’s own lyrics are showing")
                 }
                 if !onlineStarted, musicAnswered || onlineDue {
                     onlineStarted = true
