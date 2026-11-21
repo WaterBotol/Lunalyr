@@ -299,7 +299,9 @@ struct QueuePlaylistStore: @unchecked Sendable {
 /// How a click on a song went, for the strip's note and the log.
 enum QueueOutcome: Equatable, Sendable {
     /// "Lunalyr Queue" plays: `songs` of the `wanted` ones were copied.
-    case queued(songs: Int, wanted: Int, fromAlbum: Bool)
+    /// `fromAlbum`: the rest of the song's album follows it; `moreBy`: the
+    /// artist whose other library songs follow (nil when none do).
+    case queued(songs: Int, wanted: Int, fromAlbum: Bool, moreBy: String? = nil)
     /// The song plays on its own.
     case alone(QueueSolo)
     /// A newer click came first; this one played nothing.
@@ -308,8 +310,12 @@ enum QueueOutcome: Equatable, Sendable {
     /// In plain words, when there is something to say.
     var note: String? {
         switch self {
-        case .queued(let songs, let wanted, let fromAlbum):
+        case .queued(let songs, let wanted, let fromAlbum, let moreBy):
             if songs < wanted { return "Some songs after it couldn\u{2019}t be added, so they\u{2019}re left out." }
+            if let moreBy {
+                let who = moreBy.isEmpty ? "the same artist" : moreBy
+                return fromAlbum ? "Then the rest of its album and more by \(who)." : "Then more by \(who)."
+            }
             return fromAlbum ? "Then the rest of its album." : nil
         case .alone(let why): return why.note
         case .superseded: return nil
@@ -323,9 +329,11 @@ enum QueueSolo: String, Sendable {
     case source
     /// The song isn't in the library, so nothing can be copied after it.
     case notInLibrary
-    /// A library song with no album name.
+    /// A library song with no album name, and nothing else by its artist
+    /// in the library.
     case single
-    /// Nothing comes after it on its album in the library.
+    /// Nothing comes after it on its album, and nothing else by its artist
+    /// is in the library.
     case album
     /// The queue could not be built, so the song plays by itself.
     case rescued
@@ -334,18 +342,20 @@ enum QueueSolo: String, Sendable {
         switch self {
         case .source: return "Plays this song only: Lunalyr can keep only your library and your own playlists going."
         case .notInLibrary: return "Plays this song only: it isn\u{2019}t in your library, so the playlist can\u{2019}t carry on from it."
-        case .single: return "Plays this song only."
-        case .album: return "Plays this song only: nothing after it on its album is in your library."
+        case .single: return "Plays this song only: nothing else by its artist is in your library."
+        case .album: return "Plays this song only: nothing after it on its album or by its artist is in your library."
         case .rescued: return "Couldn\u{2019}t line up what comes next, so this song plays on its own."
         }
     }
 }
 
-/// A library song from the clicked song's album.
+/// A library song from the clicked song's album, or by its artist.
 struct AlbumTrack: Equatable, Sendable {
     var id: String
     var disc = 0
     var number = 0
+    /// The album it is on: read for the artist's songs only.
+    var album = ""
 }
 
 /// The first step's reply (`AppleMusicSearch.prepareQueue`).
@@ -354,8 +364,10 @@ enum QueuePrepared: Equatable, Sendable {
     case played(QueueSolo, source: String, songs: Int)
     /// The new queue playlist's persistent ID.
     case made(String, source: String, songs: Int)
-    /// The clicked library song's album, in library order.
-    case album([AlbumTrack], source: String, songs: Int)
+    /// The clicked library song's album (empty when it has no album name)
+    /// and every library song by its artist (`artistName`), each in
+    /// library order.
+    case album([AlbumTrack], artist: [AlbumTrack] = [], artistName: String = "", source: String, songs: Int)
     case unreadable
 
     init(_ items: [NSAppleEventDescriptor]) {
@@ -371,12 +383,23 @@ enum QueuePrepared: Equatable, Sendable {
             guard let id = QueuePlaylistStore.valid(text(4)) else { self = .unreadable; return }
             self = .made(id, source: text(2), songs: number(3))
         case "album":
-            let ids = items.indices.contains(4) ? items[4].scriptItems.map { $0.scriptText ?? "" } : []
+            func texts(_ i: Int) -> [String] { items.indices.contains(i) ? items[i].scriptItems.map { $0.scriptText ?? "" } : [] }
+            let ids = texts(4)
             let discs = numbers(5), tracks = numbers(6)
             let matched = discs.count == ids.count && tracks.count == ids.count
+            // The artist's songs: lists of different lengths keep library
+            // order with nothing else known.
+            let artistIDs = texts(7), albums = texts(8), artistDiscs = numbers(9), artistTracks = numbers(10)
+            let artistMatched = albums.count == artistIDs.count && artistDiscs.count == artistIDs.count
+                && artistTracks.count == artistIDs.count
             self = .album(ids.indices.map { AlbumTrack(id: ids[$0], disc: matched ? discs[$0] : 0,
                                                         number: matched ? tracks[$0] : 0) },
-                          source: text(2), songs: number(3))
+                          artist: artistIDs.indices.map {
+                              AlbumTrack(id: artistIDs[$0], disc: artistMatched ? artistDiscs[$0] : 0,
+                                         number: artistMatched ? artistTracks[$0] : 0,
+                                         album: artistMatched ? albums[$0] : "")
+                          },
+                          artistName: text(11), source: text(2), songs: number(3))
         default:
             self = .unreadable
         }
@@ -387,7 +410,9 @@ enum QueuePrepared: Equatable, Sendable {
         switch self {
         case .played(let why, let source, let songs): return "source \(source) (\(songs) songs): plays alone (\(why.rawValue))"
         case .made(_, let source, let songs): return "source \(source) (\(songs) songs): building"
-        case .album(let tracks, let source, _): return "not in the playing playlist (source \(source)): \(tracks.count) songs on its album in the library"
+        case .album(let tracks, let artist, _, let source, _):
+            return "not in the playing playlist (source \(source)): \(tracks.count) songs on its album, "
+                + "\(artist.count) by its artist in the library"
         case .unreadable: return "unreadable reply"
         }
     }
@@ -498,8 +523,33 @@ struct AppleMusicSearch: PlayerSearching {
         return merged
     }
 
-    private static func key(_ title: String, _ artist: String, _ kind: PlayerSearchResult.Kind = .song) -> String {
-        "\(kind.rawValue)|\(title.lowercased())|\(artist.lowercased())"
+    /// Library and catalogue results for the same song share a key, so the
+    /// library copy (which can carry on into a queue) wins: case, accents
+    /// and width don't count, nor a trailing "(feat. …)", "[ft …]",
+    /// "feat. …", "(Remastered 2011)" or " - Remastered …".
+    static func key(_ title: String, _ artist: String, _ kind: PlayerSearchResult.Kind = .song) -> String {
+        "\(kind.rawValue)|\(loose(title))|\(loose(artist))"
+    }
+
+    private static let looseTails: [NSRegularExpression] = [
+        #"\s*[(\[]\s*(feat\.?|ft\.?|featuring)\s[^)\]]*[)\]]\s*$"#,
+        #"\s*[(\[][^)\]]*remaster[^)\]]*[)\]]\s*$"#,
+        #"\s+[-\u2013\u2014]\s+[^-\u2013\u2014]*remaster.*$"#,
+        #"\s+(feat\.?|ft\.|featuring)\s.*$"#,
+    ].map { try! NSRegularExpression(pattern: $0) }
+
+    static func loose(_ text: String) -> String {
+        var folded = text.folding(options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive], locale: nil)
+        var changed = true
+        while changed {
+            changed = false
+            for tail in looseTails {
+                let range = NSRange(folded.startIndex..., in: folded)
+                let cut = tail.stringByReplacingMatches(in: folded, range: range, withTemplate: "")
+                if cut != folded, !cut.trimmingCharacters(in: .whitespaces).isEmpty { folded = cut; changed = true }
+            }
+        }
+        return folded.split(whereSeparator: \.isWhitespace).joined(separator: " ")
     }
 
     /// Tracks already in the library. Only those can be played by their
@@ -602,7 +652,7 @@ struct AppleMusicSearch: PlayerSearching {
     /// it are copied, in order, into a playlist of Lunalyr's own, which is
     /// played from its start: the playlist carries on, and shuffle still works.
     /// A library song from outside the playing playlist (a search result)
-    /// carries on through the rest of its album instead.
+    /// carries on through the rest of its album, then more by its artist.
     ///
     /// Only playlists Lunalyr made are ever deleted: their persistent IDs are
     /// kept (`QueuePlaylistStore`), and one is deleted only while it is still
@@ -684,8 +734,13 @@ struct AppleMusicSearch: PlayerSearching {
     ///   CD, a folder, a stream) or the song is not in the library: plays
     ///   it alone, `{"ok", "played", why, kind, count}`;
     /// - it is only in the library (a search result, a song from history):
-    ///   replies with its album's songs, `{"ok", "album", kind, count, ids,
-    ///   discs, numbers}`, or plays it alone when it has no album name.
+    ///   replies with its album's songs and every song by its artist,
+    ///   `{"ok", "album", kind, count, ids, discs, numbers, artistIDs,
+    ///   artistAlbums, artistDiscs, artistNumbers, artist}`. A song with no
+    ///   album name has empty album lists. The artist is the album artist,
+    ///   or the song's own artist on a compilation or when there is none,
+    ///   and a song counts as theirs by either field. Each list is one bulk
+    ///   read; the artist's always holds at least the clicked song.
     ///
     /// Only library songs are ever copied (`fillQueue`, `fillRange`): adding
     /// any other song to a user playlist would add it to the library.
@@ -746,16 +801,36 @@ struct AppleMusicSearch: PlayerSearching {
         set albumName to ""
         set albumArtist to ""
         set trackArtist to ""
+        set isCompilation to false
         try
         set albumName to album of libTrack
         set albumArtist to album artist of libTrack
         set trackArtist to artist of libTrack
+        set isCompilation to compilation of libTrack
         on error number errorNumber
         if errorNumber is not in \(PlayerScriptSource.tolerated) then error number errorNumber
         end try
+        set albumIDs to {}
+        set albumDiscs to {}
+        set albumNumbers to {}
+        set artistName to trackArtist
+        if albumArtist is not "" and not isCompilation then set artistName to albumArtist
+        set artistIDs to {}
+        set artistAlbums to {}
+        set artistDiscs to {}
+        set artistNumbers to {}
+        if artistName is not "" then
+        try
+        set artistIDs to persistent ID of (every track of library playlist 1 whose album artist is artistName or artist is artistName)
+        set artistAlbums to album of (every track of library playlist 1 whose album artist is artistName or artist is artistName)
+        set artistDiscs to disc number of (every track of library playlist 1 whose album artist is artistName or artist is artistName)
+        set artistNumbers to track number of (every track of library playlist 1 whose album artist is artistName or artist is artistName)
+        on error number errorNumber
+        if errorNumber is not in \(PlayerScriptSource.tolerated) then error number errorNumber
+        end try
+        end if
         if albumName is "" then
-        play libTrack
-        return {"ok", "played", "single", sourceKind, total}
+        return {"ok", "album", sourceKind, total, albumIDs, albumDiscs, albumNumbers, artistIDs, artistAlbums, artistDiscs, artistNumbers, artistName}
         end if
         if albumArtist is not "" then
         set albumIDs to persistent ID of (every track of library playlist 1 whose album is albumName and album artist is albumArtist)
@@ -766,7 +841,7 @@ struct AppleMusicSearch: PlayerSearching {
         set albumDiscs to disc number of (every track of library playlist 1 whose album is albumName and artist is trackArtist)
         set albumNumbers to track number of (every track of library playlist 1 whose album is albumName and artist is trackArtist)
         end if
-        return {"ok", "album", sourceKind, total, albumIDs, albumDiscs, albumNumbers}
+        return {"ok", "album", sourceKind, total, albumIDs, albumDiscs, albumNumbers, artistIDs, artistAlbums, artistDiscs, artistNumbers, artistName}
         """
     }
 
@@ -1034,6 +1109,7 @@ struct AppleMusicSearch: PlayerSearching {
             let wanted: Int
             var copied = 0
             var fromAlbum = false
+            var moreBy: String?
             switch prepared {
             case .unreadable:
                 throw PlayerSearchError.failed
@@ -1060,14 +1136,17 @@ struct AppleMusicSearch: PlayerSearching {
                             "fill", fillRange(from: range.lowerBound, to: range.upperBound, into: made)))
                     }
                 }
-            case .album(let tracks, _, _):
-                let order = albumQueue(startingAt: id, tracks: tracks)
+            case .album(let tracks, let artist, let name, _, _):
+                let carried = carryOn(startingAt: id, album: tracks, artist: artist)
+                let order = carried.ids
                 guard order.count > 1 else {
                     _ = try await send("play-alone", playAlone(persistentID: id))
-                    QueueLog.finished(click, "played alone (nothing after it on its album)")
-                    return .alone(.album)
+                    let why: QueueSolo = tracks.isEmpty ? .single : .album
+                    QueueLog.finished(click, "played alone (\(why.rawValue): nothing after it on its album or by its artist)")
+                    return .alone(why)
                 }
-                fromAlbum = true
+                fromAlbum = carried.onAlbum > 0
+                moreBy = carried.byArtist > 0 ? name : nil
                 wanted = order.count
                 let madeReply = try await send("make", makeQueue())
                 guard madeReply.count >= 3, let made = madeReply[2].scriptText.flatMap(QueuePlaylistStore.valid) else {
@@ -1095,8 +1174,9 @@ struct AppleMusicSearch: PlayerSearching {
                 QueueLog.step(click, "finish", failed: "play error \(playError)")
                 throw PlayerSearchError.scriptFailed(playError)
             }
-            QueueLog.finished(click, "playing \(queuePlaylistName), \(copied) songs\(fromAlbum ? " from its album" : "")")
-            return .queued(songs: copied, wanted: wanted, fromAlbum: fromAlbum)
+            QueueLog.finished(click, "playing \(queuePlaylistName), \(copied) songs"
+                + "\(fromAlbum ? " from its album" : "")\(moreBy != nil ? " and by its artist" : "")")
+            return .queued(songs: copied, wanted: wanted, fromAlbum: fromAlbum, moreBy: moreBy)
         } catch {
             guard !(error is CancellationError) else { throw error }
             do {
@@ -1124,12 +1204,43 @@ struct AppleMusicSearch: PlayerSearching {
             .prefix(queueLength))
     }
 
+    /// What a library song from outside the playing playlist carries on
+    /// with: the rest of its album (`albumQueue`), then the artist's other
+    /// library songs by album, disc and track number (library order for
+    /// ties, untitled albums last), leaving out its own album and anything
+    /// already queued, up to `queueLength` in all. `onAlbum` and `byArtist`
+    /// count the songs after the clicked one from each.
+    static func carryOn(startingAt id: String, album: [AlbumTrack], artist: [AlbumTrack])
+        -> (ids: [String], onAlbum: Int, byArtist: Int) {
+        let fromAlbum = albumQueue(startingAt: id, tracks: album)
+        guard !fromAlbum.isEmpty else { return ([], 0, 0) }
+        let ownAlbum = Set(album.map(\.id))
+        var seen = Set(fromAlbum)
+        let ordered = artist.enumerated().sorted { a, b in
+            let left = a.element, right = b.element
+            if left.album != right.album {
+                if left.album.isEmpty || right.album.isEmpty { return right.album.isEmpty }
+                let order = left.album.localizedStandardCompare(right.album)
+                if order != .orderedSame { return order == .orderedAscending }
+            }
+            return (max(left.disc, 1), left.number > 0 ? left.number : Int.max, a.offset)
+                < (max(right.disc, 1), right.number > 0 ? right.number : Int.max, b.offset)
+        }.map(\.element.id)
+        let more = ordered.filter { QueuePlaylistStore.valid($0) != nil && !ownAlbum.contains($0) && seen.insert($0).inserted }
+            .prefix(max(0, queueLength - fromAlbum.count))
+        return (fromAlbum + more, fromAlbum.count - 1, more.count)
+    }
+
     func play(_ result: PlayerSearchResult) async throws {
         _ = try await playNoting(result)
     }
 
     /// A library song carries on through the playlist it is in, else its
-    /// album (`playInContext`); the note says when it plays alone.
+    /// album and then more by its artist (`playInContext`); the note says
+    /// when it plays alone. A catalogue song (not in the library) is opened
+    /// by its address and plays as Music plays it: it can't be copied into
+    /// a playlist, and what Music does after it is not verified here (that
+    /// would mean playing music on the owner's Mac).
     func playNoting(_ result: PlayerSearchResult) async throws -> String? {
         switch result.target {
         case .libraryTrack(let id):

@@ -12,6 +12,14 @@ Removed, Fixed or Security. Several branches may add entries at the same time.
 When merging, keep every entry and combine duplicate headings.
 -->
 
+### Removed
+
+- Music video: the desktop player no longer lines up the video. Its film button, the video bar it opened, the arrow keys for it and Align… in the menu bar are gone. Video earlier / later and Tap to sync in the menu bar (and Settings) still set a video's timing, and a timing set before is kept.
+
+### Fixed
+
+- Desktop player: a song picked from search (or from history) that isn't in the playing playlist no longer stops after its album. Lunalyr Queue now carries on with the rest of its album and then the artist's other songs in your library, album by album; a song with no album, or the last one on its album, carries on with the artist too. It plays on its own only when nothing else by that artist is in your library, and the note over the player says which. A catalogue result is now hidden when the same song is in your library, even with a "(feat. …)" or "Remastered" tag on one of them, so the library copy, which can carry on, is the one you pick.
+
 ## [2.2.0] - 2026-11-17
 
 ### Added

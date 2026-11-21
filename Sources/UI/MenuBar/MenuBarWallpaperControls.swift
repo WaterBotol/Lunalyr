@@ -114,8 +114,8 @@ struct MenuBarWallpaperControls: View {
 }
 
 /// The music video's rows while it is the wallpaper: its timing against the
-/// song (Video earlier / later, a quarter second a click), Tap to sync and
-/// Align… for the video, Search YouTube… and Open video on YouTube.
+/// song (Video earlier / later, a quarter second a click), Tap to sync,
+/// Search YouTube… and Open video on YouTube.
 struct MenuBarMusicVideoRows: View {
     @ObservedObject var musicVideo: MusicVideoController
 
@@ -150,11 +150,6 @@ struct MenuBarMusicVideoRows: View {
                 .accessibilityValue(MusicVideoTiming.format(musicVideo.currentOffset))
                 MenuPanelRow(MusicVideoTapSync.buttonTitle(musicVideo.tapState)) { musicVideo.tapSyncButton() }
                     .help("Click, then press any key the moment the singing starts in the video")
-                // Drag the video in the desktop player (same offset as the nudges).
-                MenuPanelRow(musicVideo.isAligning ? "Aligning…" : "Align…") { startAlign() }
-                    .disabled(!musicVideo.isAligning && alignReason != nil)
-                    .help(alignReason
-                          ?? "Drag the video\u{2019}s own bar in the desktop player until the picture matches the music (kept for this video)")
                 if let note = MusicVideoTapSync.note(musicVideo.tapState) {
                     MenuPanelCaption(note)
                 }
@@ -169,20 +164,6 @@ struct MenuBarMusicVideoRows: View {
                 }
             }
         }
-    }
-
-    /// Why Align… can't start, nil when it can: it needs the desktop player.
-    private var alignReason: String? {
-        guard DesktopOptions.shared.showsControlsOnHover else {
-            return "Turn on Settings > General > Show player on hover to drag the video on the desktop"
-        }
-        return musicVideo.alignAvailability.reason
-    }
-
-    /// Align mode, with the desktop player brought up to drag the video in.
-    private func startAlign() {
-        guard musicVideo.beginAlign() else { return }
-        HoverState.shared.pinForAlign()
     }
 }
 

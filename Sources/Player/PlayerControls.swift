@@ -3,17 +3,15 @@ import SwiftUI
 
 private typealias P = LunalyrDesign.Player
 
-/// The row under the seek bar: the transport on the left; search, the
-/// queue and the film button (lining up the music video) on the right.
-/// The player switch is not here: it only steers search, so it sits by
-/// the search box.
-struct PlayerControlsRow<Transport: View, Film: View>: View {
+/// The row under the seek bar: the transport on the left; search and the
+/// queue on the right. The player switch is not here: it only steers
+/// search, so it sits by the search box.
+struct PlayerControlsRow<Transport: View>: View {
     let searchOpen: Bool
     let queueOpen: Bool
     let onSearch: () -> Void
     let onQueue: () -> Void
     @ViewBuilder let transport: () -> Transport
-    @ViewBuilder let film: () -> Film
 
     var body: some View {
         HStack(spacing: 4) {
@@ -23,10 +21,14 @@ struct PlayerControlsRow<Transport: View, Film: View>: View {
                              help: "Search and play a song (\u{2318}F)", action: onSearch)
             PlayerIconButton(symbol: "list.bullet", on: queueOpen, label: "Queue",
                              help: "What played and what plays next", action: onQueue)
-            film()
         }
         .frame(height: PlayerTransportRowHeight.value)
     }
+}
+
+/// The transport row's height.
+enum PlayerTransportRowHeight {
+    static let value: CGFloat = 44
 }
 
 /// Previous, a round white play button, next. Large in the song's column,

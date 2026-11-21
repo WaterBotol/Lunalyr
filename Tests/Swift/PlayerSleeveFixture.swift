@@ -9,7 +9,7 @@ import SwiftUI
 
 /// What the player is showing.
 enum SleeveState: String, CaseIterable {
-    case rest, hover, scrub, search, queue, paused, nothing, radio, advert, noDuration, align, reduced, spotify,
+    case rest, hover, scrub, search, queue, paused, nothing, radio, advert, noDuration, reduced, spotify,
          reduceMotion, playNote
 
     var title: String {
@@ -24,7 +24,6 @@ enum SleeveState: String, CaseIterable {
         case .radio: return "Radio / stream: LIVE"
         case .advert: return "Advert: read-only"
         case .noDuration: return "No known length"
-        case .align: return "Lining up the music video"
         case .reduced: return "Reduce Transparency + Increase Contrast, hovering"
         case .spotify: return "Spotify queue: only the song playing"
         case .reduceMotion: return "Reduce Motion, paused: the record stays put"
@@ -122,13 +121,8 @@ struct SleeveFixture {
         var preview = PlayerPreview(covers: PlayerPreviewScene.covers)
         preview.now = PlayerNow(track: track, isPlaying: !paused && track != nil, player: spotify ? .spotify : .appleMusic,
                                 artwork: artwork)
-        preview.musicVideo = true
         preview.searchFocused = state == .search
         preview.backdrop = backdrop
-        if state == .align {
-            preview.align = MusicVideoAlignDisplay(videoLength: 232, songDuration: Self.duration, offset: 15, songTime: 79,
-                                                   origin: .estimated)
-        }
         self.preview = preview
         switch state {
         case .reduced: look = PlayerLook(reduceTransparency: true, increaseContrast: true)
@@ -160,7 +154,7 @@ struct SleeveScene: View {
 
     var body: some View {
         let probe = SleeveFixture(state: state)
-        let previewing = probe.scrubbing || state == .align
+        let previewing = probe.scrubbing
         let focus = PlayerHoverFocus.look(hovered: true, previewing: previewing, reduceMotion: probe.look.reduceMotion)
         let wallpaper = SleeveWallpaper(kind: backdrop, lyric: state != .nothing,
                                         line: probe.scrubbing ? "Count the windows going gold" : "Oh, the evening knows my name",

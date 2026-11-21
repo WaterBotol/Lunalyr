@@ -3,7 +3,7 @@ import XCTest
 @testable import VersoCustom
 
 // Picking a song in the desktop player carries on with what follows it:
-// the playlist it is in, else its album; and when it can't, the song still
+// the playlist it is in, else its album and then more by its artist; and when it can't, the song still
 // plays and the strip says why. A fake script lane stands in for Music.
 
 private func text(_ value: String) -> NSAppleEventDescriptor { NSAppleEventDescriptor(string: value) }
@@ -294,6 +294,102 @@ final class QueueContinuationTests: XCTestCase {
         XCTAssertEqual(store.pendingIDs, [])
     }
 
+    // MARK: Then more by the artist
+
+    /// The album reply with the artist's songs: the album above, plus two
+    /// other albums ("Zeta" in library order before "Alpha"), a song with no
+    /// album, and a repeat of one of the album's songs.
+    private static func artistReply(albumIDs: [String] = ["00B2", "00A1", "00C3", "00D0", "002E", "00B2"],
+                                    artist: [(String, String, Int, Int)]? = nil) -> NSAppleEventDescriptor {
+        let songs = artist ?? [
+            ("0F02", "Zeta", 1, 2), ("00B2", "Album", 1, 2), ("0F01", "Zeta", 1, 1), ("0A01", "alpha", 1, 1),
+            ("0E00", "", 0, 0), ("0A02", "alpha", 2, 1), ("00A1", "Album", 1, 1),
+        ]
+        let full = albumIDs.count == 6
+        return list([
+            text("ok"), text("album"), text("playlist"), number(40),
+            list(albumIDs.map(text)),
+            list((full ? [1, 1, 1, 1, 2, 1] : albumIDs.map { _ in 1 }).map(number)),
+            list((full ? [2, 1, 3, 0, 1, 2] : albumIDs.map { _ in 1 }).map(number)),
+            list(songs.map { text($0.0) }), list(songs.map { text($0.1) }),
+            list(songs.map { number($0.2) }), list(songs.map { number($0.3) }),
+            text("Lunar Tides"),
+        ])
+    }
+
+    func testTheArtistsSongsFollowTheAlbumByAlbumDiscAndTrack() {
+        guard case .album(let album, let artist, let name, _, _) = QueuePrepared(Self.artistReply().scriptItems) else {
+            return XCTFail("an album reply")
+        }
+        XCTAssertEqual(name, "Lunar Tides")
+        XCTAssertEqual(artist.first, AlbumTrack(id: "0F02", disc: 1, number: 2, album: "Zeta"))
+        let carried = AppleMusicSearch.carryOn(startingAt: "00C3", album: album, artist: artist)
+        XCTAssertEqual(carried.ids, ["00C3", "00D0", "002E", "0A01", "0A02", "0F01", "0F02", "0E00"],
+                       "the album from the song on, then the artist's albums A to Z (case aside), no-album songs last, "
+                       + "never the clicked album's earlier songs")
+        XCTAssertEqual(carried.onAlbum, 2)
+        XCTAssertEqual(carried.byArtist, 5)
+        let long = (1...200).map { AlbumTrack(id: String(format: "%04X", $0), disc: 1, number: $0, album: "B") }
+        let capped = AppleMusicSearch.carryOn(startingAt: "00A1", album: album, artist: long)
+        XCTAssertEqual(capped.ids.count, AppleMusicSearch.queueLength)
+        XCTAssertEqual(Array(capped.ids.prefix(5)), ["00A1", "00B2", "00C3", "00D0", "002E"])
+    }
+
+    private func playArtist(_ reply: NSAppleEventDescriptor, from id: String) async throws -> (QueueOutcome, ScriptedMusic) {
+        let music = ScriptedMusic { step, script in
+            switch step {
+            case "prepare": return .success(reply)
+            case "make": return .success(list([text("ok"), text("made"), text("00FE")]))
+            case "fill": return .success(filled(script))
+            default: return .success(list([text("ok"), number(0)]))
+            }
+        }
+        let (search, _) = search(music)
+        return (try await search.playInContext(persistentID: id, index: nil, origin: "search"), music)
+    }
+
+    func testTheLastSongOnAnAlbumCarriesOnWithTheArtist() async throws {
+        let (outcome, music) = try await playArtist(Self.artistReply(), from: "002E")
+        XCTAssertEqual(music.steps, ["prepare", "make", "fill", "finish"])
+        XCTAssertEqual(music.sources("fill").flatMap(copiedIDs), ["002E", "0A01", "0A02", "0F01", "0F02", "0E00"])
+        XCTAssertEqual(outcome, .queued(songs: 6, wanted: 6, fromAlbum: false, moreBy: "Lunar Tides"))
+        XCTAssertEqual(outcome.note, "Then more by Lunar Tides.")
+    }
+
+    func testAnAlbumSongCarriesOnThroughItsAlbumThenTheArtist() async throws {
+        let (outcome, _) = try await playArtist(Self.artistReply(), from: "00A1")
+        XCTAssertEqual(outcome, .queued(songs: 10, wanted: 10, fromAlbum: true, moreBy: "Lunar Tides"))
+        XCTAssertEqual(outcome.note, "Then the rest of its album and more by Lunar Tides.")
+    }
+
+    func testASongWithNoAlbumCarriesOnWithTheArtist() async throws {
+        let reply = Self.artistReply(albumIDs: [], artist: [("0E00", "", 0, 0), ("0A01", "Alpha", 1, 1)])
+        let (outcome, music) = try await playArtist(reply, from: "0E00")
+        XCTAssertEqual(music.sources("fill").flatMap(copiedIDs), ["0E00", "0A01"])
+        XCTAssertEqual(outcome.note, "Then more by Lunar Tides.")
+    }
+
+    func testASongPlaysAloneOnlyWhenNothingElseByItsArtistIsInTheLibrary() async throws {
+        let single = Self.artistReply(albumIDs: [], artist: [("0E00", "", 0, 0)])
+        let (alone, music) = try await playArtist(single, from: "0E00")
+        XCTAssertEqual(alone, .alone(.single))
+        XCTAssertEqual(music.steps, ["prepare", "play-alone"])
+        let last = Self.artistReply(albumIDs: ["00A1", "00B2"], artist: [("00A1", "Album", 1, 1), ("00B2", "Album", 1, 1)])
+        let (albumAlone, _) = try await playArtist(last, from: "00B2")
+        XCTAssertEqual(albumAlone, .alone(.album), "the artist's only songs are on this album")
+    }
+
+    func testThePrepareStepReadsTheArtistsSongsInBulk() {
+        let source = AppleMusicSearch.prepareQueue(persistentID: "AB12", index: nil, leftovers: [])
+        let reads = ["IDs": "persistent ID", "Albums": "album", "Discs": "disc number", "Numbers": "track number"]
+        for (list, property) in reads {
+            XCTAssertTrue(source.contains("set artist\(list) to \(property) of (every track of library playlist 1 "
+                                          + "whose album artist is artistName or artist is artistName)"), property)
+        }
+        XCTAssertFalse(source.contains("\"single\""), "a song with no album no longer plays alone in step one")
+        XCTAssertTrue(source.contains("if albumArtist is not \"\" and not isCompilation then set artistName to albumArtist"))
+    }
+
     // MARK: Notes, errors, records
 
     func testEveryWayOfPlayingAloneSaysWhyInPlainWords() {
@@ -303,6 +399,15 @@ final class QueueContinuationTests: XCTestCase {
             XCTAssertEqual(QueueOutcome.alone(why).note, why.note)
         }
         XCTAssertNil(QueueOutcome.queued(songs: 150, wanted: 150, fromAlbum: false).note)
+        XCTAssertEqual(QueueSolo.single.note, "Plays this song only: nothing else by its artist is in your library.")
+        XCTAssertEqual(QueueSolo.album.note,
+                       "Plays this song only: nothing after it on its album or by its artist is in your library.")
+        XCTAssertEqual(QueueOutcome.queued(songs: 3, wanted: 3, fromAlbum: true).note, "Then the rest of its album.")
+        XCTAssertEqual(QueueOutcome.queued(songs: 3, wanted: 3, fromAlbum: true, moreBy: "").note,
+                       "Then the rest of its album and more by the same artist.")
+        XCTAssertEqual(QueueOutcome.queued(songs: 3, wanted: 3, fromAlbum: false, moreBy: "IU").note, "Then more by IU.")
+        XCTAssertEqual(QueueOutcome.queued(songs: 2, wanted: 3, fromAlbum: true, moreBy: "IU").note,
+                       "Some songs after it couldn\u{2019}t be added, so they\u{2019}re left out.")
         XCTAssertNil(QueueOutcome.superseded.note)
         XCTAssertGreaterThan(PlayerNoteToast.noteSeconds(QueueSolo.notInLibrary.note), 2.5)
         XCTAssertEqual(PlayerNoteToast.noteSeconds(nil), 2.5)

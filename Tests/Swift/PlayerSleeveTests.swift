@@ -86,7 +86,7 @@ final class PlayerSleeveTests: XCTestCase {
         let left = (panel.width - DesktopPlayerView.width) / 2
         func point(x: CGFloat, fromTop y: CGFloat) -> CGPoint { CGPoint(x: x, y: panel.height - y) }
 
-        for state in [SleeveState.rest, .search, .queue, .nothing, .align, .spotify] {
+        for state in [SleeveState.rest, .search, .queue, .nothing, .spotify] {
             let fixture = SleeveFixture(state: state)
             let mask = try XCTUnwrap(ControlHitMask.render(fixture.player.environment(\.playerMaskRender, true),
                                                            size: panel), "\(state)")

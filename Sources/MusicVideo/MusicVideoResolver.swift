@@ -252,15 +252,6 @@ final class MusicVideoOffsets: ObservableObject {
         values[songKey].map { ManualEntry(value: $0, video: manualVideos[songKey]) }
     }
 
-    /// Puts back what `manualEntry` read (nil: there was none).
-    func restoreManual(_ entry: ManualEntry?, for songKey: String) {
-        if let entry {
-            set(entry.value, for: songKey, video: entry.video)
-        } else {
-            clearManual(songKey)
-        }
-    }
-
     /// Forgets the user's offset: back to the timing from captions, else
     /// the estimate (or none). With `video`, only when it applies to that
     /// video (timing set on another upload of the song stays).

@@ -126,7 +126,7 @@ first.
   window and grouped rows. Tested in `DesignSystemTests`.
 - **Album accent** (`ArtworkPalette.accent`): the cover's strongest hue, lifted to read as colour
   and guarded to 3:1 under white. On the desktop it marks only *state*: the seek bar's fill while
-  dragging, the music-video bar, the record's label, the film button while lining up. It is never
+  dragging and the record's label. It is never
   a rim, a border or a text colour.
 - **Player tints** (`PlayerKind.tint`): a 6 pt dot beside a player's name, nothing larger.
 

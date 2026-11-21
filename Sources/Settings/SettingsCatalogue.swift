@@ -78,8 +78,8 @@ struct SettingsCatalogueEntry: Hashable, Identifiable {
 ///   remembered (`custom.settingsPage`) and the window frame.
 /// - The lyric card window's own controls (shape, formats, background, text
 ///   size), reached through "Open Lyric Card…".
-/// - Menu-bar-panel-only actions: Quit Lunalyr, Join with code, Align… and
-///   Video earlier / later for a music video, the listen-along banners.
+/// - Menu-bar-panel-only actions: Quit Lunalyr, Join with code, Video
+///   earlier / later for a music video, the listen-along banners.
 /// - Keys that store state rather than a choice; see `excludedKeys`.
 enum SettingsCatalogue {
     static let all: [SettingsCatalogueEntry] = {

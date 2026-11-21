@@ -61,7 +61,7 @@ struct PlayerNow: Equatable {
 /// The player that lives on the desktop, "Sleeve": one card washed in the
 /// album's own colours. On the left the cover, with the record peeking out
 /// of it (it slides back in on pause); on the right the player, the song,
-/// the seek bar and a row with play, search, the queue and the film button.
+/// the seek bar and a row with play, search and the queue.
 /// Search and the queue take over the right-hand column; the cover stays as
 /// the anchor, with the song and the transport under it.
 struct DesktopPlayerView: View {
@@ -132,9 +132,6 @@ struct DesktopPlayerView: View {
     /// The queue row a Next press moved to before the player answered.
     @State private var optimisticCurrent: String?
     @State private var pendingCoverToggle: Task<Void, Never>?
-    /// The music video is being lined up: its bar's capsule is up for good,
-    /// so the titles make way meanwhile.
-    @State private var aligningLive = false
 
     init(model: DesktopPlayerModel, displayID: CGDirectDisplayID, scrub: ScrubController? = nil) {
         self.model = model
@@ -156,7 +153,6 @@ struct DesktopPlayerView: View {
     }
 
     private var playingKind: PlayerKind { now.player ?? model.player }
-    private var aligning: Bool { preview.map { $0.align != nil } ?? aligningLive }
 
     private var pane: DesktopPlayerModel.Pane {
         model.showsSearch ? .search : model.showsQueue ? .queue : .song
@@ -200,14 +196,8 @@ struct DesktopPlayerView: View {
         .onChange(of: model.queue) { _, queue in
             if let optimisticCurrent, queue.first(where: \.isCurrent)?.id == optimisticCurrent { self.optimisticCurrent = nil }
         }
-        .onReceive(alignPublisher) { aligningLive = $0 }
         .onAppear { if !maskRender && preview == nil { registerKeys() } }
         .onDisappear { if !maskRender && preview == nil { PlayerKeyboard.shared.unregister(displayID) } }
-    }
-
-    private var alignPublisher: AnyPublisher<Bool, Never> {
-        guard preview == nil else { return Just(false).eraseToAnyPublisher() }
-        return MusicVideoController.shared.$align.map { $0 != nil }.removeDuplicates().eraseToAnyPublisher()
     }
 
     private static var uptime: Double { ProcessInfo.processInfo.systemUptime }
@@ -416,15 +406,15 @@ struct DesktopPlayerView: View {
             playerLabel
             ScrubActivityReader(activity: scrub.activity) { activity in
                 titles(now: now)
-                    .opacity(Self.titleOpacity(dimmed: (activity.capsulesUp && kind == .seekable) || aligning))
+                    .opacity(Self.titleOpacity(dimmed: activity.capsulesUp && kind == .seekable))
                     .animation(activity.capsulesUp ? P.Motion.feedbackOut : P.Motion.feedback,
                                value: activity.capsulesUp)
             }
             Spacer(minLength: 0)
-            if kind != .hidden || aligning {
+            if kind != .hidden {
                 seekRow(kind: kind, shown: shown)
             }
-            alignOrControls(kind: kind)
+            controlsRow
                 .padding(.top, 4)
         }
     }
@@ -471,39 +461,13 @@ struct DesktopPlayerView: View {
         .accessibilityElement(children: .combine)
     }
 
-    @ViewBuilder
     private func seekRow(kind: ScrubRowKind, shown: Bool) -> some View {
         let accent = palette.fromArtwork ? palette.accentColor : playingKind.tint
-        if let preview {
-            if let align = preview.align {
-                VideoAlignRow(display: align, tint: accent)
-            } else {
-                ScrubRow(controller: scrub, kind: kind, tint: accent, isPlaying: displayedPlaying, shown: shown,
-                         showsRemaining: $model.showsRemaining)
-            }
-        } else {
-            SeekOrAlignRow(musicVideo: MusicVideoController.shared, scrub: scrub, kind: kind, tint: accent,
-                           isPlaying: displayedPlaying, shown: shown, showsRemaining: $model.showsRemaining)
-        }
+        return ScrubRow(controller: scrub, kind: kind, tint: accent, isPlaying: displayedPlaying, shown: shown,
+                        showsRemaining: $model.showsRemaining)
     }
 
     private var palette: ArtworkPalette { ArtworkPalette.of(now.track == nil ? nil : now.artwork) }
-
-    /// The transport row, or Reset / Cancel / Done while the music video is lined up.
-    @ViewBuilder
-    private func alignOrControls(kind: ScrubRowKind) -> some View {
-        let accent = palette.fromArtwork ? palette.accentColor : playingKind.tint
-        if let preview {
-            if preview.align != nil {
-                VideoAlignControls(canReset: preview.align?.origin == .manual, tint: accent,
-                                   onReset: {}, onCancel: {}, onDone: {})
-            } else {
-                controlsRow(kind: kind)
-            }
-        } else {
-            ControlsOrAlign(musicVideo: MusicVideoController.shared, tint: accent) { controlsRow(kind: kind) }
-        }
-    }
 
     // MARK: Transport
 
@@ -551,24 +515,10 @@ struct DesktopPlayerView: View {
                         onPrevious: { skip(forward: false) }, onPlayPause: playPause, onNext: { skip(forward: true) })
     }
 
-    private func controlsRow(kind: ScrubRowKind) -> some View {
+    private var controlsRow: some View {
         PlayerControlsRow(searchOpen: pane == .search, queueOpen: pane == .queue,
                           onSearch: { openSearch(toggle: true) }, onQueue: { model.toggle(.queue) }) {
             transport(.large)
-        } film: {
-            filmButton(kind: kind)
-        }
-    }
-
-    @ViewBuilder
-    private func filmButton(kind: ScrubRowKind) -> some View {
-        let accent = palette.fromArtwork ? palette.accentColor : playingKind.tint
-        if let preview {
-            if preview.musicVideo {
-                VideoAlignButton(on: preview.align != nil, reason: { nil }, tint: accent) {}
-            }
-        } else {
-            LiveAlignButton(musicVideo: MusicVideoController.shared, kind: kind, tint: accent)
         }
     }
 
@@ -696,10 +646,6 @@ struct PlayerPreview: Equatable {
     var covers: [String: NSImage] = [:]
     /// The song, instead of the monitor's.
     var now: PlayerNow?
-    /// Lining up the music video: the video's bar, instead of the music video's.
-    var align: MusicVideoAlignDisplay?
-    /// A music video is the wallpaper (the film button shows).
-    var musicVideo = false
     /// The players the switch offers.
     var kinds: [PlayerKind] = [.appleMusic, .spotify]
     /// The search field drawn with the keyboard in it.
@@ -711,7 +657,7 @@ struct PlayerPreview: Equatable {
     static let space = "playerPreviewScene"
 
     static func == (lhs: PlayerPreview, rhs: PlayerPreview) -> Bool {
-        lhs.covers == rhs.covers && lhs.now == rhs.now && lhs.align == rhs.align && lhs.musicVideo == rhs.musicVideo
+        lhs.covers == rhs.covers && lhs.now == rhs.now
             && lhs.kinds == rhs.kinds && lhs.searchFocused == rhs.searchFocused
             && (lhs.backdrop == nil) == (rhs.backdrop == nil)
     }

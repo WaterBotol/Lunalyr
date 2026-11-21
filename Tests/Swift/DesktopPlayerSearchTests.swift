@@ -35,6 +35,19 @@ final class DesktopPlayerSearchTests: XCTestCase {
         XCTAssertEqual(url.host, "itunes.apple.com")
     }
 
+    func testALibrarySongHidesTheSameSongFromTheCatalogue() {
+        let library = AppleMusicSearch.key("Halo", "Beyonc\u{E9}")
+        for (title, artist) in [("Halo", "BEYONCE"), ("Halo (feat. Someone)", "Beyonc\u{E9}"), ("Halo [ft Someone]", "Beyonc\u{E9}"),
+                                ("Halo - Remastered 2011", "Beyonc\u{E9}"), ("Halo (2011 Remaster)", "Beyonc\u{E9}"),
+                                ("Halo feat. Someone", "Beyonc\u{E9} feat. Someone"), ("  Halo ", "Beyonc\u{E9}")] {
+            XCTAssertEqual(AppleMusicSearch.key(title, artist), library, title)
+        }
+        XCTAssertNotEqual(AppleMusicSearch.key("Halo (Live)", "Beyonc\u{E9}"), library, "a live version is another song")
+        XCTAssertNotEqual(AppleMusicSearch.key("Halo", "Beyonc\u{E9}", .album), library, "an album is never hidden by a song")
+        XCTAssertNotEqual(AppleMusicSearch.key("Defeat", "X"), AppleMusicSearch.key("De", "X"), "only a whole word feat")
+        XCTAssertEqual(AppleMusicSearch.loose("(feat. Someone)"), "(feat. someone)", "a title that is all suffix stays")
+    }
+
     func testLibraryAndQueueRepliesParse() {
         func row(_ values: [NSAppleEventDescriptor]) -> NSAppleEventDescriptor { .scriptList(values) }
         let text = { (s: String) in NSAppleEventDescriptor(string: s) }
@@ -109,12 +122,14 @@ final class DesktopPlayerQueueScriptTests: XCTestCase {
         end if
         """))
         XCTAssertLessThan(made.lowerBound, alone.lowerBound)
-        // A library song from elsewhere reads its album, in three bulk events.
-        let album = try XCTUnwrap(script.range(of: "return {\"ok\", \"album\", sourceKind, total, albumIDs, albumDiscs, albumNumbers}"))
+        // A library song from elsewhere reads its album and its artist's
+        // songs, each property in one bulk event.
+        let album = try XCTUnwrap(script.range(of: "return {\"ok\", \"album\", sourceKind, total, albumIDs, albumDiscs, albumNumbers, "
+                                                + "artistIDs, artistAlbums, artistDiscs, artistNumbers, artistName}"))
         XCTAssertLessThan(alone.upperBound, album.lowerBound)
         XCTAssertTrue(script.contains("set albumIDs to persistent ID of (every track of library playlist 1 whose album is albumName and album artist is albumArtist)"))
         XCTAssertTrue(script.contains("whose album is albumName and artist is trackArtist"), "no album artist: the track's artist")
-        XCTAssertTrue(script.contains("if albumName is \"\" then\nplay libTrack\nreturn {\"ok\", \"played\", \"single\""))
+        XCTAssertFalse(script.contains("play libTrack"), "a song with no album name carries on with its artist instead")
         XCTAssertTrue(script.contains("if not inLibrary then error number -1728"))
         XCTAssertFalse(script.contains("duplicate"), "the first step copies nothing")
     }

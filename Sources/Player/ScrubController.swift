@@ -387,8 +387,6 @@ struct PlayerHoverFocus: ViewModifier {
     let displayID: CGDirectDisplayID?
     @ObservedObject private var preview = ScrubPreview.shared
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    /// Lining up the music video: the lyrics stay readable, to judge it by.
-    @State private var aligning = false
 
     static func look(hovered: Bool, previewing: Bool, reduceMotion: Bool = false) -> (blur: CGFloat, opacity: Double) {
         if previewing { return (reduceMotion ? 0 : 4, 0.8) }
@@ -405,7 +403,7 @@ struct PlayerHoverFocus: ViewModifier {
     }
 
     func body(content: Content) -> some View {
-        let look = Self.look(hovered: hovered, previewing: preview.songTime(on: displayID) != nil || (hovered && aligning),
+        let look = Self.look(hovered: hovered, previewing: preview.songTime(on: displayID) != nil,
                              reduceMotion: reduceMotion)
         let animations = Self.animations(reduceMotion: reduceMotion)
         content
@@ -413,6 +411,5 @@ struct PlayerHoverFocus: ViewModifier {
             .opacity(look.opacity)
             .animation(animations.hover, value: hovered)
             .animation(animations.preview, value: look.opacity)
-            .onReceive(MusicVideoController.shared.$align.map { $0 != nil }.removeDuplicates()) { aligning = $0 }
     }
 }
