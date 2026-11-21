@@ -771,7 +771,8 @@ struct LivelyGlyphHook: ViewModifier {
 
     func body(content: Content) -> some View {
         if #available(macOS 15.0, *), let glyphs, !Self.disabledForPreview {
-            content.textRenderer(LivelyGlyphRenderer(state: glyphs, particles: particles && particlesAllowed, slot: slot))
+            content.textRenderer(LivelyGlyphRenderer(state: glyphs, particles: particles && particlesAllowed, slot: slot,
+                                                     frame: LivelyGlyphFrame()))
         } else {
             content
         }
@@ -827,15 +828,50 @@ extension View {
 
 // MARK: - Letters
 
+/// The width a word's `Text` was given, as `LivelyGlyphRenderer` last
+/// learned it. Shared by the renderer's layout and drawing for one frame.
+final class LivelyGlyphFrame {
+    /// The size the word was last laid out at (not the drawing pass).
+    var laidOut: CGSize?
+    /// The frame it is drawn in, learned from the drawing pass.
+    var drawn: CGSize?
+}
+
 @available(macOS 15.0, *)
 struct LivelyGlyphRenderer: TextRenderer {
     var state: LivelyGlyphs
     var particles: Bool
     var slot: LivelyLetterSlot? = nil
+    var frame = LivelyGlyphFrame()
 
     var displayPadding: EdgeInsets {
         let room = state.size * 2.2 + 20
         return EdgeInsets(top: room, leading: room, bottom: room, trailing: room)
+    }
+
+    /// SwiftUI lays a word out to fit its frame, but to draw it, lays it out
+    /// again in the frame plus `displayPadding` on each side, so a word set
+    /// to shrink to fit (`minimumScaleFactor`, Hinge's pages) was drawn at
+    /// full size, far past its place. That drawing pass is the last one
+    /// asked for before `draw`, offered the size last laid out plus the
+    /// padding; `draw` scales the word back into that width.
+    func sizeThatFits(proposal: ProposedViewSize, text: TextProxy) -> CGSize {
+        let size = text.sizeThatFits(proposal)
+        let wide = displayPadding.leading + displayPadding.trailing
+        if let width = proposal.width, let laidOut = frame.laidOut, abs(width - wide - laidOut.width) < 1 {
+            // The drawing pass: the frame plus the padding (the height
+            // offered may be none at all, as Hinge's pages offer).
+            frame.drawn = laidOut
+        } else {
+            frame.laidOut = size
+        }
+        return size
+    }
+
+    /// How much to scale a one-line word to fit the width it is drawn in, or 1.
+    static func fitScale(lineWidth: CGFloat, lines: Int, frame: CGFloat?) -> CGFloat {
+        guard lines == 1, let frame, frame > 0, lineWidth > frame + 0.5 else { return 1 }
+        return frame / lineWidth
     }
 
     private struct Glyph {
@@ -847,6 +883,18 @@ struct LivelyGlyphRenderer: TextRenderer {
     }
 
     func draw(layout: Text.Layout, in context: inout GraphicsContext) {
+        let lines = Array(layout)
+        let bounds = lines.map(\.typographicBounds.rect).reduce(CGRect.null) { $0.union($1) }
+        let fit = Self.fitScale(lineWidth: bounds.isNull ? 0 : bounds.width, lines: lines.count, frame: frame.drawn?.width)
+        if fit < 1 {
+            // Into the frame where the layout set the line box (not always
+            // at the origin: a face with a tall ascender sets it lower):
+            // from its leading edge, centred in the frame's height.
+            let height = frame.drawn?.height ?? bounds.height * fit
+            context.translateBy(x: bounds.minX, y: bounds.minY + height / 2)
+            context.scaleBy(x: fit, y: fit)
+            context.translateBy(x: -bounds.minX, y: -bounds.midY)
+        }
         var glyphs: [Glyph] = []
         var minX = CGFloat.infinity, maxX = -CGFloat.infinity
         var index = 0

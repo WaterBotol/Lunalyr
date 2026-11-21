@@ -1,3 +1,4 @@
+import CoreText
 import SwiftUI
 
 // Hinge: one of the six stage layouts drawn by `StageLyricView`. Shared pieces
@@ -440,7 +441,11 @@ extension StageLyricView {
             }
         }
         .lyricShadow(tile ? 0 : 0.3, radius: max(2, size * 0.06), y: 2)
-        .wordAction(accent(run), start: run.start, end: run.end, time: time, size: size, glow: sample.glow)
+        // An action travels in ems of the word as drawn: a word too wide for
+        // its page is drawn smaller than `size`, and moved by `size` it
+        // dipped off the stage and leapt onto the line above.
+        .wordAction(accent(run), start: run.start, end: run.end, time: time,
+                    size: hingeDrawnSize(run, size: size, room: room, shrink: shrink), glow: sample.glow)
         // Word presence, about the word's centre with its action.
         .modifier(presence(run, size: size, speed: speed, live: live && !phrasing.lineTimed))
         // The burst grows about a point a quarter in from the spine, so a big
@@ -452,6 +457,29 @@ extension StageLyricView {
         .opacity(pose.ink)
     }
 
+}
+
+extension StageLyricView {
+    /// The size a word is drawn at on its page: `size`, shrunk to fit
+    /// `room` (to no less than `shrink` of it) when its capitals are wider,
+    /// as `minimumScaleFactor` shrinks it. Measured in the word's own face.
+    func hingeDrawnSize(_ run: StageRun, size: CGFloat, room: CGFloat, shrink: CGFloat) -> CGFloat {
+        let face = settings.lyricMeasureFace(size: size, hero: true, mood: mood, seed: UInt64(abs(seed &+ run.id)),
+                                             text: run.text)
+        return Self.hingeFitted(size: size, width: Self.typeWidth(run.text.uppercased(), face: face), room: room,
+                                shrink: shrink)
+    }
+
+    static func hingeFitted(size: CGFloat, width: CGFloat, room: CGFloat, shrink: CGFloat) -> CGFloat {
+        guard width > room, width > 0, room > 0 else { return size }
+        return size * max(shrink, room / width)
+    }
+
+    static func typeWidth(_ text: String, face: CTFont) -> CGFloat {
+        let line = CTLineCreateWithAttributedString(
+            NSAttributedString(string: text, attributes: [NSAttributedString.Key(kCTFontAttributeName as String): face]))
+        return CGFloat(CTLineGetTypographicBounds(line, nil, nil, nil))
+    }
 }
 
 /// Hinge: a word at its own width, never wider than `limit` (its page):
