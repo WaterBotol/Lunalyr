@@ -58,6 +58,7 @@ struct LyricLayer: View {
     @StateObject private var scenes = LyricSceneMemory()
     @StateObject private var cache = LyricLayerCache()
     @StateObject private var opening = OpeningTitleMemory()
+    @StateObject private var swapped = RenderMemo<GlyphSwapKey, GlyphSwapKey>()
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorSchemeContrast) private var contrast
     /// What lies behind the text when it is not the wallpaper: the floating
@@ -101,8 +102,38 @@ struct LyricLayer: View {
                 shown.loadingSince)
     }
 
+    /// The scene's text, before and after `LyricGlyphSwap`.
+    struct GlyphSwapKey: Equatable {
+        var lines: [LyricsFetcher.Line]
+        var romanized: [Int: [LyricsFetcher.Word]]
+        var machineTranslations: [Int: String]
+        var plainLines: [String]
+        var title: String, artist: String, album: String
+        var swap: LyricGlyphSwap?
+    }
+
+    /// Accented letters the lyric face lacks, written plainly
+    /// (`LyricGlyphSwap`); worked out once per song and face.
+    private func plainLetters(_ content: LyricSceneContent) -> LyricSceneContent {
+        guard let swap = LyricGlyphSwap.current(settings, mood: mood) else { return content }
+        let key = GlyphSwapKey(lines: content.lines, romanized: content.romanized,
+                               machineTranslations: content.machineTranslations, plainLines: content.plainLines,
+                               title: content.title, artist: content.artist, album: content.album, swap: swap)
+        let text = swapped.value(for: key) {
+            let done = swap.content(content)
+            return GlyphSwapKey(lines: done.lines, romanized: done.romanized, machineTranslations: done.machineTranslations,
+                                plainLines: done.plainLines, title: done.title, artist: done.artist, album: done.album,
+                                swap: swap)
+        }
+        var content = content
+        content.lines = text.lines; content.romanized = text.romanized
+        content.machineTranslations = text.machineTranslations; content.plainLines = text.plainLines
+        content.title = text.title; content.artist = text.artist; content.album = text.album
+        return content
+    }
+
     private func sceneContent(key: LyricSceneKey, loadingSince: Double?) -> LyricSceneContent {
-        LyricSceneContent(lines: lyricsVM.lines, romanized: lyricsVM.romanized(for: readingDisplay),
+        plainLetters(LyricSceneContent(lines: lyricsVM.lines, romanized: lyricsVM.romanized(for: readingDisplay),
             machineTranslations: lyricsVM.machineTranslations, plainLines: lyricsVM.plainLines,
             title: nowPlaying.current?.title ?? "", artist: nowPlaying.current?.artist ?? "",
             album: nowPlaying.current?.album ?? "", artwork: nowPlaying.currentTrackArtwork,
@@ -113,7 +144,7 @@ struct LyricLayer: View {
             joined: opening.joined(track: key.track, at: time),
             notFoundAt: lyricsVM.notFoundAt, idleSince: nowPlaying.idleSince,
             duration: nowPlaying.current?.duration ?? 0, seed: trackSeed, vocalWindows: lyricsVM.vocalWindows,
-            loadingSince: loadingSince, offline: lyricsVM.notFound && !LyricConnectivity.shared.isOnline)
+            loadingSince: loadingSince, offline: lyricsVM.notFound && !LyricConnectivity.shared.isOnline))
     }
 
     /// The player macOS will not let Lunalyr read, while that is why the
