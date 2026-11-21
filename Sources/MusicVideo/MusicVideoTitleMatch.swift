@@ -213,6 +213,50 @@ enum MusicVideoTitleMatch {
         }
     }
 
+    /// The title names the artist, in the artist's own script. A name
+    /// without Latin letters only has to appear ("周杰倫【告白氣球】" names
+    /// 周杰伦), as such names are often written straight against the title;
+    /// a Latin name must be whole words in a row ("[MV] IU(아이유) _ …" names
+    /// IU, "Simon & Garfunkel" over two words, "Liquid" does not name IU).
+    static func namesArtist(_ title: String, artist: String) -> Bool {
+        let title = fold(title)
+        let words = titleWords(title)
+        let whole = CoverLookup.normal(title)
+        return artistParts(artist).contains { name in
+            if !name.unicodeScalars.contains(where: \.isASCII) { return whole.contains(name) }
+            for start in words.indices {
+                var joined = ""
+                for word in words[start...] {
+                    joined += word
+                    if joined == name { return true }
+                    if !name.hasPrefix(joined) { break }
+                }
+            }
+            return false
+        }
+    }
+
+    /// The title's words (`CoverLookup.normal`), cut at anything but
+    /// letters, marks and numbers, and where Latin meets another script
+    /// ("IU(아이유)", "IU아이유" → "iu", "아이유").
+    private static func titleWords(_ title: String) -> [String] {
+        var words: [String] = [], current = "", currentASCII: Bool?
+        for character in title {
+            guard let scalar = character.unicodeScalars.first,
+                  CharacterSet.alphanumerics.contains(scalar) || scalar.properties.generalCategory == .nonspacingMark
+            else {
+                if !current.isEmpty { words.append(current) }
+                current = ""; currentASCII = nil
+                continue
+            }
+            let ascii = scalar.isASCII
+            if let currentASCII, currentASCII != ascii, !current.isEmpty { words.append(current); current = "" }
+            current.append(character); currentASCII = ascii
+        }
+        if !current.isEmpty { words.append(current) }
+        return words.map(CoverLookup.normal).filter { !$0.isEmpty }
+    }
+
     /// A live, concert or fan recording, unless the song's own title says so.
     static func isLiveOrFanUpload(_ title: String, songTitle: String) -> Bool {
         let name = " \(LyricQuery.normalize(title)) "

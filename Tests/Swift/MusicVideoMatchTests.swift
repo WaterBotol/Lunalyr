@@ -296,6 +296,30 @@ final class MusicVideoMatchTests: XCTestCase {
                           title: "밤편지", artist: "IU"), "another channel still doesn't count")
     }
 
+    /// A label posts many artists' videos: its channel counts only when the
+    /// title names the artist. Own, VEVO and verified channels need not.
+    func testALabelsVideoCountsOnlyWhenItsTitleNamesTheArtist() {
+        for title in ["[MV] SUNMI(선미) _ Through the Night", "Through the Night (Official MV)",
+                      "[MV] Liquid _ Through the Night"] {
+            XCTAssertNil(pick([Result(videoID: "AAAAAAAAAAA", title: title, channel: "1theK (원더케이)")],
+                              title: "Through the Night", artist: "IU"), title)
+        }
+        XCTAssertEqual(pick([Result(videoID: "AAAAAAAAAAA", title: "Through the Night (Official MV)", channel: "Label",
+                                    verifiedArtist: true)], title: "Through the Night", artist: "IU"), "AAAAAAAAAAA")
+        XCTAssertEqual(pick([Result(videoID: "BzYnNdJhZQw", title: "[MV] IU(아이유) _ Through the Night(밤편지)",
+                                    channel: "1theK (원더케이)")], title: "밤편지", artist: "아이유"), "BzYnNdJhZQw")
+
+        XCTAssertTrue(MusicVideoTitleMatch.namesArtist("[MV] IU(아이유) _ Through the Night(밤편지)", artist: "IU"))
+        XCTAssertTrue(MusicVideoTitleMatch.namesArtist("[MV] IU(아이유) _ Through the Night(밤편지)", artist: "아이유"))
+        XCTAssertTrue(MusicVideoTitleMatch.namesArtist("IU아이유 밤편지", artist: "IU"))
+        XCTAssertTrue(MusicVideoTitleMatch.namesArtist("周杰倫【告白氣球】", artist: "周杰伦"))
+        XCTAssertTrue(MusicVideoTitleMatch.namesArtist("Simon & Garfunkel - The Boxer", artist: "Simon & Garfunkel"))
+        XCTAssertFalse(MusicVideoTitleMatch.namesArtist("[MV] Liquid _ Through the Night", artist: "IU"))
+        XCTAssertFalse(MusicVideoTitleMatch.namesArtist("[MV] 아이유 _ 밤편지", artist: "IU"),
+                       "named only in another script")
+        XCTAssertFalse(MusicVideoTitleMatch.namesArtist("Through the Night (Official MV)", artist: "IU"))
+    }
+
     /// An art track's description, in both page layouts.
     func testArtTracksAreRecognisedFromTheirDescription() {
         let html = """

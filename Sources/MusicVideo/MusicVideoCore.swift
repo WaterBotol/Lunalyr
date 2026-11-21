@@ -156,7 +156,8 @@ enum YouTubeSearchPage {
 
     /// Label channels that post their artists' official videos ("1theK
     /// (원더케이)" for IU), counted like the artist's own, by the start of
-    /// the channel's name (`CoverLookup.normal`).
+    /// the channel's name (`CoverLookup.normal`), when the video's title
+    /// names the artist (`MusicVideoTitleMatch.namesArtist`).
     static let labelChannels = ["1thek", "stonemusicentertainment", "hybelabels", "smtown", "jypentertainment"]
 
     /// Candidate official videos among `results`, best first. Each must:
@@ -187,8 +188,11 @@ enum YouTubeSearchPage {
             guard let version = MusicVideoTitleMatch.matchedVersion(videoTitle: result.title, songTitle: title,
                                                                     artist: artist) else { continue }
             guard !channel.hasSuffix(" topic"), !result.artTrack else { continue }
+            // A label posts many artists' videos: its own counts only when
+            // the title names this one.
             let ownChannel = singers.contains { Self.channel(channelKey, isOf: $0) }
-                || labelChannels.contains { channelKey.hasPrefix($0) }
+                || (labelChannels.contains { channelKey.hasPrefix($0) }
+                    && MusicVideoTitleMatch.namesArtist(result.title, artist: artist))
             let vevo = channelKey.hasSuffix("vevo")
             guard ownChannel || vevo || result.verifiedArtist else { continue }
             if MusicVideoTitleMatch.isLiveOrFanUpload(result.title, songTitle: title) { continue }
