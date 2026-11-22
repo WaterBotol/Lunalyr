@@ -33,11 +33,14 @@ struct PlayerQueueItem: Identifiable, Equatable, Sendable {
     var isCurrent = false
     /// The Music library's id for the song, when it has one.
     var persistentID: String?
+    /// A song in Music's Up Next: how many songs after the playing one it
+    /// is, so a click skips forward that many and the rest of Up Next stays.
+    var upNextStep: Int?
 
     /// Whether clicking it does anything: the song playing pauses or plays,
-    /// any other needs its library ID to be found again. A song that played
-    /// from a stream or the radio has none.
-    var isPlayable: Bool { isCurrent || persistentID != nil }
+    /// a song in Up Next is skipped to, any other needs its library ID to be
+    /// found again. A song that played from a stream or the radio has none.
+    var isPlayable: Bool { isCurrent || upNextStep != nil || persistentID != nil }
 }
 
 /// What a player says is queued: the current playlist around the song, and
@@ -1316,8 +1319,24 @@ struct AppleMusicSearch: PlayerSearching {
     }
 
     func playQueueItemNoting(_ item: PlayerQueueItem) async throws -> String? {
+        if let steps = item.upNextStep {
+            try await run("skip", Self.skipSource(steps: steps))
+            return nil
+        }
         guard let id = item.persistentID else { throw PlayerSearchError.failed }
         return try await playInContext(persistentID: id, index: item.index > 0 ? item.index : nil, origin: "strip").note
+    }
+
+    /// Skips forward `steps` songs through Up Next, as pressing Next that
+    /// many times would, then plays: the songs after it stay queued, which
+    /// starting the song afresh would replace.
+    static func skipSource(steps: Int) -> String {
+        """
+        repeat \(min(max(steps, 1), MusicQueueReader.upNextLimit)) times
+        next track
+        end repeat
+        play
+        """
     }
 
     private func run(_ name: String, _ body: String) async throws {

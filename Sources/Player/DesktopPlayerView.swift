@@ -490,12 +490,12 @@ struct DesktopPlayerView: View {
     }
 
     /// Next moves the queue's highlight at once when what comes next is
-    /// known (Music, shuffle off), and the bar goes to 0:00. Otherwise the
+    /// known (Music with its Up Next read, or shuffle off), and the bar goes to 0:00. Otherwise the
     /// press shows and the real change moves things, so nothing shows a guess.
     private func skip(forward: Bool) {
         guard preview == nil, nowPlaying.current != nil else { return }
         if forward {
-            if let next = DesktopPlayerModel.optimisticNext(queue: model.queue, shuffleOn: model.shuffleOn,
+            if let next = DesktopPlayerModel.optimisticNext(queue: model.queue, shuffleOn: model.shuffleOn && !model.showsUpNext,
                                                              kind: nowPlaying.activePlayer) {
                 optimisticCurrent = next
                 scrub.showStart()
@@ -600,7 +600,7 @@ struct DesktopPlayerView: View {
             HStack(spacing: 8) {
                 Text("Queue").font(P.TypeScale.rowTitle).foregroundStyle(P.Ink.primary.color(look))
                 Spacer(minLength: 0)
-                if model.shuffleOn, !model.queue.isEmpty {
+                if model.shuffleOn, !model.showsUpNext, !model.queue.isEmpty {
                     Label("Playlist order, shuffle is on", systemImage: "shuffle")
                         .font(P.TypeScale.tag)
                         .help("Shuffle is on: this is the playlist\u{2019}s order, not the order songs will play in")

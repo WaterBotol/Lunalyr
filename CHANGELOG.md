@@ -12,6 +12,10 @@ Removed, Fixed or Security. Several branches may add entries at the same time.
 When merging, keep every entry and combine duplicate headings.
 -->
 
+### Changed
+
+- Desktop player: the queue lists Music's real Up Next after the playing song, in the order it will play (shuffle and Play Next / Play Later included), instead of the playlist's order. Clicking a song there skips forward to it, so the songs after it stay queued. It is read while the queue is open, even with Look ahead in the queue off; when it can't be read (another player, Low Power Mode), the queue shows the playlist as before.
+
 ### Removed
 
 - Music video: the desktop player no longer lines up the video. Its film button, the video bar it opened, the arrow keys for it and Align… in the menu bar are gone. Video earlier / later and Tap to sync in the menu bar (and Settings) still set a video's timing, and a timing set before is kept.

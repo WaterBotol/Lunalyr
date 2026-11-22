@@ -36,7 +36,12 @@ final class DesktopPlayerModel: ObservableObject {
     @Published var query = ""
     /// The search or the queue opened over the song's column. Shared by the
     /// panel and its hit mask (a separate render), so both see the same card.
-    @Published var pane: Pane = .song
+    @Published var pane: Pane = .song {
+        didSet {
+            guard !isPreview, pane != oldValue else { return }
+            MusicQueueReader.shared.wantedByPlayer = pane == .queue
+        }
+    }
     @Published private(set) var results: [PlayerSearchResult] = [] {
         didSet { if results != oldValue { selection = 0 } }
     }
@@ -54,8 +59,16 @@ final class DesktopPlayerModel: ObservableObject {
     @Published private(set) var queue: [PlayerQueueItem] = []
     /// Shuffle is on, so the order of what comes next is not known.
     @Published private(set) var shuffleOn = false
+    /// What comes next is Music's own Up Next, in the order it will play
+    /// (shuffle included), not the playlist's order.
+    @Published private(set) var showsUpNext = false
     private var history: [PlayerQueueItem] = []
     private var fetched: [PlayerQueueItem] = []
+    /// Music's Up Next after the playing song (`MusicQueueReader`).
+    private var upNext: [QueuedTrack] = []
+    /// The last Up Next read: while a new song's is being read, the one
+    /// before it, less the song that started, stands in.
+    private var lastUpNext: [QueuedTrack] = []
     private var lastTrack: NowPlayingMonitor.Track?
     private var historyCount = 0
     @Published private(set) var status: Status = .idle
@@ -90,6 +103,14 @@ final class DesktopPlayerModel: ObservableObject {
             .debounce(for: .milliseconds(500), scheduler: DispatchQueue.main)
             .sink { [weak self] _ in
                 self?.refreshQueue()
+            }.store(in: &cancellables)
+        // What Music says plays next, when it is read.
+        MusicQueueReader.shared.$upNext.removeDuplicates()
+            .sink { [weak self] tracks in
+                guard let self else { return }
+                self.upNext = tracks
+                if !tracks.isEmpty { self.lastUpNext = tracks }
+                self.recompose()
             }.store(in: &cancellables)
     }
 
@@ -167,12 +188,25 @@ final class DesktopPlayerModel: ObservableObject {
         defer { lastTrack = track; lastKind = kind }
         guard let previous = lastTrack, let track,
               Self.belongsInHistory(previous: previous, from: lastKind, next: track, in: kind) else { return }
+        if let skip = skipping {
+            if Date() > skip.until {
+                skipping = nil
+            } else {
+                if track.title == skip.to.title && track.artist == skip.to.artist { skipping = nil }
+                // Songs passed on the way to an Up Next song never played.
+                if !(previous.title == skip.from.title && previous.artist == skip.from.artist) { return }
+            }
+        }
         historyCount += 1
         history.append(PlayerQueueItem(id: "h-\(historyCount)", title: previous.title, artist: previous.artist,
                                        index: 0, persistentID: previous.persistentID))
         if history.count > 24 { history.removeFirst(history.count - 24) }
         recompose()
     }
+
+    /// A click on an Up Next song skips through the songs before it: from
+    /// the song that was playing to the one clicked, until `until`.
+    private var skipping: (from: (title: String, artist: String), to: (title: String, artist: String), until: Date)?
 
     /// The player `lastTrack` came from.
     private var lastKind: PlayerKind?
@@ -188,21 +222,70 @@ final class DesktopPlayerModel: ObservableObject {
     }
 
     /// History first (what really played, in order), then the song playing,
-    /// then what the playlist says comes next.
+    /// then what comes next: Music's Up Next when it is read, else what the
+    /// playlist says.
     private func recompose() {
-        guard let nowIndex = fetched.firstIndex(where: \.isCurrent) else { queue = fetched; return }
-        let now = fetched[nowIndex]
-        let after = Array(fetched[(nowIndex + 1)...])
+        let music = playingKind == .appleMusic
+        let upNextItems = music
+            ? Self.upNextItems(Self.upNextNow(read: upNext, last: lastUpNext, playing: NowPlayingMonitor.shared.current),
+                               playlist: fetched)
+            : []
+        showsUpNext = !upNextItems.isEmpty
+        let nowIndex = fetched.firstIndex(where: \.isCurrent)
+        let now: PlayerQueueItem
+        if let nowIndex {
+            now = fetched[nowIndex]
+        } else if !upNextItems.isEmpty, let track = NowPlayingMonitor.shared.current {
+            // Playing something outside the library (no playlist to read):
+            // Up Next still says what follows it.
+            now = PlayerQueueItem(id: "now", title: track.title, artist: track.artist, index: 0, isCurrent: true,
+                                  persistentID: track.persistentID)
+        } else {
+            queue = fetched
+            return
+        }
+        let after = upNextItems.isEmpty ? nowIndex.map { Array(fetched[($0 + 1)...]) } ?? [] : upNextItems
         var before = Array(history.suffix(24)).filter { $0.persistentID == nil || $0.persistentID != now.persistentID }
         // As many before as after: where less has played than is queued, the
         // playlist's own earlier songs fill in the older end.
         let missing = after.count - before.count
-        if missing > 0 {
+        if missing > 0, let nowIndex {
             let known = Set(before.compactMap(\.persistentID))
             let earlier = fetched[..<nowIndex].filter { $0.persistentID.map { !known.contains($0) } ?? true }
             before = Array(earlier.suffix(missing)) + before
         }
         queue = before + [now] + after
+    }
+
+    /// Up Next for the song playing: the latest read, or while that is
+    /// empty (the song just changed, the read is on its way), the read
+    /// before it from after the song now playing, when that song is in it
+    /// (the next one, or one skipped to further on).
+    nonisolated static func upNextNow(read: [QueuedTrack], last: [QueuedTrack],
+                                      playing: NowPlayingMonitor.Track?) -> [QueuedTrack] {
+        guard read.isEmpty else { return read }
+        guard let playing, let index = last.firstIndex(where: { $0.matches(playing) }) else { return [] }
+        return Array(last[(index + 1)...])
+    }
+
+    /// Up Next as queue rows: each knows how far ahead it is, and carries
+    /// the library ID of the same song in the playlist read, when there is
+    /// one (title and artist match).
+    nonisolated static func upNextItems(_ tracks: [QueuedTrack], playlist: [PlayerQueueItem]) -> [PlayerQueueItem] {
+        let n = LyricQuery.normalize
+        let ids = Dictionary(playlist.compactMap { item in item.persistentID.map { ("\(n(item.title))|\(n(item.artist))", $0) } },
+                             uniquingKeysWith: { first, _ in first })
+        // A row keeps its id as songs move up, so the list slides rather
+        // than redrawing: Music's item id, or the song, counted when repeated.
+        var seen: [String: Int] = [:]
+        return tracks.enumerated().map { offset, track in
+            let key = track.identifier ?? "\(track.title)|\(track.artist)"
+            let repeats = seen[key, default: 0]
+            seen[key] = repeats + 1
+            return PlayerQueueItem(id: "u-\(key)" + (repeats > 0 ? "-\(repeats)" : ""),
+                            title: track.title, artist: track.artist, index: 0,
+                            persistentID: ids["\(n(track.title))|\(n(track.artist))"], upNextStep: offset + 1)
+        }
     }
 
     /// Reloads the strip: the songs before this one, this one, the songs after.
@@ -225,7 +308,7 @@ final class DesktopPlayerModel: ObservableObject {
                 self.shuffleOn = snapshot.shuffle
                 self.fetched = items
                 self.recompose()
-                self.status = items.isEmpty && !self.isSearching
+                self.status = self.queue.isEmpty && !self.isSearching
                     ? .message(Self.emptyQueueMessage(for: searcher.kind))
                     : .idle
             } catch {
@@ -249,7 +332,7 @@ final class DesktopPlayerModel: ObservableObject {
 
     /// Whether the shuffle note should show on this reveal: once per change.
     func takeShuffleNote() -> Bool {
-        guard shuffleOn, shuffleNoteToken != shuffleNoteShown else { return false }
+        guard shuffleOn, !showsUpNext, shuffleNoteToken != shuffleNoteShown else { return false }
         shuffleNoteShown = shuffleNoteToken
         return true
     }
@@ -292,7 +375,13 @@ final class DesktopPlayerModel: ObservableObject {
         let searcher = playingKind.searcher
         // The strip moves to the song at once; the player catches up after.
         // It plays inside the playlist that is playing, which carries on after it.
-        if fetched.contains(where: { $0.id == item.id }) {
+        if let steps = item.upNextStep, steps > 1, let playing = NowPlayingMonitor.shared.current {
+            skipping = ((playing.title, playing.artist), (item.title, item.artist), Date().addingTimeInterval(8))
+        }
+        if item.upNextStep != nil {
+            // Up Next moves on as Music skips; until then only the mark moves.
+            queue = queue.map { var copy = $0; copy.isCurrent = $0.id == item.id; return copy }
+        } else if fetched.contains(where: { $0.id == item.id }) {
             fetched = fetched.map { var copy = $0; copy.isCurrent = $0.id == item.id; return copy }
             recompose()
         }

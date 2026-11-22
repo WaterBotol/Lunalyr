@@ -39,7 +39,7 @@ typedef Boolean (*LQGetBool)(void *);
 typedef CFDictionaryRef (*LQCopyInfo)(void *);
 typedef void (*LQRegister)(dispatch_queue_t);
 
-static const long LQRange = 12;
+static const long LQRange = 25;
 static const double LQPollSeconds = 20;
 static const double LQAnswerSeconds = 6;
 

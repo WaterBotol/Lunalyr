@@ -242,6 +242,7 @@ final class QueueLookAhead {
             monitor.$current.map { _ in () }.eraseToAnyPublisher(),
             monitor.$activePlayer.map { _ in () }.eraseToAnyPublisher(),
             reader.$upcoming.map { _ in () }.eraseToAnyPublisher(),
+            reader.$wantedByPlayer.removeDuplicates().map { _ in () }.eraseToAnyPublisher(),
             PlayerOptions.shared.$looksAhead.map { _ in () }.eraseToAnyPublisher(),
             Settings.shared.$backgroundMode.map { _ in () }.eraseToAnyPublisher(),
             LyricStyles.shared.objectWillChange.map { _ in () }.eraseToAnyPublisher(),
@@ -263,7 +264,9 @@ final class QueueLookAhead {
         let followsMusic = monitor.activePlayer == .appleMusic
         let enabled = PlayerOptions.shared.looksAhead
         let lowPowerMode = ProcessInfo.processInfo.isLowPowerModeEnabled
-        reader.setActive(enabled && followsMusic && !lowPowerMode)
+        // The desktop player's open queue reads it too, look-ahead or not:
+        // reading stays on this Mac; only the look-ahead sends titles anywhere.
+        reader.setActive((enabled || reader.wantedByPlayer) && followsMusic && !lowPowerMode)
         let conditions = LookAheadConditions(
             enabled: enabled, followsMusic: followsMusic, online: LyricConnectivity.shared.isOnline,
             lowPowerMode: lowPowerMode, onBattery: PowerSource.isOnBattery,

@@ -154,6 +154,15 @@ final class MusicQueueReader: ObservableObject {
     /// The songs after the playing one, at most `upcomingLimit`.
     @Published private(set) var upcoming: [QueuedTrack] = []
     static let upcomingLimit = 5
+    /// The songs after the playing one as the desktop player's queue lists
+    /// them, at most `upNextLimit`, in the order Music will play them
+    /// (shuffle and Play Next included).
+    @Published private(set) var upNext: [QueuedTrack] = []
+    nonisolated static let upNextLimit = 24
+    /// The desktop player's queue is open, so the queue is read even with
+    /// look-ahead off (`QueueLookAhead.refresh` decides). Nothing is looked
+    /// up for it; it only lists the songs.
+    @Published var wantedByPlayer = false
 
     /// The library perl loads, in the app's Frameworks folder.
     nonisolated static var helperURL: URL? {
@@ -232,7 +241,8 @@ final class MusicQueueReader: ObservableObject {
     }
 
     /// Reads the queue while `active` (Music is the player followed and
-    /// the look-ahead wants it); stops the helper otherwise.
+    /// the look-ahead or the desktop player's queue wants it); stops the
+    /// helper otherwise.
     func setActive(_ active: Bool) {
         guard !AppRuntime.isUnitTesting || runsInTests, active != self.active else { return }
         self.active = active
@@ -263,7 +273,9 @@ final class MusicQueueReader: ObservableObject {
     }
 
     private func publish() {
-        let next = MusicQueueMessage.upcoming(in: snapshot, current: current, limit: Self.upcomingLimit)
+        let listed = MusicQueueMessage.upcoming(in: snapshot, current: current, limit: Self.upNextLimit)
+        if listed != upNext { upNext = listed }
+        let next = Array(listed.prefix(Self.upcomingLimit))
         if next != upcoming { upcoming = next }
     }
 
