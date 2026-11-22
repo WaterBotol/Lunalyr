@@ -319,14 +319,16 @@ extension StageLyricView {
             let start = ids.map { runs[$0].start }.min() ?? 0
             var turnStart = -Double.infinity
             if let previous = pages.last {
+                // The old page holds until its last word has been sung, and
+                // is gone just as this page's first word lands: never both on
+                // the stage, never an empty stage between them. A fast line
+                // shortens the turn, down to `fableTurnShortest`.
+                let arrive = start - StageMotion.lead
                 let lastLanded = previous.runs.map { runs[$0].start }.max() ?? start
-                let early = start - StageMotion.lead - StageMotion.fableTurnLead
-                // Never before the old page's last word has landed, and gone
-                // before this page's first word lands.
-                let landed = lastLanded + StageMotion.fableUnit
-                turnStart = min(start - StageMotion.lead - StageMotion.fableUnit, max(early, landed))
-                let room = start - StageMotion.lead - turnStart
-                let length = min(StageMotion.fableTurn, max(StageMotion.fableUnit, room))
+                let lastSung = previous.runs.map { runs[$0].end }.max() ?? lastLanded
+                turnStart = min(arrive - StageMotion.fableTurnShortest,
+                                max(arrive - StageMotion.fableTurn, lastSung, lastLanded + StageMotion.fableUnit))
+                let length = arrive - turnStart
                 pages.append(FablePlan.Page(phrases: group, runs: ids, rows: rows, start: start, turnStart: turnStart,
                                             turnLength: length))
                 continue
@@ -421,10 +423,10 @@ extension StageLyricView {
 extension StageMotion {
     /// Fable's base unit (s).
     static let fableUnit = 0.1
-    /// A page starts to turn away this long before the next page's first word.
-    static let fableTurnLead = 0.3
-    /// A page turning away.
+    /// A page turning away, ending as the next page's first word lands.
     static let fableTurn = 0.24
+    /// The quickest turn, when the old page's last word is sung up to the next page.
+    static let fableTurnShortest = 0.16
 
     /// Fable's one out-ease: easeOutBack, overshooting about 10 %.
     static func fableOut(_ x: Double) -> Double {

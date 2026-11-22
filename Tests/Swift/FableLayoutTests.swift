@@ -409,11 +409,28 @@ final class FableStyleTests: XCTestCase {
         for index in plan.pages.indices.dropFirst() {
             let page = plan.pages[index]
             let lastOld = plan.pages[index - 1].runs.map { runs[$0].start }.max() ?? 0
-            XCTAssertGreaterThanOrEqual(page.turnStart, min(lastOld, page.start - StageMotion.lead - 0.1) - 1e-9)
+            let arrive = page.start - StageMotion.lead
+            XCTAssertGreaterThanOrEqual(page.turnStart, min(lastOld, arrive - StageMotion.fableTurnShortest) - 1e-9)
             let gone = page.turnStart + page.turnLength
-            XCTAssertLessThanOrEqual(gone, page.start - StageMotion.lead + 1e-9, "page \(index - 1) still showing")
+            XCTAssertEqual(gone, arrive, accuracy: 1e-9, "page \(index - 1) gone just as the next lands, no empty stage")
             XCTAssertFalse(StageLyricView.fablePageShown(index - 1, plan: plan, at: page.start - StageMotion.lead,
                                                          exitStart: .infinity))
+        }
+    }
+
+    /// The old page stays while its last word is sung (を until it ends),
+    /// and the stage is never empty between pages.
+    func testThePageHoldsThroughItsLastWordAndLeavesNoGap() {
+        let (plan, runs) = plan(StagePhrasesTests.mixed)
+        let page = plan.pages[1]
+        let lastSung = plan.pages[0].runs.map { runs[$0].end }.max() ?? 0
+        let arrive = page.start - StageMotion.lead
+        XCTAssertGreaterThanOrEqual(page.turnStart, min(lastSung, arrive - StageMotion.fableTurnShortest) - 1e-9)
+        XCTAssertEqual(page.turnStart + page.turnLength, arrive, accuracy: 1e-9)
+        for moment in stride(from: page.turnStart, through: arrive + 0.2, by: 0.02) {
+            let old = StageLyricView.fablePageShown(0, plan: plan, at: moment, exitStart: .infinity)
+            let new = StageLyricView.fablePageShown(1, plan: plan, at: moment, exitStart: .infinity)
+            XCTAssertTrue(old || new, "empty stage at \(moment)")
         }
     }
 

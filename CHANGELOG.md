@@ -26,6 +26,7 @@ When merging, keep every entry and combine duplicate headings.
 
 ### Fixed
 
+- Fable: a page no longer turns away before its last word has been sung, and the stage is no longer empty for a moment between pages. The old page holds until its last word ends and is gone just as the next page's first word lands (a fast line turns quicker, never with both pages on the stage).
 - Mandarin readings are read in context: a character takes its word's reading (地上 dì shàng, not de shàng; 银行 yín háng; 了解 liǎo jiě), and 一 and 不 change tone as spoken (一起 yì qǐ, 一个 yí gè, 不是 bú shì).
 - Settings › Romanisation & translation: the caption says Display is the only per-style choice; the Cantonese note says Language applies to every song; "Keep tone marks" is "Keep tone marks and accents", which is what it does; the translation captions mention machine translation and its rule.
 - Japanese readings: the particle を is written "o", as Hepburn and Apple Music's own readings write it (it was "wo"), so saved and generated readings agree. A simplified Chinese character in a Japanese lyric (梦, 见) is read through its kanji form (夢 yume, 見 mi) instead of being left blank.
