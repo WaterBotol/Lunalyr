@@ -18,5 +18,7 @@ final class LyricCardTranslationTests: XCTestCase {
     func testAPageHasNoTranslationUnlessGivenOne() {
         XCTAssertNil(LyricCard.Page(words: ["hello"]).translation)
         XCTAssertEqual(LyricCard.Page(words: ["月"], translation: "Moon").translation, "Moon")
+        XCTAssertNil(LyricCard.Page(words: ["月"]).reading)
+        XCTAssertEqual(LyricCard.Page(words: ["月"], reading: "tsuki").reading, "tsuki")
     }
 }

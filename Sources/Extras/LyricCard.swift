@@ -65,6 +65,9 @@ enum LyricCard {
         /// The line's translation, as the wallpaper shows it (from the lyric
         /// source, or translated on this Mac), when translations are shown.
         var translation: String?
+        /// A reading of the whole line, where its readings can't be set
+        /// word by word (the wallpaper shows it under the line too).
+        var reading: String? = nil
         var rightToLeft: Bool { LyricScript.lineIsRightToLeft(words) }
 
         /// The type size of a translation under a line set at `point`.
@@ -264,14 +267,15 @@ enum LyricCard {
             let readings = model.romanized[index]
             let words = Self.words(of: line, readings: display == .replace ? readings : nil)
             let translation = showsTranslations ? Self.translation(line.translation ?? model.machineTranslations[index]) : nil
-            guard !line.words.isEmpty else { return Page(words: words, translation: translation) }
+            let reading = LyricReadingPairs.line(readings, for: line, display: display)
+            guard !line.words.isEmpty else { return Page(words: words, translation: translation, reading: reading) }
             let layout = composition ?? LyricComposition.selected(settings: .shared, remembered: remembered?.composition,
                                                                   mood: mood, seed: index,
                                                                   track: "\(track.artist)|\(track.title)")
             let animation = Animation(line: line, composition: layout, mood: mood,
                                       seed: line.wordTimed && layout.arrivalOnly ? trackSeed : index,
                                       romanized: readings, display: display)
-            return Page(words: words, animation: animation, translation: translation)
+            return Page(words: words, animation: animation, translation: translation, reading: reading)
         }
         if pages.isEmpty {
             let plain = model.plainLines.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
@@ -491,7 +495,7 @@ enum LyricCard {
                     }
                     let frame = LyricCardFrame(size: content.size, animation: animation, backdrop: backdrop, stage: stage,
                                                time: time, ink: ink, reduceMotion: content.reduceMotion, textScale: content.textScale,
-                                               translation: clip.page.translation)
+                                               translation: clip.page.translation, reading: clip.page.reading)
                     let renderer = ImageRenderer(content: frame)
                     renderer.scale = gifScale
                     guard let image = renderer.cgImage else { return false }
@@ -590,11 +594,14 @@ private struct LyricCardFrame: View {
     var textScale: Double = 1
     /// Drawn in a band at the stage's foot, arriving with the line.
     var translation: String?
+    /// A whole-line reading, over the translation in that band.
+    var reading: String?
 
     var body: some View {
         let typeSize = LyricCard.Page.translationSize(animation.cardTypeSize)
-        // Room for two lines of translation, taken from the lyric's stage.
-        let band: CGFloat = translation == nil ? 0 : typeSize * 2.7
+        let arrival = LyricPhraseTiming(line: animation.line, nextStart: .infinity, time: time).progress
+        // Room for a line of reading and two of translation, taken from the lyric's stage.
+        let band: CGFloat = (translation == nil ? 0 : typeSize * 2.7) + (reading == nil ? 0 : typeSize * 1.5)
         Image(decorative: backdrop, scale: 1)
             .resizable()
             .frame(width: size.width, height: size.height)
@@ -603,17 +610,28 @@ private struct LyricCardFrame: View {
                     lyrics(in: CGSize(width: stage.width, height: stage.height - band))
                         .frame(width: stage.width, height: stage.height - band)
                         .clipped()
-                    if let translation {
-                        Text(translation)
-                            .font(Settings.shared.lyricFont(size: typeSize, hero: false, mood: animation.mood))
-                            .foregroundStyle(ink.base.reading)
-                            .multilineTextAlignment(.center)
-                            .lineLimit(2)
-                            .minimumScaleFactor(0.7)
-                            .modifier(TranslationSlant(text: translation))
-                            .shadow(color: .black.opacity(0.35), radius: 8, y: 2)
-                            .frame(width: stage.width, height: band)
-                            .opacity(LyricPhraseTiming(line: animation.line, nextStart: .infinity, time: time).progress)
+                    if band > 0 {
+                        VStack(spacing: typeSize * 0.2) {
+                            if let reading {
+                                Text(reading)
+                                    .font(Settings.shared.lyricFont(size: typeSize * 1.1, hero: false, mood: animation.mood))
+                                    .foregroundStyle(ink.base.reading)
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.5)
+                            }
+                            if let translation {
+                                Text(translation)
+                                    .font(Settings.shared.lyricFont(size: typeSize, hero: false, mood: animation.mood))
+                                    .foregroundStyle(ink.base.reading)
+                                    .multilineTextAlignment(.center)
+                                    .lineLimit(2)
+                                    .minimumScaleFactor(0.7)
+                                    .modifier(TranslationSlant(text: translation))
+                            }
+                        }
+                        .shadow(color: .black.opacity(0.35), radius: 8, y: 2)
+                        .frame(width: stage.width, height: band)
+                        .opacity(arrival)
                     }
                 }
                 .frame(width: stage.width, height: stage.height)
@@ -839,8 +857,16 @@ struct LyricCardView: View {
                 .lineSpacing(point * 0.12)
                 .multilineTextAlignment(rightToLeft ? .trailing : .leading)
                 .fixedSize(horizontal: false, vertical: true)
-            // The translation under its line, in the reading colour, as on
-            // the wallpaper.
+            // A whole-line reading, then the translation, under the line in
+            // the reading colour, as on the wallpaper.
+            if let reading = shown.reading {
+                Text(reading)
+                    .font(Settings.shared.lyricFont(size: LyricCard.Page.translationSize(point) * 1.1, hero: false, mood: .neutral))
+                    .foregroundStyle(ink.base.reading)
+                    .multilineTextAlignment(rightToLeft ? .trailing : .leading)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             if let translation = shown.translation {
                 Text(translation)
                     .font(Settings.shared.lyricFont(size: LyricCard.Page.translationSize(point), hero: false, mood: .neutral))
