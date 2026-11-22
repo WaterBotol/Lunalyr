@@ -55,6 +55,19 @@ final class BackingVocalsTests: XCTestCase {
         XCTAssertEqual(BackingVocalLayer.level(of: group, at: 13), 0)
     }
 
+    /// An ad-lib near a line's end is gone by the time its line is, never
+    /// cut off at full strength as the line leaves the stage.
+    func testAGroupNearTheLinesEndFadesWithTheLine() {
+        let group = BackingVocals.Group(id: 0, text: "oh", start: 10, end: 10.2)
+        let exit = 10.4, span = LyricPhraseTiming.exitSpan
+        let timing = BackingVocalLayer.timing(of: group, lineExit: exit, exitSpan: span)
+        XCTAssertLessThanOrEqual(timing.hold + timing.fade, exit + span + 1e-9)
+        XCTAssertGreaterThanOrEqual(timing.hold, group.end, "never before it is sung out")
+        XCTAssertEqual(BackingVocalLayer.level(of: group, at: exit + span, lineExit: exit, exitSpan: span), 0, accuracy: 1e-9)
+        // With the line staying, the old linger stands.
+        XCTAssertEqual(BackingVocalLayer.timing(of: group).fade, 0.9)
+    }
+
     func testGroupsKeepTheirWordsWithoutBrackets() {
         let split = BackingVocals.split(words([("Go", 0), ("(oh", 0.4), ("oh)", 0.7), ("now", 1)]), glue: [false, false, false, false])
         XCTAssertEqual(split.backing[0].words.map(\.text), ["oh", "oh"])

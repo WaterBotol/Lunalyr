@@ -241,7 +241,7 @@ struct LyricLineView: View {
             if let split, !split.backing.isEmpty {
                 ZStack {
                     BackingVocalLayer(groups: split.backing, time: time, stageSize: stageSize, baseSize: baseSize,
-                                      seed: seed, composition: composition, mood: mood)
+                                      seed: seed, composition: composition, mood: mood, lineExit: exitStart)
                     lineBody(words: split.main, glue: split.mainGlue, phraseGlue: split.mainGlue)
                 }
             } else {

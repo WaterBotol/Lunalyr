@@ -123,6 +123,10 @@ struct BackingVocalLayer: View {
     let seed: Int
     let composition: LyricComposition
     let mood: TrackMood
+    /// When the lead line starts to leave: a group is gone by the time the
+    /// line is (`lineExit` plus its exit span), not cut off mid-fade when the
+    /// line leaves the stage.
+    var lineExit: Double = .infinity
     @Environment(\.lyricReduceMotion) private var reduceMotion
     @Environment(\.lyricCreditBands) private var creditBands
     @SurfaceStyle private var surfaceStyle
@@ -137,14 +141,15 @@ struct BackingVocalLayer: View {
         let box = CGSize(width: stageSize.width * 0.6, height: stageSize.height * 0.26)
         ZStack {
             ForEach(groups) { group in
-                let level = Self.level(of: group, at: time)
+                let level = Self.level(of: group, at: time, lineExit: lineExit, exitSpan: exitSpan)
                 if level > 0.004 {
-                    let hold = max(group.end, group.start + Self.minimumHold)
+                    let hold = Self.timing(of: group, lineExit: lineExit, exitSpan: exitSpan).hold
                     LyricLineView(words: group.words, time: time, stageSize: box, baseSize: baseSize * 0.5, mood: mood,
                                   composition: style, seed: seed &+ group.id, presence: 1,
                                   lineEnd: hold, exitStart: hold, glue: group.glue)
                         .frame(width: box.width, height: box.height)
-                        .layerExit(.backing, progress: Self.exitProgress(of: group, at: time), size: box.height)
+                        .layerExit(.backing, progress: Self.exitProgress(of: group, at: time, lineExit: lineExit,
+                                                                         exitSpan: exitSpan), size: box.height)
                         .opacity(0.62 * level)
                         .lyricShadow(0.3 * level, radius: 6)
                         .position(position(of: group))
@@ -156,20 +161,36 @@ struct BackingVocalLayer: View {
         .accessibilityHidden(true)
     }
 
+    private var exitSpan: Double { LyricPhraseTiming.exitSpan(for: composition) }
+
+    /// When a group stops holding and how long it takes to fade: held at
+    /// least `minimumHold` and faded over `fadeOut`, both cut short so the
+    /// group has gone when its line has (never before it is sung out).
+    static func timing(of group: BackingVocals.Group, lineExit: Double = .infinity,
+                       exitSpan: Double = LyricPhraseTiming.exitSpan) -> (hold: Double, fade: Double) {
+        var hold = max(group.end, group.start + minimumHold)
+        guard lineExit.isFinite else { return (hold, fadeOut) }
+        let gone = lineExit + exitSpan
+        hold = min(hold, max(group.end, lineExit))
+        return (hold, max(0.15, min(fadeOut, gone - hold)))
+    }
+
     /// 0...1: eases in over the first moments, holds, then fades out slowly.
-    static func level(of group: BackingVocals.Group, at time: Double) -> Double {
+    static func level(of group: BackingVocals.Group, at time: Double, lineExit: Double = .infinity,
+                      exitSpan: Double = LyricPhraseTiming.exitSpan) -> Double {
         let start = group.start - 0.12
-        let hold = max(group.end, group.start + minimumHold)
+        let (hold, fade) = timing(of: group, lineExit: lineExit, exitSpan: exitSpan)
         if time < start { return 0 }
         if time < start + fadeIn { return Easing.smoothstep((time - start) / fadeIn) }
         if time <= hold { return 1 }
-        return 1 - Easing.smoothstep((time - hold) / fadeOut)
+        return 1 - Easing.smoothstep((time - hold) / fade)
     }
 
     /// 0 while the group is up, then 0...1 as it leaves.
-    static func exitProgress(of group: BackingVocals.Group, at time: Double) -> Double {
-        let hold = max(group.end, group.start + minimumHold)
-        return time <= hold ? 0 : Easing.smoothstep((time - hold) / fadeOut)
+    static func exitProgress(of group: BackingVocals.Group, at time: Double, lineExit: Double = .infinity,
+                             exitSpan: Double = LyricPhraseTiming.exitSpan) -> Double {
+        let (hold, fade) = timing(of: group, lineExit: lineExit, exitSpan: exitSpan)
+        return time <= hold ? 0 : Easing.smoothstep((time - hold) / fade)
     }
 
     /// The band a group takes: its own, unless a credit holds that band at

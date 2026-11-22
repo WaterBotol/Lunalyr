@@ -29,6 +29,7 @@ When merging, keep every entry and combine duplicate headings.
 
 ### Fixed
 
+- Backing vocals: an ad-lib near the end of a line fades out with its line instead of vanishing at full strength when the line leaves.
 - Visualisers: a bright, colourful cover no longer turns the lyrics dark for the first moments of a song, before the visualiser has measured its own brightness. Until then the lyrics stay light, as they already did over a music video.
 - Echo: with a translation at the top or bottom of the screen, the line's repeats on that side fade back, so the translation no longer sits on reversed ghost text.
 - Lyrics: a long translation under or over its line no longer makes the sung words smaller. The line keeps its size and the translation may reach past its edges; like the other placements, it is kept to two lines.
