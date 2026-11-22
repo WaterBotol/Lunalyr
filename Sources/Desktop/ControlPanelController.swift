@@ -31,6 +31,7 @@ final class ControlPanelController {
     private var masksStale = true
     private var cancellables: Set<AnyCancellable> = []
     private var screenObserver: NSObjectProtocol?
+    private var resignObserver: NSObjectProtocol?
     private var keyMonitor: Any?
     var windowIDs: Set<CGWindowID> {
         Set(panels.values.compactMap(\.windowServerID))
@@ -66,12 +67,34 @@ final class ControlPanelController {
                 return nil
             }
         }
+        // Another window taking the keyboard ends a keyboard opening: the
+        // player then goes when the pointer is elsewhere, as after a hover.
+        resignObserver = NotificationCenter.default.addObserver(
+            forName: NSWindow.didResignKeyNotification, object: nil, queue: .main
+        ) { note in
+            MainActor.assumeIsolated {
+                guard let window = note.object as? NSWindow,
+                      ControlPanelController.shared.displayID(of: window) != nil else { return }
+                DesktopPlayerModel.shared.endKeyboardOpen()
+            }
+        }
         screenObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification,
             object: nil, queue: .main
         ) { [weak self] _ in
             Task { @MainActor [weak self] in self?.rebuild() }
         }
+    }
+
+    /// The player opened from the keyboard: its panel on `displayID` takes
+    /// the keyboard, still without activating Lunalyr. False when there is
+    /// no panel there.
+    @discardableResult
+    func giveKeyboard(to displayID: CGDirectDisplayID) -> Bool {
+        guard let panel = panels[displayID] else { return false }
+        panel.orderFrontRegardless()
+        panel.makeKey()
+        return true
     }
 
     private func displayID(of window: NSWindow) -> CGDirectDisplayID? {

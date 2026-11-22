@@ -94,6 +94,7 @@ struct MenuBarView: View {
                 .focusSection()
             MenuBarDiscordToggle()
             MenuPanelSeparator()
+            MenuBarPlayerRow()
             MenuBarLyricCardRow()
             if extras.listenAlongAvailable {
                 MenuPanelSeparator()

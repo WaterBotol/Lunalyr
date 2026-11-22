@@ -122,8 +122,39 @@ final class DesktopPlayerModel: ObservableObject {
     private var queueKind: PlayerKind?
 
     /// Whether the player should stay on screen without the pointer: a search
-    /// is typed.
-    var isPinned: Bool { isSearching }
+    /// is typed, or it was opened from the keyboard.
+    var isPinned: Bool { isSearching || openedFromKeyboard }
+
+    /// Opened from the keyboard (the shortcut or the menu bar's Search and
+    /// Queue…), not by hovering: it stays up with the keyboard until Esc, a
+    /// song is picked, another window takes the keyboard, or the shortcut
+    /// again.
+    @Published private(set) var openedFromKeyboard = false
+    /// Moves on each time the search should take the keyboard.
+    @Published private(set) var searchFocusRequest = 0
+
+    /// The shortcut and the menu bar: shows the player on the display with
+    /// the pointer, with the search ready to type in; a second press closes it.
+    func openFromKeyboard() {
+        guard !isPreview else { return }
+        if openedFromKeyboard {
+            endKeyboardOpen()
+            ControlPanelController.shared.releaseKeyboard()
+            return
+        }
+        openedFromKeyboard = true
+        guard let display = HoverState.shared.pinForKeyboard(),
+              ControlPanelController.shared.giveKeyboard(to: display) else {
+            openedFromKeyboard = false
+            return
+        }
+        pane = .search
+        searchFocusRequest += 1
+    }
+
+    func endKeyboardOpen() {
+        if openedFromKeyboard { openedFromKeyboard = false }
+    }
 
     var isSearching: Bool { !query.trimmingCharacters(in: .whitespaces).isEmpty }
 
@@ -141,6 +172,7 @@ final class DesktopPlayerModel: ObservableObject {
     func closePane() {
         guard !isSearching else { return }
         pane = .song
+        endKeyboardOpen()
     }
 
     /// Previews only: made-up songs and results, set straight in.
@@ -397,6 +429,7 @@ final class DesktopPlayerModel: ObservableObject {
     private func collapseAfterPlaying() {
         query = ""
         results = []
+        endKeyboardOpen()
         pane = .song
     }
 

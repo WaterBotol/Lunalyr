@@ -152,19 +152,21 @@ struct VideoTimingNudge: View {
 
     var body: some View {
         HStack(spacing: 4) {
-            Button("−5") { nudge(-5) }.help("The video five seconds earlier in the song")
-                .accessibilityLabel("Video 5 seconds earlier")
-            Button("−0.5") { nudge(-0.5) }.help("The video half a second earlier in the song")
-                .accessibilityLabel("Video half a second earlier")
+            // A positive step brings the video's moments sooner, as the
+            // menu bar's Video earlier does (`MusicVideoController.videoEarlier`).
+            Button("−5") { nudge(-5) }.help("Video 5 seconds later: for a video that runs ahead of the music")
+                .accessibilityLabel("Video 5 seconds later")
+            Button("−0.5") { nudge(-0.5) }.help("Video half a second later: for a video that runs ahead of the music")
+                .accessibilityLabel("Video half a second later")
             Text(MusicVideoTiming.format(offset))
                 .lunalyrText(.value)
                 .foregroundStyle(offset == 0 ? .secondary : .primary)
                 .frame(minWidth: 56)
                 .accessibilityHidden(true)
-            Button("+0.5") { nudge(0.5) }.help("Skip half a second more of the video’s intro")
-                .accessibilityLabel("Video half a second later")
-            Button("+5") { nudge(5) }.help("Skip five seconds more of the video’s intro")
-                .accessibilityLabel("Video 5 seconds later")
+            Button("+0.5") { nudge(0.5) }.help("Video half a second earlier: skips more of its intro, for a video that lags the music")
+                .accessibilityLabel("Video half a second earlier")
+            Button("+5") { nudge(5) }.help("Video 5 seconds earlier: skips more of its intro, for a video that lags the music")
+                .accessibilityLabel("Video 5 seconds earlier")
             Button(action: reset) { Image(systemName: "arrow.counterclockwise") }
                 .help("Drop your nudge: back to the estimate")
                 .accessibilityLabel("Reset video timing")

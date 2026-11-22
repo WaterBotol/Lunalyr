@@ -18,7 +18,7 @@ final class GlobalHotkeys: ObservableObject {
 
     enum Action: UInt32, CaseIterable, Identifiable {
         case toggleLyrics = 1, syncEarlier, syncLater, cycleLayout, copyCard, pauseWallpaper
-        case tapSyncLyrics, toggleMusicVideo, nextVisualizer
+        case tapSyncLyrics, toggleMusicVideo, nextVisualizer, showPlayer
         var id: UInt32 { rawValue }
 
         var title: String {
@@ -32,6 +32,7 @@ final class GlobalHotkeys: ObservableObject {
             case .tapSyncLyrics: return "Tap to sync lyrics"
             case .toggleMusicVideo: return "Music video on or off"
             case .nextVisualizer: return "Next visualiser"
+            case .showPlayer: return "Search and queue on the desktop"
             }
         }
 
@@ -47,6 +48,7 @@ final class GlobalHotkeys: ObservableObject {
             case .tapSyncLyrics: return "tapSyncLyrics"
             case .toggleMusicVideo: return "toggleMusicVideo"
             case .nextVisualizer: return "nextVisualizer"
+            case .showPlayer: return "showPlayer"
             }
         }
 
@@ -54,7 +56,7 @@ final class GlobalHotkeys: ObservableObject {
         /// switched on, so an update takes no new keys from other apps.
         var isOnByDefault: Bool {
             switch self {
-            case .tapSyncLyrics, .toggleMusicVideo, .nextVisualizer: return false
+            case .tapSyncLyrics, .toggleMusicVideo, .nextVisualizer, .showPlayer: return false
             default: return true
             }
         }
@@ -98,6 +100,7 @@ final class GlobalHotkeys: ObservableObject {
         .init(action: .tapSyncLyrics, keyCode: UInt32(kVK_ANSI_T), key: "T"),
         .init(action: .toggleMusicVideo, keyCode: UInt32(kVK_ANSI_V), key: "V"),
         .init(action: .nextVisualizer, keyCode: UInt32(kVK_ANSI_N), key: "N"),
+        .init(action: .showPlayer, keyCode: UInt32(kVK_ANSI_S), key: "S"),
     ]
 
     static func shortcut(for action: Action) -> Shortcut? {
@@ -291,6 +294,7 @@ final class GlobalHotkeys: ObservableObject {
             case .tapSyncLyrics: LyricTapSyncController.shared.toggle()
             case .toggleMusicVideo: extras.toggleMusicVideo()
             case .nextVisualizer: extras.nextVisualizer()
+            case .showPlayer: DesktopPlayerModel.shared.openFromKeyboard()
             }
         }
     }

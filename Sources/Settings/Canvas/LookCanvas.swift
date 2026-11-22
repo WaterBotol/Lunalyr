@@ -197,7 +197,14 @@ struct LookCanvas: View {
 
     @ViewBuilder private var stateChip: some View {
         if WallpaperStateNote.state(paused: extras.wallpaperPaused, hiddenByMirroring: extras.hiddenByMirroring) != nil {
+            // Over the picture, the window's ink needs the window's own
+            // ground: on a dark wallpaper it was 2.8:1 in light mode.
             WallpaperStateNote()
+                .padding(.horizontal, 9)
+                .padding(.vertical, 4)
+                .background(Capsule().fill(Color.studio(.popover)))
+                .overlay(Capsule().strokeBorder(Color.studio(.separator)))
+                .shadow(color: .black.opacity(0.18), radius: 3, y: 1)
                 .padding(10)
                 .transition(.opacity)
         }

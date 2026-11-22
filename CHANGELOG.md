@@ -12,6 +12,10 @@ Removed, Fixed or Security. Several branches may add entries at the same time.
 When merging, keep every entry and combine duplicate headings.
 -->
 
+### Added
+
+- Desktop player without hovering: **Search and Queue…** in the menu bar opens the player on the display with the pointer, its search ready to type in, and keeps it up with the keyboard until Esc, a song is picked or another window is used. A shortcut does the same (⌃⌥⌘S, or ⌃⇧⌘S), off until switched on in Settings › General › Shortcuts.
+
 ### Changed
 
 - Desktop player: the queue lists Music's real Up Next after the playing song, in the order it will play (shuffle and Play Next / Play Later included), instead of the playlist's order. Clicking a song there skips forward to it, so the songs after it stay queued. It is read while the queue is open, even with Look ahead in the queue off; when it can't be read (another player, Low Power Mode), the queue shows the playlist as before.
@@ -22,6 +26,8 @@ When merging, keep every entry and combine duplicate headings.
 
 ### Fixed
 
+- Settings › Music video: the timing buttons' tooltips and VoiceOver names had earlier and later the wrong way round. **+** brings the video earlier (it skips more of the intro), as the menu bar's Video earlier does; **−** brings it later.
+- Settings: "Wallpaper paused" over the Look preview sits on its own light (or dark) backing, so it reads on any wallpaper; it was 2.8:1 on a dark one in light mode.
 - Desktop player: a song picked from search (or from history) that isn't in the playing playlist no longer stops after its album. Lunalyr Queue now carries on with the rest of its album and then the artist's other songs in your library, album by album; a song with no album, or the last one on its album, carries on with the artist too. It plays on its own only when nothing else by that artist is in your library, and the note over the player says which. A catalogue result is now hidden when the same song is in your library, even with a "(feat. …)" or "Remastered" tag on one of them, so the library copy, which can carry on, is the one you pick.
 
 ## [2.2.0] - 2026-11-17

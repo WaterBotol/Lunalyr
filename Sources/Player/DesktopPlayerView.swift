@@ -184,7 +184,13 @@ struct DesktopPlayerView: View {
         .onChange(of: searchFocused) { _, focused in
             guard !maskRender, preview == nil else { return }
             PlayerInteraction.shared.searchFocused = focused
-            if !focused { ControlPanelController.shared.releaseKeyboard() }
+            // Opened from the keyboard, Tab may move on to the player's
+            // buttons: the panel keeps the keyboard until Esc.
+            if !focused && !model.openedFromKeyboard { ControlPanelController.shared.releaseKeyboard() }
+        }
+        .onChange(of: model.searchFocusRequest) { _, _ in
+            guard !maskRender, preview == nil, hover.showsPlayer(on: displayID, searching: model.isPinned) else { return }
+            searchFocused = true
         }
         .onChange(of: contextKey, initial: true) { _, _ in
             if !maskRender && preview == nil { scrub.update(scrubContext) }
@@ -547,6 +553,8 @@ struct DesktopPlayerView: View {
                 focus.wrappedValue = true
             },
             clearSearch: {
+                // Esc ends a keyboard opening, whatever else it does.
+                model.endKeyboardOpen()
                 if !model.query.isEmpty || focus.wrappedValue {
                     model.query = ""
                     focus.wrappedValue = false

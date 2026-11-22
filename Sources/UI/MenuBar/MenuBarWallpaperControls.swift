@@ -230,6 +230,28 @@ struct MenuBarToggles: View {
     }
 }
 
+/// Search and Queue…: opens the desktop player on the display with the
+/// pointer, its search ready to type in, so it can be used without hovering
+/// (the keyboard, VoiceOver). Hidden with the hover player switched off.
+@MainActor
+struct MenuBarPlayerRow: View {
+    @Model(\.extras) private var extras
+    @Model(\.hotkeys) private var hotkeys
+    @ObservedObject private var desktop = DesktopOptions.shared
+
+    static let title = "Search and Queue…"
+
+    var body: some View {
+        if desktop.showsControlsOnHover {
+            MenuPanelRow(Self.title, value: extras.shortcutsEnabled ? hotkeys.activeLabel(for: .showPlayer) : nil) {
+                // After the menu has closed, so the player's panel keeps the keyboard.
+                DispatchQueue.main.async { DesktopPlayerModel.shared.openFromKeyboard() }
+            }
+            .help("Open the desktop player's search and queue without hovering")
+        }
+    }
+}
+
 /// Open Lyric Card…: an action, not a toggle -- it opens the lyric-card
 /// window for the line playing (the same name in Settings, the menu-bar
 /// line's menu and the shortcut). Disabled with nothing playing.

@@ -39,6 +39,19 @@ final class HoverState: ObservableObject {
 
     func isActive(on displayID: CGDirectDisplayID) -> Bool { activeDisplayID == displayID }
 
+    /// The player opened from the keyboard: pinned to the display with the
+    /// pointer (else the main one) and shown now, not at the next poll.
+    /// Nil when the hover player is switched off.
+    func pinForKeyboard() -> CGDirectDisplayID? {
+        guard DesktopOptions.shared.showsControlsOnHover else { return nil }
+        let mouse = NSEvent.mouseLocation
+        let screen = NSScreen.screens.first { NSMouseInRect(mouse, $0.frame, false) } ?? NSScreen.main
+        guard let display = screen?.versoDisplayID else { return nil }
+        pinnedDisplay = display
+        poll()
+        return display
+    }
+
     func start() {
         guard !started else { return }
         started = true
