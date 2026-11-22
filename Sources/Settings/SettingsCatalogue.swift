@@ -482,7 +482,7 @@ enum SettingsCatalogue {
               keywords: ["pinyin", "tones", "accents"]),
         .init(.readings, "Romanisation", "Prefer saved readings", .toggle, keys: ["custom.romanizationSaved"],
               keywords: ["saved readings", "source readings"]),
-        .init(.readings, "Romanisation", "Import Reading LRC…", .action,
+        .init(.readings, "Romanisation", "Import Readings from LRC…", .action,
               keywords: ["readings", "file", "pronunciation"]),
         .init(.readings, "Translation", "Show translations", .toggle, keys: ["custom.showTranslations"],
               keywords: ["translation", "bilingual"]),

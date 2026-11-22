@@ -44,7 +44,7 @@ struct ReadingsPage: View {
 
     /// Readings from a file of one's own, for the lyrics showing.
     @ViewBuilder private var savedReadings: some View {
-        Button("Import Reading LRC…") {
+        Button("Import Readings from LRC…") {
             // A file that can't be used says why, as on Timing & sources.
             switch InspectorImport.lyrics(title: "Choose a reading LRC file") {
             case nil: break

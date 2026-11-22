@@ -8,7 +8,8 @@ final class RomanizationOptions: ObservableObject {
     enum Display: String, CaseIterable, Identifiable {
         case off, below, replace
         var id: String { rawValue }
-        var title: String { self == .off ? "Off" : self == .below ? "Below lyrics" : "Replace lyrics" }
+        /// Named as translations' places are ("Under the line").
+        var title: String { self == .off ? "Off" : self == .below ? "Under the line" : "In place of the line" }
     }
     enum Language: String, CaseIterable, Identifiable {
         case automatic, japanese, mandarin, cantonese, korean, other
