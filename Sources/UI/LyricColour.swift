@@ -470,6 +470,8 @@ enum LyricBackdrop {
     /// The most an unmeasured music video is taken to be: under
     /// `LyricInkDirector.lightBelow`, so lyrics over it stay light.
     static let unmeasuredVideoCeiling = 0.2
+    /// The same for a visualiser before its stage meter has read a frame.
+    static let unmeasuredVisualizerCeiling = 0.2
 
     /// The backdrop at the brightest place a line reaches: the ends of the
     /// stage, which get `edgeBacking` of the text backing.
@@ -560,7 +562,12 @@ enum LyricBackdrop {
         case .colourOnly where measured != nil:
             return LyricLegibility.darkened(measured ?? field, by: WallpaperShade.scrimAtStage(strength: strength))
         case .visualizer:
-            return min(1, field * (1 - min(0.9, 0.25 * strength)) + 0.06)
+            // Not yet measured (`drawn` answers once the stage meter has
+            // read a frame): visualisers are mostly dark between their lit
+            // ribbons, so never guess one light enough for dark text, which
+            // a bright cover did and left the first moments of a song in
+            // dark ink on a dark scene. The meter corrects it within moments.
+            return min(min(1, field * (1 - min(0.9, 0.25 * strength)) + 0.06), unmeasuredVisualizerCeiling)
         default:
             if motion {
                 return field * (1 - min(0.9, 0.4 * strength)) * 0.6

@@ -28,6 +28,7 @@ When merging, keep every entry and combine duplicate headings.
 
 ### Fixed
 
+- Visualisers: a bright, colourful cover no longer turns the lyrics dark for the first moments of a song, before the visualiser has measured its own brightness. Until then the lyrics stay light, as they already did over a music video.
 - Echo: with a translation at the top or bottom of the screen, the line's repeats on that side fade back, so the translation no longer sits on reversed ghost text.
 - Lyrics: a long translation under or over its line no longer makes the sung words smaller. The line keeps its size and the translation may reach past its edges; like the other placements, it is kept to two lines.
 - Fable: a page no longer turns away before its last word has been sung, and the stage is no longer empty for a moment between pages. The old page holds until its last word ends and is gone just as the next page's first word lands (a fast line turns quicker, never with both pages on the stage).
