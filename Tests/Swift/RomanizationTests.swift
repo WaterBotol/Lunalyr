@@ -77,7 +77,7 @@ final class RomanizationTests: XCTestCase {
             XCTAssertEqual(LyricRomanizer.romanize(text, language: .japanese, toneMarks: false), expected, text)
         }
         // The tokenizer always says nan for 何; it is nani before most words.
-        XCTAssertTrue(JapaneseReading.romanize("何を見ていたの").hasPrefix("nani wo"))
+        XCTAssertTrue(JapaneseReading.romanize("何を見ていたの").hasPrefix("nani o"))
         XCTAssertTrue(JapaneseReading.romanize("何も").hasPrefix("nani"))
         XCTAssertTrue(JapaneseReading.romanize("何でもない").hasPrefix("nandemo"))
     }
@@ -143,8 +143,8 @@ final class RomanizationTests: XCTestCase {
             "はしれ": "hashire", "はしれ！": "hashire!", "はしれメロス": "hashire merosu", "はしれはしれ": "hashire hashire",
             "ねえ はしれ": "nee hashire", "はくしゅ": "hakushu", "はくしゅして": "hakushu shite", "はね": "hane",
             "はよ": "hayo", "はよ来て": "hayo kite", "はで": "hade", "はぐして": "hagushite", "はぐしよう": "hagushiyou",
-            "はぐしたい": "hagushitai", "へ理屈": "herikutsu", "へ理屈を": "herikutsu wo", "へりくつ": "herikutsu",
-            "へりくつを": "herikutsu wo",
+            "はぐしたい": "hagushitai", "へ理屈": "herikutsu", "へ理屈を": "herikutsu o", "へりくつ": "herikutsu",
+            "へりくつを": "herikutsu o",
         ]
         for (text, expected) in words {
             XCTAssertEqual(JapaneseReading.romanize(text), expected, text)
@@ -167,11 +167,11 @@ final class RomanizationTests: XCTestCase {
             XCTAssertTrue(reading.contains(expected), "\(text): \(reading)")
             XCTAssertNil(reading.rangeOfCharacter(from: pinyin), "\(text): \(reading)")
         }
-        // Simplified Chinese kanji in a Japanese lyric get no reading, and
-        // the ending after one does not stick to the particle before it.
+        // Simplified Chinese kanji in a Japanese lyric are read through
+        // their traditional form (梦 夢, 见 見), not left blank.
         let dream = line(["君", "の", "梦", "を", "见", "た"], wordTimed: false)
-        XCTAssertEqual(texts(dream), ["kimi", "no", "", "wo", "", "ta"])
-        XCTAssertEqual(texts(dream, options(.replace)), ["kimi", "no", "梦", "wo", "见", "ta"])
+        XCTAssertEqual(texts(dream), ["kimi", "no", "yume", "o", "mi", "ta"])
+        XCTAssertEqual(texts(dream, options(.replace)), ["kimi", "no", "yume", "o", "mita"], "the verb and its ending read as one word")
     }
 
     func testFullWidthDigitsCountPeopleAsHalfWidthOnesDo() {
@@ -338,14 +338,14 @@ final class RomanizationTests: XCTestCase {
             XCTAssertEqual(reading, parts.map(JapaneseReading.romanize), parts.joined(separator: " "))
         }
         XCTAssertEqual(texts(line(["あいたい", "あいたい", "いますぐ"], spaced: true)), ["aitai", "aitai", "ima sugu"])
-        XCTAssertEqual(texts(line(["そらを", "みあげて", "ないた"], spaced: true)), ["sora wo", "miagete", "naita"])
+        XCTAssertEqual(texts(line(["そらを", "みあげて", "ないた"], spaced: true)), ["sora o", "miagete", "naita"])
         XCTAssertEqual(texts(line(["あっ", "きみだ", "よ"], spaced: true)), ["a", "kimi da", "yo"])
         // A source reading is laid on the phrases it reads, not a itai or
         // miagetenaita under one word and nothing under the next.
         let sourced: [([String], String, [String])] = [
             (["あいたい", "あいたい", "いますぐ"], "aitai aitai imasugu", ["aitai", "aitai", "ima sugu"]),
             (["まって", "まって", "いかないで"], "matte matte ikanaide", ["matte", "matte", "ikanaide"]),
-            (["そらを", "みあげて", "ないた"], "sora wo miagete naita", ["sora wo", "miagete", "naita"]),
+            (["そらを", "みあげて", "ないた"], "sora o miagete naita", ["sora o", "miagete", "naita"]),
             (["えっ", "どうして", "なの"], "e doushite nano", ["e", "dou shite", "na no"]),
             (["あっ", "きみだ", "よ"], "a kimi da yo", ["a", "kimi da", "yo"]),
             (["思っ", "た", "より"], "omotta yori", ["omo", "tta", "yori"]),
@@ -552,8 +552,8 @@ final class RomanizationTests: XCTestCase {
         XCTAssertEqual(JapaneseAlignment.respelled("SYŌ"), "SHŌ")
         // English sung for a kanji is often shaped like romaji, and stays as
         // written: not passhion, vishion, ashia or shituation.
-        let english = [(["情熱", "を"], "passion wo"), (["未来", "が"], "vision ga"), (["亜細亜", "へ"], "Asia e"),
-                       (["状況", "を"], "situation wo"), (["使命", "を"], "mission wo"), (["音楽", "を"], "music wo")]
+        let english = [(["情熱", "を"], "passion o"), (["未来", "が"], "vision ga"), (["亜細亜", "へ"], "Asia e"),
+                       (["状況", "を"], "situation o"), (["使命", "を"], "mission o"), (["音楽", "を"], "music o")]
         for (parts, reading) in english {
             XCTAssertEqual(texts(line(parts, wordTimed: false, reading: reading)), reading.components(separatedBy: " "), reading)
         }

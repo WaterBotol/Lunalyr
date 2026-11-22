@@ -4,7 +4,7 @@ import Foundation
 /// Japanese romaji from the system tokenizer. It reads each phrase of a line
 /// at once, because kanji need their context (今日 kyou, 大人 otona), and its
 /// Latin transcription is tidied into Hepburn with wapuro-style long vowels:
-/// the particles は and へ read wa and e, っ doubles the next consonant across
+/// the particles は, へ and を read wa, e and o, っ doubles the next consonant across
 /// token boundaries, ー repeats its vowel, small kana join their syllable, and
 /// inflections are written with their stem (思った omotta, 会いたい aitai).
 enum JapaneseReading {
@@ -236,6 +236,10 @@ enum JapaneseReading {
                 || (!wordStarts.contains(where: phrase.hasPrefix) && leadsAsParticle(at: index, in: tokens, tokenizer: tokenizer))
             if token.source == "は" { return particle ? "wa" : "ha" }
             return particle ? "e" : "he"
+        case "を", "ヲ":
+            // Only ever the particle: o, as Hepburn and Apple Music's own
+            // readings write it, so saved and generated readings agree.
+            return "o"
         case "月" where before.map(isNumber) == true, "日" where before.map(isNumber) == true,
              "日間" where before.map(isNumber) == true:
             return date(token.source, number: before?.source ?? "")
@@ -266,8 +270,15 @@ enum JapaneseReading {
         } else {
             // A kanji the tokenizer cannot read (simplified Chinese 爱) gets
             // no reading rather than a Mandarin one or the kanji itself;
-            // counted people (2人) are read the Japanese way.
-            return counted(token.source, tokenizer: tokenizer) ?? ""
+            // counted people (2人) are read the Japanese way. A simplified
+            // form that is a kanji in its traditional form (梦 夢 yume, 见 見
+            // mi) is read as that.
+            if let reading = counted(token.source, tokenizer: tokenizer) { return reading }
+            if let traditional = token.source.applyingTransform(StringTransform("Hans-Hant"), reverse: false),
+               traditional != token.source, let reading = transcription(traditional, tokenizer: tokenizer) {
+                return reading
+            }
+            return ""
         }
         return hepburn(raw)
     }

@@ -26,6 +26,7 @@ When merging, keep every entry and combine duplicate headings.
 
 ### Fixed
 
+- Japanese readings: the particle を is written "o", as Hepburn and Apple Music's own readings write it (it was "wo"), so saved and generated readings agree. A simplified Chinese character in a Japanese lyric (梦, 见) is read through its kanji form (夢 yume, 見 mi) instead of being left blank.
 - Lyrics: with the song title card kept on screen, translations no longer run under it. Bottom-of-the-screen translations, the rolling layouts' translation band and a translation under the line keep clear of the card (a line lifts, or shrinks a little in Fable and Hinge, only as far as it needs to). Nothing changes with the card off or moved up.
 - Lyrics: a translation at the top or bottom of the screen no longer overlaps the next line's while a line is held. The slot shows one translation; the held line's fades as the next line starts, and under Reduce Motion it is drawn once.
 - Lyrics: in an LRC file, a row sharing a lyric's timestamp is its translation only when the file's second rows are in another language; in the lyric's own language they are a second singer's words, shown on the line as "first / second". A translation in a script you don't read (a Chinese translation for an English reader) is left out, as it already was for TTML lyrics, and no longer stops machine translation.
