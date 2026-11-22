@@ -163,9 +163,9 @@ struct LyricPhraseTiming {
         return min(1, max(0, (time - line.start) / max(0.001, end - line.start)))
     }
 
-    static let exitDuration = 0.46
+    static let exitDuration = WallpaperMotion.lineExit
     /// From `exitStart` until the last, most staggered word has gone.
-    static let exitSpan = 0.70
+    static let exitSpan = WallpaperMotion.exitSpan
 
     /// `heldUntil`: a carrying stage line held until its hand-over to the
     /// next line (`StageCarry.heldUntil`); it leaves no earlier than that.
@@ -173,7 +173,7 @@ struct LyricPhraseTiming {
     /// is held for (`LyricLayer.stageClearance`).
     init(line: LyricsFetcher.Line, nextStart: Double, time: Double, heldUntil: Double? = nil, leavesBy: Double? = nil) {
         let duration = max(0, min(line.end, nextStart) - line.start)
-        let attack = line.wordTimed ? 0.22 : min(0.32, max(0.12, duration * 0.18))
+        let attack = line.wordTimed ? WallpaperMotion.lineAttack : min(0.32, max(0.12, duration * 0.18))
         progress = vc_settle(time - line.start, attack)
         let seed = Self.timeSeed(line.start) ^ 0x51ED_C0DE
         arrival = vc_spring_step(time - line.start,
@@ -280,7 +280,7 @@ struct WordPresentation: Equatable {
         if time < word.start {
             let hint = vc_word_visibility(time, word.start, word.end, ahead ? 1 : 0,
                 index == nextIndex ? 1 : 0, settings.nextWordPreviewLead)
-                * Easing.smoothstep((time - eligibleSince) / 0.16)
+                * Easing.smoothstep((time - eligibleSince) / WallpaperMotion.previewRamp)
             opacity = hint > 0 && LyricRuns.isPreviewWord(word.text) ? hint : 0
         } else {
             let carriesPreview = ahead && (motion.reveal == 1 || LyricRuns.isPreviewWord(word.text))

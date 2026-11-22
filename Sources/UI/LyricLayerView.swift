@@ -758,7 +758,7 @@ struct LyricLayer: View {
     private func previewLevel(of line: LyricsFetcher.Line, time: Double, since: Double) -> Double {
         guard let onset = LyricPhraseTiming.firstWordOnset(of: line) else { return 0 }
         return vc_word_visibility(time, onset, onset + 1, 1, 1, settings.nextWordPreviewLead) / 0.25
-            * Easing.smoothstep((time - since) / 0.16)
+            * Easing.smoothstep((time - since) / WallpaperMotion.previewRamp)
     }
 
     /// Whether an earlier line is still being sung or finishing its exit.
@@ -1219,7 +1219,7 @@ struct LyricLayer: View {
         let base = baseSize * (composition == .spoken ? 1.26 : 1.06)
         let pointSize = base * 0.68
         let previewOpacity = vc_word_visibility(time, line.start, line.end, 1, 1, settings.nextWordPreviewLead)
-            * Easing.smoothstep((time - previewSince) / 0.16)
+            * Easing.smoothstep((time - previewSince) / WallpaperMotion.previewRamp)
         let stage = composition.fillsStage
         // A carrying layout's hand-over brings the line in (`StageCarry`).
         let carriedIn = stage && composition.carriesStage && carry?.incoming != nil

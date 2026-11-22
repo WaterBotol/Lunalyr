@@ -106,6 +106,9 @@ VCSpring vc_word_spring(uint64_t seed, double duration, double cadence, double e
     return s;
 }
 
+const double VC_WORD_EXIT = .40;
+const double VC_WORD_EXIT_STAGGER = .14;
+
 VCWordMotion vc_word_motion(double time, double start, double end, double cadence,
                             double exit_start, double order, uint64_t seed,
                             double energy, int reduced) {
@@ -130,12 +133,12 @@ VCWordMotion vc_word_motion(double time, double start, double end, double cadenc
     double weight = .72 + .28*smooth((duration - .08) / .5);
     m.heat = clamp(weight*(vc_spring_step(time - (start - .02), swell) - vc_spring_step(time - release, fall)), 0, 1.15);
     if (isfinite(exit_start)) {
-        double stagger = clamp(order, 0, 1)*.14 + (.5 + .5*vc_jitter(seed, 4))*.05;
+        double stagger = clamp(order, 0, 1)*VC_WORD_EXIT_STAGGER + (.5 + .5*vc_jitter(seed, 4))*.05;
         /* A word stays a moment once it has fully arrived: in a very fast
            line it otherwise left about a tenth of a second after its onset,
            a flash rather than a word. */
         double leaves = fmax(exit_start + stagger, start + reveal + .20);
-        m.leave = vc_settle(time - leaves, .40*(1 + .1*vc_jitter(seed, 5)));
+        m.leave = vc_settle(time - leaves, VC_WORD_EXIT*(1 + .1*vc_jitter(seed, 5)));
     }
     if (reduced || m.heat <= 0) return m;
     double hot = fmin(m.heat, 1), held = smooth((duration - .25) / 1.1);

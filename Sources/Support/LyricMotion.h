@@ -54,6 +54,12 @@ typedef struct {
 /* Everything one timed word does, as a pure function of playback time.
    exit_start is the line's exit onset (INFINITY when it has none) and order
    the word's reading position in its line, 0...1, which staggers the exit. */
+/* A word's exit and the stagger between words leaving, in seconds: the
+   design tokens `WallpaperMotion.wordExit` and `.wordExitStagger`, held to
+   them by MotionTokensTests. */
+extern const double VC_WORD_EXIT;
+extern const double VC_WORD_EXIT_STAGGER;
+
 VCWordMotion vc_word_motion(double time, double start, double end, double cadence,
                             double exit_start, double order, uint64_t seed,
                             double energy, int reduce_motion);

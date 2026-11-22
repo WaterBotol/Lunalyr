@@ -8,6 +8,14 @@ import XCTest
 final class MotionTokensTests: XCTestCase {
     typealias Motion = LunalyrDesign.Motion
 
+    /// The live lyric timings are the tokens, so neither drifts from the other.
+    func testTheLyricMotionUsesTheTokens() {
+        XCTAssertEqual(VC_WORD_EXIT, WallpaperMotion.wordExit)
+        XCTAssertEqual(VC_WORD_EXIT_STAGGER, WallpaperMotion.wordExitStagger)
+        XCTAssertEqual(LyricPhraseTiming.exitSpan, WallpaperMotion.exitSpan)
+        XCTAssertEqual(LyricPhraseTiming.exitDuration, WallpaperMotion.lineExit)
+    }
+
     func testDurationsArePositive() {
         let durations: [Double] = [
             Motion.Hold.confirm, Motion.Hold.hud, Motion.Hold.placeholderDelay, Motion.Hold.spinnerDelay,
