@@ -82,7 +82,7 @@ final class ReadingAndTTMLTests: XCTestCase {
         [ti:Sample]
         [ar:Singer]
         [00:01.00]Hold on
-        [00:01.00]Stay with me
+        [00:01.00]Halt durch, bleib heute Nacht bei mir
         [00:04.00]The whole phrase
         [00:07.00]Keep going
         [00:10.00]♪
@@ -107,7 +107,7 @@ final class ReadingAndTTMLTests: XCTestCase {
             XCTAssertEqual(lines.map(\.text), ["Hold on", "The whole phrase", "Keep going", "", "Finish the song"], ext)
             XCTAssertEqual(lines.map(\.wordTimed), [true, false, true, false, false], ext)
             XCTAssertEqual(lines[0].words[1].start, 1.6, accuracy: 0.001, ext)
-            XCTAssertEqual(lines[0].translation, "Stay with me", ext)
+            XCTAssertEqual(lines[0].translation, "Halt durch, bleib heute Nacht bei mir", ext)
             XCTAssertEqual(lines[1].end, 7.55, accuracy: 0.001, ext)
             XCTAssertEqual(lines[1].words, LyricsFetcher.distributeWords(in: "The whole phrase", from: 4, to: 7.55), ext)
             XCTAssertTrue(lines[3].isInstrumental, ext)

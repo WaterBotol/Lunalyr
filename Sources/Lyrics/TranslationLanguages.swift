@@ -44,23 +44,33 @@ enum TranslationLanguages {
     /// The scripts of a text's letters. Letters in scripts not listed here
     /// are left out, so such a translation is never held back.
     static func scripts(of text: String) -> Set<Script> {
-        var found = Set<Script>()
-        for scalar in text.unicodeScalars where scalar.properties.isAlphabetic {
-            switch scalar.value {
-            case 0x41...0x5A, 0x61...0x7A, 0xC0...0x24F, 0x1E00...0x1EFF: found.insert(.latin)
-            case 0x3005, 0x3007, 0x3400...0x4DBF, 0x4E00...0x9FFF, 0xF900...0xFAFF, 0x20000...0x323AF: found.insert(.han)
-            case 0x3040...0x30FF, 0x31F0...0x31FF, 0xFF66...0xFF9F: found.insert(.kana)
-            case 0x1100...0x11FF, 0x3130...0x318F, 0xA960...0xA97F, 0xAC00...0xD7AF: found.insert(.hangul)
-            case 0x400...0x52F: found.insert(.cyrillic)
-            case 0x370...0x3FF: found.insert(.greek)
-            case 0x600...0x6FF, 0x750...0x77F, 0xFB50...0xFDFF, 0xFE70...0xFEFF: found.insert(.arabic)
-            case 0x590...0x5FF: found.insert(.hebrew)
-            case 0xE00...0xE7F: found.insert(.thai)
-            case 0x900...0x97F: found.insert(.devanagari)
-            default: break
-            }
+        Set(text.unicodeScalars.compactMap(script(of:)))
+    }
+
+    /// The script most of a text's letters are in, if any are in one listed here.
+    static func dominantScript(of text: String) -> Script? {
+        var counts: [Script: Int] = [:]
+        for scalar in text.unicodeScalars { if let script = script(of: scalar) { counts[script, default: 0] += 1 } }
+        // Kana and Han together are Japanese: whichever leads, it is one script here.
+        if let kana = counts[.kana], kana > 0 { counts[.kana] = kana + (counts[.han] ?? 0); counts[.han] = nil }
+        return counts.max { $0.value < $1.value }?.key
+    }
+
+    private static func script(of scalar: Unicode.Scalar) -> Script? {
+        guard scalar.properties.isAlphabetic else { return nil }
+        switch scalar.value {
+        case 0x41...0x5A, 0x61...0x7A, 0xC0...0x24F, 0x1E00...0x1EFF: return .latin
+        case 0x3005, 0x3007, 0x3400...0x4DBF, 0x4E00...0x9FFF, 0xF900...0xFAFF, 0x20000...0x323AF: return .han
+        case 0x3040...0x30FF, 0x31F0...0x31FF, 0xFF66...0xFF9F: return .kana
+        case 0x1100...0x11FF, 0x3130...0x318F, 0xA960...0xA97F, 0xAC00...0xD7AF: return .hangul
+        case 0x400...0x52F: return .cyrillic
+        case 0x370...0x3FF: return .greek
+        case 0x600...0x6FF, 0x750...0x77F, 0xFB50...0xFDFF, 0xFE70...0xFEFF: return .arabic
+        case 0x590...0x5FF: return .hebrew
+        case 0xE00...0xE7F: return .thai
+        case 0x900...0x97F: return .devanagari
+        default: return nil
         }
-        return found
     }
 
     /// Whether a listener with these preferred languages can read a

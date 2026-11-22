@@ -1,4 +1,5 @@
 import Foundation
+import NaturalLanguage
 import Yams
 
 /// Custom fork: bounded parallel provider lookup, recording-specific caching,
@@ -1174,7 +1175,8 @@ final class LyricsFetcher {
     /// exhaust memory; the rows after that point are not read.
     static let lrcExpansionLimit = 2 * lrcInputLimit
 
-    static func parseLRC(_ text: String, trackDuration: Double) -> [Line] {
+    static func parseLRC(_ text: String, trackDuration: Double,
+                         preferredLanguages: [String] = Locale.preferredLanguages) -> [Line] {
         guard text.utf8.count <= lrcInputLimit,
               let lineStamp = try? NSRegularExpression(pattern:#"\[(\d{1,3}):([0-5]\d)(?:[.:](\d{1,3}))?\]"#),
               let wordStamp = try? NSRegularExpression(pattern:#"<(\d{1,3}):([0-5]\d)(?:[.:](\d{1,3}))?>"#)
@@ -1253,7 +1255,7 @@ final class LyricsFetcher {
                 rows.append(LRCRow(stamp:stamp,start:begin,text:plain,tokens:valid ? tokens : []))
             }
         }
-        let parsed=mergingSharedTimestamps(rows),lastEnd=trackDuration.isFinite ? trackDuration : 0
+        let parsed=mergingSharedTimestamps(rows,preferredLanguages:preferredLanguages),lastEnd=trackDuration.isFinite ? trackDuration : 0
         return LyricCredits.markingTitleHeader(parsed.enumerated().compactMap { index,item in
             let end=index+1<parsed.count ? parsed[index+1].start : max(lastEnd,item.start+4)
             if item.credit {
@@ -1294,16 +1296,22 @@ final class LyricsFetcher {
     /// Bilingual LRC repeats a timestamp for a reading or a translation, e.g.
     /// "[00:10.00]君の名は" then "[00:10.00]kimi no na wa". Those rows become one
     /// line: the first is the lyric, a Latin reading of a non-Latin lyric is its
-    /// romanisation and any other version is its translation. Without this the
-    /// first row lasted no time at all and only the second was ever shown. An
-    /// empty or "♪" row gives way to a lyric at the same time, and a
+    /// romanisation, and another version is its translation when the file's
+    /// second rows, taken together, are in another language than its lyrics
+    /// (`SharedRows.areTranslations`). Otherwise they are a second singer's
+    /// words at the same moment, joined onto the line. A translation in a
+    /// script the listener doesn't read is left out, as for TTML. Without this
+    /// the first row lasted no time at all and only the second was ever shown.
+    /// An empty or "♪" row gives way to a lyric at the same time, and a
     /// word-timed copy of the lyric lends it its word timing.
-    private static func mergingSharedTimestamps(_ rows: [LRCRow]) -> [LRCRow] {
+    private static func mergingSharedTimestamps(_ rows: [LRCRow], preferredLanguages: [String]) -> [LRCRow] {
         // Stable: rows at one instant keep their order in the file. Rows that
         // meet at 0 only because an [offset:] moved them earlier stay apart.
         let ordered = rows.enumerated().sorted { ($0.element.stamp, $0.offset) < ($1.element.stamp, $1.offset) }.map(\.element)
         let readings = LyricScript.ReadingCache()
         var merged: [LRCRow] = []
+        /// A second version of the row at this index in `merged`.
+        var seconds: [Int: String] = [:]
         for row in ordered {
             guard var line = merged.last, abs(line.stamp - row.stamp) < 0.0005, !line.credit, !row.credit else { merged.append(row); continue }
             let text = row.text.trimmingCharacters(in: .whitespaces)
@@ -1316,12 +1324,47 @@ final class LyricsFetcher {
                 line.tokens = row.tokens
             } else if line.romanization == nil, LyricScript.isReading(text, of: lyric, cache: readings) {
                 line.romanization = text
-            } else if line.translation == nil {
-                line.translation = text
+            } else if seconds[merged.count - 1] == nil {
+                // Translation or a second singer: decided once the whole file is read.
+                seconds[merged.count - 1] = text
             } else { continue }
             merged[merged.count - 1] = line
         }
+        guard !seconds.isEmpty else { return merged }
+        let pairs = seconds.keys.sorted().map { (lyric: merged[$0].text, second: seconds[$0]!) }
+        let translations = SharedRows.areTranslations(lyrics: pairs.map(\.lyric), seconds: pairs.map(\.second))
+        let readable = translations && TranslationLanguages.readable(pairs.map(\.second), languages: preferredLanguages)
+        for (index, second) in seconds {
+            if translations {
+                if readable { merged[index].translation = second }
+            } else {
+                merged[index].text = merged[index].text.trimmingCharacters(in: .whitespaces) + " / " + second
+                // The word stamps were for the first singer's words alone.
+                merged[index].tokens = []
+            }
+        }
         return merged
+    }
+
+    /// The second rows of a bilingual-looking LRC (rows sharing a timestamp
+    /// with a lyric, that aren't its reading).
+    enum SharedRows {
+        /// Whether they translate the lyrics: unless, across the file, they
+        /// are plainly in the lyrics' own language (the same script, and the
+        /// same language where it can be told), which makes them a second
+        /// singer's words. Judged on the whole file, not row by row: a short
+        /// line's language can't be told, and one file is never half
+        /// translation, half duet. Where it can't be told, a translation, as
+        /// bilingual files are the common case.
+        static func areTranslations(lyrics: [String], seconds: [String]) -> Bool {
+            let lyric = lyrics.joined(separator: "\n"), second = seconds.joined(separator: "\n")
+            let lyricScript = TranslationLanguages.dominantScript(of: lyric)
+            let secondScript = TranslationLanguages.dominantScript(of: second)
+            if let lyricScript, let secondScript, lyricScript != secondScript { return true }
+            guard let a = NLLanguageRecognizer.dominantLanguage(for: String(lyric.prefix(2000))),
+                  let b = NLLanguageRecognizer.dominantLanguage(for: String(second.prefix(2000))) else { return true }
+            return a != b
+        }
     }
 
     // MARK: - Shared line construction

@@ -161,6 +161,42 @@ enum OpeningTitle {
                   scale: min(Placement.scales.upperBound, max(Placement.scales.lowerBound, scale)))
     }
 
+    // MARK: Keeping clear of it
+
+    /// How much of the title's glow, in the card's own size, a translation
+    /// keeps clear of above the card's box: the bloom's visible part.
+    static let glowClearance: CGFloat = 0.3
+    /// The most of the lyric stage's height the card may claim at its foot,
+    /// so a card dragged up into the middle cannot squeeze the translations
+    /// off the stage.
+    static let footShare: CGFloat = 0.4
+
+    /// How far up from the lyric stage's foot a translation set there keeps
+    /// clear of a kept card: from the foot to the top of the card's box
+    /// (`box`), the card's largest, so it holds through the song and does
+    /// not change as a cover arrives, plus `gap` for the title's glow.
+    /// The stage of `stage` is centred on a layer of `layer`, which `card`
+    /// is placed in; `span` is how wide translations run, centred on the
+    /// stage. Zero when the card sits in the upper half of the stage, lies
+    /// to the side of `span`, or is lower than the foot by more than `gap`;
+    /// never more than `footShare` of the stage.
+    static func stageFootInset(card: CGRect, layer: CGSize, stage: CGSize, span: CGFloat, gap: CGFloat) -> CGFloat {
+        let stageBox = CGRect(x: (layer.width - stage.width) / 2, y: (layer.height - stage.height) / 2,
+                              width: stage.width, height: stage.height)
+        guard card.width > 0, card.height > 0, card.midY > stageBox.midY,
+              card.maxX > stageBox.midX - span / 2, card.minX < stageBox.midX + span / 2 else { return 0 }
+        return min(stage.height * footShare, max(0, stageBox.maxY - card.minY + gap))
+    }
+
+    /// `stageFootInset` for the card where `placement` puts it, at the
+    /// lyric's `baseSize`, with translations running `span` of the stage's width.
+    static func stageFootInset(layer: CGSize, stage: CGSize, baseSize: CGFloat, placement: Placement,
+                               span: CGFloat) -> CGFloat {
+        let scale = CGFloat(min(Placement.scales.upperBound, max(Placement.scales.lowerBound, placement.scale)))
+        return stageFootInset(card: box(in: layer, baseSize: baseSize, placement: placement), layer: layer, stage: stage,
+                              span: stage.width * span, gap: baseSize * scale * glowClearance)
+    }
+
     /// The animated cover the card plays for `track`: the album's own,
     /// whatever the Animated covers switch says (testers asked for it, Nov
     /// 2026), unless the album is one the user left out of animated covers.

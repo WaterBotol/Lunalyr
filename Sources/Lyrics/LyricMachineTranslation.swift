@@ -127,10 +127,19 @@ enum MachineTranslationPolicy {
         return left.hasPrefix("zh") && right.hasPrefix("zh") && (left == "zh" || right == "zh")
     }
 
-    /// Whether any line carries a translation from the lyric source, which
-    /// always wins over a machine translation.
+    /// Whether the lyric source translates the song: at least half its sung
+    /// lines carry a translation of their own. A source translation always
+    /// wins on its line; a stray one or two (a bilingual file's odd row)
+    /// no longer stops the other lines being machine-translated.
     static func hasSourceTranslations(_ lines: [LyricsFetcher.Line]) -> Bool {
-        lines.contains { !($0.translation?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true) }
+        var sung = 0, translated = 0
+        for line in lines where !line.isInstrumental && line.credit != true {
+            let text = line.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard text.unicodeScalars.contains(where: { CharacterSet.letters.contains($0) }) else { continue }
+            sung += 1
+            if !(line.translation?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true) { translated += 1 }
+        }
+        return translated > 0 && translated * 2 >= sung
     }
 
     /// What rules translation out before the language is known.

@@ -79,10 +79,25 @@ final class MachineTranslationTests: XCTestCase {
         var withSource = lines
         withSource[2].translation = "Running into the night"
         XCTAssertEqual(MachineTranslationPolicy.decide(lines: withSource, enabled: true, available: true, detected: "ja",
+                                                       target: "en", preferred: ["en"]), .translate(source: "ja", target: "en"),
+                       "One stray source translation in three sung lines leaves the rest to the machine")
+        withSource[0].translation = "The moon is lovely"
+        XCTAssertEqual(MachineTranslationPolicy.decide(lines: withSource, enabled: true, available: true, detected: "ja",
                                                        target: "en", preferred: ["en"]), .skip(.sourceHasTranslations))
         XCTAssertEqual(MachineTranslationPolicy.decide(lines: [line("♪", at: 0, instrumental: true)], enabled: true,
                                                        available: true, detected: "ja", target: "en", preferred: []),
                        .skip(.noLines))
+    }
+
+    func testAStraySourceTranslationKeepsItsLineAndTheMachineTranslatesTheRest() {
+        var lines = japanese
+        lines[2].translation = "Running into the night"
+        XCTAssertFalse(MachineTranslationPolicy.hasSourceTranslations(lines))
+        let shown = TranslationLineMap.lineTranslations(for: lines, translations: [
+            "月が綺麗ですね": "The moon is beautiful", "走り出す夜": "A night that starts running",
+        ])
+        XCTAssertEqual(shown, [0: "The moon is beautiful", 3: "The moon is beautiful"],
+                       "the source's own translation stays on its line")
     }
 
     func testLanguageKeysKeepChineseScripts() {
@@ -185,6 +200,7 @@ final class MachineTranslationTests: XCTestCase {
         XCTAssertEqual(subject.state, .skipped(.off))
         var sourced = japanese
         sourced[0].translation = "The moon is lovely"
+        sourced[2].translation = "Running into the night"
         subject.update(lines: sourced, enabled: true, target: "en")
         await settle(subject)
         XCTAssertEqual(subject.state, .skipped(.sourceHasTranslations))

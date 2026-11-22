@@ -63,30 +63,35 @@ final class LyricParsingTests: XCTestCase {
         XCTAssertEqual(lines.first?.start,0)
     }
     func testSharedTimestampsBecomeOneLineWithReadingOrTranslation() {
+        // One bilingual file is one language pair: a Chinese song with its
+        // readings and an English translation.
         let text="""
-        [00:10.00]君の名は
-        [00:10.00]kimi no na wa
-        [00:14.00]I love you
-        [00:14.00]我爱你
-        [00:18.00]我爱你
-        [00:18.00]wo ai ni
-        [00:22.00]사랑해
-        [00:22.00]I love you
-        [00:26.00]
-        [00:26.00]Last line
-        [00:30.00]Echo
-        [00:30.00]Echo
+        [00:10.00]我爱你
+        [00:10.00]wo ai ni
+        [00:14.00]你是我的唯一
+        [00:14.00]You are my only one
+        [00:18.00]月亮代表我的心
+        [00:18.00]wo de xin
+        [00:18.00]The moon stands for my heart
+        [00:22.00]
+        [00:22.00]再见了
+        [00:26.00]再见了
+        [00:26.00]再见了
         """
-        let lines=LyricsFetcher.parseLRC(text,trackDuration:40)
-        XCTAssertEqual(lines.map(\.text),["君の名は","I love you","我爱你","사랑해","Last line","Echo"])
-        XCTAssertEqual(lines.map(\.start),[10,14,18,22,26,30])
-        XCTAssertEqual(lines.map(\.end),[14,18,22,26,30,40])
-        XCTAssertEqual(lines.map(\.romanization),["kimi no na wa",nil,"wo ai ni",nil,nil,nil])
-        XCTAssertEqual(lines.map(\.translation),[nil,"我爱你",nil,"I love you",nil,nil])
+        let lines=LyricsFetcher.parseLRC(text,trackDuration:40,preferredLanguages:["en-AU"])
+        XCTAssertEqual(lines.map(\.text),["我爱你","你是我的唯一","月亮代表我的心","再见了","再见了"])
+        XCTAssertEqual(lines.map(\.start),[10,14,18,22,26])
+        XCTAssertEqual(lines.map(\.end),[14,18,22,26,40])
+        XCTAssertEqual(lines.map(\.romanization),["wo ai ni",nil,"wo de xin",nil,nil])
+        XCTAssertEqual(lines.map(\.translation),[nil,"You are my only one","The moon stands for my heart",nil,nil])
         // The lyric, not its companion, is what plays at that time.
         let index=LyricLineIndex(lines:lines)
-        XCTAssertEqual(index.line(at:10.5).map {lines[$0].text},"君の名は")
-        XCTAssertEqual(index.line(at:14).map {lines[$0].text},"I love you")
+        XCTAssertEqual(index.line(at:10.5).map {lines[$0].text},"我爱你")
+        XCTAssertEqual(index.line(at:14).map {lines[$0].text},"你是我的唯一")
+        // And the other way round, for a reader of the translation.
+        let english=LyricsFetcher.parseLRC("[00:14.00]I love you\n[00:14.00]我爱你\n[00:18.00]Stay\n[00:18.00]留下",
+                                           trackDuration:30,preferredLanguages:["zh-Hans-CN"])
+        XCTAssertEqual(english.map(\.translation),["我爱你","留下"])
     }
     func testSharedTimestampPlaceholdersAndWordTimedCopies() {
         // A "♪" row gives way to the lyric sung at the same time, and is never

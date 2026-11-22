@@ -215,6 +215,16 @@ struct LyricLayer: View {
     }
 
     var body: some View {
+        // The whole layer's size: the song's title card is placed in it
+        // (`OpeningTitle.box`), and translations keep clear of a kept card.
+        GeometryReader { layer in
+            stage(layer: layer.size)
+                .frame(width: layer.size.width, height: layer.size.height)
+        }
+    }
+
+    @ViewBuilder
+    private func stage(layer: CGSize) -> some View {
         // A resting clock's timeline hands a rebuild the date of its last
         // tick; anything this frame starts must start from now.
         let wall = pace?.wall(self.wall) ?? self.wall
@@ -276,7 +286,7 @@ struct LyricLayer: View {
                             ZStack {
                                 scene(leaving.scene.content, key: leaving.scene.key,
                                       time: leaving.scene.renderTime(at: wall), wall: wall, live: false, energy: energy,
-                                      ink: ink)
+                                      ink: ink, layer: layer)
                                 // The staying card is drawn once, below;
                                 // a card this scene held before it leaves
                                 // with the scene.
@@ -293,7 +303,7 @@ struct LyricLayer: View {
                         }
                     }
                     ZStack {
-                        scene(content, key: key, time: time, wall: wall, live: true, energy: energy, ink: ink)
+                        scene(content, key: key, time: time, wall: wall, live: true, energy: energy, ink: ink, layer: layer)
                         if staying == nil { openingTitle(content, key: key, time: time, coverFade: coverFade) }
                     }
                         .opacity(transition.incomingPresence)
@@ -367,7 +377,7 @@ struct LyricLayer: View {
     /// One scene: whatever the lyric layer shows for a given state.
     @ViewBuilder
     private func scene(_ content: LyricSceneContent, key: LyricSceneKey, time: TimeInterval, wall: Double,
-                       live: Bool, energy: Double, ink: LyricInk) -> some View {
+                       live: Bool, energy: Double, ink: LyricInk, layer: CGSize) -> some View {
         let fallback = ink.base
         switch key.kind {
         case .idle:
@@ -468,7 +478,8 @@ struct LyricLayer: View {
             }
         case .synced:
             let lines = SceneLines(lines: content.lines, romanized: content.romanized, fingerprint: key.fingerprint,
-                                   machineTranslations: content.machineTranslations)
+                                   machineTranslations: content.machineTranslations,
+                                   footInset: titleFootInset(content, key: key, layer: layer))
             // The scene's own breaks, so an outgoing scene's orb fades out
             // with it instead of vanishing.
             let gap = settings.showInterludes
@@ -644,6 +655,28 @@ struct LyricLayer: View {
         let fingerprint: Int
         /// Translations made on this Mac; a line's own translation wins.
         var machineTranslations: [Int: String] = [:]
+        /// How far up from the stage's foot a translation there keeps clear
+        /// of the song's kept title card (`titleFootInset`); 0 for none.
+        var footInset: CGFloat = 0
+    }
+
+    /// The share of the stage's width a translation runs across, centred.
+    static let translationWidth: CGFloat = 0.8
+
+    /// How far up from the stage's foot a translation set there -- under
+    /// its line, in a rolling stage's band or at the bottom of the screen --
+    /// keeps clear of the song's title card, while the card is kept on
+    /// screen for the whole song low on the desktop beside the lyrics
+    /// (`OpeningTitle.stageFootInset`). One rule for every layout and
+    /// placement. Nothing while the card is not kept, is placed elsewhere,
+    /// or is drawn in the floating lyrics or its own window, so there the
+    /// translations sit as before. Set by the scene, not by the moment, so
+    /// it does not move as the card enters or rests.
+    private func titleFootInset(_ content: LyricSceneContent, key: LyricSceneKey, layer: CGSize) -> CGFloat {
+        guard titleMode == .inline, backdropOverride == nil, style.showsTranslations,
+              openingSchedule(content, key: key)?.kept == true else { return 0 }
+        return OpeningTitle.stageFootInset(layer: layer, stage: CGSize(width: maxWidth, height: maxHeight),
+                                           baseSize: baseSize, placement: .stored(), span: Self.translationWidth)
     }
 
     /// Outgoing ink finishes its exit after a line boundary: every word of
@@ -678,7 +711,8 @@ struct LyricLayer: View {
             }
         }
         .overlayPreferenceValue(EdgeTranslations.self) { items in
-            EdgeTranslationsView(items: items, stageSize: stageSize, mood: mood, baseSize: baseSize)
+            EdgeTranslationsView(items: items, stageSize: stageSize, mood: mood, baseSize: baseSize,
+                                 footInset: scene.footInset)
         }
     }
 
@@ -975,21 +1009,29 @@ struct LyricLayer: View {
                 let densityScale = line.wordTimed && composition.hasConnections
                     ? min(1.0, max(0.52, sqrt(110.0 / Double(max(density, 110))))) : 1.0
                 let translationSize = baseSize * 0.30 * userScale
+                let place = style.translationPlacement
+                // A translation at the stage's foot keeps clear of a kept
+                // title card there (`titleFootInset`): a rolling stage's
+                // band rises by it, and a line with its translation under
+                // it is fitted above it (`LyricLineStack.footLift`).
+                let bandFoot = rolls && !place.overWords ? scene.footInset : 0
                 // A rolling stage keeps a band for translations clear of its
                 // words whenever the song has any, so its size never changes
                 // from line to line.
                 let band = rolls && style.showsTranslations
                     && (cache.hasTranslations(lines, fingerprint: scene.fingerprint) || !scene.machineTranslations.isEmpty)
-                    ? translationSize * 2.7 + baseSize * 0.3 : 0
-                let fit = LyricLineStack.Fit(available: composition.hasConnections
-                    ? CGSize(width: stageSize.width * 0.92, height: stageSize.height * 0.86)
-                    : stageSize, userScale: rolls || composition.fillsStage ? 1 : userScale,
+                    ? translationSize * 2.7 + baseSize * 0.3 + bandFoot : 0
+                let lineFoot = !rolls && place == .below && translation?.isEmpty == false ? scene.footInset : 0
+                let available = composition.hasConnections
+                    ? CGSize(width: stageSize.width * 0.92, height: stageSize.height * 0.86) : stageSize
+                let fit = LyricLineStack.Fit(available: CGSize(width: available.width,
+                                                               height: min(available.height, stageSize.height - lineFoot)),
+                    userScale: rolls || composition.fillsStage ? 1 : userScale,
                     neutral: rolls || composition.fillsStage ? 1 : 0.75)
-                let place = style.translationPlacement
                 let translationFont = settings.lyricFont(size: baseSize * 0.34 * userScale, hero: false, mood: mood)
                 VStack(spacing: baseSize * 0.2) {
                 if !rolls, place == .above, let translation, !translation.isEmpty {
-                    TranslationLine(text: translation, font: translationFont, width: stageSize.width * 0.8)
+                    TranslationLine(text: translation, font: translationFont, width: stageSize.width * Self.translationWidth)
                         .opacity(pose.progress * (1 - textExit))
                 }
                 Group {
@@ -1062,7 +1104,7 @@ struct LyricLayer: View {
                     // Sized with the line's words, as their own readings are.
                     TranslationLine(text: lineReading,
                                     font: settings.lyricFont(size: baseSize * 0.38 * densityScale, hero: false, mood: mood),
-                                    width: stageSize.width * 0.8)
+                                    width: stageSize.width * Self.translationWidth)
                         .opacity(pose.progress * (1 - textExit))
                 }
                 // A translation from the lyric source sits under its line as
@@ -1070,7 +1112,7 @@ struct LyricLayer: View {
                 // rolling stage keeps one size across lines, so there it
                 // rests over the stage's foot instead of resizing the stage.
                 if !rolls, place == .below, let translation, !translation.isEmpty {
-                    TranslationLine(text: translation, font: translationFont, width: stageSize.width * 0.8)
+                    TranslationLine(text: translation, font: translationFont, width: stageSize.width * Self.translationWidth)
                         .opacity(pose.progress * (1 - textExit))
                 }
                 }
@@ -1081,25 +1123,41 @@ struct LyricLayer: View {
                     if rolls, let translation, !translation.isEmpty {
                         TranslationLine(text: translation,
                                         font: settings.lyricFont(size: translationSize, hero: false, mood: mood),
-                                        width: stageSize.width * 0.8, lines: 2)
+                                        width: stageSize.width * Self.translationWidth, lines: 2)
                             .opacity(pose.progress * (1 - textExit))
-                            .padding(place.overWords ? .top : .bottom, baseSize * 0.2)
+                            .padding(place.overWords ? .top : .bottom, baseSize * 0.2 + bandFoot)
                     }
                 }
                 // At the screen's edge: handed to the stage (`EdgeTranslations`).
                 .preference(key: EdgeTranslations.self, value: !rolls && place.atEdge
                     && !previewing && translation?.isEmpty == false
                     ? [EdgeTranslations.Item(id: index, text: translation ?? "", top: place == .top,
-                                             opacity: pose.progress * (1 - textExit), size: baseSize * 0.34 * userScale)] : [])
+                                             opacity: EdgeTranslations.presence(own: pose.progress * (1 - textExit),
+                                                 handoff: Self.timingHandoffPresence(after: index, in: lines, time: time),
+                                                 handedOn: Self.edgeHandover(after: index, in: lines, time: time) {
+                                                     handOver(after: $0, in: lines)
+                                                 }),
+                                             size: baseSize * 0.34 * userScale)] : [])
                 .opacity(Self.timingHandoffPresence(after: index, in: lines, time: time))
                 .modifier(FittedLyricStage(available: fit.available, userScale: fit.userScale, neutral: fit.neutral))
                 // Set no wider than the stage, and placed, by `LyricLineStack`.
                 .layoutValue(key: LyricLineStack.LineKey.self, value: .init(fit: fit,
-                    presence: previewing ? nil : pose.progress * (1 - pose.exit)))
+                    presence: previewing ? nil : pose.progress * (1 - pose.exit), footClearance: lineFoot))
             }
         } else {
             Color.clear
         }
+    }
+
+    /// 0...1: how far the line after `row` has taken the translation slot
+    /// at the screen's edge over from it (`EdgeTranslations`): that line's
+    /// own entrance, from its start, whether or not it has a translation.
+    /// A held line, still being sung, would otherwise keep its translation
+    /// in the slot under the next line's.
+    static func edgeHandover(after row: Int, in lines: [LyricsFetcher.Line], time: Double,
+                             handOver: (Int) -> Double) -> Double {
+        guard lines.indices.contains(row + 1), !lines[row + 1].isInstrumental, time >= lines[row + 1].start else { return 0 }
+        return min(1, max(0, LyricPhraseTiming(line: lines[row + 1], nextStart: handOver(row + 1), time: time).progress))
     }
 
     /// 0...1: how far the line after `row` has arrived (its spring), or 0
@@ -2077,6 +2135,10 @@ struct LyricLineStack: Layout {
     struct Line: Equatable {
         var fit: Fit
         var presence: Double?
+        /// How far above the stage's foot the line's own foot (its
+        /// translation) keeps, clear of a kept title card
+        /// (`LyricLayer.titleFootInset`); 0 for anywhere on the stage.
+        var footClearance: CGFloat = 0
     }
 
     struct LineKey: LayoutValueKey {
@@ -2103,8 +2165,18 @@ struct LyricLineStack: Layout {
         var held: Double?
     }
 
+    /// How far a line of height `extent`, centred on a stage of
+    /// `stageHeight`, rises so its foot keeps `clearance` above the stage's:
+    /// only as far as it reaches into that, and never past the stage's top.
+    /// Its fit (`Fit.available`) already keeps it short enough to fit.
+    static func footLift(extent: CGFloat, clearance: CGFloat, stageHeight: CGFloat) -> CGFloat {
+        guard clearance > 0 else { return 0 }
+        return max(0, min(extent / 2 - (stageHeight / 2 - clearance), stageHeight / 2 - extent / 2))
+    }
+
     /// Each subview's vertical offset from the middle of the stage: zero
-    /// for all but held lines. Those stack upwards, the latest nearest the
+    /// for all but held lines and lines keeping their foot clear
+    /// (`footLift`). Held lines stack upwards, the latest nearest the
     /// middle, above the tallest line there (weighted by how present it is,
     /// so the held line follows lines arriving and leaving instead of
     /// jumping between them), and never past the top of the stage.
@@ -2114,18 +2186,22 @@ struct LyricLineStack: Layout {
             return item.size.height * line.fit.scale(for: item.size)
         }
         var middle: CGFloat = 0
-        for item in items where item.held == nil {
-            guard let presence = item.line?.presence else { continue }
-            middle = max(middle, extent(item) / 2 * CGFloat(min(1, max(0, presence))))
-        }
         var result = [CGFloat](repeating: 0, count: items.count)
+        for (index, item) in items.enumerated() {
+            guard let line = item.line else { continue }
+            let lift = footLift(extent: extent(item), clearance: line.footClearance, stageHeight: stageHeight)
+            result[index] = -lift
+            guard item.held == nil, let presence = line.presence else { continue }
+            middle = max(middle, (extent(item) / 2 + lift) * CGFloat(min(1, max(0, presence))))
+        }
         var top = -middle
         for index in items.indices.reversed() {
             guard let travel = items[index].held, travel > 0, items[index].line != nil else { continue }
             let amount = CGFloat(min(1, travel))
             let half = extent(items[index]) * (1 - heldShrink * amount) / 2
             let target = max(-stageHeight / 2 + half, top - gap - half)
-            result[index] = min(0, target) * amount
+            // From where it was as the current line (lifted, if it was).
+            result[index] = result[index] * (1 - amount) + min(0, target) * amount
             top = result[index] - half
         }
         return result
@@ -2177,6 +2253,37 @@ struct EdgeTranslations: PreferenceKey {
     }
     static let defaultValue: [Item] = []
     static func reduce(value: inout [Item], nextValue: () -> [Item]) { value += nextValue() }
+
+    /// A line's translation's strength in the slot: its own entrance and
+    /// exit, the stage's hand-over between word- and line-timed lines
+    /// (`LyricLayer.timingHandoffPresence`, which fades the line itself),
+    /// and how far the next line has taken the slot over (`handedOn`).
+    static func presence(own: Double, handoff: Double, handedOn: Double) -> Double {
+        min(1, max(0, own)) * min(1, max(0, handoff)) * (1 - min(1, max(0, handedOn)))
+    }
+
+    /// What each edge's slot shows: one translation per line (a held line
+    /// drawn twice under Reduce Motion hands the same one up twice), the
+    /// latest line's at its own strength, and an earlier line's only as
+    /// much as the later ones leave room for -- together never more than
+    /// one translation's strength -- so it fades out as they come in
+    /// rather than sitting under them. Ordered oldest first.
+    static func slot(_ items: [Item]) -> [Item] {
+        var strongest: [Int: Item] = [:]
+        for item in items where item.opacity > (strongest[item.id]?.opacity ?? -1) { strongest[item.id] = item }
+        var shown: [Item] = []
+        for top in [true, false] {
+            var room = 1.0
+            for item in strongest.values.filter({ $0.top == top }).sorted(by: { $0.id > $1.id }) {
+                let opacity = min(item.opacity, room)
+                room -= opacity
+                if opacity > 0.001 {
+                    shown.append(Item(id: item.id, text: item.text, top: item.top, opacity: opacity, size: item.size))
+                }
+            }
+        }
+        return shown.sorted { $0.id < $1.id }
+    }
 }
 
 private struct EdgeTranslationsView: View {
@@ -2184,16 +2291,21 @@ private struct EdgeTranslationsView: View {
     let stageSize: CGSize
     let mood: TrackMood
     let baseSize: CGFloat
+    /// How far up from the stage's foot one at the bottom keeps clear of a
+    /// kept title card (`LyricLayer.titleFootInset`).
+    var footInset: CGFloat = 0
     @ObservedObject private var settings = Settings.shared
 
     var body: some View {
-        // Lines overlapping in a hand-over share the place, cross-fading.
+        // Lines overlapping in a hand-over share the place, cross-fading:
+        // one translation each, the later one taking over (`slot`).
         ZStack {
-            ForEach(items, id: \.id) { item in
+            ForEach(EdgeTranslations.slot(items), id: \.id) { item in
                 TranslationLine(text: item.text, font: settings.lyricFont(size: item.size, hero: false, mood: mood),
-                                width: stageSize.width * 0.8, lines: 2)
+                                width: stageSize.width * LyricLayer.translationWidth, lines: 2)
                     .opacity(item.opacity)
-                    .padding(item.top ? .top : .bottom, baseSize * 0.5)
+                    // At the foot, clear of a kept title card (`LyricLayer.titleFootInset`).
+                    .padding(item.top ? .top : .bottom, item.top ? baseSize * 0.5 : max(baseSize * 0.5, footInset))
                     .frame(width: stageSize.width, height: stageSize.height, alignment: item.top ? .top : .bottom)
             }
         }
