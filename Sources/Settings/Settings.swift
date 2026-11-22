@@ -309,13 +309,13 @@ final class Settings: ObservableObject {
             symbols[key] = name
         }
         var actions: [String: WordAction] = [:]
-        // Keys: English words as `englishKey`, others folded
+        // Keys: phrases as `ActionPhrases.key`, English words as `englishKey`, others folded
         // (`ActionLexicon.fold`). Values by raw value, title or former name
         // (`WordAction(listValue:)`); a word whose action is no longer
         // offered is skipped, and the saved list itself is left alone.
         for (word, raw) in effectiveActionWordList {
             guard let action = WordAction(listValue: raw) else { continue }
-            let key = LyricWordIcons.englishKey(word) ?? ActionLexicon.fold(word)
+            let key = ActionPhrases.key(word) ?? LyricWordIcons.englishKey(word) ?? ActionLexicon.fold(word)
             guard !key.isEmpty else { continue }
             actions[key] = action
         }

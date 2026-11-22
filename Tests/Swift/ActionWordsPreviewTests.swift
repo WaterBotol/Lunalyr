@@ -53,6 +53,14 @@ final class ActionWordsPreviewTests: XCTestCase {
         Clip(action: .pulse, texts: ["feel", "my", "heartbeat", "race"], hue: 0.97),
         Clip(action: .wave, texts: ["we", "ride", "the", "waves", "tonight"], hue: 0.53),
         Clip(action: .sink, texts: ["I", "sink", "beneath", "the", "tide"], hue: 0.58),
+        // Candidates (`WordAction.candidateList`), for the owner to judge.
+        Clip(action: .sunlight, texts: ["wake", "up", "to", "the", "sunshine"], hue: 0.6),
+        Clip(action: .moonlight, texts: ["staring", "at", "the", "moon"], hue: 0.66),
+        Clip(action: .rush, texts: ["we", "chase", "the", "night"], hue: 0.08),
+        Clip(action: .glitch, texts: ["lost", "in", "the", "static", "tonight"], hue: 0.75),
+        Clip(action: .sparkle, texts: ["watch", "the", "diamonds", "shine"], hue: 0.7),
+        Clip(action: .free, texts: ["finally", "I", "break", "free"], hue: 0.55),
+        Clip(action: .stretch, texts: ["I", "reach", "across", "the", "distance"], hue: 0.45),
     ]
 
     /// A symbol on each action word, so the reel shows the symbol's
@@ -63,10 +71,12 @@ final class ActionWordsPreviewTests: XCTestCase {
         "fade": "sparkles", "burn": "flame.fill", "frozen": "snowflake", "bleed": "drop.fill",
         "dark": "moon.fill", "broken": "bolt.fill", "melt": "flame", "echo": "speaker.wave.2.fill",
         "heartbeat": "heart.fill", "waves": "water.waves", "sink": "arrow.down.to.line",
+        // The app's own default symbols, to check symbol and action together.
+        "sunshine": "sun.max", "moon": "moon",
     ]
 
     static var actionList: [String: WordAction] {
-        Dictionary(WordAction.defaultList.map { ($0.word, $0.action) },
+        Dictionary((WordAction.defaultList + WordAction.candidateList).map { ($0.word, $0.action) },
                    uniquingKeysWith: { first, _ in first })
     }
 
@@ -287,18 +297,20 @@ final class ActionWordsPreviewTests: XCTestCase {
             return
         }
 
+        // LUNALYR_ACTION_PREVIEW_COMPOSITION: the layout for sheets and videos (Cutout by default).
+        let composition = environment["LUNALYR_ACTION_PREVIEW_COMPOSITION"].flatMap(LyricComposition.init(rawValue:)) ?? .cutout
         if sheetsOnly {
             for clip in chosen {
                 let onset = Self.words(clip).onset
                 let moments = [0.05, 0.2, 0.35, 0.55, 0.8, 1.1, 1.4, 1.8]
                 var rows: [[NSBitmapImageRep]] = []
                 for moment in moments {
-                    rows.append([try image(Self.sideBySide(clip, time: onset + moment, onset: onset)).0])
+                    rows.append([try image(Self.sideBySide(clip, time: onset + moment, onset: onset, composition: composition)).0])
                 }
                 let cell = CGSize(width: 640, height: 360)
                 let pairs = stride(from: 0, to: rows.count, by: 2).map { [rows[$0][0], rows[min($0 + 1, rows.count - 1)][0]] }
                 try StageLayoutVideoTests.writePNG(try StageLayoutVideoTests.sheet(pairs, cell: cell),
-                                                   to: "\(dir)/sheets/sheet-\(clip.action.rawValue).png")
+                                                   to: "\(dir)/sheets/sheet-\(clip.action.rawValue)\(composition == .cutout ? "" : "-" + composition.rawValue).png")
             }
             return
         }
@@ -314,7 +326,7 @@ final class ActionWordsPreviewTests: XCTestCase {
             for index in 0...count {
                 try autoreleasepool {
                     let time = span.lowerBound + Double(index) / Self.fps
-                    let (rep, cg) = try image(Self.sideBySide(clip, time: time, onset: onset))
+                    let (rep, cg) = try image(Self.sideBySide(clip, time: time, onset: onset, composition: composition))
                     try movie.append(cg)
                     try reel?.append(cg)
                     if index == keyIndex {

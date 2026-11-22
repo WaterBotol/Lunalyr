@@ -55,6 +55,14 @@ enum ActionLexicon {
         let folded = fold(text)
         guard !folded.isEmpty else { return nil }
         if let action = user[folded] { return (folded, action) }
+        guard let found = builtIn(text, folded: folded, user: user, script: script) else { return nil }
+        // A candidate action (`WordAction.candidates`) moves only the user's own words.
+        if WordAction.candidates.contains(found.action), !user.keys.contains(found.key) { return nil }
+        return found
+    }
+
+    private static func builtIn(_ text: String, folded: String, user: [String: WordAction],
+                                script: Script) -> (key: String, action: WordAction)? {
         if script.cjk {
             // The user's own CJK words: contained in the run, longest first.
             let own = user.keys.filter { Script($0).cjk }.sorted { $0.count != $1.count ? $0.count > $1.count : $0 < $1 }

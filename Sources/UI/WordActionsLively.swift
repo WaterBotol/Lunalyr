@@ -113,6 +113,12 @@ enum LivelyAction {
         case .pulse: return max(1.0, h + 0.5)
         case .wave: return max(1.3, h + 0.6)
         case .sink: return max(2.2, h + 1.1)
+        case .sunlight, .moonlight: return max(2.0, h + 1.0)
+        case .rush: return max(1.3, h + 0.6)
+        case .glitch: return max(0.9, min(h, 1.0) + 0.45)
+        case .sparkle: return max(1.6, h + 0.8)
+        case .free: return max(2.1, h + 1.1)
+        case .stretch: return max(1.8, h + 0.9)
         }
     }
 
@@ -447,6 +453,18 @@ struct LivelyPose: Equatable {
             pose.dy = 0.62 * A * d
             pose.tilt = 2.5 * A * sin(2 * .pi * 0.7 * t) * L.clamp01(d)
             pose.cool = 0.3 * L.clamp01(d)
+        case .sunlight, .moonlight:
+            pose = sunlight(t: t, duration: D, intensity: A, cool: action == .moonlight)
+        case .rush:
+            pose = rush(t: t, duration: D, intensity: A, hold: hold)
+        case .glitch:
+            pose = glitch(t: t, duration: D, intensity: A, hold: hold)
+        case .sparkle:
+            pose = sparkle(t: t, duration: D, intensity: A, hold: hold)
+        case .free:
+            pose = free(t: t, duration: D, intensity: A, hold: hold)
+        case .stretch:
+            pose = stretch(t: t, duration: D, intensity: A, hold: hold)
         }
         return pose
     }
@@ -467,6 +485,9 @@ extension LivelyAction {
         case .frost: pose.cool = 0.5 * cue
         case .bleed: pose.red = 0.4 * cue
         case .dark: pose.dim = 0.25 * cue
+        case .sunlight: pose.warm = 0.45 * cue
+        case .moonlight: pose.cool = 0.45 * cue
+        case .sparkle: pose.warm = 0.25 * cue
         default: break
         }
         return pose
@@ -888,7 +909,7 @@ struct LivelyGlyphRenderer: TextRenderer {
         return frame / lineWidth
     }
 
-    private struct Glyph {
+    struct Glyph {
         let slice: Text.Layout.RunSlice
         let rect: CGRect
         let baseline: CGFloat
@@ -1098,6 +1119,18 @@ struct LivelyGlyphRenderer: TextRenderer {
             plain()
         case .sink:
             sinkGlyph(g, size: size, in: c)
+        case .sunlight, .moonlight:
+            sunlightGlyph(g, word: word, in: c)
+        case .rush:
+            rushGlyph(g, count: count, word: word, in: c)
+        case .glitch:
+            glitchGlyph(g, count: count, word: word, in: c)
+        case .sparkle:
+            sparkleGlyph(g, count: count, word: word, in: c)
+        case .free:
+            freeGlyph(g, count: count, word: word, in: c)
+        case .stretch:
+            stretchGlyph(g, count: count, word: word, in: c)
         default:
             plain()
         }
@@ -1429,6 +1462,18 @@ struct LivelyGlyphRenderer: TextRenderer {
             var ink = context
             ink.addFilter(.blur(radius: size * 0.1))
             ink.fill(path, with: .color(Color(red: 0.03, green: 0.02, blue: 0.07).opacity(0.82 * A * dark)))
+        case .sunlight, .moonlight:
+            sunlightBehind(word: word, baseline: baseline, in: &context)
+        case .rush:
+            rushBehind(word: word, baseline: baseline, in: &context)
+        case .glitch:
+            glitchBehind(word: word, baseline: baseline, in: &context)
+        case .sparkle:
+            sparkleBehind(word: word, baseline: baseline, in: &context)
+        case .free:
+            freeBehind(word: word, baseline: baseline, in: &context)
+        case .stretch:
+            stretchBehind(word: word, baseline: baseline, in: &context)
         default:
             break
         }
@@ -1707,12 +1752,24 @@ struct LivelyGlyphRenderer: TextRenderer {
                                with: .color(.white.opacity(0.8 * (a > 0.85 ? (1 - a) / 0.15 : 1) * d)),
                                lineWidth: max(1, size * 0.016))
             }
+        case .sunlight, .moonlight:
+            sunlightFront(glyphs: glyphs, word: word, baseline: baseline, in: &context)
+        case .rush:
+            rushFront(glyphs: glyphs, word: word, baseline: baseline, in: &context)
+        case .glitch:
+            glitchFront(glyphs: glyphs, word: word, baseline: baseline, in: &context)
+        case .sparkle:
+            sparkleFront(glyphs: glyphs, word: word, baseline: baseline, in: &context)
+        case .free:
+            freeFront(glyphs: glyphs, word: word, baseline: baseline, in: &context)
+        case .stretch:
+            stretchFront(glyphs: glyphs, word: word, baseline: baseline, in: &context)
         default:
             break
         }
     }
 
-    private func star(_ c: CGPoint, _ r: CGFloat) -> Path {
+    func star(_ c: CGPoint, _ r: CGFloat) -> Path {
         var path = Path()
         let inner = r * 0.28
         for k in 0..<8 {
@@ -1812,6 +1869,12 @@ struct SymbolEntrancePose: Equatable {
         case .pulse:
             let beat = 0.22 * L.thump(e - 0.35) + 0.14 * L.thump(e - 0.59)
             p.sx = 0.3 + 0.7 * pop + beat; p.sy = p.sx
+        case .sunlight, .moonlight:
+            // Rising like the sun (or moon) over the line, turning a little as it comes up.
+            let rise = L.ss5(e / 0.85) + 0.06 * L.bump(e - 0.55, 0.8)
+            p.dy = 0.75 * (1 - rise)
+            p.rotation = -40 * (1 - L.ss5(e / 1.0))
+            p.sx = 0.6 + 0.4 * L.ss5(e / 0.7); p.sy = p.sx
         default:
             p.sx = 0.3 + 0.7 * pop; p.sy = p.sx
             p.rotation = -20 * (1 - wobble)

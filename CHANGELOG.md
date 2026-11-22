@@ -14,6 +14,9 @@ When merging, keep every entry and combine duplicate headings.
 
 ### Added
 
+- Action words: phrases of two or three words. "fall apart" shatters on "apart" where "fall" alone would dip, "let go" floats and "turn around" spins; a phrase moves its last word. A few phrases keep their words still ("take a break", "out cold", "ice cream"). Phrases can be added to the action word list too.
+- Action words: more words for the existing actions: swirl and orbit (Spin), balloon, feather and hover (Float), collapse and crumble (Dip), expand and towering (Grow), blur, haze and mist (Dissolve), fracture and splinter (Shatter), hollow and canyon (Echo).
+- Action words: seven new actions to try in the action word list: Sunlight (a warm sheen sweeps across the word and soft rays fan up behind it), Moonlight (the same sweep in cool silver), Rush, Glitch, Sparkle, Free and Stretch. They are not in the default list yet.
 - Lyric cards show the line's translation under it, as the wallpaper does (from the lyric source, or translated on this Mac), when Show translations is on, and a whole-line reading where the wallpaper shows one: on the still card and in animated GIFs and videos.
 - Desktop player without hovering: **Search and Queue…** in the menu bar opens the player on the display with the pointer, its search ready to type in, and keeps it up with the keyboard until Esc, a song is picked or another window is used. A shortcut does the same (⌃⌥⌘S, or ⌃⇧⌘S), off until switched on in Settings › General › Shortcuts.
 

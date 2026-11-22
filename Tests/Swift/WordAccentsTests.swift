@@ -92,7 +92,14 @@ final class WordAccentsTests: XCTestCase {
         XCTAssertEqual(WordAction.defaults.count, WordAction.defaultList.count, "no word twice")
         XCTAssertEqual(WordAction.defaults["spin"], "spin")
         XCTAssertEqual(WordAction.defaults["cold"], "frost")
-        XCTAssertEqual(Set(WordAction.defaultList.map(\.action)), Set(WordAction.allCases), "every action is used")
+        XCTAssertEqual(Set(WordAction.defaultList.map(\.action)).union(WordAction.candidates), Set(WordAction.allCases),
+                       "every action is used, or waits for the owner's yes")
+        XCTAssertTrue(WordAction.candidates.isDisjoint(with: WordAction.defaultList.map(\.action)))
+        let all = WordAction.defaultList.map(\.word) + WordAction.candidateList.map(\.word)
+        XCTAssertEqual(Set(all).count, all.count, "no word in both lists, or twice")
+        for (word, _) in WordAction.candidateList {
+            XCTAssertEqual(ActionPhrases.key(word) ?? LyricWordIcons.englishKey(word), word, "listed as it is matched")
+        }
     }
 
     // MARK: Caps
@@ -118,6 +125,64 @@ final class WordAccentsTests: XCTestCase {
         let plan = WordAccentPlan.make(words: words, glue: [], symbols: nil, actions: Self.actions)
         XCTAssertEqual(plan.accents.count, 1)
         XCTAssertEqual(plan[words[1].presentationID]?.action, .spin)
+    }
+
+    // MARK: Phrases
+
+    func testAPhraseMovesItsLastWordBeforeItsWordsAlone() {
+        let words = Self.line(["we", "fall", "apart", "tonight"])
+        let plan = WordAccentPlan.make(words: words, glue: [], symbols: nil, actions: Self.actions)
+        XCTAssertEqual(plan.accents.count, 1)
+        XCTAssertEqual(plan[words[2].presentationID]?.action, .shatter, "fall apart shatters on apart")
+        XCTAssertNil(plan[words[1].presentationID], "not fall's dip")
+        XCTAssertEqual(WordAccentPlan.actionKey(words: words, glue: [], actions: Self.actions), "fall apart")
+    }
+
+    func testPhraseWordsFoldTheirForms() {
+        for texts in [["letting", "go"], ["I", "let", "go"], ["Falling", "apart,"], ["turned", "around"]] {
+            let words = Self.line(texts)
+            let plan = WordAccentPlan.make(words: words, glue: [], symbols: nil, actions: Self.actions)
+            XCTAssertNotNil(plan[words.last!.presentationID]?.action, "\(texts)")
+        }
+        let alone = Self.line(["go", "and", "turn"])
+        XCTAssertTrue(WordAccentPlan.make(words: alone, glue: [], symbols: nil, actions: Self.actions).isEmpty,
+                      "everyday words move only in their phrase")
+    }
+
+    func testCandidateActionsWaitForTheOwnersYes() {
+        let words = Self.line(["here", "comes", "the", "sun"])
+        XCTAssertTrue(WordAccentPlan.make(words: words, glue: [], symbols: nil, actions: Self.actions).isEmpty,
+                      "not in the default list")
+        var own = Self.actions
+        own["sun"] = .sunlight
+        XCTAssertEqual(WordAccentPlan.make(words: words, glue: [], symbols: nil, actions: own)[words[3].presentationID]?.action,
+                       .sunlight, "a word the user adds moves")
+        XCTAssertEqual(WordAction(listValue: "Sunlight"), .sunlight)
+        XCTAssertEqual(WordAction(listValue: "moon"), .moonlight)
+    }
+
+    func testBlockingPhrasesKeepTheirWordsStill() {
+        let words = Self.line(["take", "a", "break", "then", "we", "fall"])
+        let plan = WordAccentPlan.make(words: words, glue: [], symbols: nil, actions: Self.actions)
+        XCTAssertNil(plan[words[2].presentationID], "take a break is no shatter")
+        XCTAssertEqual(plan[words[5].presentationID]?.action, .dip, "a later word still moves")
+        let cold = Self.line(["knocked", "out", "cold"])
+        XCTAssertTrue(WordAccentPlan.make(words: cold, glue: [], symbols: nil, actions: Self.actions).isEmpty)
+        var own = Self.actions
+        own["take a break"] = .float
+        let mine = WordAccentPlan.make(words: words, glue: [], symbols: nil, actions: own)
+        XCTAssertEqual(mine[words[2].presentationID]?.action, .float, "a list phrase wins over a blocking one")
+    }
+
+    func testPhraseKeys() {
+        XCTAssertEqual(ActionPhrases.key("Let  Go"), "let go")
+        XCTAssertEqual(ActionPhrases.key("fall apart!"), "fall apart")
+        XCTAssertNil(ActionPhrases.key("go"))
+        XCTAssertNil(ActionPhrases.key("심장 소리"))
+        XCTAssertEqual(WordAccentsSection.actionKey("Fall Apart"), "fall apart")
+        for (word, _) in WordAction.defaultList {
+            XCTAssertEqual(ActionPhrases.key(word) ?? LyricWordIcons.englishKey(word), word, "listed as it is matched")
+        }
     }
 
     func testAWordCanTakeBoth() {

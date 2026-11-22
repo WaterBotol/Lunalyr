@@ -65,7 +65,7 @@ struct WordAccentsSection: View {
                         }
                         .revealRow()
                         InspectorCaption("One action word a line, in English and other common languages.",
-                                         more: "Only the first action word in a line moves, once, as it is sung; repeats of a word later in the song move gently every other time. Besides this list, common words in Spanish, Portuguese, French, German, Italian, Indonesian, Tagalog, Vietnamese, Japanese, Korean and Chinese move too. Words you add here, in any language, come first. With Reduce Motion it glows instead.")
+                                         more: "Only the first action word in a line moves, once, as it is sung. A phrase of two or three words (let go, fall apart) moves its last word, and comes before its words on their own. Repeats of a word later in the song move gently every other time. Besides this list, common words in Spanish, Portuguese, French, German, Italian, Indonesian, Tagalog, Vietnamese, Japanese, Korean and Chinese move too. Words you add here, in any language, come first. With Reduce Motion it glows instead.")
                             .revealRow()
                     }
                 }
@@ -74,9 +74,11 @@ struct WordAccentsSection: View {
         }
     }
 
-    /// An action word as its list keeps it: English as matched, any other
+    /// An action word as its list keeps it: an English phrase as its words
+    /// one space apart ("let go"), English as matched, any other
     /// language folded (accents and case), CJK as written.
     static func actionKey(_ word: String) -> String? {
+        if let phrase = ActionPhrases.key(word) { return phrase }
         if let english = LyricWordIcons.englishKey(word) { return english }
         let folded = ActionLexicon.fold(word)
         return folded.isEmpty ? nil : folded

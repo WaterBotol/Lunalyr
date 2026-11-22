@@ -158,6 +158,22 @@ enum WordAction: String, CaseIterable, Identifiable {
     case wave
     /// Sinks below the line with a few bubbles.
     case sink
+    // Candidates (`candidateList`): offered in the list editor, not yet in
+    // the default list nor in the other languages' built-in lists.
+    /// A warm sheen sweeps across the letters and soft rays fan up from behind.
+    case sunlight
+    /// A cool silver sheen sweeps across the letters; no rays.
+    case moonlight
+    /// Slides forward with a motion streak, letters bunching, then eases back.
+    case rush
+    /// Slices shift sideways with a brief colour split for a few frames.
+    case glitch
+    /// Small four-point twinkles light on a few letters in turn.
+    case sparkle
+    /// The last letters lift off and drift up and away, then come home.
+    case free
+    /// The letter spacing widens slowly, then closes.
+    case stretch
 
     var id: String { rawValue }
 
@@ -174,6 +190,9 @@ enum WordAction: String, CaseIterable, Identifiable {
             "heartbeat": .pulse, "fade": .dissolve, "vanish": .dissolve, "fall": .dip, "jump": .hop,
             "bounce": .hop, "drown": .sink, "break": .shatter, "blood": .bleed, "darkness": .dark,
             "turn": .spin, "rotate": .spin, "fly": .float, "tremble": .shake, "ocean": .wave,
+            "sun": .sunlight, "sunshine": .sunlight, "moon": .moonlight, "run": .rush, "speed": .rush,
+            "static": .glitch, "shine": .sparkle, "twinkle": .sparkle, "fly away": .free, "freedom": .free,
+            "far": .stretch,
         ]
         guard let action = aliases[name] else { return nil }
         self = action
@@ -199,6 +218,13 @@ enum WordAction: String, CaseIterable, Identifiable {
         case .pulse: return "Heartbeat"
         case .wave: return "Wave"
         case .sink: return "Sink"
+        case .sunlight: return "Sunlight"
+        case .moonlight: return "Moonlight"
+        case .rush: return "Rush"
+        case .glitch: return "Glitch"
+        case .sparkle: return "Sparkle"
+        case .free: return "Free"
+        case .stretch: return "Stretch"
         }
     }
 
@@ -206,26 +232,32 @@ enum WordAction: String, CaseIterable, Identifiable {
     static let defaultList: [(word: String, action: WordAction)] = [
         // Plurals, -ing and -ed fold through `englishForms` (bleeds,
         // melting, echoes, shattered, drowning, spinning); irregular forms
-        // are listed. Vivid words the motion shows, not everyday ones
+        // are listed. Phrases (`ActionPhrases`) let an everyday word move
+        // only in company: "go" floats in "let go", "turn" spins in "turn
+        // around". Vivid words the motion shows, not everyday ones
         // ("love", "go", "away", "down", "turn", and the very common
         // "night", "heart", "high" and "rain", are left out: measured on
         // a few hundred songs, they made action words constant).
         ("spin", .spin), ("twirl", .spin), ("whirl", .spin), ("whirlwind", .spin), ("spiral", .spin),
         ("tornado", .spin), ("dizzy", .spin), ("carousel", .spin), ("revolve", .spin),
+        ("swirl", .spin), ("orbit", .spin), ("turn around", .spin),
         ("levitate", .float), ("float", .float), ("fly", .float), ("flying", .float), ("flew", .float),
         ("soar", .float), ("drift", .float), ("heaven", .float), ("clouds", .float), ("weightless", .float),
-        ("wings", .float), ("higher", .float),
+        ("wings", .float), ("higher", .float), ("balloon", .float), ("feather", .float), ("hover", .float),
+        // "let go" only: "let it go" is an everyday phrase and stays still.
+        ("let go", .float),
         ("fall", .dip), ("falling", .dip), ("fell", .dip), ("drop", .dip), ("dive", .dip), ("tumble", .dip),
-        ("gravity", .dip), ("plunge", .dip),
+        ("gravity", .dip), ("plunge", .dip), ("collapse", .dip), ("crumble", .dip),
         ("shake", .shake), ("shook", .shake), ("tremble", .shake), ("shiver", .shake), ("nervous", .shake),
         ("quake", .shake), ("earthquake", .shake), ("scared", .shake), ("rattle", .shake),
         ("bounce", .hop), ("jump", .hop), ("leap", .hop), ("hop", .hop), ("dance", .hop), ("dancing", .hop),
         ("grow", .grow), ("grew", .grow), ("rise", .grow), ("rising", .grow), ("bigger", .grow),
-        ("bloom", .grow), ("blossom", .grow), ("swell", .grow),
+        ("bloom", .grow), ("blossom", .grow), ("swell", .grow), ("expand", .grow), ("towering", .grow),
         ("shrink", .shrink), ("smaller", .shrink), ("tiny", .shrink),
         ("fade", .dissolve), ("disappear", .dissolve), ("vanish", .dissolve), ("gone", .dissolve),
         ("dust", .dissolve), ("ghost", .dissolve), ("forget", .dissolve), ("forgotten", .dissolve),
-        ("erase", .dissolve), ("evaporate", .dissolve), ("dissolve", .dissolve),
+        ("erase", .dissolve), ("evaporate", .dissolve), ("dissolve", .dissolve), ("blur", .dissolve), ("haze", .dissolve),
+        ("mist", .dissolve),
         ("burn", .flicker), ("burnt", .flicker), ("fire", .flicker), ("flame", .flicker), ("blaze", .flicker),
         ("ignite", .flicker), ("spark", .flicker), ("embers", .flicker), ("smoke", .flicker), ("heat", .flicker),
         ("freeze", .frost), ("frozen", .frost), ("froze", .frost), ("cold", .frost), ("colder", .frost),
@@ -237,9 +269,9 @@ enum WordAction: String, CaseIterable, Identifiable {
         ("midnight", .dark), ("black", .dark), ("blackout", .dark), ("void", .dark),
         ("break", .shatter), ("broke", .shatter), ("broken", .shatter), ("shatter", .shatter), ("crack", .shatter),
         ("pieces", .shatter), ("crash", .shatter), ("smash", .shatter), ("heartbreak", .shatter),
-        ("apart", .shatter),
+        ("apart", .shatter), ("fracture", .shatter), ("splinter", .shatter), ("fall apart", .shatter), ("fell apart", .shatter),
         ("melt", .melt), ("drip", .melt), ("meltdown", .melt), ("thaw", .melt), ("liquid", .melt), ("wax", .melt),
-        ("echo", .echo), ("repeat", .echo), ("resonate", .echo), ("voices", .echo), ("calling", .echo),
+        ("echo", .echo), ("repeat", .echo), ("resonate", .echo), ("voices", .echo), ("calling", .echo), ("hollow", .echo), ("canyon", .echo),
         ("heartbeat", .pulse), ("pulse", .pulse), ("beat", .pulse), ("alive", .pulse),
         ("pounding", .pulse), ("racing", .pulse), ("drum", .pulse), ("drums", .pulse), ("rhythm", .pulse),
         ("wave", .wave), ("ocean", .wave), ("sea", .wave), ("tide", .wave), ("river", .wave), ("surf", .wave),
@@ -250,6 +282,101 @@ enum WordAction: String, CaseIterable, Identifiable {
 
     static let defaults: [String: String] =
         Dictionary(defaultList.map { ($0.word, $0.action.rawValue) }, uniquingKeysWith: { first, _ in first })
+
+    /// New actions and their words, shown to the owner as renders before
+    /// they join `defaultList` (none is in it yet, and the other languages'
+    /// built-in lists leave them out). A word here is in no other list.
+    static let candidateList: [(word: String, action: WordAction)] = [
+        ("sun", .sunlight), ("sunshine", .sunlight), ("sunlight", .sunlight), ("sunrise", .sunlight),
+        ("sunset", .sunlight), ("dawn", .sunlight), ("daybreak", .sunlight), ("daylight", .sunlight),
+        ("sunbeam", .sunlight), ("golden hour", .sunlight), ("light up", .sunlight), ("lit up", .sunlight),
+        ("into the light", .sunlight), ("break of dawn", .sunlight),
+        ("moon", .moonlight), ("moonlight", .moonlight), ("moonlit", .moonlight), ("moonbeam", .moonlight),
+        ("starlight", .moonlight),
+        // Not "run": measured on a library of 180 songs it was the most
+        // frequent trigger of all (46 lines).
+        ("rush", .rush), ("chase", .rush), ("speed", .rush), ("escape", .rush), ("race", .rush),
+        ("fast", .rush),
+        ("glitch", .glitch), ("static", .glitch), ("signal", .glitch), ("error", .glitch),
+        ("malfunction", .glitch), ("machine", .glitch), ("robot", .glitch), ("rewind", .glitch),
+        ("shine", .sparkle), ("shiny", .sparkle), ("sparkle", .sparkle), ("glitter", .sparkle),
+        ("diamond", .sparkle), ("gold", .sparkle), ("golden", .sparkle), ("bright", .sparkle),
+        ("twinkle", .sparkle), ("stars", .sparkle),
+        ("free", .free), ("freedom", .free), ("release", .free), ("birds", .free), ("break free", .free),
+        ("fly away", .free),
+        ("stretch", .stretch), ("reach", .stretch), ("distance", .stretch), ("endless", .stretch),
+        ("far away", .stretch), ("miles away", .stretch),
+    ]
+
+    /// The actions still waiting for the owner's yes.
+    static let candidates: Set<WordAction> = Set(candidateList.map(\.action))
+        .subtracting(defaultList.map(\.action))
+
+    static let candidateDefaults: [String: String] =
+        Dictionary(candidateList.map { ($0.word, $0.action.rawValue) }, uniquingKeysWith: { first, _ in first })
+}
+
+// MARK: - Phrases
+
+/// Two- and three-word action phrases ("let go", "fall apart"), and the few
+/// phrases that keep a word from moving ("take a break" is no shatter).
+/// A phrase is a list key whose words (each as `englishKey`) are one space
+/// apart. Each of its words matches a run through `englishForms` (falling
+/// apart, letting go); irregular forms are listed. The accent goes on the
+/// phrase's last word, and a phrase comes before a single word starting at
+/// the same place, so "fall apart" shatters where "fall" alone would dip.
+enum ActionPhrases {
+    /// Built-in, whatever the list: words in these phrases never move
+    /// (a list phrase that is the same words wins over them).
+    static let blocking: [[String]] = [
+        ["take", "a", "break"], ["give", "me", "a", "break"], ["out", "cold"], ["ice", "cream"],
+    ]
+
+    /// `text` as a phrase key: its words as `englishKey`, one space apart.
+    /// Nil for a single word, or if any word is not plain English letters.
+    static func key(_ text: String) -> String? {
+        let parts = text.split(whereSeparator: \.isWhitespace).map { LyricWordIcons.englishKey(String($0)) }
+        guard parts.count >= 2, !parts.contains(nil) else { return nil }
+        return parts.compactMap { $0 }.joined(separator: " ")
+    }
+
+    /// The line's action, if any: which run (of `runs`, the line's visible
+    /// runs as they spell their words) moves, the key it matched and its
+    /// action. Reading order; at each run a list phrase starting there
+    /// (longest first), then a blocking phrase (its runs are skipped), then
+    /// the run as a single word (`ActionLexicon.match`). The first wins.
+    static func hit(_ runs: [String], actions: [String: WordAction],
+                    script: ActionLexicon.Script) -> (run: Int, key: String, action: WordAction)? {
+        let phrases = actions.compactMap { key, action -> (words: [String], key: String, action: WordAction)? in
+            key.contains(" ") ? (key.split(separator: " ").map(String.init), key, action) : nil
+        }.sorted { $0.words.count != $1.words.count ? $0.words.count > $1.words.count : $0.key < $1.key }
+        var forms: [Int: [String]] = [:]
+        func matches(_ words: [String], at start: Int) -> Bool {
+            guard start + words.count <= runs.count else { return false }
+            for (offset, word) in words.enumerated() {
+                let index = start + offset
+                let found = forms[index] ?? LyricWordIcons.englishForms(runs[index])
+                forms[index] = found
+                guard found.contains(word) else { return false }
+            }
+            return true
+        }
+        var index = 0
+        while index < runs.count {
+            if let phrase = phrases.first(where: { matches($0.words, at: index) }) {
+                return (index + phrase.words.count - 1, phrase.key, phrase.action)
+            }
+            if let block = blocking.first(where: { matches($0, at: index) }) {
+                index += block.count
+                continue
+            }
+            if let found = ActionLexicon.match(runs[index], user: actions, script: script) {
+                return (index, found.key, found.action)
+            }
+            index += 1
+        }
+        return nil
+    }
 }
 
 /// What one word wears: its symbol, its action, or both.
@@ -293,11 +420,12 @@ struct WordAccentPlan: Equatable {
                      gentle: Bool = false) -> WordAccentPlan {
         guard symbols?.isEmpty == false || actions != nil else { return .none }
         var plan = WordAccentPlan()
-        var shownSymbols = 0, moved = 0
+        var shownSymbols = 0
         var seen = Set<String>()  // symbols shown
-        let script = actions == nil ? ActionLexicon.Script() : ActionLexicon.Script(words.map(\.text).joined(separator: " "))
-        for range in LyricRuns.ranges(glue, count: words.count) {
-            let text = words[range].map(\.text).joined()
+        let runs = visibleRuns(words, glue: glue)
+        let hit = actions.flatMap { ActionPhrases.hit(runs.map(\.text), actions: $0, script: script(words)) }
+        for (index, run) in runs.enumerated() {
+            let range = run.range, text = run.text
             guard let first = words[range].first(where: { LyricRuns.isVisible($0.text) }) else { continue }
             var accent = WordAccent()
             if let symbols, shownSymbols < maxSymbolsPerLine,
@@ -306,11 +434,9 @@ struct WordAccentPlan: Equatable {
                 accent.symbol = found.value
                 shownSymbols += 1
             }
-            if let actions, moved < maxActionsPerLine,
-               let found = ActionLexicon.match(text, user: actions, script: script) {
-                accent.action = found.action
+            if let hit, hit.run == index {
+                accent.action = hit.action
                 accent.gentle = gentle
-                moved += 1
             }
             if accent != WordAccent() {
                 plan.accents[first.presentationID] = accent
@@ -327,13 +453,19 @@ struct WordAccentPlan: Equatable {
     /// The word key of the line's action word, if any (the same matching
     /// as `make`, so the two always agree).
     static func actionKey(words: [LyricsFetcher.Word], glue: [Bool], actions: [String: WordAction]) -> String? {
-        let script = ActionLexicon.Script(words.map(\.text).joined(separator: " "))
-        for range in LyricRuns.ranges(glue, count: words.count) {
-            let text = words[range].map(\.text).joined()
-            guard words[range].contains(where: { LyricRuns.isVisible($0.text) }) else { continue }
-            if let found = ActionLexicon.match(text, user: actions, script: script) { return found.key }
+        ActionPhrases.hit(visibleRuns(words, glue: glue).map(\.text), actions: actions, script: script(words))?.key
+    }
+
+    /// The line's runs that show something, each with the text it spells.
+    private static func visibleRuns(_ words: [LyricsFetcher.Word], glue: [Bool]) -> [(range: Range<Int>, text: String)] {
+        LyricRuns.ranges(glue, count: words.count).compactMap { range in
+            guard words[range].contains(where: { LyricRuns.isVisible($0.text) }) else { return nil }
+            return (range, words[range].map(\.text).joined())
         }
-        return nil
+    }
+
+    private static func script(_ words: [LyricsFetcher.Word]) -> ActionLexicon.Script {
+        ActionLexicon.Script(words.map(\.text).joined(separator: " "))
     }
 
     /// Which lines of a song move gently: an action word acts in full the

@@ -11,11 +11,16 @@ final class ActionWordsCoverageTests: XCTestCase {
         guard let dir = ProcessInfo.processInfo.environment["LUNALYR_ACTION_COVERAGE_DIR"], !dir.isEmpty else {
             throw XCTSkip("Set TEST_RUNNER_LUNALYR_ACTION_COVERAGE_DIR to a lyrics cache folder")
         }
-        let actions: [String: WordAction] = WordAction.defaults.compactMapValues { WordAction(listValue: $0) }
+        // LUNALYR_ACTION_COVERAGE_CANDIDATES=1: as if every candidate action were approved.
+        let withCandidates = ProcessInfo.processInfo.environment["LUNALYR_ACTION_COVERAGE_CANDIDATES"] == "1"
+        let list = withCandidates ? WordAction.defaults.merging(WordAction.candidateDefaults) { first, _ in first } : WordAction.defaults
+        let actions: [String: WordAction] = list.compactMapValues { WordAction(listValue: $0) }
+        print("COVERAGE list: \(withCandidates ? "defaults and candidates" : "defaults")")
         let files = try FileManager.default.contentsOfDirectory(atPath: dir).filter { $0.hasSuffix(".json") }
         var perSong: [Int] = []
         var groups: [String: [Int]] = [:]
         var triggers: [String: Int] = [:]
+        var songsWith: [String: Int] = [:]
         for file in files {
             let data = try Data(contentsOf: URL(fileURLWithPath: dir).appendingPathComponent(file))
             guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -23,6 +28,7 @@ final class ActionWordsCoverageTests: XCTestCase {
                   let synced = result["synced"] as? [String: Any],
                   let lines = synced["_0"] as? [[String: Any]] else { continue }
             var hits = 0
+            var keys = Set<String>()
             for line in lines {
                 let start = line["start"] as? Double ?? 0
                 var words: [LyricsFetcher.Word] = ((line["words"] as? [[String: Any]]) ?? []).map {
@@ -40,8 +46,10 @@ final class ActionWordsCoverageTests: XCTestCase {
                 if let key = WordAccentPlan.actionKey(words: words, glue: glue, actions: actions) {
                     hits += 1
                     triggers[key, default: 0] += 1
+                    keys.insert(key)
                 }
             }
+            for key in keys { songsWith[key, default: 0] += 1 }
             perSong.append(hits)
             groups[json["group"] as? String ?? "library", default: []].append(hits)
         }
@@ -55,7 +63,9 @@ final class ActionWordsCoverageTests: XCTestCase {
         let median = sorted[sorted.count / 2]
         let zero = Double(sorted.filter { $0 == 0 }.count) / Double(sorted.count) * 100
         let inRange = Double(sorted.filter { (2...8).contains($0) }.count) / Double(sorted.count) * 100
-        let top = triggers.sorted { $0.value > $1.value }.prefix(25).map { "\($0.key) \($0.value)" }.joined(separator: ", ")
+        // Each trigger: lines it moved, and in how many songs.
+        let top = triggers.sorted { $0.value > $1.value }.prefix(40)
+            .map { "\($0.key) \($0.value)/\(songsWith[$0.key] ?? 0)" }.joined(separator: ", ")
         print(String(format: "COVERAGE songs %d, median %d, mean %.1f, zero %.0f%%, 2...8 %.0f%%, p25 %d, p75 %d, p90 %d",
                      sorted.count, median, Double(sorted.reduce(0, +)) / Double(sorted.count), zero, inRange,
                      sorted[sorted.count / 4], sorted[sorted.count * 3 / 4], sorted[sorted.count * 9 / 10]))
