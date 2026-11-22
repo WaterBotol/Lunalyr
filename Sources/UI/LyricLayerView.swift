@@ -1029,10 +1029,12 @@ struct LyricLayer: View {
                     userScale: rolls || composition.fillsStage ? 1 : userScale,
                     neutral: rolls || composition.fillsStage ? 1 : 0.75)
                 let translationFont = settings.lyricFont(size: baseSize * 0.34 * userScale, hero: false, mood: mood)
-                VStack(spacing: baseSize * 0.2) {
+                LineAndTranslations(spacing: baseSize * 0.2) {
                 if !rolls, place == .above, let translation, !translation.isEmpty {
-                    TranslationLine(text: translation, font: translationFont, width: stageSize.width * Self.translationWidth)
+                    TranslationLine(text: translation, font: translationFont, width: stageSize.width * Self.translationWidth,
+                                    lines: 2)
                         .opacity(pose.progress * (1 - textExit))
+                        .layoutValue(key: LineAndTranslations.Spills.self, value: true)
                 }
                 Group {
                     if line.wordTimed {
@@ -1106,14 +1108,17 @@ struct LyricLayer: View {
                                     font: settings.lyricFont(size: baseSize * 0.38 * densityScale, hero: false, mood: mood),
                                     width: stageSize.width * Self.translationWidth)
                         .opacity(pose.progress * (1 - textExit))
+                        .layoutValue(key: LineAndTranslations.Spills.self, value: true)
                 }
                 // A translation from the lyric source sits under its line as
                 // a quieter second voice, arriving and leaving with it. A
                 // rolling stage keeps one size across lines, so there it
                 // rests over the stage's foot instead of resizing the stage.
                 if !rolls, place == .below, let translation, !translation.isEmpty {
-                    TranslationLine(text: translation, font: translationFont, width: stageSize.width * Self.translationWidth)
+                    TranslationLine(text: translation, font: translationFont, width: stageSize.width * Self.translationWidth,
+                                    lines: 2)
                         .opacity(pose.progress * (1 - textExit))
+                        .layoutValue(key: LineAndTranslations.Spills.self, value: true)
                 }
                 }
                 // A rolling stage keeps its band at the foot, or at the head
@@ -2311,6 +2316,46 @@ private struct EdgeTranslationsView: View {
         }
         .frame(width: stageSize.width, height: stageSize.height)
         .allowsHitTesting(false)
+    }
+}
+
+/// A line with its translation (and a whole-line reading) stacked over or
+/// under it, as wide as the line itself. A translation wrapped wider than
+/// its line reaches past it instead of widening what is fitted to the
+/// stage: fitted together, a long translation made the sung words smaller.
+struct LineAndTranslations: Layout {
+    var spacing: CGFloat
+
+    /// A translation or reading, which may reach past its line.
+    struct Spills: LayoutValueKey {
+        static let defaultValue = false
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let sizes = measure(proposal, subviews)
+        return Self.size(of: sizes, spills: subviews.map { $0[Spills.self] }, spacing: spacing)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var y = bounds.minY
+        for (subview, size) in zip(subviews, measure(proposal, subviews)) {
+            subview.place(at: CGPoint(x: bounds.midX, y: y), anchor: .top, proposal: ProposedViewSize(size))
+            y += size.height + spacing
+        }
+    }
+
+    private func measure(_ proposal: ProposedViewSize, _ subviews: Subviews) -> [CGSize] {
+        subviews.map { $0.sizeThatFits(ProposedViewSize(width: proposal.width, height: nil)) }
+    }
+
+    /// As wide as the widest part that is not a translation (all of them,
+    /// when every part is one), as tall as all of them stacked.
+    static func size(of sizes: [CGSize], spills: [Bool], spacing: CGFloat) -> CGSize {
+        guard !sizes.isEmpty else { return .zero }
+        let own = zip(sizes, spills).filter { !$0.1 }.map(\.0.width)
+        let width = own.max() ?? sizes.map(\.width).max() ?? 0
+        let height = sizes.map(\.height).reduce(0, +) + spacing * CGFloat(sizes.count - 1)
+        return CGSize(width: width, height: height)
     }
 }
 
