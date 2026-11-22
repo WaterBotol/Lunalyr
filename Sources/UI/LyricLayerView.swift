@@ -661,6 +661,9 @@ struct LyricLayer: View {
     }
 
     /// The share of the stage's width a translation runs across, centred.
+    /// A translation's type size against the lyric's base size, in every
+    /// layout (the rolling ones drew it at 0.30, the others at 0.34).
+    static let translationShare: CGFloat = 0.34
     static let translationWidth: CGFloat = 0.8
 
     /// How far up from the stage's foot a translation set there -- under
@@ -1008,7 +1011,8 @@ struct LyricLayer: View {
                 let density = line.words.reduce(0) { $0 + $1.text.count + 3 }
                 let densityScale = line.wordTimed && composition.hasConnections
                     ? min(1.0, max(0.52, sqrt(110.0 / Double(max(density, 110))))) : 1.0
-                let translationSize = baseSize * 0.30 * userScale
+                // One translation size in every layout and place.
+                let translationSize = baseSize * Self.translationShare * userScale
                 let place = style.translationPlacement
                 // A translation at the stage's foot keeps clear of a kept
                 // title card there (`titleFootInset`): a rolling stage's
@@ -1028,7 +1032,7 @@ struct LyricLayer: View {
                                                                height: min(available.height, stageSize.height - lineFoot)),
                     userScale: rolls || composition.fillsStage ? 1 : userScale,
                     neutral: rolls || composition.fillsStage ? 1 : 0.75)
-                let translationFont = settings.lyricFont(size: baseSize * 0.34 * userScale, hero: false, mood: mood)
+                let translationFont = settings.lyricFont(size: translationSize, hero: false, mood: mood)
                 LineAndTranslations(spacing: baseSize * 0.2) {
                 if !rolls, place == .above, let translation, !translation.isEmpty {
                     TranslationLine(text: translation, font: translationFont, width: stageSize.width * Self.translationWidth,
@@ -1145,7 +1149,7 @@ struct LyricLayer: View {
                                                  handedOn: Self.edgeHandover(after: index, in: lines, time: time) {
                                                      handOver(after: $0, in: lines)
                                                  }),
-                                             size: baseSize * 0.34 * userScale)] : [])
+                                             size: translationSize)] : [])
                 .opacity(Self.timingHandoffPresence(after: index, in: lines, time: time))
                 .modifier(FittedLyricStage(available: fit.available, userScale: fit.userScale, neutral: fit.neutral))
                 // Set no wider than the stage, and placed, by `LyricLineStack`.

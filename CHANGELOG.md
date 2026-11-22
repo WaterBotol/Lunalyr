@@ -19,6 +19,7 @@ When merging, keep every entry and combine duplicate headings.
 
 ### Changed
 
+- Lyrics: translations are one size in every layout (Spoken, Cascade and Cutout drew them a little smaller).
 - Settings › Romanisation & translation: readings' Display choices are named as translations' places are (Off, Under the line, In place of the line, were Below lyrics and Replace lyrics), and "Import Reading LRC…" is "Import Readings from LRC…".
 - Lyrics: translations lean like italics (in Latin, Cyrillic and Greek; Chinese, Japanese and Korean stay upright), so with a whole-line reading on as well, the reading and the translation no longer look like two translations. On cards too.
 - Desktop player: the queue lists Music's real Up Next after the playing song, in the order it will play (shuffle and Play Next / Play Later included), instead of the playlist's order. Clicking a song there skips forward to it, so the songs after it stay queued. It is read while the queue is open, even with Look ahead in the queue off; when it can't be read (another player, Low Power Mode), the queue shows the playlist as before.
