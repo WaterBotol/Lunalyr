@@ -139,6 +139,13 @@ enum ActionLexicon {
         words(.float, ["cielo", "alas"]),
         words(.dissolve, ["olvidar", "olvido", "olvida", "olvidame", "olvidarte"]),
         words(.frost, ["nieve"]),
+        words(.sunlight, ["sol", "amanecer", "atardecer"]),
+        words(.moonlight, ["luna"]),
+        words(.rush, ["corre", "correr", "corriendo", "prisa", "deprisa", "escapar", "huir", "veloz"]),
+        words(.glitch, ["fallo", "falla", "averia", "estatica", "interferencia", "maquina"]),
+        words(.sparkle, ["brillar", "brilla", "brillo", "brillante", "destello", "diamante", "diamantes", "dorado", "dorada", "resplandor"]),
+        words(.free, ["libre", "libres", "libertad", "soltar"]),
+        words(.stretch, ["estirar", "estira", "alcanzar", "distancia", "lejos", "lejano"]),
     ], stems: [
         ("tembl", .shake), ("tiembl", .shake), ("sacud", .shake),
         ("crece", .grow), ("crezc", .grow), ("creci", .grow),
@@ -163,6 +170,13 @@ enum ActionLexicon {
         words(.float, ["ceu", "asas"]),
         words(.dissolve, ["esquecer", "esqueci", "esquece", "sumir", "sumiu"]),
         words(.frost, ["neve"]),
+        words(.sunlight, ["sol", "amanhecer"]),
+        words(.moonlight, ["lua"]),
+        words(.rush, ["correr", "corre", "correndo", "pressa", "depressa", "fugir"]),
+        words(.glitch, ["falha", "falhou", "erro", "avaria", "defeito", "maquina"]),
+        words(.sparkle, ["brilhar", "brilho", "brilha", "brilhante", "cintilar", "diamante", "dourado", "dourada"]),
+        words(.free, ["liberdade", "soltar"]),
+        words(.stretch, ["esticar", "alcancar", "distancia", "distante"]),
     ], stems: [
         ("flutu", .float), ("encolh", .shrink), ("desapare", .dissolve),
         ("queim", .flicker), ("congel", .frost), ("sangr", .bleed), ("escur", .dark),
@@ -186,6 +200,13 @@ enum ActionLexicon {
         words(.sink, ["profond", "profonde"]),
         words(.wave, ["mer", "houle"]),
         words(.sink, ["noie", "noyer", "noyee", "sombrer", "sombrent"]),
+        words(.sunlight, ["soleil", "aube"]),
+        words(.moonlight, ["lune"]),
+        words(.rush, ["courir", "vite", "fuir", "vitesse"]),
+        words(.glitch, ["panne", "erreur", "brouillage"]),
+        words(.sparkle, ["briller", "brille", "brillant", "brillante", "scintille", "scintiller", "etincelle", "diamant", "diamants", "paillettes", "doree"]),
+        words(.free, ["libre", "libres", "liberte", "delivre"]),
+        words(.stretch, ["etirer", "atteindre", "lointain", "lointaine"]),
     ], stems: [
         ("envol", .float), ("flott", .float), ("trembl", .shake), ("saut", .hop),
         ("retreci", .shrink), ("disparai", .dissolve), ("disparu", .dissolve),
@@ -208,6 +229,13 @@ enum ActionLexicon {
         words(.sink, ["tief", "tiefer", "tiefe"]),
         words(.wave, ["welle", "wellen", "meer", "ozean"]),
         words(.sink, ["sinken", "sinkt", "versinken", "versinkt", "versank"]),
+        words(.sunlight, ["sonne", "sonnenschein", "morgenrot"]),
+        words(.moonlight, ["mond", "mondlicht"]),
+        words(.rush, ["rennen", "rennt", "renne", "schnell", "fliehen", "flieh", "flucht"]),
+        words(.glitch, ["fehler", "storung", "rauschen", "absturz", "kaputt", "defekt", "maschine", "roboter"]),
+        words(.sparkle, ["diamant", "diamanten"]),
+        words(.free, ["freiheit", "befreit", "losgelassen"]),
+        words(.stretch, ["dehnen", "strecken", "entfernung", "ferne", "endlos", "unendlich"]),
     ], stems: [
         ("flieg", .float), ("schweb", .float), ("dreh", .spin), ("zitter", .shake),
         ("hupf", .hop), ("wachs", .grow), ("schrumpf", .shrink), ("verschw", .dissolve), ("verblass", .dissolve),
@@ -236,6 +264,13 @@ enum ActionLexicon {
         words(.dissolve, ["dimenticare", "dimentico", "dimentica", "dimenticato"]),
         words(.frost, ["neve"]),
         words(.sink, ["profondo", "profonda"]),
+        words(.sunlight, ["tramonto"]),
+        words(.moonlight, ["luna"]),
+        words(.rush, ["correre", "corro", "fretta", "veloce", "fuggire", "scappa", "scappare"]),
+        words(.glitch, ["guasto", "errore", "difetto", "interferenza", "statica", "macchina"]),
+        words(.sparkle, ["brillare", "brilla", "brillante", "scintilla", "luccica", "diamante", "dorato", "dorata"]),
+        words(.free, ["libero", "libera", "liberi", "liberta"]),
+        words(.stretch, ["allungare", "raggiungere", "distanza", "lontano", "lontana"]),
     ], stems: [ ("svani", .dissolve), ("scompar", .dissolve), ("bruci", .flicker), ("congel", .frost),
         ("oscur", .dark), ("spezz", .shatter), ("sciogl", .melt), ("sciolt", .melt),
         ("affond", .sink), ("annega", .sink),
@@ -259,6 +294,12 @@ enum ActionLexicon {
         words(.pulse, ["detak", "berdetak"]),
         words(.wave, ["ombak", "lautan", "gelombang", "samudra"]),
         words(.sink, ["tenggelam"]),
+        words(.sunlight, ["matahari", "fajar"]),
+        words(.rush, ["berlari", "lari", "cepat", "kabur", "mengejar", "kejar"]),
+        words(.glitch, ["galat", "eror", "gangguan", "mesin"]),
+        words(.sparkle, ["berkilau", "kilauan", "gemerlap", "berlian", "keemasan"]),
+        words(.free, ["bebas", "kebebasan", "merdeka", "lepaskan"]),
+        words(.stretch, ["jauh", "jarak", "meraih"]),
     ], stems: [])
 
     static let tagalog: Latin = latinList("tl", words: [
@@ -279,6 +320,11 @@ enum ActionLexicon {
         words(.pulse, ["tibok"]),
         words(.wave, ["alon", "dagat", "karagatan"]),
         words(.sink, ["nalunod", "lunod", "lumubog"]),
+        words(.rush, ["tumakbo", "tatakbo", "takbo", "mabilis", "tumakas"]),
+        words(.glitch, ["aberya", "depekto", "makina"]),
+        words(.sparkle, ["kumikinang", "kinang", "kislap", "kumikislap", "diyamante", "ginintuan"]),
+        words(.free, ["malaya", "kalayaan", "pakawalan"]),
+        words(.stretch, ["malayo", "abutin"]),
     ], stems: [])
 
     /// Vietnamese: whole syllables with their tone marks (the marks tell
@@ -338,6 +384,13 @@ enum ActionLexicon {
         words(.float, ["翼"]),
         words(.frost, ["雪"]),
         words(.dissolve, ["忘れ"]),
+        words(.sunlight, ["太陽", "日差し", "朝日", "夕日"]),
+        words(.moonlight, ["月光", "月明かり"]),
+        words(.rush, ["走る", "走り", "走っ", "走れ", "駆け", "急げ", "逃げ", "追いかけ"]),
+        words(.glitch, ["バグ", "ノイズ", "エラー", "故障", "誤作動", "砂嵐", "巻き戻"]),
+        words(.sparkle, ["きらきら", "キラキラ", "輝", "きらめ", "煌め", "ダイヤモンド"]),
+        words(.free, ["自由", "飛び立", "羽ばた", "解き放"]),
+        words(.stretch, ["遠く", "遥か", "果てしな", "伸ばし", "伸ばす", "伸びる", "距離", "届く"]),
     ], exclude: ["影響", "暗記", "暗号", "落ち着", "回答", "今回", "一回", "毎回", "前回", "海外", "暗恋", "暗戀", "沈黙"])
 
     static let chinese = Contained("zh", [
@@ -364,6 +417,13 @@ enum ActionLexicon {
         words(.frost, ["雪"]),
         words(.dissolve, ["忘记", "忘記"]),
         words(.flicker, ["火"]),
+        words(.sunlight, ["阳光", "陽光", "太阳", "太陽", "日出", "夕阳", "夕陽"]),
+        words(.moonlight, ["月光", "月亮"]),
+        words(.rush, ["奔跑", "快跑", "逃跑", "追逐", "飞奔", "飛奔", "狂奔"]),
+        words(.glitch, ["故障", "乱码", "亂碼", "杂讯", "雜訊", "错误", "錯誤", "噪音", "倒带", "倒帶", "机器人", "機器人"]),
+        words(.sparkle, ["闪耀", "閃耀", "闪闪", "閃閃", "闪亮", "閃亮", "闪烁", "閃爍", "钻石", "鑽石", "璀璨", "金色"]),
+        words(.free, ["自由", "飞走", "飛走", "展翅", "释放", "釋放"]),
+        words(.stretch, ["遥远", "遙遠", "远方", "遠方", "距离", "距離", "无尽", "無盡", "伸展", "延伸"]),
     ], exclude: ["暗恋", "暗戀", "飞机", "飛機", "海报", "海報", "火车", "火車", "雪碧"])
 
     static let korean = Contained("ko", [
@@ -389,5 +449,12 @@ enum ActionLexicon {
         words(.float, ["날개", "하늘"]),
         words(.dissolve, ["잊어", "잊혀", "잊지"]),
         words(.flicker, ["뜨거운"]),
+        words(.sunlight, ["햇살", "햇빛", "태양"]),
+        words(.moonlight, ["달빛"]),
+        words(.rush, ["달려", "서둘러", "도망", "빨리", "쫓아"]),
+        words(.glitch, ["오류", "에러", "버그", "노이즈", "잡음", "되감", "로봇"]),
+        words(.sparkle, ["반짝", "빛나", "다이아몬드", "황금빛"]),
+        words(.free, ["자유", "날아가", "풀려나"]),
+        words(.stretch, ["멀리", "끝없이", "닿아", "늘어나"]),
     ], exclude: ["커피", "멈춤"])
 }

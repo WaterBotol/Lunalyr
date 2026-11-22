@@ -158,8 +158,7 @@ enum WordAction: String, CaseIterable, Identifiable {
     case wave
     /// Sinks below the line with a few bubbles.
     case sink
-    // Candidates (`candidateList`): offered in the list editor, not yet in
-    // the default list nor in the other languages' built-in lists.
+    // Added 23 Nov 2026.
     /// A warm sheen sweeps across the letters and soft rays fan up from behind.
     case sunlight
     /// A cool silver sheen sweeps across the letters; no rays.
@@ -244,8 +243,8 @@ enum WordAction: String, CaseIterable, Identifiable {
         ("levitate", .float), ("float", .float), ("fly", .float), ("flying", .float), ("flew", .float),
         ("soar", .float), ("drift", .float), ("heaven", .float), ("clouds", .float), ("weightless", .float),
         ("wings", .float), ("higher", .float), ("balloon", .float), ("feather", .float), ("hover", .float),
-        // "let go" only: "let it go" is an everyday phrase and stays still.
-        ("let go", .float),
+        // "let it go" too, on the owner's yes (6 lines in 3 of 180 songs).
+        ("let go", .float), ("let it go", .float),
         ("fall", .dip), ("falling", .dip), ("fell", .dip), ("drop", .dip), ("dive", .dip), ("tumble", .dip),
         ("gravity", .dip), ("plunge", .dip), ("collapse", .dip), ("crumble", .dip),
         ("shake", .shake), ("shook", .shake), ("tremble", .shake), ("shiver", .shake), ("nervous", .shake),
@@ -270,23 +269,17 @@ enum WordAction: String, CaseIterable, Identifiable {
         ("break", .shatter), ("broke", .shatter), ("broken", .shatter), ("shatter", .shatter), ("crack", .shatter),
         ("pieces", .shatter), ("crash", .shatter), ("smash", .shatter), ("heartbreak", .shatter),
         ("apart", .shatter), ("fracture", .shatter), ("splinter", .shatter), ("fall apart", .shatter), ("fell apart", .shatter),
+        // "glass" on the owner's yes; "a glass of", "raise a glass" stay still (`ActionPhrases.blocking`).
+        ("glass", .shatter),
         ("melt", .melt), ("drip", .melt), ("meltdown", .melt), ("thaw", .melt), ("liquid", .melt), ("wax", .melt),
         ("echo", .echo), ("repeat", .echo), ("resonate", .echo), ("voices", .echo), ("calling", .echo), ("hollow", .echo), ("canyon", .echo),
         ("heartbeat", .pulse), ("pulse", .pulse), ("beat", .pulse), ("alive", .pulse),
-        ("pounding", .pulse), ("racing", .pulse), ("drum", .pulse), ("drums", .pulse), ("rhythm", .pulse),
+        ("pounding", .pulse), ("drum", .pulse), ("drums", .pulse), ("rhythm", .pulse),
         ("wave", .wave), ("ocean", .wave), ("sea", .wave), ("tide", .wave), ("river", .wave), ("surf", .wave),
         ("shore", .wave), ("flood", .wave), ("sway", .wave), ("water", .wave),
         ("sink", .sink), ("sank", .sink), ("sunk", .sink), ("drown", .sink), ("deep", .sink), ("deeper", .sink),
         ("underwater", .sink), ("abyss", .sink), ("anchor", .sink), ("quicksand", .sink),
-    ]
-
-    static let defaults: [String: String] =
-        Dictionary(defaultList.map { ($0.word, $0.action.rawValue) }, uniquingKeysWith: { first, _ in first })
-
-    /// New actions and their words, shown to the owner as renders before
-    /// they join `defaultList` (none is in it yet, and the other languages'
-    /// built-in lists leave them out). A word here is in no other list.
-    static let candidateList: [(word: String, action: WordAction)] = [
+        // Added 23 Nov 2026 after the owner saw the renders.
         ("sun", .sunlight), ("sunshine", .sunlight), ("sunlight", .sunlight), ("sunrise", .sunlight),
         ("sunset", .sunlight), ("dawn", .sunlight), ("daybreak", .sunlight), ("daylight", .sunlight),
         ("sunbeam", .sunlight), ("golden hour", .sunlight), ("light up", .sunlight), ("lit up", .sunlight),
@@ -296,7 +289,7 @@ enum WordAction: String, CaseIterable, Identifiable {
         // Not "run": measured on a library of 180 songs it was the most
         // frequent trigger of all (46 lines).
         ("rush", .rush), ("chase", .rush), ("speed", .rush), ("escape", .rush), ("race", .rush),
-        ("fast", .rush),
+        ("fast", .rush), ("racing", .rush),
         ("glitch", .glitch), ("static", .glitch), ("signal", .glitch), ("error", .glitch),
         ("malfunction", .glitch), ("machine", .glitch), ("robot", .glitch), ("rewind", .glitch),
         ("shine", .sparkle), ("shiny", .sparkle), ("sparkle", .sparkle), ("glitter", .sparkle),
@@ -306,6 +299,16 @@ enum WordAction: String, CaseIterable, Identifiable {
         ("fly away", .free),
         ("stretch", .stretch), ("reach", .stretch), ("distance", .stretch), ("endless", .stretch),
         ("far away", .stretch), ("miles away", .stretch),
+    ]
+
+    static let defaults: [String: String] =
+        Dictionary(defaultList.map { ($0.word, $0.action.rawValue) }, uniquingKeysWith: { first, _ in first })
+
+    /// New actions and their words, shown to the owner as renders before
+    /// they join `defaultList` (the other languages' built-in lists leave
+    /// them out, and they move only the user's own words). A word here is
+    /// in no other list. Empty: the last seven were approved on 23 Nov 2026.
+    static let candidateList: [(word: String, action: WordAction)] = [
     ]
 
     /// The actions still waiting for the owner's yes.
@@ -330,6 +333,7 @@ enum ActionPhrases {
     /// (a list phrase that is the same words wins over them).
     static let blocking: [[String]] = [
         ["take", "a", "break"], ["give", "me", "a", "break"], ["out", "cold"], ["ice", "cream"],
+        ["glass", "of"], ["raise", "a", "glass"], ["raise", "your", "glass"], ["raise", "our", "glass"],
     ]
 
     /// `text` as a phrase key: its words as `englishKey`, one space apart.

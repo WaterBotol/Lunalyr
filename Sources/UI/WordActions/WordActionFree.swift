@@ -3,11 +3,12 @@ import SwiftUI
 // MARK: - Free (a candidate action, `WordAction.candidateList`)
 //
 // "Fly away": the end of the word breaks loose. Its last letters (about the
-// last third, at least one, at most four) lift off one after another, the
+// last half, at least one, at most four) lift off one after another, the
 // last letter first: a quick take-off up and out past the word's end (about
-// 70 % of the way), then a slow glide on up and away for as long as they are
-// gone, ~1.2–1.75 em up and ~1.2–1.7 em out at the furthest, shrinking,
-// turning and fading a touch, bobbing on the wind; then they glide back down
+// 70 % of the way) trailing a few fading afterimages, then a slow glide on
+// up and away for as long as they are gone, ~1.0–1.6 em up and ~1.5–1.9 em
+// out at the furthest, turning, shrinking and fading a touch, bobbing on
+// the wind; then they glide back down
 // swaying like falling leaves and settle into their places, the innermost
 // first. A faint ghost keeps each one's place while it is gone. The rest of
 // the word stays put, lifting and leaning a little toward its end as they go
@@ -16,11 +17,11 @@ import SwiftUI
 // the end flies, and it comes back.
 
 extension LivelyAction {
-    /// How many letters fly: about the last third, at least one, at most four.
+    /// How many letters fly: about the last half, at least one, at most four.
     static func freeFlyers(count: Int) -> Int {
-        guard count > 3 else { return 1 }
-        let third: Double = (Double(count) / 3).rounded(.up)
-        return min(4, Int(third))
+        guard count > 2 else { return 1 }
+        let half: Double = (Double(count) / 2).rounded(.up)
+        return min(4, Int(half))
     }
 
     /// The whole word's lift and lean, 0...1: up over half a second as the
@@ -74,13 +75,13 @@ extension LivelyAction {
         let drift: Double = 0.68 * out + 0.32 * glide
         let home: Double = ss5((t - homeStart) / homeTime)
         let stay: Double = 1 - home
-        // The outermost climbs highest and drifts furthest. Lower and wider
-        // than first drawn (1.1-1.7 em up), which crossed the line above.
+        // The outermost climbs highest and drifts furthest: more out than up
+        // (1.7 em up crossed the line above), and inside `displayPadding`.
         let outer: Double = m > 1 ? 1 - rd / Double(m - 1) : 1
-        let height: Double = 0.8 + 0.4 * outer + 0.07 * rnd(seed, r, 41)
-        let reach: Double = 1.4 + 0.45 * outer + 0.12 * rnd(seed, r, 42)
+        let height: Double = 1.0 + 0.5 * outer + 0.1 * rnd(seed, r, 41)
+        let reach: Double = 1.5 + 0.3 * outer + 0.08 * rnd(seed, r, 42)
         let side: Double = r % 2 == 0 ? 1 : -1
-        let turn: Double = side * (14 + 8 * rnd(seed, r, 43))
+        let turn: Double = side * (22 + 12 * rnd(seed, r, 43))
         // On the wind: a slow bob and sway, out of step letter to letter.
         let hang: Double = ss((tau - 0.35) / 0.6) * stay
         let phase: Double = 2.1 * rd + 6 * rnd(seed, r, 44)
@@ -101,7 +102,7 @@ extension LivelyAction {
         let leaning: Double = turn * up * stay
         let rocking: Double = 7 * cos(swayAngle) * hang
         f.deg = leaning + rocking + rock
-        f.scale = 1 - 0.2 * f.away
+        f.scale = 1 - 0.12 * f.away
         f.flap = bump(tau, 0.55)
         return f
     }
@@ -121,10 +122,10 @@ extension LivelyPose {
         let breatheIn: Double = L.ss((t - 0.6) / 0.5) * lift
         let breathe: Double = 0.018 * sin(breatheAngle) * breatheIn
         let land: Double = 0.04 * L.bump(t - (D - 0.55), 0.45)
-        let rise: Double = -0.2 * lift
+        let rise: Double = -0.26 * lift
         pose.dy = A * (rise + breathe + land)
-        pose.dx = A * 0.05 * lift
-        pose.tilt = -3.6 * A * lift
+        pose.dx = A * 0.06 * lift
+        pose.tilt = -4.5 * A * lift
         let settle: Double = 0.03 * A * L.bump(t - (D - 0.5), 0.4)
         pose.sy = 1 - settle
         pose.sx = 1 + 0.5 * settle
@@ -159,24 +160,39 @@ extension LivelyGlyphRenderer {
             ghost.opacity = ghostAlpha
             ghost.draw(g.slice)
         }
-        var c = context
-        let fade: Double = 0.35 * f.away * A
-        c.opacity = 1 - fade
         let mid = CGPoint(x: g.rect.midX, y: g.rect.midY)
         let flapAngle: Double = 2 * .pi * 3.2 * t
         let flapSine: Double = sin(flapAngle)
         let beat: Double = 0.16 * A * f.flap * flapSine * flapSine
-        let shrink: Double = 1 - (1 - f.scale) * A
-        let offsetX: Double = outward * f.dx * A * span * size
-        let offsetY: Double = f.dy * A * span * size
-        let degrees: Double = outward * f.deg * A
-        let scaleX: Double = shrink * (1 - beat)
-        let scaleY: Double = shrink * (1 + 0.3 * beat)
-        c.translateBy(x: mid.x + CGFloat(offsetX), y: mid.y + CGFloat(offsetY))
-        c.rotate(by: .degrees(degrees))
-        c.scaleBy(x: CGFloat(scaleX), y: CGFloat(scaleY))
-        c.translateBy(x: -mid.x, y: -mid.y)
-        c.draw(g.slice)
+        /// The letter drawn where flight `p` puts it.
+        func place(_ p: L.FreeFlight, opacity: Double) {
+            var c = context
+            c.opacity = opacity
+            let shrink: Double = 1 - (1 - p.scale) * A
+            let offsetX: Double = outward * p.dx * A * span * size
+            let offsetY: Double = p.dy * A * span * size
+            let degrees: Double = outward * p.deg * A
+            let scaleX: Double = shrink * (1 - beat)
+            let scaleY: Double = shrink * (1 + 0.3 * beat)
+            c.translateBy(x: mid.x + CGFloat(offsetX), y: mid.y + CGFloat(offsetY))
+            c.rotate(by: .degrees(degrees))
+            c.scaleBy(x: CGFloat(scaleX), y: CGFloat(scaleY))
+            c.translateBy(x: -mid.x, y: -mid.y)
+            c.draw(g.slice)
+        }
+        // While it moves fast (the take-off, the drop home): a short trail
+        // of fading afterimages, where it was a few frames ago.
+        let settleOut: Double = L.ss((D - t) / 0.3)
+        for k in 1...3 {
+            let back = L.freeFlight(t - 0.035 * Double(k), r: r, flyers: m, duration: D, seed: state.seed)
+            let ddx: Double = f.dx - back.dx, ddy: Double = f.dy - back.dy
+            let gap: Double = (ddx * ddx + ddy * ddy).squareRoot()
+            let fast: Double = min(1, gap / 0.2)
+            let alpha: Double = 0.3 * A * settleOut * fast * (1 - Double(k) / 4)
+            if alpha > 0.004 { place(back, opacity: alpha) }
+        }
+        let fade: Double = 0.2 * f.away * A
+        place(f, opacity: 1 - fade)
     }
 
     /// Drawn behind the letters, once per word.

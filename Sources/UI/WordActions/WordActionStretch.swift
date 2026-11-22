@@ -2,30 +2,28 @@ import SwiftUI
 
 // MARK: - Stretch (a candidate action, `WordAction.candidateList`)
 //
-// The letter spacing opens slowly, the letters drifting apart from the
-// word's centre as if it were being pulled long; held, the word keeps a
-// faint elastic tension (a slow creep and a breath of give); let go, the
-// letters close back together with a soft, slightly springy settle. The
-// letters keep their size (a hair wider at most): only the gaps open. Not
-// Grow (the whole word scales) nor Shrink (squeezed in, then a pop out).
+// The word is pulled long: on an elastic pull (a spring that goes a touch
+// past and back) it widens by about 30 % and thins a little, like taffy;
+// the letters spread apart from its centre, the outer ones a beat behind;
+// held, it keeps a faint elastic tension (a slow creep and a breath of
+// give); let go, it snaps back with a springy settle a touch past rest.
+// The letters themselves widen only 10 %: mostly the gaps open. Not Grow
+// (the whole word scales) nor Shrink (squeezed in, then a pop out).
 //
-// macOS 14 (and joined scripts) draw only the whole-word part: a gentle
-// horizontal widen and back. From macOS 15 the per-letter part undoes that
-// widen on each letter and places it itself, so the gaps open by a set
-// number of ems whatever the word's width.
+// macOS 14 (and joined scripts) draw only the whole-word part: the word
+// itself widened and thinned. From macOS 15 the per-letter part undoes that
+// widen on each letter and places it itself, at its share of the widened
+// word (so a Cutout card, widened with the word, still holds every letter).
 
 extension LivelyAction {
-    /// Where the letters spread from: true the word's centre, false its first letter.
-    fileprivate static let stretchFromCentre = true
-
     /// How far the word is pulled long, 0 at rest, about 1 while held:
-    /// opened with a smootherstep over 0.85 s, a slow creep (+8 %) and a faint (±6 %)
+    /// opened on a spring (first peak at 0.45 s, 8 % past), a slow creep (+8 %) and a faint (±6 %)
     /// ~1 Hz give while held, and let go from `D − 0.82` s on a soft
     /// spring that closes ~16 % past (a touch tighter than at rest) and settles.
     static func stretchOpen(_ t: Double, duration D: Double) -> Double {
         guard t > 0, t < D else { return 0 }
         let letGo: Double = D - 0.82
-        let open: Double = ss5((t - 0.03) / 0.85)
+        let open: Double = spring(t - 0.03, peak: 0.45, overshoot: 0.08)
         // While held: a slow creep a little further, and a faint give.
         let heldIn: Double = ss5((t - 0.6) / 0.5)
         let heldOut: Double = 1 - ss5((t - (letGo - 0.3)) / 0.3)
@@ -39,21 +37,10 @@ extension LivelyAction {
     }
 
     /// The whole word's horizontal widen (all that macOS 14 shows), as a share.
-    static func stretchWiden(_ open: Double, A: Double) -> Double { 0.07 * A * open }
+    static func stretchWiden(_ open: Double, A: Double) -> Double { 0.3 * A * open }
 
-    /// Each letter's own horizontal stretch at full pull, as a share (≤ 4 %).
-    static func stretchLetter(_ open: Double, A: Double) -> Double { 0.03 * A * open }
-
-    /// How far the end letters travel out (ems, each side, at full pull):
-    /// 0.15 em a gap, capped at 0.30 em for words up to 8 letters, and less
-    /// for longer ones.
-    static func stretchReach(count: Int, A: Double) -> Double {
-        let n: Double = Double(max(1, count))
-        let byGaps: Double = 0.15 * (n - 1) / 2
-        let shorten: Double = min(1, (8 / n).squareRoot())
-        let cap: Double = 0.30 * shorten
-        return A * min(byGaps, cap)
-    }
+    /// Each letter's own horizontal stretch at full pull, as a share.
+    static func stretchLetter(_ open: Double, A: Double) -> Double { 0.1 * A * open }
 }
 
 extension LivelyPose {
@@ -65,6 +52,8 @@ extension LivelyPose {
         let open: Double = L.stretchOpen(t, duration: D)
         var pose = LivelyPose()
         pose.sx = 1 + L.stretchWiden(open, A: A)
+        // Thinned a little as it is pulled long.
+        pose.sy = 1 - 0.07 * A * open
         pose.glow = 0.2 * A * L.clamp01(open)
         return pose
     }
@@ -73,25 +62,22 @@ extension LivelyPose {
 @available(macOS 15.0, *)
 extension LivelyGlyphRenderer {
     /// Stretch's per-letter part: the whole word's widen undone on each
-    /// letter, which is set out by its own spread instead (outer letters a
-    /// beat behind the inner ones, so it reads as elastic).
+    /// letter, which is set at its own share of the widened word instead
+    /// (outer letters a beat behind the inner ones, so it reads as elastic).
     func stretchGlyph(_ g: Glyph, count: Int, word: CGRect, in context: GraphicsContext) {
         typealias L = LivelyAction
         let t: Double = state.t, D: Double = state.duration, A: Double = state.intensity
-        let size: Double = Double(state.size)
         guard count > 1 else { context.draw(g.slice); return }
         let half: Double = Double(count - 1) / 2
         let place: Double = Double(g.index) - half
-        // −1 … 1 from the centre (or 0 … 2 from the first letter).
-        let from: Double = L.stretchFromCentre ? place / half : Double(g.index) / half
-        let lag: Double = 0.05 * min(1, abs(place) / half)
+        let lag: Double = 0.06 * min(1, abs(place) / half)
         let open: Double = L.stretchOpen(t - lag, duration: D)
-        let reach: Double = L.stretchReach(count: count, A: A)
-        let target: Double = from * reach * open * size
-        // The whole word is widened by `widen` about its centre: undo it.
+        // The whole word is widened by `widen` about its centre: undo it,
+        // and set the letter where its own (lagging) widen puts it.
         let widen: Double = 1 + L.stretchWiden(L.stretchOpen(t, duration: D), A: A)
+        let own: Double = 1 + L.stretchWiden(open, A: A)
         let offset: Double = Double(g.rect.midX - word.midX)
-        let dx: Double = (offset + target) / widen - offset
+        let dx: Double = offset * own / widen - offset
         let sx: Double = (1 + L.stretchLetter(open, A: A)) / widen
         var c = context
         let anchor = CGPoint(x: g.rect.midX, y: g.baseline)

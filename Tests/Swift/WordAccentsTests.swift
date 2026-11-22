@@ -149,14 +149,17 @@ final class WordAccentsTests: XCTestCase {
                       "everyday words move only in their phrase")
     }
 
-    func testCandidateActionsWaitForTheOwnersYes() {
-        let words = Self.line(["here", "comes", "the", "sun"])
-        XCTAssertTrue(WordAccentPlan.make(words: words, glue: [], symbols: nil, actions: Self.actions).isEmpty,
-                      "not in the default list")
-        var own = Self.actions
-        own["sun"] = .sunlight
-        XCTAssertEqual(WordAccentPlan.make(words: words, glue: [], symbols: nil, actions: own)[words[3].presentationID]?.action,
-                       .sunlight, "a word the user adds moves")
+    /// The seven actions added on 23 Nov 2026, from their default words.
+    func testTheNewActionsAreInTheDefaultList() {
+        let hits: [(String, WordAction)] = [
+            ("here comes the sun", .sunlight), ("under the moonlight", .moonlight), ("we chase the night", .rush),
+            ("my heart is racing", .rush), ("lost in the static", .glitch), ("watch the diamonds", .sparkle),
+            ("I want to break free", .free), ("reach for me", .stretch), ("so far away", .stretch),
+        ]
+        for (line, action) in hits {
+            XCTAssertEqual(actionIn(line), action, line)
+        }
+        XCTAssertTrue(WordAction.candidateList.isEmpty, "none waiting")
         XCTAssertEqual(WordAction(listValue: "Sunlight"), .sunlight)
         XCTAssertEqual(WordAction(listValue: "moon"), .moonlight)
     }
@@ -375,6 +378,13 @@ final class WordAccentsTests: XCTestCase {
             ("어둠 속에서", .dark), ("눈물이 떨어져", .dip), ("파도처럼", .wave), ("피가 흘러", .bleed),
             // Chinese (simplified and traditional)
             ("我的心跳", .pulse), ("一起飞翔", .float), ("在黑暗中", .dark), ("心碎了", .shatter), ("我們一起飛", .float),
+            // The seven actions added on 23 Nov 2026.
+            ("bajo el sol", .sunlight), ("la luna llena", .moonlight), ("corre sin mirar atrás", .rush),
+            ("quiero ser libre", .free), ("estás tan lejos", .stretch), ("tu brillo en la noche", .sparkle),
+            ("une erreur de plus", .glitch), ("mein Herz ist frei, Freiheit", .free), ("unter dem Mond", .moonlight),
+            ("太陽の下で", .sunlight), ("自由になりたい", .free), ("遠くへ行こう", .stretch), ("キラキラ光る", .sparkle),
+            ("햇살 아래", .sunlight), ("멀리 떠나", .stretch), ("阳光下的我", .sunlight), ("飞走了", .free),
+            ("遥远的你", .stretch), ("闪闪发光", .sparkle), ("aku bebas", .free), ("malaya na ako", .free),
         ]
         for (line, action) in hits {
             XCTAssertEqual(actionIn(line), action, line)
@@ -388,13 +398,13 @@ final class WordAccentsTests: XCTestCase {
             "I sang it loud", "that romp was fun", "a vague idea",
             // Words that look like a listed one but mean something else.
             "vuelve a casa", "me gustó, gefallen hat es mir", "tremendo día",
-            // Korean 날 (day / me) and Japanese 今回 (this time), Chinese 浪漫 (romance), 暗恋 (a crush), 沉默 (silence).
-            "그날 밤", "날 사랑해", "今回だけ", "浪漫的晚上", "我暗恋你", "沉默的人", "影響される",
+            // Korean 날 (day / me) and Japanese 今回 (this time), Chinese 浪漫 (romance), 暗恋 (a crush), 沉默 (silence), 走 (walk).
+            "그날 밤", "날 사랑해", "今回だけ", "浪漫的晚上", "我暗恋你", "沉默的人", "影響される", "我们走吧",
             // Vietnamese words only on a Vietnamese line: English "run" and "bay" stay still.
             "we run to the bay",
             // Words another listed language spells the same way.
             "don't be late", "mi bebé", "onde você está", "se queda conmigo", "me llamas", "zu laut",
-            "i grandi amori", "a crescent moon", "sangria at noon", "olá amigo", "커피가 좋아", "沈黙の夜",
+            "i grandi amori", "a crescent shape", "sangria at noon", "olá amigo", "커피가 좋아", "沈黙の夜",
         ]
         for line in misses {
             XCTAssertNil(actionIn(line), line)
@@ -421,6 +431,7 @@ final class WordAccentsTests: XCTestCase {
             ("an open wound", .bleed), ("lost in the midnight", .dark), ("in a million pieces", .shatter),
             ("the candle drips", .melt), ("I hear the voices", .echo), ("I'm alive again", .pulse),
             ("down by the river", .wave), ("in the deep end", .sink),
+            ("just let it go", .float), ("you see right through the glass", .shatter),
             ("bailando toda la noche", .hop), ("on danse encore", .hop), ("wir tanzen", .hop), ("一起跳舞", .hop),
             ("踊り続ける", .hop), ("춤을 춰", .hop), ("눈이 내리는 하늘", .float),
         ]
@@ -428,7 +439,7 @@ final class WordAccentsTests: XCTestCase {
             XCTAssertEqual(actionIn(line), action, line)
         }
         for line in ["all night long", "you have my heart", "dancing in the rain".replacingOccurrences(of: "dancing", with: "walking"),
-                     "so high", "a rose for you", "a glass of wine", "just let it go", "멈춤 없이", "坐火车回家"] {
+                     "so high", "a rose for you", "a glass of wine", "raise a glass tonight", "멈춤 없이", "坐火车回家"] {
             XCTAssertNil(actionIn(line), line)
         }
     }
