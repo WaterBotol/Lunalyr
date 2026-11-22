@@ -150,7 +150,7 @@ extension StageLyricView {
             // Word presence, about the word and its thick edge, with its action.
             .modifier(presence(run, size: size, speed: 1, live: !plan.lineTimed))
             .font(font(size, hero: true, id: run.id))
-            .lineLimit(1).minimumScaleFactor(0.35)
+            .lineLimit(1).minimumScaleFactor(StageWordFit.floor)
             .frame(maxWidth: stage.width * 0.8)
             // Room for the thick edge inside the word's own box.
             .padding(.trailing, plan.rightToLeft ? 0 : size * Self.torqueDepth(role) * 0.9)

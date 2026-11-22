@@ -21,6 +21,14 @@ extension LyricComposition {
 
 /// One glued run of a line: "beau" "ti" "ful" is a single run, shown
 /// syllable by syllable as each is sung.
+/// How far a stage layout's one-line word may shrink to fit its room.
+/// Only a word that would not fit is shrunk at all, so this only decides
+/// how small a very long one (a compound, a link) is drawn rather than cut
+/// off with "…"; the layouts' own floors of a quarter to a half did that.
+enum StageWordFit {
+    static let floor: CGFloat = 0.12
+}
+
 struct StageRun: Equatable, Identifiable {
     struct Part: Equatable {
         var text: String

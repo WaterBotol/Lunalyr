@@ -414,7 +414,8 @@ extension StageLyricView {
                            live: Bool, speed: Double) -> some View {
         let info = phrasing.words.indices.contains(run.id) ? phrasing.words[run.id] : nil
         let entrance = info.map(Self.hingeEntrance) ?? .ink
-        let shrink: CGFloat = (info?.isFocal ?? false) ? 0.3 : 0.5
+        // As small as it must be: a long compound or a link used to end in "…".
+        let shrink: CGFloat = StageWordFit.floor
         let groupStart: Double = {
             guard let group = info?.runGroup else { return run.start }
             return phrasing.words.filter { $0.runGroup == group && runs.indices.contains($0.run) }

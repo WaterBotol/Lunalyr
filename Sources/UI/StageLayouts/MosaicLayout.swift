@@ -177,7 +177,7 @@ extension StageLyricView {
                                     word(run, tile ? ink.tileText : sample.sung, size: size)
                                         .font(font(size, hero: true, id: run.id))
                                         .livelyLetters()
-                                        .lineLimit(1).minimumScaleFactor(Self.mosaicSetsLetters(run.text) ? 0.5 : 0.25)
+                                        .lineLimit(1).minimumScaleFactor(Self.mosaicSetsLetters(run.text) ? 0.5 : StageWordFit.floor)
                                         .frame(maxWidth: room)
                                         .background { tileBackground(tile, size: size, run: run) }
                                         .highlightLayer(tile)
@@ -194,7 +194,7 @@ extension StageLyricView {
                             let wipe = reduceMotion ? 1 : Self.glide((time - (run.start - 0.04)) / (0.32 / lineSpeed))
                             let plain = word(run, .white, size: size)
                                 .font(font(size, hero: true, id: run.id))
-                                .lineLimit(1).minimumScaleFactor(0.45).frame(maxWidth: stage.width * 0.7)
+                                .lineLimit(1).minimumScaleFactor(StageWordFit.floor).frame(maxWidth: stage.width * 0.7)
                             let tilt = (chance(run.id, 28) - 0.5) * 5
                             ZStack {
                                 // The pale panel behind, a little off-square, arriving a beat after the bar.
@@ -221,7 +221,7 @@ extension StageLyricView {
                                     word(run, ink.tileText, size: size)
                                         .font(font(size, hero: true, id: run.id))
                                         .livelyLetters()
-                                        .lineLimit(1).minimumScaleFactor(0.45).frame(maxWidth: stage.width * 0.7)
+                                        .lineLimit(1).minimumScaleFactor(StageWordFit.floor).frame(maxWidth: stage.width * 0.7)
                                 }
                                     .rotationEffect(.degrees(tilt))
                                     .opacity(Self.glide((time - (run.start + 0.1)) / 0.2))
@@ -255,7 +255,7 @@ extension StageLyricView {
                                 }
                                 symbol(run, size: size, colour: sample.sung)
                             }
-                            .lineLimit(1).minimumScaleFactor(0.4).frame(maxWidth: stage.width * 0.8)
+                            .lineLimit(1).minimumScaleFactor(StageWordFit.floor).frame(maxWidth: stage.width * 0.8)
                             }
                             .lyricShadow(0.28, radius: 8, y: 3)
                         }
@@ -274,7 +274,7 @@ extension StageLyricView {
                         word(run, sample.rest.opacity(fade.word), size: small)
                             .font(font(small, hero: true, id: run.id))
                             .livelyLetters(particles: false)
-                            .lineLimit(1).minimumScaleFactor(0.4).frame(maxWidth: stage.width * 0.4)
+                            .lineLimit(1).minimumScaleFactor(StageWordFit.floor).frame(maxWidth: stage.width * 0.4)
                     }
                         .opacity(morph.smallOpacity)
                 }

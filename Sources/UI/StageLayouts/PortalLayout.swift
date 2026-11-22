@@ -426,7 +426,7 @@ extension StageLyricView {
                     if live > 0.001 { word(run, liveColour).livelyLetters(particles: live >= 0.999).opacity(live) }
                 }
                 .font(font(size, hero: true, id: index))
-                .lineLimit(1).minimumScaleFactor(0.35).frame(maxWidth: stageSize.width * 0.7 / scale)
+                .lineLimit(1).minimumScaleFactor(StageWordFit.floor).frame(maxWidth: stageSize.width * 0.7 / scale)
             }
             if let icon, iconSide >= 0.6 { portalIcon(icon, size: size, live: live, eased: eased, tiltSign: tiltSign, outlined: outlined) }
         }
