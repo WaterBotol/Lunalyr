@@ -40,3 +40,14 @@ final class TranslationSlantTests: XCTestCase {
         XCTAssertFalse(TranslationSlant.leans(""), "a reading passes no text and stays upright")
     }
 }
+
+/// Echo's repeats step back on the side a translation sits at.
+final class EchoUnderTranslationTests: XCTestCase {
+    func testRepeatsOnTheTranslationsSideAreQuieted() {
+        XCTAssertEqual(EchoBackdrop.strength(flipped: true, translationEdge: .bottom), EchoBackdrop.quietUnderTranslation)
+        XCTAssertEqual(EchoBackdrop.strength(flipped: false, translationEdge: .bottom), 1)
+        XCTAssertEqual(EchoBackdrop.strength(flipped: false, translationEdge: .top), EchoBackdrop.quietUnderTranslation)
+        XCTAssertEqual(EchoBackdrop.strength(flipped: true, translationEdge: .top), 1)
+        XCTAssertEqual(EchoBackdrop.strength(flipped: true, translationEdge: nil), 1)
+    }
+}

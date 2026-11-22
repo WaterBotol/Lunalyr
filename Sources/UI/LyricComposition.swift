@@ -446,6 +446,22 @@ struct EchoBackdrop: View {
     @SurfaceStyle private var style
     @Environment(\.lyricReduceMotion) private var reduceMotion
     @Environment(\.lyricInk) private var ink
+    /// The screen edge this line's translation sits at, if any.
+    @Environment(\.lyricEdgeTranslation) private var translationEdge
+
+    /// How strong the repeats are on the side a translation sits at: the
+    /// translation reads over them instead of over reversed ghost text.
+    static let quietUnderTranslation = 0.3
+
+    /// A repeat's share of its strength: quieted on the translation's side
+    /// (mirrored repeats lie below the line, the others above it).
+    static func strength(flipped: Bool, translationEdge: VerticalEdge?) -> Double {
+        switch translationEdge {
+        case .bottom?: return flipped ? quietUnderTranslation : 1
+        case .top?: return flipped ? 1 : quietUnderTranslation
+        case nil: return 1
+        }
+    }
 
     private struct Ghost {
         var scale: CGFloat
@@ -514,7 +530,8 @@ struct EchoBackdrop: View {
                 let centre = CGPoint(x: stage.width / 2 + baseSize * ghost.dx * side, y: stage.height / 2 + edge + baseSize * ghost.dy)
                 Text(text)
                     .font(font(baseSize * ghost.scale))
-                    .foregroundStyle(tint.opacity(ghost.opacity * strength))
+                    .foregroundStyle(tint.opacity(ghost.opacity * strength
+                                                  * Self.strength(flipped: ghost.flipped, translationEdge: translationEdge)))
                     .lineLimit(1)
                     .fixedSize()
                     .mask(LyricSweepMask(progress: revealed, rightToLeft: rightToLeft, feather: 0.2))

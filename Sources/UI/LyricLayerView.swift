@@ -1074,6 +1074,9 @@ struct LyricLayer: View {
                             accents: wordAccents(index, words: words, glue: glue, rolling: rolling, scene: scene),
                             carry: carry, phraseGlue: phraseGlue)
                             .environment(\.lyricActionStrength, settings.actionWordStrength.amount)
+                            // Echo quiets its repeats on the side a translation sits at.
+                            .environment(\.lyricEdgeTranslation, !rolls && place.atEdge && translation?.isEmpty == false
+                                         ? (place == .top ? .top : .bottom) : nil)
                         let arrived: Double = carriedIn ? 1 : pose.arrival
                         let gone: Double = carriedOut ? 0 : pose.exit
                         let swell: CGFloat = still ? 1 : 0.965 + 0.035 * arrived - 0.012 * gone

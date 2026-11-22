@@ -40,10 +40,17 @@ enum ActionWordStrength: String, CaseIterable, Identifiable {
 }
 
 private struct ActionStrengthKey: EnvironmentKey { static let defaultValue = LivelyAction.defaultAmount }
+private struct EdgeTranslationKey: EnvironmentKey { static let defaultValue: VerticalEdge? = nil }
 private struct LivelyGlyphsKey: EnvironmentKey { static let defaultValue: LivelyGlyphs? = nil }
 private struct LivelyParticlesKey: EnvironmentKey { static let defaultValue = true }
 
 extension EnvironmentValues {
+    /// The screen edge a line's translation sits at ("Top" or "Bottom of the
+    /// screen"), for Echo to quiet its repeats on that side.
+    var lyricEdgeTranslation: VerticalEdge? {
+        get { self[EdgeTranslationKey.self] }
+        set { self[EdgeTranslationKey.self] = newValue }
+    }
     /// "Action word strength" as an amount, 0...1 (set once at the lyric
     /// layer's root; Wild by default).
     var lyricActionStrength: Double {
