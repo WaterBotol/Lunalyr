@@ -610,6 +610,7 @@ private struct LyricCardFrame: View {
                             .multilineTextAlignment(.center)
                             .lineLimit(2)
                             .minimumScaleFactor(0.7)
+                            .modifier(TranslationSlant(text: translation))
                             .shadow(color: .black.opacity(0.35), radius: 8, y: 2)
                             .frame(width: stage.width, height: band)
                             .opacity(LyricPhraseTiming(line: animation.line, nextStart: .infinity, time: time).progress)
@@ -847,6 +848,7 @@ struct LyricCardView: View {
                     .multilineTextAlignment(rightToLeft ? .trailing : .leading)
                     .lineLimit(3)
                     .fixedSize(horizontal: false, vertical: true)
+                    .modifier(TranslationSlant(text: translation))
             }
         }
             .visualEffect { text, geometry in

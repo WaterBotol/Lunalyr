@@ -1106,7 +1106,7 @@ struct LyricLayer: View {
                     // Sized with the line's words, as their own readings are.
                     TranslationLine(text: lineReading,
                                     font: settings.lyricFont(size: baseSize * 0.38 * densityScale, hero: false, mood: mood),
-                                    width: stageSize.width * Self.translationWidth)
+                                    width: stageSize.width * Self.translationWidth, isReading: true)
                         .opacity(pose.progress * (1 - textExit))
                         .layoutValue(key: LineAndTranslations.Spills.self, value: true)
                 }
@@ -2360,13 +2360,17 @@ struct LineAndTranslations: Layout {
 }
 
 /// A line's translation, or a reading of the whole line: the reading
-/// colour, centred, under its line.
+/// colour, centred, under its line. A translation is set in italics, so
+/// with a whole-line reading on as well the two never look like two
+/// translations.
 private struct TranslationLine: View {
     let text: String
     let font: Font
     let width: CGFloat
     /// Kept to the band reserved for it on rolling stages.
     var lines: Int?
+    /// A reading of the line rather than a translation: upright.
+    var isReading = false
     @Environment(\.lyricInk) private var ink
 
     var body: some View {
@@ -2377,7 +2381,35 @@ private struct TranslationLine: View {
             .multilineTextAlignment(.center)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: width)
+            .modifier(TranslationSlant(text: isReading ? "" : text))
             .lyricShadow(0.3, radius: 6, y: 2)
+    }
+}
+
+/// A translation leans, as italics would, so it never reads as a whole-line
+/// reading set the same way. A lean rather than `italic()`, which a lyric
+/// face without an italic cut ignores; and only in scripts written with
+/// italics (Latin, Cyrillic, Greek), never Chinese or Japanese.
+struct TranslationSlant: ViewModifier {
+    let text: String
+    /// About 11 degrees.
+    static let lean: CGFloat = 0.2
+
+    static func leans(_ text: String) -> Bool {
+        guard let script = TranslationLanguages.dominantScript(of: text) else { return false }
+        return [.latin, .cyrillic, .greek].contains(script)
+    }
+
+    func body(content: Content) -> some View {
+        if Self.leans(text) {
+            content.visualEffect { view, geometry in
+                // Sheared about its middle, so it stays centred where it was.
+                view.transformEffect(CGAffineTransform(a: 1, b: 0, c: -Self.lean, d: 1,
+                                                       tx: Self.lean * geometry.size.height / 2, ty: 0))
+            }
+        } else {
+            content
+        }
     }
 }
 

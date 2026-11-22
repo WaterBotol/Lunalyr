@@ -24,3 +24,19 @@ final class LineAndTranslationsTests: XCTestCase {
         XCTAssertEqual(LineAndTranslations.size(of: [], spills: [], spacing: 4), .zero)
     }
 }
+
+/// Translations lean, readings and CJK translations do not.
+final class TranslationSlantTests: XCTestCase {
+    func testLatinCyrillicAndGreekTranslationsLean() {
+        XCTAssertTrue(TranslationSlant.leans("The moon is beautiful"))
+        XCTAssertTrue(TranslationSlant.leans("Луна прекрасна"))
+        XCTAssertTrue(TranslationSlant.leans("Το φεγγάρι"))
+    }
+
+    func testChineseJapaneseAndKoreanStayUpright() {
+        XCTAssertFalse(TranslationSlant.leans("月色真美"))
+        XCTAssertFalse(TranslationSlant.leans("月が綺麗ですね"))
+        XCTAssertFalse(TranslationSlant.leans("달이 예쁘네요"))
+        XCTAssertFalse(TranslationSlant.leans(""), "a reading passes no text and stays upright")
+    }
+}
