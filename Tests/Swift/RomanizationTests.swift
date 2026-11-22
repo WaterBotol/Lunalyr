@@ -695,7 +695,7 @@ final class RomanizationTests: XCTestCase {
             lineTimed($1, start: Double($0) * 4)
         } + [lineTimed("ありがとう", start: 40)]
         XCTAssertEqual(LyricRomanizer.songLanguage(song), .mandarin)
-        XCTAssertEqual(joined(texts(song[1], in: song)), "wǒ men yī qǐ zǒu")
+        XCTAssertEqual(joined(texts(song[1], in: song)), "wǒ men yì qǐ zǒu", "一 changes tone before a third tone")
         XCTAssertEqual(joined(texts(song[5], in: song)), "arigatou")
     }
 

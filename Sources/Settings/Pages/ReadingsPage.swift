@@ -26,11 +26,12 @@ struct ReadingsPage: View {
                 }
                 InspectorCaption("Readings follow the original timing.", more: "Readings follow the original timing. Local transliteration can miss names and unusual pronunciations.")
                     .environment(\.captionFollowsControl, false)
-                InspectorCaption("Cantonese shows only readings from the source.", more: "Lunalyr can’t generate Jyutping on this Mac. Lyrics written in Cantonese show only readings from the lyric source or an imported reading LRC, never Mandarin pinyin. Cantonese songs in standard written Chinese look like Mandarin, so choose Cantonese for them.")
+                InspectorCaption("Cantonese shows only readings from the source.", more: "Lunalyr can’t generate Jyutping on this Mac. Lyrics written in Cantonese show only readings from the lyric source or an imported reading LRC, never Mandarin pinyin. Cantonese songs in standard written Chinese look like Mandarin, so choose Cantonese for them. Language applies to every song: set it back to Automatic afterwards, or later Mandarin songs get no pinyin.")
                     .environment(\.captionFollowsControl, false)
                 MoreOptions {
                     CheckboxList {
-                        Toggle("Keep tone marks", isOn: $o.toneMarks)
+                        Toggle("Keep tone marks and accents", isOn: $o.toneMarks)
+                            .help("Off, readings drop every accent: tone marks (nǚ nu), long vowels (Kyō Kyo) and the rest")
                         Toggle("Prefer saved readings", isOn: $o.preferSaved)
                     }
                     savedReadings
@@ -64,15 +65,15 @@ struct ReadingsPage: View {
             .id(message)
             .transition(.opacity)
         }
-        InspectorCaption("Saved readings are pronunciation guides.", more: "Saved readings are pronunciation guides. Translations are a separate feature and are not generated here.")
+        InspectorCaption("Saved readings are pronunciation guides.", more: "Saved readings are pronunciation guides. Translations are set under Translation below.")
         InspectorCaption("Japanese readings are matched to the lyric’s kana.", more: "Japanese readings are matched to the lyric’s kana, however they’re spaced. A reading written for other words isn’t shown; Lunalyr’s own reading is used for that line.")
             .environment(\.captionFollowsControl, false)
     }
 
-    /// Which lyric style the romanisation choices change.
+    /// Which lyric style Display changes (Language and the rest are shared).
     static func styleNote(floating: Bool) -> String {
-        floating ? "Changes the Floating style; the desktop keeps its own."
-            : "Changes the Desktop style; the Floating style keeps its own."
+        floating ? "Display changes the Floating style; the desktop keeps its own. The rest applies to both."
+            : "Display changes the Desktop style; the Floating style keeps its own. The rest applies to both."
     }
 }
 

@@ -478,7 +478,7 @@ enum SettingsCatalogue {
               keywords: ["romanization", "readings", "below", "above", "furigana"]),
         .init(.readings, "Romanisation", "Language", .choice, keys: ["custom.romanizationLanguage"],
               keywords: ["romanization", "japanese", "korean", "chinese", "cantonese", "mandarin"]),
-        .init(.readings, "Romanisation", "Keep tone marks", .toggle, keys: ["custom.romanizationTones"],
+        .init(.readings, "Romanisation", "Keep tone marks and accents", .toggle, keys: ["custom.romanizationTones"],
               keywords: ["pinyin", "tones", "accents"]),
         .init(.readings, "Romanisation", "Prefer saved readings", .toggle, keys: ["custom.romanizationSaved"],
               keywords: ["saved readings", "source readings"]),

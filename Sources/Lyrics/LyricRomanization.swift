@@ -289,8 +289,14 @@ enum LyricRomanizer {
             placement = text.place(words.map { Piece(text: KoreanRomanizer.romanize($0.text), location: $0.location, length: $0.length) },
                                    fragments: text.fragments(characters))
         case .mandarin:
-            // Pinyin is read one character at a time, so each word stands alone.
-            placement = .words(text.words.map(pinyin), spans: Array(text.words.indices), fragments: nil)
+            // Pinyin is read across the whole line, so a character takes its
+            // word's reading (地上 dì shàng), then laid on each timed word.
+            let syllables = MandarinReading.syllables(text.string)
+            let readings = text.words.indices.map { index in
+                punctuation(MandarinReading.reading(of: text.words[index], at: text.ranges[index].location,
+                                                    syllables: syllables))
+            }
+            placement = .words(readings, spans: Array(text.words.indices), fragments: nil)
         case .cantonese:
             // There is no on-device Jyutping, and Mandarin pinyin would be wrong.
             return nil
@@ -303,7 +309,7 @@ enum LyricRomanizer {
 
     private static func pinyin(_ text: String) -> String {
         guard containsNonLatin(text) else { return text }
-        return punctuation(text.applyingTransform(.mandarinToLatin, reverse: false) ?? text)
+        return punctuation(MandarinReading.reading(of: text, at: 0, syllables: MandarinReading.syllables(text)))
     }
 
     /// Full-width punctuation as it is written in Latin text.

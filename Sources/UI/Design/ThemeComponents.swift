@@ -25,7 +25,7 @@ import SwiftUI
 // Switch or checkbox (SPEC §4, the mocks): a switch for a setting that
 // stands alone and turns a feature on or off; checkboxes for a list of
 // related options under one heading (Discord's six, the lyric sources,
-// the shortcut rows, Keep tone marks / Prefer saved readings). Every
+// the shortcut rows, Keep tone marks and accents / Prefer saved readings). Every
 // `Toggle` in a `ThemedForm` is a switch; wrap a list in `CheckboxList` (or
 // apply `ThemedCheckboxStyle`) to make its rows checkboxes. Both keep
 // SwiftUI `Toggle` semantics (VoiceOver hears a switch or checkbox, Space

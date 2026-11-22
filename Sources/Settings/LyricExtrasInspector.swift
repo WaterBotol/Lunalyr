@@ -705,7 +705,7 @@ struct TranslationSection: View {
                 }
                 .help("Under or over its line, or at the bottom or top of the screen (the floating window's, for floating lyrics)")
             }
-            InspectorCaption("Shown when the lyric source has a translation.", more: "Appears when the lyric source includes a translation for a line, such as bilingual LRC files. Lyrics are never sent anywhere to be translated.")
+            InspectorCaption("From the lyric source, or translated on this Mac.", more: "A line's own translation from the lyric source, such as a bilingual LRC file, comes first. Machine translation below fills in the rest on this Mac; lyrics are never sent anywhere to be translated.")
             #if canImport(Translation)
             if #available(macOS 15.0, *) { MachineTranslationControls() }
             #endif

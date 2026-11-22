@@ -106,8 +106,8 @@ final class FormLanguageTests: XCTestCase {
     }
 
     func testRomanisationSaysWhichStyleItEdits() {
-        XCTAssertTrue(ReadingsPage.styleNote(floating: false).hasPrefix("Changes the Desktop style"))
-        XCTAssertTrue(ReadingsPage.styleNote(floating: true).hasPrefix("Changes the Floating style"))
+        XCTAssertTrue(ReadingsPage.styleNote(floating: false).hasPrefix("Display changes the Desktop style"))
+        XCTAssertTrue(ReadingsPage.styleNote(floating: true).hasPrefix("Display changes the Floating style"))
     }
 
     func testThisSongNamesArtistAndAlbum() {

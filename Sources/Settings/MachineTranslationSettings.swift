@@ -6,7 +6,7 @@ import Translation
 /// What Settings says about on-device translation, for the song on screen.
 enum MachineTranslationCopy {
     static let toggle = "Translate lyrics on this Mac"
-    static let about = "When a song’s lyrics have no translation and are in a language you don’t read, Lunalyr translates them on this Mac with Apple’s Translation and shows them under the lyrics. Each song is translated once and kept in Lunalyr’s cache. Lyrics are never sent anywhere to be translated. A lyric source’s own translation is always shown instead when it has one."
+    static let about = "When a song’s lyrics are in a language you don’t read and the lyric source translates fewer than half its lines, Lunalyr translates the other lines on this Mac with Apple’s Translation and shows them under the lyrics. Each song is translated once and kept in Lunalyr’s cache. Lyrics are never sent anywhere to be translated. A line’s own translation from the lyric source is always shown instead."
 
     static func name(_ identifier: String, locale: Locale = .current) -> String {
         locale.localizedString(forIdentifier: identifier) ?? identifier

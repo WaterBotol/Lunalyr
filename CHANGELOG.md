@@ -26,6 +26,8 @@ When merging, keep every entry and combine duplicate headings.
 
 ### Fixed
 
+- Mandarin readings are read in context: a character takes its word's reading (地上 dì shàng, not de shàng; 银行 yín háng; 了解 liǎo jiě), and 一 and 不 change tone as spoken (一起 yì qǐ, 一个 yí gè, 不是 bú shì).
+- Settings › Romanisation & translation: the caption says Display is the only per-style choice; the Cantonese note says Language applies to every song; "Keep tone marks" is "Keep tone marks and accents", which is what it does; the translation captions mention machine translation and its rule.
 - Japanese readings: the particle を is written "o", as Hepburn and Apple Music's own readings write it (it was "wo"), so saved and generated readings agree. A simplified Chinese character in a Japanese lyric (梦, 见) is read through its kanji form (夢 yume, 見 mi) instead of being left blank.
 - Lyrics: with the song title card kept on screen, translations no longer run under it. Bottom-of-the-screen translations, the rolling layouts' translation band and a translation under the line keep clear of the card (a line lifts, or shrinks a little in Fable and Hinge, only as far as it needs to). Nothing changes with the card off or moved up.
 - Lyrics: a translation at the top or bottom of the screen no longer overlaps the next line's while a line is held. The slot shows one translation; the held line's fades as the next line starts, and under Reduce Motion it is drawn once.
