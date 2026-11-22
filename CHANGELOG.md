@@ -14,6 +14,7 @@ When merging, keep every entry and combine duplicate headings.
 
 ### Added
 
+- Lyric cards show the line's translation under it, as the wallpaper does (from the lyric source, or translated on this Mac), when Show translations is on: on the still card and in animated GIFs and videos.
 - Desktop player without hovering: **Search and Queue…** in the menu bar opens the player on the display with the pointer, its search ready to type in, and keeps it up with the keyboard until Esc, a song is picked or another window is used. A shortcut does the same (⌃⌥⌘S, or ⌃⇧⌘S), off until switched on in Settings › General › Shortcuts.
 
 ### Changed

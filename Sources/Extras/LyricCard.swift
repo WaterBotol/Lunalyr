@@ -62,7 +62,13 @@ enum LyricCard {
         /// Each glued run of syllables or characters is one entry.
         var words: [String]
         var animation: Animation?
+        /// The line's translation, as the wallpaper shows it (from the lyric
+        /// source, or translated on this Mac), when translations are shown.
+        var translation: String?
         var rightToLeft: Bool { LyricScript.lineIsRightToLeft(words) }
+
+        /// The type size of a translation under a line set at `point`.
+        static func translationSize(_ point: CGFloat) -> CGFloat { max(30, point * 0.3) }
     }
 
     struct SoundTrack: Equatable {
@@ -223,6 +229,12 @@ enum LyricCard {
     static let lightestScrim = 0.48
     static let rollingHeightInTypeSizes: CGFloat = 2.35
 
+    /// A translation worth drawing: trimmed, and nil when empty.
+    static func translation(_ text: String?) -> String? {
+        guard let text = text?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty else { return nil }
+        return text
+    }
+
     /// The line to share: the one being sung, or the last one sung during
     /// a break, or the start of unsynced lyrics; else just the song.
     static func currentContent(before: Int, after: Int, composition: LyricComposition?,
@@ -246,18 +258,20 @@ enum LyricCard {
         let saturation = grid.isEmpty ? 0.5 : grid.map(\.y).reduce(0, +) / Double(grid.count)
         let mood = TrackMood.derive(genre: track.genre, wordsPerSecond: model.wordsPerSecond,
                                     artworkSaturation: saturation, seed: trackSeed)
+        let showsTranslations = LunalyrExtras.shared.showsTranslations
         var pages = indices.map { index -> Page in
             let line = model.lines[index]
             let readings = model.romanized[index]
             let words = Self.words(of: line, readings: display == .replace ? readings : nil)
-            guard !line.words.isEmpty else { return Page(words: words) }
+            let translation = showsTranslations ? Self.translation(line.translation ?? model.machineTranslations[index]) : nil
+            guard !line.words.isEmpty else { return Page(words: words, translation: translation) }
             let layout = composition ?? LyricComposition.selected(settings: .shared, remembered: remembered?.composition,
                                                                   mood: mood, seed: index,
                                                                   track: "\(track.artist)|\(track.title)")
             let animation = Animation(line: line, composition: layout, mood: mood,
                                       seed: line.wordTimed && layout.arrivalOnly ? trackSeed : index,
                                       romanized: readings, display: display)
-            return Page(words: words, animation: animation)
+            return Page(words: words, animation: animation, translation: translation)
         }
         if pages.isEmpty {
             let plain = model.plainLines.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
@@ -476,7 +490,8 @@ enum LyricCard {
                         if let rendered = plate.cgImage { backdrop = rendered }
                     }
                     let frame = LyricCardFrame(size: content.size, animation: animation, backdrop: backdrop, stage: stage,
-                                               time: time, ink: ink, reduceMotion: content.reduceMotion, textScale: content.textScale)
+                                               time: time, ink: ink, reduceMotion: content.reduceMotion, textScale: content.textScale,
+                                               translation: clip.page.translation)
                     let renderer = ImageRenderer(content: frame)
                     renderer.scale = gifScale
                     guard let image = renderer.cgImage else { return false }
@@ -573,16 +588,35 @@ private struct LyricCardFrame: View {
     let ink: LyricInk
     let reduceMotion: Bool
     var textScale: Double = 1
+    /// Drawn in a band at the stage's foot, arriving with the line.
+    var translation: String?
 
     var body: some View {
+        let typeSize = LyricCard.Page.translationSize(animation.cardTypeSize)
+        // Room for two lines of translation, taken from the lyric's stage.
+        let band: CGFloat = translation == nil ? 0 : typeSize * 2.7
         Image(decorative: backdrop, scale: 1)
             .resizable()
             .frame(width: size.width, height: size.height)
             .overlay {
-                lyrics(in: stage.size)
-                    .frame(width: stage.width, height: stage.height)
-                    .clipped()
-                    .position(x: stage.midX, y: stage.midY)
+                VStack(spacing: 0) {
+                    lyrics(in: CGSize(width: stage.width, height: stage.height - band))
+                        .frame(width: stage.width, height: stage.height - band)
+                        .clipped()
+                    if let translation {
+                        Text(translation)
+                            .font(Settings.shared.lyricFont(size: typeSize, hero: false, mood: animation.mood))
+                            .foregroundStyle(ink.base.reading)
+                            .multilineTextAlignment(.center)
+                            .lineLimit(2)
+                            .minimumScaleFactor(0.7)
+                            .shadow(color: .black.opacity(0.35), radius: 8, y: 2)
+                            .frame(width: stage.width, height: band)
+                            .opacity(LyricPhraseTiming(line: animation.line, nextStart: .infinity, time: time).progress)
+                    }
+                }
+                .frame(width: stage.width, height: stage.height)
+                .position(x: stage.midX, y: stage.midY)
             }
             .environment(\.colorScheme, .dark)
             .environment(\.lyricReduceMotion, reduceMotion)
@@ -799,10 +833,22 @@ struct LyricCardView: View {
         let share = CGFloat(content.textScale)
         let available = CGSize(width: stage.width * (count < 4 ? 0.82 : 0.9) * share,
                                height: (stage.height - 2 * air) * share)
-        return line.font(font)
-            .lineSpacing(point * 0.12)
-            .multilineTextAlignment(rightToLeft ? .trailing : .leading)
-            .fixedSize(horizontal: false, vertical: true)
+        return VStack(alignment: rightToLeft ? .trailing : .leading, spacing: point * 0.22) {
+            line.font(font)
+                .lineSpacing(point * 0.12)
+                .multilineTextAlignment(rightToLeft ? .trailing : .leading)
+                .fixedSize(horizontal: false, vertical: true)
+            // The translation under its line, in the reading colour, as on
+            // the wallpaper.
+            if let translation = shown.translation {
+                Text(translation)
+                    .font(Settings.shared.lyricFont(size: LyricCard.Page.translationSize(point), hero: false, mood: .neutral))
+                    .foregroundStyle(ink.base.reading)
+                    .multilineTextAlignment(rightToLeft ? .trailing : .leading)
+                    .lineLimit(3)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
             .visualEffect { text, geometry in
                 text.scaleEffect(LyricStageFit.scale(content: geometry.size, available: available,
                     maximum: count < 4 ? 2.6 : 1), anchor: rightToLeft ? .trailing : .leading)
