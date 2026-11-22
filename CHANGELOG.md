@@ -29,6 +29,7 @@ When merging, keep every entry and combine duplicate headings.
 
 ### Fixed
 
+- Action words: an action still moving when its line starts to leave (a spin or a float on the last word) settles over a third of a second as the line goes, instead of being cut off mid-motion.
 - Hinge, Torque, Portal and Mosaic: a very long word (a German compound, a link) is drawn smaller to fit instead of ending in "…".
 - Backing vocals: an ad-lib near the end of a line fades out with its line instead of vanishing at full strength when the line leaves.
 - Visualisers: a bright, colourful cover no longer turns the lyrics dark for the first moments of a song, before the visualiser has measured its own brightness. Until then the lyrics stay light, as they already did over a music video.

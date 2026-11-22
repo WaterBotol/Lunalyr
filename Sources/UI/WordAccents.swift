@@ -448,12 +448,27 @@ struct WordActionEffect: ViewModifier {
     var hold: Double? = nil
     /// A chorus repeat (`WordAccent.gentle`): moves gently.
     var gentle = false
+    /// The word's onset, to set against its line's exit.
+    var start: Double = -.infinity
     @Environment(\.lyricReduceMotion) private var reduceMotion
     @Environment(\.lyricActionStrength) private var strength
+    @Environment(\.lyricLineExit) private var lineExit
+
+    /// How long an action still moving takes to settle once its line starts
+    /// to leave: on a line's last word an action of 1-2 s outlasted the
+    /// line and was cut off mid-motion as it left.
+    static let settle = 0.35
+
+    /// 1 until the line starts to leave, then down to 0 over `settle`.
+    static func settling(at time: Double, lineExit: Double) -> Double {
+        guard lineExit.isFinite else { return 1 }
+        return 1 - Easing.smoothstep((time - lineExit) / settle)
+    }
 
     func body(content: Content) -> some View {
+        let settling = Self.settling(at: start + elapsed, lineExit: lineExit)
         content.modifier(LivelyActionEffect(action: action, elapsed: elapsed, hold: hold ?? 0.6,
-                                            amount: strength * (gentle ? LivelyAction.gentleShare : 1),
+                                            amount: strength * (gentle ? LivelyAction.gentleShare : 1) * settling,
                                             size: size, glow: glow, reduceMotion: reduceMotion, gentle: gentle))
     }
 }
@@ -465,7 +480,7 @@ extension View {
                     glow: Color = .white) -> some View {
         if let action = accent?.action {
             modifier(WordActionEffect(action: action, elapsed: time - start, size: size, glow: glow,
-                                      hold: end.map { $0 - start }, gentle: accent?.gentle ?? false))
+                                      hold: end.map { $0 - start }, gentle: accent?.gentle ?? false, start: start))
         } else {
             self
         }

@@ -41,10 +41,17 @@ enum ActionWordStrength: String, CaseIterable, Identifiable {
 
 private struct ActionStrengthKey: EnvironmentKey { static let defaultValue = LivelyAction.defaultAmount }
 private struct EdgeTranslationKey: EnvironmentKey { static let defaultValue: VerticalEdge? = nil }
+private struct LineExitKey: EnvironmentKey { static let defaultValue = Double.infinity }
 private struct LivelyGlyphsKey: EnvironmentKey { static let defaultValue: LivelyGlyphs? = nil }
 private struct LivelyParticlesKey: EnvironmentKey { static let defaultValue = true }
 
 extension EnvironmentValues {
+    /// When the line a word belongs to starts to leave: an action still
+    /// moving then settles as the line goes (`WordActionEffect`).
+    var lyricLineExit: Double {
+        get { self[LineExitKey.self] }
+        set { self[LineExitKey.self] = newValue }
+    }
     /// The screen edge a line's translation sits at ("Top" or "Bottom of the
     /// screen"), for Echo to quiet its repeats on that side.
     var lyricEdgeTranslation: VerticalEdge? {

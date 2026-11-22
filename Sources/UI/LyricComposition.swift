@@ -249,6 +249,7 @@ struct LyricLineView: View {
             }
         }
         .environment(\.lyricWordAccents, accents)
+        .environment(\.lyricLineExit, exitStart)
     }
 
     /// Whether a line's bracketed words are drawn apart as backing vocals:
