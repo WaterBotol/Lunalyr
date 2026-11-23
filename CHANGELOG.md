@@ -34,6 +34,7 @@ When merging, keep every entry and combine duplicate headings.
 
 ### Fixed
 
+- Mandarin readings no longer put a space before punctuation ("nǐ, nǐ", not "nǐ , nǐ"; "nǐ hǎo, Baby", not "nǐ hǎo ,Baby"). Found by the Windows port.
 - Action words: an action still moving when its line starts to leave (a spin or a float on the last word) settles over a third of a second as the line goes, instead of being cut off mid-motion.
 - Hinge, Torque, Portal and Mosaic: a very long word (a German compound, a link) is drawn smaller to fit instead of ending in "…".
 - Backing vocals: an ad-lib near the end of a line fades out with its line instead of vanishing at full strength when the line leaves.

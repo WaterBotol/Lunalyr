@@ -31,21 +31,46 @@ enum MandarinReading {
     }
 
     /// `word`, found at `location` in the line, with each Han character
-    /// replaced by its syllable and the syllables spaced apart.
+    /// replaced by its syllable. Syllables are spaced apart; punctuation
+    /// sits against what comes before it ("nǐ, nǐ", not "nǐ , nǐ"); a
+    /// full-width mark is followed by a space before the next letter or
+    /// syllable, as its Latin form would be; an opening bracket or quote
+    /// sits against what follows; Latin beside a syllable is spaced off.
     static func reading(of word: String, at location: Int, syllables: [Int: String]) -> String {
         var out = "", offset = location
+        var spaceNext = false
+        func opens(_ character: Character) -> Bool {
+            guard let category = character.unicodeScalars.first?.properties.generalCategory else { return false }
+            return category == .openPunctuation || category == .initialPunctuation
+        }
+        func space() { if let last = out.last, !last.isWhitespace, !opens(last) { out += " " } }
         for character in word {
             let length = character.utf16.count
-            if character.unicodeScalars.first?.properties.isIdeographic == true {
-                let syllable = syllables[offset] ?? single(String(character))
-                if !out.isEmpty, out.last != " " { out += " " }
-                out += syllable + " "
-            } else {
+            let scalar = character.unicodeScalars.first
+            if scalar?.properties.isIdeographic == true {
+                space()
+                out += syllables[offset] ?? single(String(character))
+                spaceNext = true
+            } else if character.isWhitespace {
                 out.append(character)
+                spaceNext = false
+            } else if let category = scalar?.properties.generalCategory,
+                      category == .openPunctuation || category == .initialPunctuation {
+                if spaceNext || scalar.map({ $0.value > 0x2E7F }) == true { space() }
+                out.append(character)
+                spaceNext = false
+            } else if character.isPunctuation {
+                out.append(character)
+                spaceNext = scalar.map { $0.value > 0x2E7F } ?? false
+            } else {
+                if spaceNext { space() }
+                out.append(character)
+                spaceNext = false
             }
             offset += length
         }
-        return out.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: "  ", with: " ")
+        while out.contains("  ") { out = out.replacingOccurrences(of: "  ", with: " ") }
+        return out.trimmingCharacters(in: .whitespaces)
     }
 
     private static func han(in string: NSString, from start: Int, length: Int) -> [(offset: Int, text: String)] {

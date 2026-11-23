@@ -27,6 +27,16 @@ final class MandarinReadingTests: XCTestCase {
         XCTAssertEqual(read("Baby，我爱你"), "Baby, wǒ ài nǐ")
     }
 
+    /// Found by the Windows port: a mark after a syllable got a space before it.
+    func testPunctuationSitsAgainstTheSyllableBeforeIt() {
+        XCTAssertEqual(read("我爱你，你爱我"), "wǒ ài nǐ, nǐ ài wǒ")
+        XCTAssertEqual(read("你好，Baby"), "nǐ hǎo, Baby")
+        XCTAssertEqual(read("你好！"), "nǐ hǎo!")
+        XCTAssertEqual(read("你Baby"), "nǐ Baby")
+        XCTAssertEqual(read("你好, 我"), "nǐ hǎo, wǒ")
+        XCTAssertEqual(read("我说「你好」，好"), "wǒ shuō nǐ hǎo, hǎo")
+    }
+
     func testAWordsReadingIsCutIntoOneSyllablePerCharacter() {
         XCTAssertEqual(MandarinReading.split("dìshàng", into: 2), ["dì", "shàng"])
         XCTAssertEqual(MandarinReading.split("xīan", into: 2), ["xī", "an"])
