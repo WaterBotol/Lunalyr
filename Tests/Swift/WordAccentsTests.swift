@@ -150,6 +150,23 @@ final class WordAccentsTests: XCTestCase {
     }
 
     /// The seven actions added on 23 Nov 2026, from their default words.
+    /// Hide (the owner's idea, 25 Nov) is a candidate: it moves only a word
+    /// the user lists, and its words aren't in the default list.
+    func testHideIsACandidateOnly() {
+        let listed = Dictionary(WordAction.defaultList.map { ($0.word, $0.action) }, uniquingKeysWith: { a, _ in a })
+        for (word, _) in WordAction.candidateList { XCTAssertNil(listed[word], word) }
+        XCTAssertEqual(WordAction(listValue: "hide"), .hide)
+        XCTAssertEqual(WordAction(listValue: "Hide"), .hide)
+        let words = Self.line(["I", "want", "to", "hide"])
+        let mine = WordAccentPlan.make(words: words, glue: [], symbols: nil, actions: ["hide": .hide])
+        XCTAssertEqual(mine[words[3].presentationID]?.action, .hide, "a listed word hides")
+        let defaults = WordAccentPlan.make(words: words, glue: [], symbols: nil, actions: Self.actions)
+        XCTAssertNil(defaults[words[3].presentationID]?.action, "not with the default list")
+        XCTAssertEqual(LivelyAction.hideDepth(0, duration: 2, intensity: 1), 0)
+        XCTAssertEqual(LivelyAction.hideDepth(2, duration: 2, intensity: 1), 0)
+        XCTAssertGreaterThan(LivelyAction.hideDepth(1.0, duration: 2, intensity: 1), 1.5, "under the ground while hidden")
+    }
+
     func testTheNewActionsAreInTheDefaultList() {
         let hits: [(String, WordAction)] = [
             ("here comes the sun", .sunlight), ("under the moonlight", .moonlight), ("we chase the night", .rush),
@@ -159,7 +176,7 @@ final class WordAccentsTests: XCTestCase {
         for (line, action) in hits {
             XCTAssertEqual(actionIn(line), action, line)
         }
-        XCTAssertTrue(WordAction.candidateList.isEmpty, "none waiting")
+        XCTAssertEqual(WordAction.candidates, [.hide], "only Hide waits for the owner's yes")
         XCTAssertEqual(WordAction(listValue: "Sunlight"), .sunlight)
         XCTAssertEqual(WordAction(listValue: "moon"), .moonlight)
     }

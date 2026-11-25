@@ -14,6 +14,7 @@ When merging, keep every entry and combine duplicate headings.
 
 ### Added
 
+- Action words: a new candidate action, Hide (a hole opens under the word, which drops into it and pops back up). Like any candidate it moves only words you add to your own list (hide, hidden, burrow, underground are suggested) until it is approved for the default list.
 - Action words: phrases of two or three words. "fall apart" shatters on "apart" where "fall" alone would dip, "let go" floats and "turn around" spins; a phrase moves its last word. A few phrases keep their words still ("take a break", "out cold", "ice cream"). Phrases can be added to the action word list too.
 - Action words: more words for the existing actions: swirl and orbit (Spin), balloon, feather and hover (Float), collapse and crumble (Dip), expand and towering (Grow), blur, haze and mist (Dissolve), fracture and splinter (Shatter), hollow and canyon (Echo).
 - Action words: seven new actions, in the default list and in the other languages' built-in lists: Sunlight (a warm sheen sweeps across the word and soft rays fan up behind it) for sun, sunshine, sunset, dawn; Moonlight (the same sweep in cool silver) for moon, moonlight, starlight; Rush for rush, chase, escape, racing; Glitch for glitch, static, signal, error; Sparkle for shine, diamond, gold, stars; Free (the end of the word flies off and comes back) for free, freedom, break free, fly away; Stretch (the word is pulled long and snaps back) for stretch, reach, distance, far away.
@@ -23,6 +24,7 @@ When merging, keep every entry and combine duplicate headings.
 
 ### Changed
 
+- Action words: Freeze no longer draws rows of thin spikes along the top and foot of the word; the frost sheet, crystals and glint stay. Dark's shadow is a soft rectangle round the word instead of an oval, and its ink sweeps on as a smooth rectangle with a straight soft front instead of a wavering blob.
 - Lyrics: translations are one size in every layout (Spoken, Cascade and Cutout drew them a little smaller).
 - Settings › Romanisation & translation: readings' Display choices are named as translations' places are (Off, Under the line, In place of the line, were Below lyrics and Replace lyrics), and "Import Reading LRC…" is "Import Readings from LRC…".
 - Lyrics: translations lean like italics (in Latin, Cyrillic and Greek; Chinese, Japanese and Korean stay upright), so with a whole-line reading on as well, the reading and the translation no longer look like two translations. On cards too.

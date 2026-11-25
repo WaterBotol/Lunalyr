@@ -119,6 +119,7 @@ enum LivelyAction {
         case .sparkle: return max(1.6, h + 0.8)
         case .free: return max(2.1, h + 1.1)
         case .stretch: return max(1.8, h + 0.9)
+        case .hide: return max(1.9, h + 1.0)
         }
     }
 
@@ -465,6 +466,8 @@ struct LivelyPose: Equatable {
             pose = free(t: t, duration: D, intensity: A, hold: hold)
         case .stretch:
             pose = stretch(t: t, duration: D, intensity: A, hold: hold)
+        case .hide:
+            pose = hide(t: t, duration: D, intensity: A, hold: hold)
         }
         return pose
     }
@@ -655,6 +658,8 @@ struct LivelyActionEffect: ViewModifier {
                 // the label shows faintly.
                 .modifier(LivelyWaterline(depth: action == .sink ? LivelyAction.clamp01(pose.dy / max(0.01, 0.62 * intensity)) : nil,
                                           size: size))
+                // Hide: the hole in the ground, fixed where the word stands.
+                .modifier(LivelyHole(open: action == .hide ? LivelyAction.hideHole(elapsed, duration: duration) : nil, size: size))
                 .opacity(pose.opacity)
         }
     }
@@ -702,29 +707,27 @@ struct LivelyWaterline: ViewModifier {
 }
 
 /// Dark's closing vignette: a soft shadow round the word, its clear
-/// middle shrinking towards the word as `amount` grows.
+/// middle closing in towards the word as `amount` grows. A softly rounded
+/// rectangle that follows the word's shape (until 26 Nov an ellipse, which
+/// the owner found read as an oval): a blurred band between an inner and
+/// an outer rounded rectangle, darkest at its inner edge.
 struct LivelyVignette: View {
     let amount: Double
     let size: CGFloat
 
     var body: some View {
         Canvas { context, canvas in
-            let centre = CGPoint(x: canvas.width / 2, y: canvas.height / 2)
-            let word = CGSize(width: canvas.width - size * 6, height: canvas.height - size * 6)
-            let inner = max(word.width, word.height) * 0.5 + size * CGFloat(1.6 - 1.1 * amount)
-            let outer = inner + size * 1.8
+            let word = CGRect(x: size * 3, y: size * 3, width: max(1, canvas.width - size * 6),
+                              height: max(1, canvas.height - size * 6))
+            let clear = size * CGFloat(1.1 - 0.75 * amount)
+            let inner = word.insetBy(dx: -clear, dy: -clear * 0.7)
+            let outer = inner.insetBy(dx: -size * 1.0, dy: -size * 0.8)
             let shade = Color(red: 0.02, green: 0.01, blue: 0.05)
-            // Squashed to the word's shape: wider than tall.
-            context.translateBy(x: centre.x, y: centre.y)
-            context.scaleBy(x: 1, y: max(0.35, (word.height + size * 2.2) / (word.width + size * 2.2)))
-            context.translateBy(x: -centre.x, y: -centre.y)
-            context.fill(Path(ellipseIn: CGRect(x: centre.x - outer, y: centre.y - outer, width: outer * 2, height: outer * 2)),
-                         with: .radialGradient(Gradient(stops: [
-                             .init(color: shade.opacity(0), location: 0),
-                             .init(color: shade.opacity(0), location: inner / outer * 0.75),
-                             .init(color: shade.opacity(0.6 * amount), location: inner / outer),
-                             .init(color: shade.opacity(0), location: 1),
-                         ]), center: centre, startRadius: 0, endRadius: outer))
+            var band = Path(roundedRect: outer, cornerRadius: size * 0.9)
+            band.addPath(Path(roundedRect: inner, cornerRadius: size * 0.35))
+            var soft = context
+            soft.addFilter(.blur(radius: size * 0.42))
+            soft.fill(band, with: .color(shade.opacity(0.55 * amount)), style: FillStyle(eoFill: true))
         }
         .allowsHitTesting(false)
     }
@@ -1431,37 +1434,32 @@ struct LivelyGlyphRenderer: TextRenderer {
         let t = state.t, D = state.duration, A = state.intensity, size = state.size
         switch state.action {
         case .dark:
-            // Ink creeping over the word and its label from the leading
-            // side, its edge soft and uneven, then drawing back.
+            // Ink sweeping over the word and its label from the leading
+            // side: a smooth, softly rounded rectangle whose front is a
+            // straight soft edge, then drawing back. (Until 26 Nov it was a
+            // blurred blob with a sagging top and a wavering front, which
+            // read as an oval; the owner asked for a rectangle.)
             let dark = L.darkness(t, duration: D)
             guard dark > 0.005 else { break }
             let front = L.inkFront(t, duration: D)
             let edge = word.minX + word.width * CGFloat(front)
-            let top = word.minY - size * 0.35, bottom = word.maxY + size * 0.3
-            let left = word.minX - size * 0.9
-            guard edge > left else { break }
-            var path = Path()
-            let steps = 14
-            path.move(to: CGPoint(x: left, y: top))
-            // The top edge sags a little toward the front.
-            for k in 1...steps {
-                let f = CGFloat(k) / CGFloat(steps)
-                let x = left + (edge - left) * f
-                let y = top + size * 0.08 * CGFloat(sin(Double(f) * 3 + t * 1.4)) * f
-                path.addLine(to: CGPoint(x: x, y: y))
-            }
-            // The leading edge, wavering.
-            for k in 1...steps {
-                let f = Double(k) / Double(steps)
-                let y = top + (bottom - top) * CGFloat(f)
-                let wobble = 0.16 * sin(f * 5.5 + t * 2.2) + 0.08 * sin(f * 11 - t * 3.1)
-                path.addLine(to: CGPoint(x: edge + size * CGFloat(wobble), y: y))
-            }
-            path.addLine(to: CGPoint(x: left, y: bottom))
-            path.closeSubpath()
+            let feather = size * 0.4
+            let box = word.insetBy(dx: -size * 0.3, dy: -size * 0.2)
+            let right = min(box.maxX, edge + feather / 2)
+            guard right > box.minX else { break }
+            let shade = Color(red: 0.03, green: 0.02, blue: 0.07)
+            let alpha = 0.82 * A * dark
+            let solidTo = (edge - feather / 2 - box.minX) / box.width
+            let clearAt = (edge + feather / 2 - box.minX) / box.width
             var ink = context
-            ink.addFilter(.blur(radius: size * 0.1))
-            ink.fill(path, with: .color(Color(red: 0.03, green: 0.02, blue: 0.07).opacity(0.82 * A * dark)))
+            ink.addFilter(.blur(radius: size * 0.035))
+            ink.fill(Path(roundedRect: CGRect(x: box.minX, y: box.minY, width: right - box.minX, height: box.height),
+                          cornerRadius: size * 0.1),
+                     with: .linearGradient(
+                        Gradient(stops: [.init(color: shade.opacity(alpha), location: 0),
+                                         .init(color: shade.opacity(alpha), location: max(0, solidTo)),
+                                         .init(color: shade.opacity(0), location: max(0.001, clearAt))]),
+                        startPoint: CGPoint(x: box.minX, y: box.midY), endPoint: CGPoint(x: box.maxX, y: box.midY)))
         case .sunlight, .moonlight:
             sunlightBehind(word: word, baseline: baseline, in: &context)
         case .rush:
@@ -1542,9 +1540,10 @@ struct LivelyGlyphRenderer: TextRenderer {
             }
         case .frost:
             // Frost spreading from the leading edge: a pale sheet with a soft
-            // edge, feathery rime along the top and foot of the word, and
-            // crystals branching out on the letters as the front reaches
-            // them. It thaws gently, the crystals shrinking one by one.
+            // edge, and crystals branching out on the letters as the front
+            // reaches them. It thaws gently, the crystals shrinking one by
+            // one. (The rime of short spikes along the top and foot was
+            // taken out on 26 Nov: the owner found the many thin lines busy.)
             let ice = Color(red: 0.86, green: 0.95, blue: 1)
             let thaw = L.frostThaw(t, duration: D)
             let front = L.frostFront(t)
@@ -1566,23 +1565,6 @@ struct LivelyGlyphRenderer: TextRenderer {
                                      .init(color: ice.opacity(0), location: stopAt)]),
                     startPoint: CGPoint(x: sheet.minX, y: sheet.midY), endPoint: CGPoint(x: sheet.maxX, y: sheet.midY)))
             }
-            // Rime: short spikes along the top and the foot, up to the front.
-            var rime = Path()
-            let step = size * 0.07
-            var x = sheet.minX
-            var n = 0
-            while x < min(sheet.maxX, reach) {
-                let grow = CGFloat(L.ss5(Double((reach - x) / (size * 0.4)))) * CGFloat(1 - L.ss((thaw - 0.4 * L.rnd(seed, n, 90)) / 0.6))
-                let len = size * CGFloat(0.04 + 0.08 * L.rnd(seed, n, 91)) * grow
-                let lean = size * CGFloat(0.03 * (L.rnd(seed, n, 92) - 0.5))
-                rime.move(to: CGPoint(x: x, y: sheet.minY + size * 0.04))
-                rime.addLine(to: CGPoint(x: x + lean, y: sheet.minY + size * 0.04 + len))
-                rime.move(to: CGPoint(x: x, y: sheet.maxY - size * 0.04))
-                rime.addLine(to: CGPoint(x: x - lean, y: sheet.maxY - size * 0.04 - len))
-                x += step * CGFloat(0.7 + 0.6 * L.rnd(seed, n, 93))
-                n += 1
-            }
-            context.stroke(rime, with: .color(ice.opacity(0.7 * A)), lineWidth: max(1, size * 0.014))
             for g in glyphs {
                 for k in 0..<6 {
                     let px = g.rect.minX + g.rect.width * CGFloat(0.05 + 0.9 * L.rnd(seed, g.index, 30 + k))

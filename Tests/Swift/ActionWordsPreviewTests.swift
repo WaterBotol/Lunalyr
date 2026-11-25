@@ -61,6 +61,7 @@ final class ActionWordsPreviewTests: XCTestCase {
         Clip(action: .sparkle, texts: ["watch", "the", "diamonds", "shine"], hue: 0.7),
         Clip(action: .free, texts: ["finally", "I", "break", "free"], hue: 0.55),
         Clip(action: .stretch, texts: ["I", "reach", "across", "the", "distance"], hue: 0.45),
+        Clip(action: .hide, texts: ["I", "just", "want", "to", "hide", "away"], hue: 0.32),
     ]
 
     /// A symbol on each action word, so the reel shows the symbol's

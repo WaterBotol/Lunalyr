@@ -173,6 +173,9 @@ enum WordAction: String, CaseIterable, Identifiable {
     case free
     /// The letter spacing widens slowly, then closes.
     case stretch
+    // Candidate, 26 Nov 2026 (the owner's idea).
+    /// Drops into a hole that opens in the ground, then pops back up.
+    case hide
 
     var id: String { rawValue }
 
@@ -224,6 +227,7 @@ enum WordAction: String, CaseIterable, Identifiable {
         case .sparkle: return "Sparkle"
         case .free: return "Free"
         case .stretch: return "Stretch"
+        case .hide: return "Hide"
         }
     }
 
@@ -307,8 +311,11 @@ enum WordAction: String, CaseIterable, Identifiable {
     /// New actions and their words, shown to the owner as renders before
     /// they join `defaultList` (the other languages' built-in lists leave
     /// them out, and they move only the user's own words). A word here is
-    /// in no other list. Empty: the last seven were approved on 23 Nov 2026.
+    /// in no other list. The seven before were approved on 23 Nov 2026;
+    /// Hide is the owner's idea of 25 Nov ("disappear", "vanish" and "gone"
+    /// stay Dissolve).
     static let candidateList: [(word: String, action: WordAction)] = [
+        ("hide", .hide), ("hidden", .hide), ("burrow", .hide), ("underground", .hide),
     ]
 
     /// The actions still waiting for the owner's yes.
