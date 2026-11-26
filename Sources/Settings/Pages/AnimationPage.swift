@@ -39,13 +39,6 @@ struct AnimationPage: View {
                 }
             }
             WordAccentsSection()
-            // Custom Mix can pick either, so both stay reachable there.
-            if style.hasConnections || automatic {
-                constellation
-            }
-            if style == .echo || automatic {
-                echo
-            }
         }
         // Sub-options glide in and out with the choice that shows them.
         .lunalyrReveal(s.lyricComposition)
@@ -56,30 +49,35 @@ struct AnimationPage: View {
         .lunalyrReveal(EntranceSupport.note(selected: s.arrival(in: style), layout: s.lyricComposition, mix: chosenMix))
     }
 
-    private var constellation: some View {
-        InspectorSection("Constellation") {
+    /// Constellation's and Echo's own fine-tuning, under Word entrances'
+    /// More options (they were sections of their own until 26 Nov 2026).
+    /// Custom Mix can pick either, so both stay reachable there.
+    private var showsConstellation: Bool { style.hasConnections || automatic }
+    private var showsEcho: Bool { style == .echo || automatic }
+
+    private func layoutHeader(_ title: String) -> some View {
+        Text(title)
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(Color.studio(.ink2))
+            .accessibilityAddTraits(.isHeader)
+    }
+
+    @ViewBuilder private var layoutTuning: some View {
+        if showsConstellation {
+            layoutHeader("Constellation")
             ValueSlider("Spread", value: $s.constellationSpread, in: 0.4...1.8, step: 0.01,
                         format: SettingsFormat.percent)
             ValueSlider("Links", value: $s.constellationLinkOpacity, in: 0...0.6, step: 0.01,
                         format: SettingsFormat.percent)
-            if automatic {
-                InspectorCaption("Used when Custom Mix picks Constellation.")
-                    .revealRow()
-            }
         }
-        .revealRow()
-    }
-
-    private var echo: some View {
-        InspectorSection("Echo") {
+        if showsEcho {
+            layoutHeader("Echo")
             ValueSlider("Repeats", value: $s.echoStrength, in: 0...1.8, step: 0.01,
                         format: SettingsFormat.percent)
-            if automatic {
-                InspectorCaption("Used when Custom Mix picks Echo.")
-                    .revealRow()
-            }
         }
-        .revealRow()
+        if automatic {
+            InspectorCaption("Constellation and Echo use these when Custom Mix picks them.")
+        }
     }
 
     private var wordEntrances: some View {
@@ -120,12 +118,16 @@ struct AnimationPage: View {
                                                              set: { s.nextWordPreviewByStyle[s.wordControlsKey] = $0 }))
             InspectorCaption(automatic ? "These controls apply to layouts picked by Custom Mix."
                                        : "These controls apply to the selected layout.")
-            if s.previewsNextWord(in: style) {
+            if s.previewsNextWord(in: style) || showsConstellation || showsEcho {
                 MoreOptions {
-                    ValueSlider("Preview lead", value: $s.nextWordPreviewLead, in: 0.15...1.25, step: 0.05,
-                                format: SettingsFormat.seconds,
-                                spoken: { SettingsFormat.spokenSeconds($0) + " before the next word" })
-                        .help("How long before each word its faint preview appears")
+                    if s.previewsNextWord(in: style) {
+                        ValueSlider("Preview lead", value: $s.nextWordPreviewLead, in: 0.15...1.25, step: 0.05,
+                                    format: SettingsFormat.seconds,
+                                    spoken: { SettingsFormat.spokenSeconds($0) + " before the next word" })
+                            .help("How long before each word its faint preview appears")
+                            .revealRow()
+                    }
+                    layoutTuning
                 }
                 .revealRow()
             }

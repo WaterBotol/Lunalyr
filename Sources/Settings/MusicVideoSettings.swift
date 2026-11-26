@@ -19,11 +19,9 @@ struct MusicVideoSection: View {
         Toggle("Search YouTube for videos", isOn: $s.musicVideoOnline)
         InspectorCaption(Self.privacyCaption, more: Self.privacyDetail)
         displayChoice
-        ValueSlider("Video dimming", value: $s.musicVideoDim, in: Settings.musicVideoDimRange, step: 0.01,
-                    format: SettingsFormat.percent)
     }
 
-    /// "Show the video on", beside dimming and blur.
+    /// "Show the video on".
     @ViewBuilder private var displayChoice: some View {
         let heavy = visualizer.heavyScenesOnMainDisplayOnly
         let connected = screens.displays
@@ -79,6 +77,10 @@ struct MusicVideoMoreOptions: View {
         ChoiceMenu("Without a video", selection: $s.musicVideoFallback, selectedTitle: \.title) {
             ForEach(Settings.BackgroundMode.musicVideoFallbacks) { Text($0.title).tag($0) }
         }
+        // Under More options since 26 Nov 2026: Darkening, shown for every
+        // wallpaper type, darkens the video too; this adds to it.
+        ValueSlider("Video dimming", value: $s.musicVideoDim, in: Settings.musicVideoDimRange, step: 0.01,
+                    format: SettingsFormat.percent)
         ValueSlider("Video blur", value: $s.musicVideoBlur, in: Settings.musicVideoBlurRange, step: 0.5,
                     format: { String(format: "%.0f pt", $0) })
         ChoiceMenu("YouTube videos", selection: $s.musicVideoFraming, selectedTitle: \.title) {

@@ -24,6 +24,8 @@ When merging, keep every entry and combine duplicate headings.
 
 ### Changed
 
+- Settings: fine-tuning moved under More options. Motion speed (Wallpaper), Video dimming (Music video; Darkening, shown for every wallpaper, darkens the video too), Sensitivity (Music response), Title strength (Text) and Constellation's Spread and Links and Echo's Repeats (Animation, now under Word entrances, no longer sections of their own). Nothing changes what they do or how they're set.
+- Settings › Text › Shown with the lyrics: "Show the song title at the start" and "Keep the song title on screen" are one choice, Song title: Off, At the start or Whole song.
 - Cutout: a word's label now turns over onto it like a flap, a little past flat and back, and carries on over as the next word's label turns on. It used to press in from the word's leading edge. The turn is measured on each label, so a label with a reading under its word, or a script that reaches high and low, turns as a taller card, and the word and its reading change colour only where the label covers them. With Reduce Motion the label still simply fades in.
 - Action words: Freeze no longer draws rows of thin spikes along the top and foot of the word; the frost sheet, crystals and glint stay. Dark's shadow is a soft rectangle round the word instead of an oval, and its ink sweeps on as a smooth rectangle with a straight soft front instead of a wavering blob.
 - Lyrics: translations are one size in every layout (Spoken, Cascade and Cutout drew them a little smaller).

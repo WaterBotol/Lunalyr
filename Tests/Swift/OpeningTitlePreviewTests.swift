@@ -200,7 +200,7 @@ final class OpeningTitlePreviewTests: XCTestCase {
         }
     }
 
-    /// "Keep the song title on screen": the desktop card well into the song
+    /// Song title › Whole song: the desktop card well into the song
     /// with the lyrics singing, from the start and joined part-way, and the
     /// floating window's row above its lyrics (default and small sizes,
     /// over a dark and a light app). Renders go to `<dir>/kept/`.

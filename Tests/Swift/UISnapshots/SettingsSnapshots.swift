@@ -34,13 +34,36 @@ extension UISnapshotCatalogue {
                                         player: .playing, view: { _ in SettingsInspectorProbe(page: page) }))
         }
         cases.append(UISnapshotCase("settings/typography-inspector-kept-title",
-                                    note: "Text inspector with Keep the song title on screen: Title strength",
+                                    note: "Text inspector with Song title › Whole song (Title strength under More options)",
                                     chrome: .plain, size: .fitting(width: LunalyrDesign.Studio.Layout.inspectorWidth),
                                     player: .playing,
                                     prepare: { $0.defaults.set(true, forKey: OpeningTitle.alwaysKey) },
                                     view: { _ in SettingsInspectorProbe(page: .typography) }))
+        cases += moreOptionsStates
         cases += wallpaperStates + otherPageStates + colourStates + lookStates
         return cases
+    }
+
+    /// Inspectors with every More options open: where the fine-tuning sits.
+    private static var moreOptionsStates: [UISnapshotCase] {
+        let width = LunalyrDesign.Studio.Layout.inspectorWidth
+        func open(_ name: String, _ note: String, _ page: SettingsPage,
+                  prepare: @escaping @MainActor (UISnapshotScene) -> Void = { _ in }) -> UISnapshotCase {
+            UISnapshotCase("settings/\(name)-more-options", note: note + ", every More options open",
+                           chrome: .plain, size: .fitting(width: width), player: .playing, prepare: prepare,
+                           view: { _ in SettingsInspectorProbe(page: page).environment(\.moreOptionsOpen, true) })
+        }
+        return [
+            open("typography", "Text, song title kept on screen", .typography,
+                 prepare: { $0.defaults.set(true, forKey: OpeningTitle.alwaysKey) }),
+            open("animation", "Animation, Custom Mix", .animation),
+            open("wallpaper-visualiser", "Wallpaper, Visualiser", .wallpaper,
+                 prepare: { $0.settings.backgroundMode = .visualizer }),
+            open("wallpaper-music-video", "Wallpaper, Music video", .wallpaper,
+                 prepare: { $0.settings.backgroundMode = .musicVideo }),
+            open("wallpaper-patterns", "Wallpaper, Line patterns", .wallpaper,
+                 prepare: { $0.settings.backgroundMode = .pattern }),
+        ]
     }
 
     private static var colourStates: [UISnapshotCase] {

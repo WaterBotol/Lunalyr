@@ -712,4 +712,14 @@ final class OpeningTitleTests: XCTestCase {
         let late = staying.restsFrom + OpeningTitle.restEase + 1
         XCTAssertEqual(try XCTUnwrap(OpeningTitle.phase(staying, at: late)).opacity, OpeningTitle.restOpacity, accuracy: 1e-9)
     }
+
+    /// Settings › Text › Song title: one choice over the two stored
+    /// switches, reading every state they can be in (26 Nov 2026).
+    func testSongTitleChoiceReadsBothSwitches() {
+        XCTAssertEqual(SongTitleShowing(shows: false, keeps: false), .off)
+        XCTAssertEqual(SongTitleShowing(shows: false, keeps: true), .off)
+        XCTAssertEqual(SongTitleShowing(shows: true, keeps: false), .atStart)
+        XCTAssertEqual(SongTitleShowing(shows: true, keeps: true), .wholeSong)
+        XCTAssertEqual(SongTitleShowing.allCases.map(\.title), ["Off", "At the start", "Whole song"])
+    }
 }

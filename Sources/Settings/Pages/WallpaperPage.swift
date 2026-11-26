@@ -2,8 +2,8 @@ import AppKit
 import SwiftUI
 
 /// The Wallpaper inspector: the Looks, the type's own options with the
-/// adjustments every drawn type shares (Motion speed and Darkening shown,
-/// the rest under More options), and how visualisers hear the music. The
+/// adjustments every drawn type shares (Darkening shown, the fine-tuning
+/// under More options), and how visualisers hear the music. The
 /// type itself is chosen on the canvas, under the picture
 /// (`WallpaperTypeChoices`). How the lyrics stay readable is on Text.
 @MainActor
@@ -186,14 +186,8 @@ struct WallpaperPage: View {
     /// Whether Motion speed applies: everything Lunalyr draws itself.
     private var movesWithSpeed: Bool { s.backgroundMode != .custom && s.backgroundMode != .musicVideo }
 
-    /// The adjustments shown in every drawn type's section: Motion speed
-    /// (where Lunalyr draws the picture) and Darkening.
+    /// The adjustment shown in every type's section: Darkening.
     @ViewBuilder private var everydayAdjustments: some View {
-        if movesWithSpeed {
-            ValueSlider("Motion speed", value: $s.effectSpeed, in: 0.2...2, step: 0.05,
-                        format: SettingsFormat.multiplier)
-                .revealRow()
-        }
         ValueSlider("Darkening", value: $s.scrimStrength, in: s.scrimRange, step: 0.01, format: SettingsFormat.percent)
         if let note = WorkspaceCopy.increasedContrastDarkening(preferred: s.preferredScrimStrength,
                                                                increaseContrast: s.increaseContrast) {
@@ -201,9 +195,16 @@ struct WallpaperPage: View {
         }
     }
 
-    /// The rarer adjustments, under More options: Colour richness, Pattern
-    /// visibility (Line patterns only) and Reset Adjustments.
+    /// The fine-tuning, under More options: Motion speed (where Lunalyr
+    /// draws the picture; shown with Darkening until 26 Nov 2026), Colour
+    /// richness, Pattern visibility (Line patterns only) and Reset
+    /// Adjustments, which is always there, so More options is never empty.
     @ViewBuilder private var moreAdjustments: some View {
+        if movesWithSpeed {
+            ValueSlider("Motion speed", value: $s.effectSpeed, in: 0.2...2, step: 0.05,
+                        format: SettingsFormat.multiplier)
+                .revealRow()
+        }
         if movesWithSpeed
             && (s.backgroundMode != .visualizer || s.audioVisualizerStyle != .light3D || s.light3DColours == .album) {
             ValueSlider("Colour richness", value: $s.vividness, in: 0.4...1.8, step: 0.01,
@@ -344,18 +345,18 @@ private struct MusicResponseSection: View {
                 DisabledReason(WorkspaceCopy.systemAudioWaits(showing: s.effectiveBackgroundMode == .musicVideo
                     ? Settings.effectiveMode(s.musicVideoFallback, under: s.powerConstraint) : s.effectiveBackgroundMode))
             }
-            ValueSlider("Sensitivity", value: $s.audioSensitivity, in: 0.3...3, step: 0.05,
-                        minimumLabel: "Low", maximumLabel: "High", format: SettingsFormat.multiplier)
-            .disabled(!s.audioReactiveEnabled)
-            if !s.audioReactiveEnabled && !waitsForVisualiser {
-                DisabledReason("Switch on System audio to set how strongly scenes respond.")
-            }
             // Switched on, the status below already says why capture is
             // paused, as the power-saving banner does.
             if s.audioReactiveEnabled {
                 AudioCaptureStatus()
             }
             MoreOptions {
+                ValueSlider("Sensitivity", value: $s.audioSensitivity, in: 0.3...3, step: 0.05,
+                            minimumLabel: "Low", maximumLabel: "High", format: SettingsFormat.multiplier)
+                .disabled(!s.audioReactiveEnabled)
+                if !s.audioReactiveEnabled && !waitsForVisualiser {
+                    DisabledReason("Switch on System audio to set how strongly scenes respond.")
+                }
                 ChoiceMenu("Capture method", selection: $s.audioCaptureMethod, selectedTitle: \.title) {
                     ForEach(AudioCaptureMethod.allCases) { Text($0.title).tag($0) }
                 }

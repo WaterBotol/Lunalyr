@@ -19,7 +19,7 @@ enum OpeningTitle {
     /// In one lyric style's preferences (`LyricStyle`).
     static func isOn(in defaults: UserDefaults) -> Bool { defaults.object(forKey: settingKey) as? Bool ?? true }
 
-    /// Keep the song title on screen: the card enters as usual (at the
+    /// Song title › Whole song (`alwaysKey`): the card enters as usual (at the
     /// song's start, or when Lunalyr joins it part-way) and stays for the
     /// whole song, settling to `restOpacity` once it would have left, so
     /// there is always a name for what is playing. Low on the left beside

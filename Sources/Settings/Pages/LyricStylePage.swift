@@ -49,6 +49,7 @@ struct LyricStylePage: View {
         .lunalyrReveal(s.editorialTypography)
         .lunalyrReveal(s.randomizeLyricFonts)
         .lunalyrReveal(keepsOpeningTitle)
+        .lunalyrReveal(showOpeningTitle)
         .lunalyrReveal(s.fontChoice)
         .lunalyrReveal(s.googleFontState)
         .onAppear { familyDraft = s.googleFontFamily }
@@ -124,8 +125,9 @@ struct LyricStylePage: View {
         }
     }
 
-    /// The layers shown with the lyrics: checkboxes, as related options;
-    /// how backing vocals move and Editorial typography under More options.
+    /// The layers shown with the lyrics: the song title as one choice, the
+    /// rest checkboxes, as related options; Title strength, how backing
+    /// vocals move and Editorial typography under More options.
     /// A colour well for one line of the song title, kept as a hex string.
     private func titleColourWell(_ label: String, hex: Binding<String>) -> some View {
         ColorPicker(label, selection: Binding(
@@ -135,11 +137,27 @@ struct LyricStylePage: View {
             .fixedSize()
     }
 
+    /// "Song title": the two stored switches (`OpeningTitle.settingKey`,
+    /// `alwaysKey`) as one choice. Off leaves "whole song" as it was, so
+    /// turning the title back on returns to the last choice's keys as set.
+    private var songTitle: Binding<SongTitleShowing> {
+        Binding(get: { SongTitleShowing(shows: showOpeningTitle, keeps: keepsOpeningTitle) },
+                set: { choice in
+                    switch choice {
+                    case .off: showOpeningTitle = false
+                    case .atStart: showOpeningTitle = true; keepsOpeningTitle = false
+                    case .wholeSong: showOpeningTitle = true; keepsOpeningTitle = true
+                    }
+                })
+    }
+
     private var shownWithLyrics: some View {
         InspectorSection("Shown with the lyrics") {
+            ChoiceMenu("Song title", selection: songTitle, selectedTitle: \.title) {
+                ForEach(SongTitleShowing.allCases) { Text($0.title).tag($0) }
+            }
+            .help("At the start: the title and artist appear low on the left as the song begins, in the lyrics’ typeface, and leave before the first line is sung. Whole song: the title stays, quieter once the singing starts, so you always know what’s playing; with floating lyrics, in the song title card.")
             VStack(alignment: .leading, spacing: 7) {
-                Toggle("Show the song title at the start", isOn: $showOpeningTitle)
-                    .help("The title and artist appear low on the left as the song begins, in the lyrics’ typeface, and leave before the first line is sung.")
                 Toggle("Show the album cover", isOn: $showOpeningCover)
                     .padding(.leading, 23)
                     .disabled(!showOpeningTitle)
@@ -155,17 +173,6 @@ struct LyricStylePage: View {
                     }
                     .padding(.leading, 46)
                     .revealRow()
-                }
-                Toggle("Keep the song title on screen", isOn: $keepsOpeningTitle)
-                    .padding(.leading, 23)
-                    .disabled(!showOpeningTitle)
-                    .help("The title stays for the whole song, quieter once the singing starts, so you always know what’s playing. Low on the left beside the lyrics; with floating lyrics, in the song title card.")
-                if keepsOpeningTitle && showOpeningTitle {
-                    ValueSlider("Title strength", value: $titleStrength, in: OpeningTitle.strengthRange, step: 0.01,
-                                format: SettingsFormat.percent)
-                        .padding(.leading, 23)
-                        .help("How strong the song title stays once the singing has started. 100% keeps it fully solid.")
-                        .revealRow()
                 }
                 if floating.isFloating {
                     // The floating lyrics' card has a window of its own.
@@ -197,6 +204,12 @@ struct LyricStylePage: View {
             }
             .toggleStyle(StudioCheckboxStyle())
             MoreOptions {
+                if keepsOpeningTitle && showOpeningTitle {
+                    ValueSlider("Title strength", value: $titleStrength, in: OpeningTitle.strengthRange, step: 0.01,
+                                format: SettingsFormat.percent)
+                        .help("How strong the song title stays once the singing has started. 100% keeps it fully solid.")
+                        .revealRow()
+                }
                 if backingLayer {
                     ChoiceMenu("Backing vocals animate like", selection: $backingStyle,
                                selectedTitle: { $0.isEmpty ? "The lead’s layout" : (LyricComposition.saved($0)?.title ?? "The lead’s layout") }) {
@@ -315,4 +328,20 @@ private struct GoogleFontStatus: View {
     }
 }
 
+/// Text › Shown with the lyrics › Song title: when the song title shows.
+enum SongTitleShowing: String, CaseIterable, Identifiable {
+    case off, atStart, wholeSong
+    var id: String { rawValue }
 
+    init(shows: Bool, keeps: Bool) {
+        self = !shows ? .off : keeps ? .wholeSong : .atStart
+    }
+
+    var title: String {
+        switch self {
+        case .off: return "Off"
+        case .atStart: return "At the start"
+        case .wholeSong: return "Whole song"
+        }
+    }
+}
