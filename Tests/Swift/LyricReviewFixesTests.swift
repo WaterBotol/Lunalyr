@@ -266,12 +266,18 @@ final class LyricReviewFixesTests: XCTestCase {
     // MARK: Reduce Motion audit (docs session)
 
     func testReduceMotionKeepsCutoutLabelsAndSungWordsStill() {
-        // Labels: no press-on scale, at any point of the entrance.
+        // Labels: no turn, at any point of the entrance or exit; always whole.
         for arrival in stride(from: 0.0, through: 1.1, by: 0.05) {
-            XCTAssertEqual(RollingUnit.tileWidth(arrival: arrival, reduceMotion: true), 1)
+            for leaving in [0.0, 0.5, 1.0] {
+                XCTAssertEqual(RollingUnit.labelFlip(arrival: arrival, leaving: leaving, reduceMotion: true), 0)
+            }
+            let label = RollingUnit.label(arrival: arrival, leaving: 0, pointSize: 60, textSwitch: 0.4, ink: .none,
+                                          reduceMotion: true)
+            XCTAssertEqual(label.width, 1)
+            XCTAssertEqual(label.flip, 0)
         }
-        XCTAssertEqual(RollingUnit.tileWidth(arrival: 0, reduceMotion: false), 0.05)
-        XCTAssertEqual(RollingUnit.tileWidth(arrival: 0.5, reduceMotion: false), 0.5, accuracy: 1e-9)
+        XCTAssertEqual(RollingUnit.labelFlip(arrival: 0, leaving: 0, reduceMotion: false), -90)
+        XCTAssertEqual(RollingUnit.labelFlip(arrival: 0.5, leaving: 0, reduceMotion: false), -45, accuracy: 1e-9)
         // The word in focus does not zoom; emphasis stays in light and glow.
         XCTAssertEqual(ScatteredRunFrame.swell(heat: 1, glow: 1, gesture: 1.12, reduceMotion: true), 1)
         XCTAssertGreaterThan(ScatteredRunFrame.swell(heat: 1, glow: 1, gesture: 1.12, reduceMotion: false), 1.1)

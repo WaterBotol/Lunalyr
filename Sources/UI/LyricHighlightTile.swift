@@ -124,7 +124,7 @@ enum LyricHighlightTiming {
 /// words are both drawn with it.
 struct CutoutTile: View {
     let colour: Color
-    /// How far it has pressed in, 0...1 (`RollingUnit.tileWidth` for labels).
+    /// How far it has pressed in, 0...1 (a label is always whole: `RollingUnit.label`).
     var width: CGFloat = 1
     var rightToLeft = false
     @Environment(\.lyricReduceMotion) private var reduceMotion

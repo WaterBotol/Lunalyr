@@ -238,4 +238,57 @@ final class HighlightExitTests: XCTestCase {
         }
         print("HighlightExitTests: worst contrast through the exit \(worst), longest under 1.9:1 \(longest) s")
     }
+
+    // MARK: Cutout's label turns over like a flap (owner's pick, 26 Nov 2026)
+
+    func testCutoutLabelFlipsOnAndCarriesOnOver() {
+        // Edge on and unseen before the onset, a little past flat with the
+        // spring, flat when it lands, and on over as it leaves.
+        let before = RollingUnit.label(arrival: 0, leaving: 0, pointSize: 60, textSwitch: 0.4, ink: .none, reduceMotion: false)
+        XCTAssertEqual(before.flip, -90)
+        XCTAssertEqual(before.opacity, 0, accuracy: 1e-9)
+        XCTAssertEqual(before.width, 1, "always the word's full width: no more press from the leading edge")
+        XCTAssertGreaterThan(RollingUnit.labelFlip(arrival: 1.06, leaving: 0, reduceMotion: false), 0, "a little past")
+        let landed = RollingUnit.label(arrival: 1, leaving: 0, pointSize: 60, textSwitch: 0.4, ink: .none, reduceMotion: false)
+        XCTAssertEqual(landed.flip, 0)
+        XCTAssertEqual(landed.opacity, 1, accuracy: 1e-9)
+        XCTAssertEqual(RollingUnit.labelFlip(arrival: 1, leaving: 1, reduceMotion: false), 90, "carries on over")
+        var last = -91.0
+        for step in 0...20 {
+            let leaving = Double(step) / 20
+            let flip = RollingUnit.labelFlip(arrival: 1, leaving: leaving, reduceMotion: false)
+            XCTAssertGreaterThanOrEqual(flip, last, "one way round")
+            last = flip
+        }
+    }
+
+    func testCutoutLabelFlipIsMeasuredOnTheLabelsOwnHeight() {
+        // Where a corner of the label lands at a turn, as a share of the
+        // label: the same for a short label and a tall one (a reading under
+        // the word, a script reaching high and low), and for a short word
+        // and a long one, so every label turns the same way to the eye.
+        func corner(_ size: CGSize, _ degrees: Double, _ point: CGPoint) -> CGPoint {
+            let projected = point.applying(LabelFlip(degrees: degrees).effectValue(size: size))
+            return CGPoint(x: projected.x / size.width, y: projected.y / size.height)
+        }
+        for degrees in [-60.0, -30, 10, 45, 75] {
+            for unit in [CGPoint(x: 0, y: 0), CGPoint(x: 1, y: 0), CGPoint(x: 0, y: 1), CGPoint(x: 1, y: 1)] {
+                let short = CGSize(width: 240, height: 60)
+                let reference = corner(short, degrees, CGPoint(x: unit.x * short.width, y: unit.y * short.height))
+                for size in [CGSize(width: 240, height: 110), CGSize(width: 720, height: 60), CGSize(width: 96, height: 40)] {
+                    let other = corner(size, degrees, CGPoint(x: unit.x * size.width, y: unit.y * size.height))
+                    XCTAssertEqual(other.y, reference.y, accuracy: 1e-6, "\(size) at \(degrees)°")
+                    XCTAssertEqual(other.x, reference.x, accuracy: 1e-6, "\(size) at \(degrees)°")
+                }
+            }
+        }
+        // Flat is no change at all; turned, the near edge swells and the far one narrows.
+        XCTAssertEqual(CGPoint(x: 10, y: 5).applying(LabelFlip(degrees: 0).effectValue(size: CGSize(width: 100, height: 40))),
+                       CGPoint(x: 10, y: 5))
+        let size = CGSize(width: 200, height: 50)
+        let top = CGPoint(x: 0, y: 0).applying(LabelFlip(degrees: 40).effectValue(size: size))
+        let bottom = CGPoint(x: 0, y: 50).applying(LabelFlip(degrees: 40).effectValue(size: size))
+        XCTAssertNotEqual(top.x, bottom.x, accuracy: 1)
+        XCTAssertLessThan(bottom.y - top.y, 50, "turned, the label is shorter")
+    }
 }

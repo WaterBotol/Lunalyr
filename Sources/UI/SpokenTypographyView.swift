@@ -1,3 +1,4 @@
+import QuartzCore
 import SwiftUI
 
 /// Fit the actual rotated ink around its intended centre. Font estimates
@@ -221,23 +222,23 @@ struct SpokenTypographyView: View {
         let stageMarginY = max(baseSize * 0.22, size.height * 0.05)
         let reveal = RollingTokenState.partReveal(token, time: time, composition: composition,
             runOpacity: presentation.opacity, intensity: intensity, reduceMotion: reduceMotion, settings: settings)
-        // Cutout's label: one width rule before and after the onset, a
-        // sliver under the faint preview, then pressed on with the word's
-        // spring, so it lands with a little give. (It used to show full
-        // width while previewing and snap to 5% at the onset.) Otherwise
-        // the tile "Cutout · Highlight" presses in behind a word as it is
-        // sung, drawn out to a label's size around the word without moving
-        // or resizing it.
+        // Cutout's label turns over onto its word like a flap with the
+        // word's spring, a little past and back, and carries on over as it
+        // leaves (`RollingUnit.labelFlip`; it used to be pressed on from
+        // the leading edge, until 26 Nov 2026). Otherwise the tile
+        // "Cutout · Highlight" presses in behind a word as it is sung,
+        // drawn out to a label's size around the word without moving or
+        // resizing it.
         // Used with restraint: only the word in focus wears its label; as
-        // it steps back the label lifts away and it is plain type again.
-        // A label lifting away as its word steps back leaves as a
-        // highlight does (`LyricHighlightTiming`): softening with its word,
-        // which eases back to its own colour.
+        // it steps back the label turns away and it is plain type again.
+        // A label leaving as its word steps back leaves as a highlight does
+        // (`LyricHighlightTiming`): softening with its word, which eases
+        // back to its own colour.
         let tile: RollingUnit.Tile? = token.tile
-            ? .init(width: RollingUnit.tileWidth(arrival: presentation.arrival, reduceMotion: reduceMotion),
-                    pose: .leaving(RollingUnit.labelLeaving(rank: rank, time: time, handover: handover),
-                                   reduceMotion: reduceMotion),
-                    pointSize: token.pointSize, textSwitch: ink.tileTextSwitch, ink: token.inkReach)
+            ? RollingUnit.label(arrival: presentation.arrival,
+                                leaving: RollingUnit.labelLeaving(rank: rank, time: time, handover: handover),
+                                pointSize: token.pointSize, textSwitch: ink.tileTextSwitch, ink: token.inkReach,
+                                reduceMotion: reduceMotion)
             : highlight.isVisible
             ? .init(width: CGFloat(highlight.width), pose: highlight, pointSize: token.pointSize,
                     reach: RollingUnit.labelReach, textSwitch: ink.tileTextSwitch, ink: token.inkReach) : nil
@@ -268,6 +269,7 @@ struct SpokenTypographyView: View {
                                rightToLeft: token.rightToLeft)
                         .padding(.horizontal, -tile.reach.width)
                         .padding(.top, -tile.top).padding(.bottom, -tile.bottom)
+                        .modifier(LabelFlip(degrees: tile.flip))
                         .scaleEffect(tile.scale)
                         .blur(radius: tile.blur)
                         .opacity(tile.opacity)
@@ -446,11 +448,32 @@ extension RollingTokenState {
 /// A rolling word and its reading as one unit: exactly what the stack
 /// measures and the stage fits.
 struct RollingUnit: View {
-    /// A Cutout label's width as a share of the word. One rule before and
-    /// after the onset; with Reduce Motion the label is simply there and
-    /// fades in with its word instead of being pressed on.
-    static func tileWidth(arrival: Double, reduceMotion: Bool) -> CGFloat {
-        reduceMotion ? 1 : CGFloat(min(1.06, max(0.05, arrival)))
+    /// How far a Cutout label has turned, in degrees about its middle
+    /// (`LabelFlip`): edge on (-90) before its word's onset, turned over
+    /// onto the word with its spring (`arrival` to 1.06: a little past,
+    /// then back), and on over to +90 as it leaves (`labelLeaving`). With
+    /// Reduce Motion it is simply there and fades in with its word.
+    static func labelFlip(arrival: Double, leaving: Double, reduceMotion: Bool) -> Double {
+        guard !reduceMotion else { return 0 }
+        let arrived = min(1.06, max(0, arrival))
+        return -90 * (1 - arrived) + 90 * Easing.smoothstep(leaving)
+    }
+
+    /// A turning label's strength: gone while it is edge on, whole from
+    /// about 37° off flat.
+    static func labelFlipOpacity(_ degrees: Double) -> Double {
+        Easing.smoothstep((cos(degrees * .pi / 180) - 0.2) / 0.6)
+    }
+
+    /// Cutout's label at `arrival` and `leaving`: always the word's full
+    /// width, turned by `labelFlip` and softened as a highlight leaves.
+    static func label(arrival: Double, leaving: Double, pointSize: CGFloat, textSwitch: Double,
+                      ink: LyricInkReach, reduceMotion: Bool) -> Tile {
+        var tile = Tile(width: 1, pose: .leaving(leaving, reduceMotion: reduceMotion), pointSize: pointSize,
+                        textSwitch: textSwitch, ink: ink)
+        tile.flip = labelFlip(arrival: arrival, leaving: leaving, reduceMotion: reduceMotion)
+        tile.opacity *= labelFlipOpacity(tile.flip)
+        return tile
     }
 
     /// How much of a Cutout label is left as its word steps back from focus:
@@ -522,6 +545,8 @@ struct RollingUnit: View {
         var leaving = 0.0
         var scale: CGFloat = 1
         var blur: CGFloat = 0
+        /// A Cutout label's turn about its middle, in degrees (`labelFlip`).
+        var flip = 0.0
 
         init(width: CGFloat, opacity: Double, reach: CGSize = .zero, textSwitch: Double = 0.4) {
             self.width = width; self.opacity = opacity; self.reach = reach; self.textSwitch = textSwitch
@@ -601,8 +626,11 @@ struct RollingUnit: View {
                                   width: proxy.size.width + 2 * tile.reach.width,
                                   height: proxy.size.height + tile.top + tile.bottom)
                 let pressed = full.width * min(1, max(0, tile.width))
+                // A turning label (`LabelFlip`) lights the letters, the
+                // reading under them included, only where it covers them.
                 Rectangle()
                     .frame(width: pressed, height: full.height)
+                    .modifier(LabelFlip(degrees: tile.flip))
                     .position(x: (rightToLeft ? full.maxX - pressed : full.minX) + pressed / 2, y: full.midY)
                     .opacity(tile.textOpacity)
             }
@@ -805,5 +833,35 @@ private struct RollingWordText: View {
                                      active: lively != nil, pad: (lively?.size ?? 0) * 2.5)
             }
         }
+    }
+}
+
+
+/// Cutout's label turning over like a flap, about the line across its
+/// middle, `degrees` from flat. Its perspective is measured on its own
+/// height, so a label with a reading under its word, or a script that
+/// reaches high and low (`LyricInkReach`), turns as a taller card and its
+/// near edge swells as much as a short one's; a long word's label does
+/// not flatten out as SwiftUI's own 3D rotation (measured on the longer
+/// side) would make it. The letters' colour on the label is masked by the
+/// same turn (`RollingUnit.TileMask`).
+struct LabelFlip: GeometryEffect {
+    var degrees: Double
+    /// The eye's distance from the label, in label heights.
+    static let distance: CGFloat = 2.4
+
+    var animatableData: Double {
+        get { degrees }
+        set { degrees = newValue }
+    }
+
+    func effectValue(size: CGSize) -> ProjectionTransform {
+        guard abs(degrees) > 0.01, size.height > 0 else { return ProjectionTransform() }
+        var turn = CATransform3DIdentity
+        turn.m34 = -1 / (Self.distance * size.height)
+        turn = CATransform3DRotate(turn, CGFloat(degrees * .pi / 180), 1, 0, 0)
+        let toMiddle = CATransform3DMakeTranslation(-size.width / 2, -size.height / 2, 0)
+        let back = CATransform3DMakeTranslation(size.width / 2, size.height / 2, 0)
+        return ProjectionTransform(CATransform3DConcat(CATransform3DConcat(toMiddle, turn), back))
     }
 }
