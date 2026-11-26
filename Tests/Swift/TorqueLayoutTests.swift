@@ -183,4 +183,36 @@ final class TorqueLayoutTests: XCTestCase {
             .applying(TorqueTurn.transform(angle: 60, size: size, available: CGSize(width: 1000, height: 1000)))
         XCTAssertGreaterThan(swung.midX, 150, "A face turned to the right swings round the column")
     }
+
+    /// On "Cutout · Highlight" a word's thick edge is its card's, in a shade
+    /// of the card: lighter at the front, darker at the back, and never as
+    /// dark as a letter's edge (the card is lighter than ink).
+    func testHighlightCardEdgeIsAShadeOfTheCard() {
+        let shares: [CGFloat] = [0, 0.25, 0.5, 0.75, 1]
+        let shades = shares.map { StageLyricView.torqueCardShade($0) }
+        XCTAssertEqual(shades, shades.sorted(by: >), "darker the further back")
+        for (share, shade) in zip(shares, shades) {
+            XCTAssertGreaterThan(shade, 0)
+            XCTAssertLessThan(shade, 1)
+            XCTAssertGreaterThan(shade, 0.5 - 0.22 * Double(share), "lighter than a letter's edge")
+        }
+        XCTAssertEqual(StageLyricView.torqueCardShade(2), StageLyricView.torqueCardShade(1))
+    }
+
+    /// A card's reach above and below its word: nothing without a card; with
+    /// one, at least its margin, and more for a word whose ink stands taller
+    /// (Torque makes room for it above the word, so the card never covers
+    /// the reading of the row above).
+    func testTileOverhangFollowsTheInk() {
+        let words = [Word(text: "Ōkami", start: 1, end: 1.4), Word(text: "ocean", start: 1.5, end: 2)]
+        let view = StageLyricView(words: words, glue: [false, false], time: 2, stageSize: CGSize(width: 1280, height: 720),
+                                  baseSize: 46, mood: .neutral, composition: .torque, seed: 3)
+        let runs = StageRun.make(words, glue: [false, false])
+        XCTAssertEqual(view.tileOverhang(false, size: 100, run: runs[0]), .none)
+        let tall = view.tileOverhang(true, size: 100, run: runs[0])
+        let plain = view.tileOverhang(true, size: 100, run: runs[1])
+        XCTAssertGreaterThanOrEqual(plain.top, 2)
+        XCTAssertGreaterThanOrEqual(plain.bottom, 2)
+        XCTAssertGreaterThanOrEqual(tall.top, plain.top)
+    }
 }

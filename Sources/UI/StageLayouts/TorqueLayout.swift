@@ -9,7 +9,8 @@ import SwiftUI
 // it; when the next phrase starts, the whole column torques a quarter turn to
 // the left and the next face swings in from the right (mirrored for a
 // right-to-left line). Within a face the focal word gets the wring (it arrives
-// edge-on and unwinds, its thick edge growing in after it), content words rise
+// edge-on and unwinds, its thick edge growing in after it; on "Cutout ·
+// Highlight" the thick edge is the card's, not the letters'), content words rise
 // a little, function words cut in beside the word they ride with, and a quick
 // run rises as one group. A held word is wrung tighter for as long as it is
 // sung. Nothing moves once it has landed.
@@ -48,6 +49,13 @@ extension StageLyricView {
         case .content: return 0.075
         case .function: return 0.05
         }
+    }
+
+    /// How light a highlight card's thick edge is, `share` of the way back
+    /// (0 at the card, 1 at the back): a shade of the card's own colour, a
+    /// little lighter than a letter's edge, as the card is lighter than ink.
+    static func torqueCardShade(_ share: CGFloat) -> Double {
+        0.62 - 0.22 * Double(min(max(share, 0), 1))
     }
 
     /// The copies drawn for a word's thick edge.
@@ -126,16 +134,26 @@ extension StageLyricView {
                     live: live, gap: size * 0.04, maxWidth: stage.width * 0.8) {
             ZStack {
                 if steps > 0, depth > 0.2 {
-                    // The thick edge: the word's own colour in shade, darker
-                    // the further back it steps, so it reads as a solid edge.
                     ZStack {
                         ForEach((1...steps).reversed(), id: \.self) { step in
                             let share = CGFloat(step) / CGFloat(steps)
-                            // The edge follows the letters; the particles are the face's.
-                            word(run, liveColour, size: size)
-                                .livelyLetters(particles: false)
-                                .colorMultiply(Color(white: 0.5 - 0.22 * Double(share)))
-                                .offset(x: side * depth * share * 0.55, y: depth * share)
+                            Group {
+                                if tile {
+                                    // On a highlight the thick edge is the card's own: the
+                                    // card in shade, so no letter edge shows past it.
+                                    word(run, liveColour, size: size).hidden()
+                                        .background { tileBackground(true, size: size, run: run) }
+                                        .colorMultiply(Color(white: Self.torqueCardShade(share)))
+                                } else {
+                                    // The thick edge: the word's own colour in shade, darker
+                                    // the further back it steps, so it reads as a solid edge.
+                                    // The edge follows the letters; the particles are the face's.
+                                    word(run, liveColour, size: size)
+                                        .livelyLetters(particles: false)
+                                        .colorMultiply(Color(white: 0.5 - 0.22 * Double(share)))
+                                }
+                            }
+                            .offset(x: side * depth * share * 0.55, y: depth * share)
                         }
                     }
                 }
@@ -146,6 +164,8 @@ extension StageLyricView {
                 .background { tileBackground(tile, size: size, run: run) }
                 .highlightLayer(tile)
             }
+            // The card and its edge fade in as one: the edge never shows through.
+            .highlightLayer(tile)
             .wordAction(accent(run), start: run.start, end: run.end, time: time, size: size, glow: sample.glow)
             // Word presence, about the word and its thick edge, with its action.
             .modifier(presence(run, size: size, speed: 1, live: !plan.lineTimed))
@@ -156,6 +176,9 @@ extension StageLyricView {
             .padding(.trailing, plan.rightToLeft ? 0 : size * Self.torqueDepth(role) * 0.9)
             .padding(.leading, plan.rightToLeft ? size * Self.torqueDepth(role) * 0.9 : 0)
             .padding(.bottom, size * Self.torqueDepth(role) * 1.4)
+            // Room for a card's top above the word, so it never covers the
+            // reading of the row above.
+            .padding(.top, tileOverhang(tile, size: size, run: run).top)
         }
         .modifier(TorqueTurn(angle: native ? pose.wring * Double(side) : 0, available: nil))
         .scaleEffect(native ? CGFloat(pose.scale) : 1)

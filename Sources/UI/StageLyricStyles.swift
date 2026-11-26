@@ -499,15 +499,22 @@ struct StageLyricView: View {
     /// (`LyricInkReach`): kana, kanji and accented capitals under a face
     /// with a short box (Minecrafter) stuck out above it.
     func tileBackground(_ on: Bool, size: CGFloat, run: StageRun) -> some View {
+        let overhang = tileOverhang(on, size: size, run: run)
+        return RoundedRectangle(cornerRadius: 3).fill(ink.tileColour).opacity(on ? 1 : 0)
+            .padding(.horizontal, -size * 0.1)
+            .padding(.top, -overhang.top).padding(.bottom, -overhang.bottom)
+    }
+
+    /// How far a word's tile reaches above and below the word's frame
+    /// (`tileBackground`); none without one.
+    func tileOverhang(_ on: Bool, size: CGFloat, run: StageRun) -> LyricInkReach {
+        guard on else { return .none }
         // Measured as set, and in capitals too: Hinge sets its words in
         // capitals, whose accents stand taller ("Ō" over "ō").
         let face = settings.lyricMeasureFace(size: size, hero: true, mood: mood, seed: UInt64(abs(seed &+ run.id)),
                                              text: run.text)
-        let reach = on ? LyricInkReach.of(run.text, face: face).union(LyricInkReach.of(run.text.uppercased(), face: face))
-            : .none
-        return RoundedRectangle(cornerRadius: 3).fill(ink.tileColour).opacity(on ? 1 : 0)
-            .padding(.horizontal, -size * 0.1)
-            .padding(.top, -(size * 0.02 + reach.top)).padding(.bottom, -(size * 0.02 + reach.bottom))
+        let reach = LyricInkReach.of(run.text, face: face).union(LyricInkReach.of(run.text.uppercased(), face: face))
+        return LyricInkReach(top: size * 0.02 + reach.top, bottom: size * 0.02 + reach.bottom)
     }
 
     /// 1 for an ordinary pace, up to 3 when the line is sung fast: every motion
